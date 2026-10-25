@@ -35,6 +35,7 @@ import {
   eintragGespeichert,
   eintreffzeit,
   eintreffzeitSetzen,
+  nummerUndZugSetzen,
   einheitEntfernen,
   einheitVerschieben,
   folgemeldungErbt,
@@ -450,5 +451,22 @@ describe("zeitUnstimmigkeit (R3-E5)", () => {
   it("meldet Abrücken vor dem Eintreffen", () => {
     expect(zeitUnstimmigkeit({ eintreffen: jetzt - 60_000, abgerueckt: jetzt - 3_600_000 }, jetzt)).toMatch(/liegt vor dem Eintreffen/);
     expect(zeitUnstimmigkeit({ eintreffen: jetzt - 3_600_000, abgerueckt: jetzt }, jetzt)).toBeNull();
+  });
+});
+
+describe("nummerUndZugSetzen (Schnellerfassung, Zettel)", () => {
+  it("übernimmt die Schreibweise der schon vergebenen Züge (Audit Phase 6)", () => {
+    const { einsatzId, eintragId } = buehne();
+    zugSetzen(einsatzId, eintrag(einsatzId, eintragId).einheitSchluessel, eintragId, "Bergungszug Nord");
+    const zweite = meldungHinzufuegen(einsatzId, bogen("Ellwangen"))!.eintrag.id;
+    nummerUndZugSetzen(einsatzId, zweite, { zug: "bergungszug  nord" });
+    expect(eintrag(einsatzId, zweite).zugEtikett).toBe("Bergungszug Nord");
+  });
+
+  it("schreibt Nummernzüge einheitlich: „2.Zug“ wird „2. Zug“", () => {
+    const { einsatzId, eintragId } = buehne();
+    nummerUndZugSetzen(einsatzId, eintragId, { zug: "2.Zug", nummer: 7 });
+    expect(eintrag(einsatzId, eintragId).zugEtikett).toBe("2. Zug");
+    expect(eintrag(einsatzId, eintragId).nummer).toBe(7);
   });
 });

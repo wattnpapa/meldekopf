@@ -120,6 +120,14 @@
       /* Zweitschrift im Balken als fester Ton, nicht als halbdurchsichtiges
          Weiß: Deckkraft nimmt der Feld-Modus nicht zurück. Auf Petrol gerechnet. */
       --kopf-auf-2: #cfe6ea;
+      /* Rollen-Marken (Führer / Unterführer / Mannschaft) und die weiße
+         Ruhezone um QR-Codes: App-Token des Erfassungsbogens (index.html,
+         441811c), nicht in @bos/oberflaeche. Fehlten bis zum Audit (Phase 6);
+         die Marken standen ohne Fläche da. */
+      --rolle-f-fond: #ede9fb; --rolle-f-text: #3a2f7a;
+      --rolle-u-fond: #e2f3ec; --rolle-u-text: #1c5c44;
+      --rolle-m-fond: #eceef3; --rolle-m-text: #3a3f4a;
+      --qr-ruhezone: #ffffff;
     }
     /* @bos/oberflaeche/stil/token.css — beim Bauen hier eingesetzt (Plugin
        `oberflaeche-token` in vite.config.ts): Design-Token und die
@@ -2562,6 +2570,385 @@
     }
 
     /* ---------------------------------------------------------------
+       Nachzug nach dem Audit (Phase 6): Regeln des Erfassungsbogens
+       (index.html, Commit 441811c), deren Klassen die übernommenen
+       Komponenten nur dynamisch setzen (`kompakt`, Scanner, Teil-Quittung,
+       Moduswechsel, Sortierknöpfe, Kopf der Schnellerfassung). Die erste
+       Übernahme hatte Klassen aus Template-Strings nicht erkannt; am
+       Telefon lag dadurch der Aufklappknopf jeder zugeklappten
+       Einheitenkarte über dem ganzen Bildschirm (Audit, P0), und der Scanner
+       hatte keine Grundregel (kein Vollbild). Den Abgleich hat ein Teilstring-
+       Vergleich verfälscht („.scanner“ steckte in „dialog.scanner“). Ausgelassen
+       sind Schrittleiste und Schrittinhalt des Assistenten sowie die
+       Plattformregeln der nativen Hüllen.
+       --------------------------------------------------------------- */
+    .weiche-weg > p.offline-badge.offline-laedt { color: var(--warn-text); border-color: currentColor;}
+    .seiten-kopf.assistent-kopf .titelzeile { order: 1;}
+    /* Die Schrittleiste sitzt bündig auf der Unterkante des Balkens. */
+    .seiten-kopf.assistent-kopf .kopf-inhalt { padding-bottom: 0;}
+    @media (max-width: 29.999rem) {
+      .seiten-kopf.assistent-kopf .titelzeile { padding: var(--r-1) 0 var(--r-2);}
+      .seiten-kopf.assistent-kopf .kopf-inhalt { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: var(--r-3);}
+      .seiten-kopf.assistent-kopf .titelzeile { order: -1; flex: 0 0 auto; padding: 0;}
+      /* In der Einsatz-Erfassung tragen Rücksprung und Marke den frei
+        vergebenen Namen der Sammlung — beide einzeilig, gekürzt wird der
+        Name; der volle Text bleibt Knopf- bzw. Markentext (Vorlesesoftware)
+        und steht in der Marke zusätzlich als title. Vorher: Rücksprung auf
+        360 px zweizeilig, Kopf 285 px. Gekürzt wird höchstens auf 7em —
+        bei großer Systemschrift rutscht der Anzeigemodus dann in die
+        nächste Zeile, statt „‹ Startseite" auf „‹" zu kürzen. */
+      .seiten-kopf.assistent-kopf .kopf-oberzeile .zur-start {
+        display: block; flex: 1 1 0; min-width: min(100%, 7em); text-align: left;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        line-height: calc(var(--ziel-basis) + var(--ziel) - 0.4rem);
+      }
+      .seiten-kopf.assistent-kopf .kopf-oberzeile:has(.anzeige-schalter.offen) .anzeige-schalter { flex: 1 1 100%;}
+      /* Unter dem Kopf reicht der schmale Abstand wie im Querformat. */
+      .seiten-kopf.assistent-kopf ~ main { padding-top: var(--r-3);}
+    }
+    /* Große Systemschrift (Audit Runde 2, R2-M1): bei 200 % auf 360 × 640
+      war der Kopf 1 155 px hoch, die Überschrift „1. Einheit" begann zweieinhalb
+      Bildhöhen tiefer. Eine Medienabfrage sieht die Systemschrift nicht (rem
+      in @media bezieht sich auf die Grundeinstellung des Browsers, nicht auf
+      die Schrift der Seite) — eine Container-Abfrage schon: dort zählt rem
+      die tatsächliche Schrift. „Schmaler als 17.5rem" trifft bei normaler
+      Schrift kein Telefon (320 px = 20rem, im Feld-Modus mit 112 % 17,9rem),
+      bei 150–200 % jedes (360 px bei 200 % = 11,25rem). Dann verdichtet sich
+      der Kopf wie
+      im Querformat: Speicherzeile weg, Titel einzeilig, Schrittleiste als
+      waagerecht rollende Reiterzeile. */
+    .seiten-kopf.assistent-kopf { container: kopf / inline-size;}
+    @container kopf (max-width: 17.5rem) {
+      .seiten-kopf.assistent-kopf .titelzeile { padding: var(--r-1) 0;}
+      .seiten-kopf.assistent-kopf .kopf-oberzeile .zur-start { font-size: min(var(--t-m), 20px); line-height: calc(44px + var(--ziel) - 0.4rem); min-height: calc(44px + var(--ziel)); min-width: min(100%, 6em);}
+      .seiten-kopf.assistent-kopf .anzeige-schalter button { font-size: min(var(--t-xs), 16px); min-height: calc(44px + var(--ziel)); min-width: calc(44px + var(--ziel)); padding-block: 0.15rem; padding-inline: min(0.7rem, 12px);}
+      .seiten-kopf.assistent-kopf .anzeige-schalter .anzeige-klappe { font-size: min(var(--t-s), 18px);}
+      .seiten-kopf.assistent-kopf .modus-marke { font-size: min(var(--t-xs), 15px);}
+    }
+    .sortieren > button { min-width: min(calc(var(--ziel-basis) + var(--ziel)), calc(50px + var(--ziel))); padding: 0.25rem; line-height: 1;}
+    .sortieren > button:disabled { opacity: 0.4;}
+    @container assistent-nav (max-width: 25rem) {
+      .primaer { padding-inline: min(1.1rem, 20px, 3.5vw);}
+    }
+    @container assistent-nav (max-width: 260px) {
+      footer.nav.assistent-nav:not(.mit-uebernehmen) > .anzeige-leiste { grid-row: 2;}
+    }
+    @media (orientation: landscape) and (max-height: 31.25rem) {
+      .seiten-kopf.assistent-kopf .kopf-inhalt { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: var(--r-3);}
+      .seiten-kopf.assistent-kopf .titelzeile { order: 0; flex: 1 1 auto; min-width: 0; padding: 0.15rem 0; gap: 0.4rem; flex-wrap: nowrap;}
+      /* Im Feld-Modus (größere Schrift, größere Segmente) reichte selbst der
+        gekürzte Titel, um die Oberzeile in eine zweite Zeile zu drücken —
+        gemessen 145 statt der angestrebten 200 px Formular. Der Titel ist
+        der Name der App und auf jedem Schritt derselbe; das Zeichen der
+        Einheit daneben bleibt und trägt die Wiedererkennung. */
+      .feld-modus .seiten-kopf.assistent-kopf .titelzeile h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;}
+      .seiten-kopf.assistent-kopf .kopf-oberzeile .anzeige-schalter button { padding-inline: 0.45rem;}
+    }
+    .rolle-marke.rolle-f { background: var(--rolle-f-fond); color: var(--rolle-f-text);}
+    .rolle-marke.rolle-u { background: var(--rolle-u-fond); color: var(--rolle-u-text);}
+    .rolle-marke.rolle-m { background: var(--rolle-m-fond); color: var(--rolle-m-text);}
+    /* R2-K7: Telefon — zugeklappte Einheit als kompakte Zeile (Name,
+      Stärke, Bedarf). Der Aufklapp-Knopf liegt unsichtbar über der ganzen
+      Zeile: getippt wird irgendwo auf die Einheit, nicht auf ein kleines
+      Ziel. Nur das Dreieck rechts oben zeigt, dass es weitergeht. */
+    .einheit-zeile.kompakt { position: relative; padding: var(--r-2) 2rem var(--r-2) 0;}
+    .einheit-zeile.gestrichen.kompakt { padding-left: var(--r-2);}
+    /* Die Marke „kürzlich eingetroffen" kostete zugeklappt eine eigene Zeile
+      je Karte (Feld-Thema: 5 statt 6 Einheiten im Bild); sie steht nach
+      dem Aufklappen, und die Sammelquittung nennt die Neuen mit Namen. */
+    .einheit-zeile.kompakt .neu-badge .neu-lang { display: none;}
+    .einheit-zeile.kompakt .neu-badge .neu-kurz { display: inline;}
+    .einheit-zeile.kompakt .kompakt-zeile {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.4rem;
+      font-variant-numeric: tabular-nums;
+    }
+    /* R2-W5: Übergabevermerk im Kopf der Einsatzansicht. Ist seit der
+      Weitergabe hier etwas dazugekommen, steht er als Warnkasten da — die
+      neue Schicht hat es womöglich nicht. */
+    .weitergabe-vermerk.seitdem-neu {
+      display: inline-block; margin-top: var(--r-1); padding: 0.15rem 0.5rem;
+      background: var(--warn-fond); color: var(--warn-text);
+      border: 1px solid var(--warn-linie); border-radius: var(--radius);
+    }
+    .muster-sub.bemerkung-neu { color: var(--warn-text); font-weight: 600;}
+    /* Teil-Quittung: Kästchenzeile des mehrteiligen QR-Transports (siehe
+      teil-quittung.tsx). Ein gefülltes Kästchen sagt auf einem amtlichen Bogen
+      genau das, was hier gemeint ist: eingegangen. Offene Teile bleiben leer.
+      Die Farben laufen über eigene Kanäle, weil die Zeile in zwei Welten steht
+      — auf den Token-Flächen der App und im Scanner-Overlay über dem
+      Kamerabild, wo (wie beim übrigen Overlay-Text) nur Weiß auf Schwarz
+      trägt. */
+    .teil-quittung {
+      --quittung-linie: var(--linie-stark);
+      --quittung-ein: var(--gut);
+      /* --grund statt Weiß: Kennzeichenfarbe und Grund sind in jeder Belegung
+         gegenläufig hell/dunkel — damit trägt die Schrift im gefüllten Kästchen
+         auch im aufgehellten Grün des Dunkel- und Nacht-Modus. */
+      --quittung-auf-ein: var(--grund);
+      --quittung-text: var(--text-2);
+      list-style: none; margin: var(--r-3) 0 0; padding: 0;
+      display: flex; flex-wrap: wrap; gap: var(--r-2);
+    }
+    .teil-quittung > li {
+      /* Kästchengröße in em: die 112-%-Schrift des Feld-Modus vergrößert die
+         Zeile mit, ohne eigenen Modus-Block. Keine Trefferfläche — deshalb
+         bewusst ohne --ziel. */
+      font-family: var(--schrift-daten); font-size: var(--t-s); font-weight: 700;
+      min-width: 2.2em; min-height: 2.2em;
+      display: flex; align-items: center; justify-content: center;
+      border: var(--strich-stark) solid var(--quittung-linie);
+      border-radius: var(--radius); color: var(--quittung-text);
+    }
+    /* Abgestempelt. Der Unterschied liegt in der Füllung, nicht nur in der
+      Farbe — sonst wäre der Stand allein farbig kodiert. Die Füllung ist der
+      Stand und steht deshalb sofort; bewegt wird sie nicht. */
+    .teil-quittung > li.ein {
+      background: var(--quittung-ein); border-color: var(--quittung-ein);
+      color: var(--quittung-auf-ein);
+    }
+    /* Der Stempel kommt herunter — nur auf dem Kästchen, das GERADE eingegangen
+      ist (`.frisch` aus teil-quittung.tsx), nicht auf allen gefüllten. Vorher
+      hing die Bewegung an `.ein` und lief damit beim Öffnen des Scanners für
+      jeden längst gesammelten Teil erneut: eine Quittung für nichts, genau in
+      dem Moment, in dem der Blick nach dem fehlenden Teil sucht. Fällt die
+      Bewegung aus (reduzierte Bewegung), bleibt die Füllung als Auskunft. */
+    .teil-quittung > li.frisch { animation: stempel-teil var(--dauer-2) var(--kurve);}
+    /* Schwarz, Weiß und der Textschatten sind hier bewusst modusunabhängige
+      Rohwerte: hinter der Fläche läuft ein Kamerabild, kein Formular — es
+      gibt keine Belegung, die ein Anzeigemodus daran sinnvoll änderte. */
+    .scanner {
+      position: fixed; inset: 0; z-index: 100; background: #000;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: space-between; padding: 1.5rem 1rem 0; gap: 1rem;
+      /* Mobile Browser: `inset: 0` misst den Layout-Viewport — bei sichtbarer
+         Browserleiste läge „Abbrechen" darunter und der Scan-Modus hätte
+         scheinbar keinen Ausgang. `100dvh` folgt der Leiste; die Safe-Area
+         hält die Knöpfe über dem Home-Indikator (PWA/Standalone). */
+      height: 100dvh;
+      /* Ohne Kamera (Fehlertext plus Handscanner-Anleitung) war der Inhalt
+         bei 360 × 640 rund 840 px hoch, im Feld-Modus 1030 — und das Overlay
+         schnitt ihn ab: „Abbrechen" stand bei 800 px, unerreichbar, der
+         einzige Ausweg war das Neuladen. Das Overlay rollt deshalb, und die
+         Knopfleiste (.scanner-aktionen) klebt an seiner Unterkante. */
+      overflow-y: auto;
+    }
+    /* `fixed` statt `absolute`: als absolut gesetztes Kind rollte das
+      Kamerabild mit dem Inhalt mit. Beide Rechtecke (Video und Suchrahmen)
+      bleiben so viewport-bezogen — darauf rechnet suchAusschnitt. */
+    .scanner video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover;}
+    .scanner > * { position: relative;}
+    /* Dunkle Unterlage unter dem Text: Der Schlagschatten allein trägt nur über
+      dunklem Bild. Abgefilmt wird aber oft ein Bildschirm — hell und flächig,
+      und darauf verschwand weiße Schrift fast ganz. */
+    .scanner-text {
+      margin: 0; color: #fff; text-align: center;
+      max-width: 34rem;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.5);
+      padding: 0.6rem 0.9rem; border-radius: var(--radius);
+    }
+    .scanner-text > p { margin: 0;}
+    /* Der Abstandsrat kommt erst nach Sekunden ohne Treffer dazu: kleiner als
+      die Aufforderung darüber, damit er sie nicht überstimmt — aber in vollem
+      Weiß. Blasses Weiß verschwindet auf einem hellen Kamerabild, und
+      ausgerechnet ein Bildschirm im Bild macht es hell. */
+    .scanner-text > .scanner-tipp { margin-top: 0.6rem; font-size: var(--t-s);}
+    /* Derselbe Ton wie im Aktualisierungsband: Alarmschrift auf dunkler
+      Fläche, einmal benannt statt zweimal getippt. */
+    .scanner-text.fehler { color: var(--alarm-auf-akzent); display: grid; gap: 0.6rem;}
+    .scanner-text.fehler p { margin: 0;}
+    /* Die zwei Freigabe-Stellen sind eine Anleitung, keine Fließtextwand:
+      links ausgerichtet und aufgezählt bleiben sie im Einsatz lesbar. */
+    .scanner-schritte {
+      margin: 0; padding-left: 1.2rem; text-align: left;
+      display: grid; gap: 0.4rem;
+    }
+    /* Die Quittung im Overlay: über dem Kamerabild trägt kein Rollen-Token,
+      deshalb dieselbe Weiß-auf-Video-Sprache wie der Overlay-Text. Zentriert,
+      weil sie hier unter dem mittigen Hinweis steht — nicht auf dem
+      linksbündigen Satzspiegel der Startseite. */
+    .scanner .teil-quittung {
+      --quittung-linie: rgba(255, 255, 255, 0.9);
+      --quittung-ein: #fff;
+      --quittung-auf-ein: #000;
+      --quittung-text: #fff;
+      justify-content: center; margin-top: var(--r-2);
+    }
+    /* Der Handscanner-Weg tritt an die Stelle des Suchrahmens, wenn die
+      Kamera ausfällt: gleiche Fläche, gleicher Platz — damit ohne Kamera
+      nicht ein leerer schwarzer Bildschirm mit roter Zeile übrig bleibt,
+      sondern sichtbar ein zweiter, gangbarer Weg. */
+    .scanner-handscanner {
+      width: min(90vw, 34rem); color: #fff; text-align: center;
+      display: grid; gap: 0.6rem;
+      border: 3px dashed rgba(255, 255, 255, 0.7); border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    }
+    .scanner-handscanner p { margin: 0;}
+    .handscanner-titel { font-weight: 700; font-size: var(--t-l);}
+    .scanner-handscanner .scanner-schritte { color: #fff;}
+    /* Lebenszeichen: gedämpft, solange nichts kommt — aufleuchtend, sobald
+      der Scanner tippt. Das ist die Rückmeldung, die sonst das Kamerabild
+      gäbe. */
+    .handscanner-lampe {
+      border: var(--strich) solid rgba(255, 255, 255, 0.5); border-radius: var(--radius);
+      padding: 0.35rem 0.6rem; color: rgba(255, 255, 255, 0.75);
+    }
+    .handscanner-lampe.aktiv {      background: #fff; color: #000; border-color: #fff; text-shadow: none; font-weight: 700;}
+    .handscanner-fussnote { font-size: var(--t-s); color: rgba(255, 255, 255, 0.8);}
+    /* Die Einstellhinweise (Enter-Abschluss, Tastaturbelegung) sind
+      eingeklappt: rund 50 Wörter, die nur braucht, wessen Scanner verdreht
+      tippt — ausgeklappt verdrängten sie die Knopfleiste. Die Zeile ist
+      selbst ein Tippziel im Grundmaß. */
+    .handscanner-hinweise { text-align: left;}
+    .handscanner-hinweise > summary {
+      cursor: pointer; font-weight: 600; text-align: center;
+      display: flex; align-items: center; justify-content: center;
+      min-height: calc(var(--ziel-basis) + var(--ziel));
+    }
+    .handscanner-hinweise > p { margin: 0.2rem 0 0;}
+    /* Suchrahmen und seine Quittung. Der Rahmen ist der einzige Punkt, auf dem
+      der Blick beim Abfilmen wirklich liegt — die Hände halten den Stapel, die
+      Textzeile darüber wird nicht gelesen. Ein angenommener Teil quittiert
+      deshalb hier: der Rahmen wird kurz grün und die Fläche darin nimmt einen
+      Hauch derselben Farbe an.
+    
+      Bewusst eine reine Farbquittung — der Rahmen legt fest, welcher
+      Bildausschnitt dekodiert wird (suchAusschnitt in qr-scanner-web.tsx);
+      etwas, das sich verschiebt oder skaliert, verzöge mitten im Scan das
+      Suchfenster. Und bewusst als Übergang statt als Keyframe: unter
+      reduzierter Bewegung bleibt so ein hartes Aufblitzen stehen, statt die
+      Auskunft ersatzlos zu streichen (dieselbe Lehre wie bei .zahl-geaendert).
+    
+      Die Farben sind hier Rohwerte wie der übrige Scanner: hinter der Fläche
+      läuft ein Kamerabild, kein Formular. #8fe0ab ist der Grünton, der schon
+      im Kopfbalken „erledigt" sagt, wo --gut zu dunkel wäre — über einem
+      beliebigen Kamerabild gilt dasselbe. */
+    .scanner-rahmen {
+      position: relative;
+      width: min(65vw, 55vh); aspect-ratio: 1;
+      border: 3px solid rgba(255, 255, 255, 0.9); border-radius: var(--radius);
+      transition: border-color var(--dauer-3) ease-out;
+    }
+    .scanner-rahmen::after {
+      content: ""; position: absolute; inset: 0;
+      background: #8fe0ab; opacity: 0;
+      transition: opacity var(--dauer-3) ease-out;
+    }
+    .scanner-rahmen.angenommen { border-color: #8fe0ab; transition-duration: var(--dauer-1);}
+    .scanner-rahmen.angenommen::after { opacity: 0.22; transition-duration: var(--dauer-1);}
+    /* Der Ausgang steht auf jeder Displayhöhe im Bild: die Leiste klebt an
+      der Unterkante des rollenden Overlays (sticky schlägt das `relative`
+      aller Scanner-Kinder), mit eigener dunkler Unterlage, weil unter ihr
+      Text oder Kamerabild vorbeirollen. Die Knöpfe stehen in einer Zeile
+      und brechen um — gestapelt kosteten drei Knöpfe 160 px Höhe. Die
+      Safe-Area wandert vom Overlay hierher: `bottom: 0` misst am Rollfenster,
+      ein Polster am Overlay läge sonst UNTER der Leiste. */
+    .scanner > .scanner-aktionen {
+      position: sticky; bottom: 0; z-index: 1; width: 100%;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem 0.75rem;
+      padding: 0.75rem 0 calc(0.75rem + env(safe-area-inset-bottom));
+      background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.75) 35%);
+    }
+    /* Kamera-Auswahl im Scanner (erst ab zwei Kameras sichtbar): erbt das
+      Feld-Aussehen, bleibt aber schmal genug, dass lange Gerätenamen die
+      Knopfleiste nicht über den Rand ziehen. */
+    .scanner-kamera select { max-width: min(80vw, 22rem);}
+    /* Dialoge mit Tabelle (Beispielbögen) brauchen mehr Breite als die
+      Textdialoge: 80 % der Seitenbreite, damit die vier Spalten samt
+      Zeilen-Aktionen nebeneinander passen. Der max()-Anteil hält den Dialog
+      auf kleinen Fenstern so breit wie bisher (80 % wären dort unnötig
+      schmal), die Viewport-Grenze deckelt ihn wie gehabt. */
+    dialog.breit { width: min(calc(100vw - min(2rem, 32px)), max(80vw, 34rem));}
+    /* Der Wechsel des Anzeigemodus springt — hier erklärt Bewegung keinen
+      Zustand, sie verdeckt ihn. Knöpfe überblenden ihre Schriftfarbe
+      (`transition: color` weiter oben), der Seitengrund schlägt dagegen
+      sofort um. Ein Knopf ohne eigene Fläche („Impressum",
+      „Datensicherung") trägt für die Dauer des Übergangs also noch die
+      Schrift des alten Modus auf dem Grund des neuen — gemessen ein
+      Helligkeitsabstand von 0,007, praktisch unsichtbar.
+      anzeige-modus.ts setzt die Klasse für einen Frame um die Umschaltung. */
+    .modus-wechsel, .modus-wechsel *, .modus-wechsel *::before, .modus-wechsel *::after, .modus-wechsel ::backdrop {      transition-duration: 0ms !important;}
+    .feld-modus label.feld { color: var(--text); font-weight: 700;}
+    .feld-modus input[type="checkbox"], .feld-modus input[type="radio"] { width: 1.7rem; height: 1.7rem;}
+    /* Helle Schrift auf dunklem Grund läuft optisch zu: die Punzen füllen sich,
+      Zeilen rücken zusammen. Beides wird auf derselben Leiter ausgeglichen,
+      ohne einen zweiten Satz Grade zu erfinden — eine Spur Sperrung und ein
+      Hauch mehr Durchschuss. Gilt für beide dunklen Modi. */
+    .dunkel-modus body, .nacht-modus body { letter-spacing: 0.006em; line-height: 1.55;}
+    /* R4-L4: Native Bedienelemente stehen nachts nicht mehr reinweiß im sonst
+      warmen Bild. Der Ring der Optionsknöpfe und der Kästchen und das
+      Kalendersymbol der Datumsfelder waren 255/255/255 — die hellsten Punkte
+      im Nacht-Modus (Schrift: Luma 206). Filter statt eigener Zeichnung:
+      warm getönt und abgedunkelt, höchstens so hell wie die Schrift. */
+    .nacht-modus input[type="radio"], .nacht-modus input[type="checkbox"], .nacht-modus input::-webkit-calendar-picker-indicator, .nacht-modus input::-webkit-inner-spin-button {      filter: sepia(1) saturate(0.6) brightness(0.78);}
+    /* R8-L7: Der Haken im gewählten Kästchen war 2,79:1 gegen die Füllung (123/114/99
+      gegen 199). Dunklere Füllung: Haken 5,3:1, das leere Kästchen (60/56/48) bleibt
+      daneben klar anders. Der Haken bleibt bei Luma 199, nichts wird heller. */
+    .nacht-modus input[type="checkbox"] { accent-color: #6b4d0e;}
+    /* Der Rahmen „Ohne Kamera: mit dem USB-Handscanner" war kaltgrau (179/179/179). */
+    .nacht-modus .scanner-handscanner { color: var(--text); border-color: var(--text-2);}
+    .nacht-modus .scanner-handscanner .scanner-schritte { color: var(--text);}
+    .nacht-modus .handscanner-fussnote { color: var(--text-2);}
+    .nacht-modus .handscanner-lampe { border-color: var(--text-2); color: var(--text-2);}
+    .nacht-modus .handscanner-lampe.aktiv { background: var(--text); border-color: var(--text); color: var(--grund);}
+    /* R2-L6: Helle Reste im Nacht-Thema. Der Scanner schrieb in reinem Weiß
+      (Luminanz 255 statt 206 des Nacht-Texts) und meldete Fehler in kühlem
+      Rosa — nachts der hellste Text der App. Hinter ihm läuft zwar ein
+      Kamerabild, aber die Schrift steht auf eigener dunkler Unterlage; der
+      warme Nacht-Text trägt dort genauso. */
+    .nacht-modus .scanner-text, .nacht-modus .scanner-handscanner, .nacht-modus .scanner-handscanner .scanner-schritte { color: var(--text);}
+    .nacht-modus .scanner-text.fehler { color: var(--alarm);}
+    .nacht-modus .handscanner-fussnote, .nacht-modus .handscanner-lampe { color: var(--text-2);}
+    .nacht-modus .handscanner-lampe.aktiv { background: var(--text); border-color: var(--text); color: var(--grund);}
+    .nacht-modus .scanner-rahmen:not(.angenommen) { border-color: var(--text);}
+    .nacht-modus .scanner .teil-quittung {
+      --quittung-linie: var(--text-2); --quittung-ein: var(--text);
+      --quittung-auf-ein: var(--grund); --quittung-text: var(--text);
+    }
+    /* R2-H8: Datumsfelder (Schritt 2) standen als „schmal" auf 112 px — das
+      Jahr war abgeschnitten, „Zeitraum bis (Vorschlag: wie Beginn)" brach
+      auf drei Zeilen. Breit genug für TT.MM.JJJJ samt Kalenderknopf, und
+      auf dem Telefon in voller Breite untereinander; Datum mit Uhrzeit
+      („mittel datum") behält sein 12rem, stapelt dort aber ebenso. */
+    .zeile > label.feld.datum:not(.mittel) { flex: 0 1 11rem;}
+    @media (max-width: 30rem) {
+      /* Beide Selektoren: der :not() oben zählt eine Klasse mehr. */
+      .zeile > label.feld.datum, .zeile > label.feld.datum:not(.mittel) { flex: 1 1 100%;}
+      html.schrift-gross .seiten-kopf.assistent-kopf .titelzeile { position: absolute; padding: 0;}
+      html.schrift-gross .seiten-kopf.assistent-kopf .kopf-inhalt { justify-content: flex-start;}
+      html.schrift-gross .seiten-kopf.assistent-kopf .kopf-oberzeile { flex: 1 1 100%; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;}
+      html.schrift-gross .seiten-kopf.assistent-kopf .kopf-oberzeile .zur-start { flex: 0 1 auto; min-width: 0; padding-inline: 6px; white-space: nowrap; font-size: min(var(--t-s), 16px);}
+      html.schrift-gross .seiten-kopf.assistent-kopf .kopf-oberzeile .anzeige-schalter { flex: 0 1 auto; min-width: 0; margin: 0;}
+      html.schrift-gross .seiten-kopf.assistent-kopf .anzeige-klappe { min-width: 0; white-space: nowrap; padding-inline: 6px; font-size: min(var(--t-xs), 14px);}
+    }
+    @container assistent-nav (max-width: 260px) {
+      footer.nav.assistent-nav:not(.mit-uebernehmen) > .anzeige-leiste { grid-row: 1;}
+      footer.nav.assistent-nav.mit-uebernehmen > .anzeige-leiste { grid-row: 2;}
+      footer.nav.assistent-nav.mit-uebernehmen > .uebernehmen { grid-row: 1; grid-column: 1 / -1; justify-self: stretch; white-space: normal;}
+    }
+    @media (max-width: 9rem) {
+      footer.nav.assistent-nav:not(.mit-uebernehmen) > .anzeige-leiste { grid-row: 2;}
+      footer.nav.assistent-nav.mit-uebernehmen > .anzeige-leiste { grid-row: 3;}
+    }
+    @media (max-width: 16rem) {
+      .seiten-kopf.assistent-kopf .titelzeile { position: absolute; padding: 0;}
+      .seiten-kopf.assistent-kopf .kopf-oberzeile > .anzeige-schalter { display: none;}
+    }
+    @media (orientation: landscape) and (max-height: 31.25rem) {
+      /* R9-G4: Quer lag „‹ Startseite" 2 px über den Schritt-Tabs 4 bis 6 (ein Fehltipp verließ den Assistenten), und die Ansichtswahl stand
+        zweimal im Bild (Segmente oben, „◐ Ansicht" in der Fußleiste). Jetzt 8 px Abstand zwischen Rücksprung und Reitern, und die Wahl
+        steht nur in der Fußleiste, die beim Rollen bleibt. */
+      .seiten-kopf.assistent-kopf .kopf-inhalt { row-gap: 8px;}
+      .seiten-kopf.assistent-kopf .kopf-oberzeile > .anzeige-schalter { display: none;}
+    }
+    @media (max-width: 16rem) {
+      .seiten-kopf.assistent-kopf .kopf-inhalt { padding-top: 2px; row-gap: 0;}
+      .seiten-kopf.assistent-kopf .kopf-oberzeile .zur-start { min-width: 0;}
+    }
+
+    /* ---------------------------------------------------------------
        Kennfarbe in den Anzeigemodi. Die Token der Modi selbst kommen aus
        @bos/oberflaeche (oben); hier steht nur, was die Kennfarbe dieser App
        betrifft. Der Nacht-Modus nimmt das gemeinsame Bernstein.
@@ -2581,6 +2968,17 @@
     }
     .dunkel-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
     .nacht-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
+    /* Rollen-Marken in Dunkel und Nacht (Erfassungsbogen, 441811c). */
+    .dunkel-modus {
+      --rolle-f-fond: #2b2748; --rolle-f-text: #c9c0ee;
+      --rolle-u-fond: #1c2c25; --rolle-u-text: #9fcbb2;
+      --rolle-m-fond: var(--flaeche-2); --rolle-m-text: var(--text-2);
+    }
+    .nacht-modus {
+      --rolle-f-fond: #2a2440; --rolle-f-text: #c3b6ea;
+      --rolle-u-fond: #1d2a22; --rolle-u-text: #9fcbb2;
+      --rolle-m-fond: var(--flaeche-2); --rolle-m-text: var(--text-2);
+    }
 
     /* Große Systemschrift (schrift-stufe.ts setzt die Klasse): Startkopf quer gedeckelt (R7-H8, R7-S4). */
     @media (orientation: landscape) and (max-height: 31.25rem) {

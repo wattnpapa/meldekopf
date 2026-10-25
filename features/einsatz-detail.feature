@@ -212,7 +212,7 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
   Szenario: Ohne Namen lässt sich keine Einheit übernehmen
     Wenn ich auf "Einheit manuell erfassen…" klicke
     Und ich auf "In Einsatz übernehmen" klicke
-    Dann sehe ich den Dialog "Name der Einheit fehlt"
+    Dann sehe ich den Dialog "Ort der Einheit fehlt"
 
   Szenario: Nach dem Export lassen sich nur die seitdem neuen Bögen weitergeben
     Dann sehe ich den Hinweis "Noch kein Export aus diesem Einsatz"
@@ -241,3 +241,22 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
   Szenario: Ein zweites Fenster nimmt eine Einheit auf, das erste zeigt sie sofort
     Wenn in einem zweiten Fenster die Einheit "DLRG" "Wardenburg" manuell aufgenommen wird
     Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
+
+  # Audit Phase 6 (P0): Am Telefon lag der Aufklappknopf jeder zugeklappten
+  # Einheitenkarte über dem ganzen Bildschirm; „Bogen scannen…" klappte nur
+  # unsichtbar eine Karte auf. Playwright klickt nur, was den Klick auch bekommt.
+  Szenario: Am Telefon erreichen die Knöpfe über der Einheitenliste ihren Tipp
+    Angenommen das Fenster 390 × 844 Pixel groß ist
+    Wenn ich auf "Bogen scannen…" klicke
+    Dann sehe ich den Dialog "QR-Code scannen"
+
+  # Audit Phase 6 (P1): Eine unterbrochene Erfassung öffnete sich wortlos
+  # wieder; die nächste Einheit trug Ort und Stärke der vorigen.
+  Szenario: Eine unterbrochene Erfassung fragt vor dem Fortsetzen
+    Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich das Feld "Ort der Einheit (Pflicht)" mit "Bremen" fülle
+    Und ich auf "‹ Einsatz „Hochwasser Weser“" klicke
+    Und ich auf "Einheit manuell erfassen…" klicke
+    Dann sehe ich den Dialog "Angefangene Erfassung"
+    Wenn ich im Dialog auf "Verwerfen und neue Einheit erfassen" klicke
+    Dann steht im Feld "Ort der Einheit (Pflicht)" der Wert ""

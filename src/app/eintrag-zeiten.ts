@@ -281,7 +281,10 @@ export function nummerUndZugSetzen(einsatzId: string, eintragId: string, wert: {
   const s = liste.find((x) => x.id === einsatzId);
   const e = s?.eintraege.find((x) => x.id === eintragId);
   if (!s || !e) return;
-  const zug = wert.zug?.trim() || undefined;
+  // Schreibweise der schon vergebenen Züge übernehmen wie bei „Zug zuordnen“ und
+  // im Papier-Abgleich (R7-K4): „2.Zug“ vom Zettel neben „2. Zug“ stand sonst als
+  // zweiter Zug in den Zwischensummen (Audit Phase 6, Meldekopf).
+  const zug = zugNormalisiert(wert.zug ?? "", s.eintraege.filter((x) => x.einheitSchluessel !== e.einheitSchluessel).map((x) => x.zugEtikett)) || undefined;
   for (const x of s.eintraege) {
     if (x.einheitSchluessel !== e.einheitSchluessel) continue;
     if (wert.nummer != null) x.nummer = wert.nummer;

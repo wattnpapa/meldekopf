@@ -148,9 +148,10 @@ export function Schnellerfassung({
     // niemandem zuordnen (Audit Runde 3, R3-E3, R3-G3).
     if (!einheitOrt(b.einheit) && b.einheit.standortRef == null) {
       await zeigeHinweis({
-        titel: "Name der Einheit fehlt",
-        text: "Ohne Namen lässt sich die Meldung keiner Einheit zuordnen — in der Lage stünde nur die Organisation. Bitte zuerst den Namen eintragen.",
-        ok: "Zum Namensfeld",
+        // Das Feld heißt „Ort der Einheit (Pflicht)“; die Rückfrage nennt es so (Audit Phase 6, Neuling).
+        titel: "Ort der Einheit fehlt",
+        text: "Ohne Ort lässt sich die Meldung keiner Einheit zuordnen — in der Lage stünde nur die Organisation. Bitte zuerst „Ort der Einheit“ eintragen.",
+        ok: "Zum Feld „Ort der Einheit“",
       });
       const feld = document.getElementById("feld-einheit-name");
       feld?.scrollIntoView?.({ block: "center" });
@@ -317,7 +318,7 @@ export function Schnellerfassung({
         <div className="kopf-oberzeile">
           {/* Der Rückweg führt in den Einsatz (F2); die Erfassung bleibt als Entwurf liegen. */}
           <button type="button" className="zur-start" onClick={zurueckInDenEinsatz}>
-            ‹ Einsatz „{einsatz.name}"
+            ‹ Einsatz „{einsatz.name}“
           </button>
           <AnzeigeSchalter klappbar />
         </div>
@@ -335,7 +336,7 @@ export function Schnellerfassung({
         </p>
         {/* Die Uhrzeit vom Meldeblock gleich oben mitnehmen, statt sie danach je Karte über „ändern" (R2-A5). */}
         <EintreffzeitFeld wert={zeit} onAendern={setZeit} nummer={nummer} onNummer={setNummer} zug={zug} onZug={setZug} zuege={zuege} />
-        <AbschnittEinheit bogen={bogen} aendern={aendern} />
+        <AbschnittEinheit bogen={bogen} aendern={aendern} kompakt />
         <div ref={staerkeAbschnitt} id="abschnitt-staerke">
           <AbschnittStaerke bogen={bogen} aendern={aendern} />
         </div>

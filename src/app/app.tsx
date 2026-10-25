@@ -15,9 +15,10 @@ import { Fragment, Suspense, lazy, useState, type ReactNode } from "react";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { einsatzErfragen } from "./einsatz-erfragen";
 import { ERFASSUNGSBOGEN_URL } from "./adressen";
+import { bogenHatInhalt, einheitAnzeigename } from "./hilfen";
 import { Aktualisierungshinweise } from "./aktualisierung";
 import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
-import { Dialogschicht } from "@bos/oberflaeche/dialoge";
+import { Dialogschicht, frageWahl } from "@bos/oberflaeche/dialoge";
 import { Fusszeile } from "./fusszeile";
 import { Kopfnav } from "@bos/oberflaeche/kopfnav-ui";
 import { KOPFNAV } from "./kopfnav";
@@ -32,7 +33,7 @@ import { offlineText, useOfflineStand } from "./offline-bereit";
 import { nachAbgleichFortsetzen, useFensterAbgleich } from "./fenster-abgleich";
 import { entwurfPlatzFrei, erfassungFuer } from "./schnellerfassung/angefangen";
 import type { ExportUmfang } from "./weitergabe/export-stand";
-import { entwurfLaden } from "./entwurf";
+import { entwurfLaden, entwurfVerwerfen } from "./entwurf";
 import { QrScannerWeb } from "./eingang/qr-scanner-web";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
 import { SpeicherWarnung } from "./speicher-warnung";
@@ -149,6 +150,22 @@ export function App() {
 
   async function manuellErfassen(einsatzId: string) {
     if (!(await entwurfPlatzFrei(einsatzId))) return;
+    // Eine angefangene Erfassung dieser Sammlung: fortsetzen oder bewusst neu —
+    // sonst trug die nächste Einheit wortlos Namen und Stärke der vorigen
+    // (Audit Phase 6, Stress und Workflow, P1; im Erfassungsbogen R2-E1).
+    const angefangen = erfassungFuer(einsatzId, entwurfLaden());
+    if (angefangen && bogenHatInhalt(angefangen.bogen)) {
+      const wahl = await frageWahl({
+        titel: "Angefangene Erfassung",
+        text: `„${einheitAnzeigename(angefangen.bogen.einheit) || "(noch ohne Ort)"}" ist angefangen, aber noch nicht übernommen.`,
+        wege: [
+          { wert: "weiter", label: "Diese Erfassung fortsetzen" },
+          { wert: "neu", label: "Verwerfen und neue Einheit erfassen", hinweis: "Die angefangenen Eingaben gehen verloren.", gefahr: true },
+        ],
+      });
+      if (!wahl) return;
+      if (wahl === "neu") entwurfVerwerfen();
+    }
     setMeldung("");
     setFehler("");
     setErfassungOffen(true);

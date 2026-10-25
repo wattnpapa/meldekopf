@@ -11,7 +11,7 @@
  * (`vokabSortiert`), weil `VokabAuswahl` aus `@bos/oberflaeche` es nicht tut.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Einheit,
   Ernaehrung,
@@ -215,6 +215,17 @@ function OvVorschlagFeld(props: {
 }
 
 
+/** In der Schnellerfassung zugeklappt (`details`), sonst ohne Rahmen. */
+function AufklappRahmen(props: { aktiv: boolean; titel: string; children: ReactNode }) {
+  if (!props.aktiv) return <>{props.children}</>;
+  return (
+    <details className="zugehoerigkeit-klappe">
+      <summary>{props.titel}</summary>
+      {props.children}
+    </details>
+  );
+}
+
 /** Steht in der Ebene etwas, das beim Entfernen verloren ginge? */
 function ebeneHatInhalt(h: HierarchieEbene): boolean {
   return !!(h.name.trim() || h.kurz?.trim() || h.telefon?.trim() || h.email?.trim());
@@ -256,7 +267,20 @@ const EINHEITSTYP_BEISPIEL: Partial<Record<OrganisationsTyp, string>> = {
   [OrganisationsTyp.DLRG]: "z. B. Wasserrettungszug, Bootstrupp",
 };
 
-export function AbschnittEinheit({ bogen, aendern: aendernRoh }: AbschnittProps) {
+export function AbschnittEinheit({
+  bogen,
+  aendern: aendernRoh,
+  kompakt = false,
+}: AbschnittProps & {
+  /**
+   * Schnellerfassung: Der Ort steht oben, Kontaktstellen und übergeordnete
+   * Ebenen klappen zu. Ausgeklappt standen die Zähler der Stärke 2,5
+   * Bildschirme tiefer, und die OV-Auflösung beim Verlassen des Ortsfelds
+   * schob sie unter dem Finger weg — der erste Tipp ging verloren (Audit
+   * Phase 6, Feldnutzer und Handschuh, P1).
+   */
+  kompakt?: boolean;
+}) {
   const e = bogen.einheit;
   // Vorbelegung und Typwechsel verändern die Personalliste — der Verpflegungs-
   // Bedarf in Schritt 5 zieht mit (siehe verpflegungMitziehen).
@@ -527,6 +551,67 @@ export function AbschnittEinheit({ bogen, aendern: aendernRoh }: AbschnittProps)
     setErgaenzt(null);
   }
 
+  /** Namensfeld einer Ebene samt der Hinweise darunter (ergänzt, nicht im Verzeichnis). */
+  const nameUndHinweise = (h: HierarchieEbene, i: number) => (
+    <>
+            {/* Nur zum Beobachten des Fokus: Der Hinweis „nicht im Verzeichnis" kommt
+                erst, wenn das Namensfeld verlassen ist. */}
+            <span
+              style={{ display: "contents" }}
+              onFocusCapture={() => setNameImFokus(i)}
+              onBlurCapture={() => setNameImFokus((z) => (z === i ? null : z))}
+            >
+            <Feld titel={i === 0 ? "Ort der Einheit (Pflicht)" : "Name"}>
+              {e.organisation === OrganisationsTyp.THW && h.bezeichnung.code === 1 ? (
+                <OvVorschlagFeld
+                  id={i === 0 ? "feld-einheit-name" : undefined}
+                  wert={h.name}
+                  platzhalter="tippen für Vorschläge…"
+                  verzeichnis={ovVerzeichnis}
+                  tippen={(name) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name } : x)) })}
+                  uebernehmen={(ov) => {
+                    setErgaenzt(null);
+                    ovUebernehmen(i, ov);
+                  }}
+                  aufgeloest={(ov) => ovAufgeloest(i, ov)}
+                />
+              ) : (
+                <input
+                  id={i === 0 ? "feld-einheit-name" : undefined}
+                  value={h.name}
+                  onChange={(ev) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)) })}
+                />
+              )}
+            </Feld>
+            </span>
+            {/* Direkt unter dem Namensfeld, das ergänzt hat — dort liegt der Blick. */}
+            {/* Kompakt nicht hier: Der Satz erschiene beim Verlassen des Felds und
+                schöbe die Zähler darunter weg (dort steht er als feste Leiste). */}
+            {!kompakt && ergaenzt && ergaenzt.i === i && e.hierarchie[ergaenzt.i]?.kurz === ergaenzt.ov.kurz && (
+              <p className="hinweis ov-ergaenzt" role="status">
+                Aus dem OV-Verzeichnis ergänzt: {ergaenzt.ov.name} ({ergaenzt.ov.kurz}) mit Telefon und E-Mail
+                {e.hierarchie.length > 1 ? ", dazu die übergeordneten Ebenen" : ""}.{" "}
+                <button type="button" className="link" onClick={ergaenzungZuruecknehmen}>Rückgängig</button>
+              </p>
+            )}
+            {/* Ein OV-Name ohne Kürzel ist Freitext: nicht aus dem Verzeichnis, ohne
+                Telefon und E-Mail (Audit Runde 4, R4-H1). Erst nach dem Verlassen
+                des Namensfelds, nicht schon beim Tippen. */}
+            {!(kompakt && i === 0) &&
+              e.organisation === OrganisationsTyp.THW &&
+              h.bezeichnung.code === 1 &&
+              ovVerzeichnis.length > 0 &&
+              h.name.trim() &&
+              !h.kurz?.trim() &&
+              nameImFokus !== i && (
+                <p className="hinweis warnung-text ov-frei-hinweis" role="status">
+                  „{h.name.trim()}" ist nicht im OV-Verzeichnis — Vorschlag antippen, sonst fehlen Kürzel, Telefon und E-Mail.
+                  Ein Ortsverband, den es dort nicht gibt, darf so stehen bleiben.
+                </p>
+              )}
+    </>
+  );
+
   return (
     <section className="karte">
       <h2>Einheit</h2>
@@ -588,6 +673,20 @@ export function AbschnittEinheit({ bogen, aendern: aendernRoh }: AbschnittProps)
         </p>
       )}
 
+      {kompakt && e.hierarchie[0] && <div className="zeile">{nameUndHinweise(e.hierarchie[0], 0)}</div>}
+      <AufklappRahmen aktiv={kompakt} titel="Zugehörigkeit und Kontakt (optional)">
+      {/* Kompakt steht der Hinweis „nicht im Verzeichnis" hier, aus demselben Grund. */}
+      {kompakt &&
+        e.organisation === OrganisationsTyp.THW &&
+        e.hierarchie[0]?.bezeichnung.code === 1 &&
+        ovVerzeichnis.length > 0 &&
+        e.hierarchie[0].name.trim() &&
+        !e.hierarchie[0].kurz?.trim() && (
+          <p className="hinweis warnung-text ov-frei-hinweis" role="status">
+            „{e.hierarchie[0].name.trim()}" ist nicht im OV-Verzeichnis — oben einen Vorschlag antippen, sonst fehlen Kürzel,
+            Telefon und E-Mail. Ein Ortsverband, den es dort nicht gibt, darf so stehen bleiben.
+          </p>
+        )}
       <h3>Zugehörigkeit / Kontaktstellen</h3>
       <p className="hinweis">
         Die erste Ebene ist die eigene Einheit, jede weitere Zeile die nächsthöhere Stelle
@@ -607,58 +706,7 @@ export function AbschnittEinheit({ bogen, aendern: aendernRoh }: AbschnittProps)
               platzhalter="z. B. Landkreis"
             />
           </Feld>
-          {/* Nur zum Beobachten des Fokus: Der Hinweis „nicht im Verzeichnis" kommt
-              erst, wenn das Namensfeld verlassen ist. */}
-          <span
-            style={{ display: "contents" }}
-            onFocusCapture={() => setNameImFokus(i)}
-            onBlurCapture={() => setNameImFokus((z) => (z === i ? null : z))}
-          >
-          <Feld titel={i === 0 ? "Ort der Einheit (Pflicht)" : "Name"}>
-            {e.organisation === OrganisationsTyp.THW && h.bezeichnung.code === 1 ? (
-              <OvVorschlagFeld
-                id={i === 0 ? "feld-einheit-name" : undefined}
-                wert={h.name}
-                platzhalter="tippen für Vorschläge…"
-                verzeichnis={ovVerzeichnis}
-                tippen={(name) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name } : x)) })}
-                uebernehmen={(ov) => {
-                  setErgaenzt(null);
-                  ovUebernehmen(i, ov);
-                }}
-                aufgeloest={(ov) => ovAufgeloest(i, ov)}
-              />
-            ) : (
-              <input
-                id={i === 0 ? "feld-einheit-name" : undefined}
-                value={h.name}
-                onChange={(ev) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)) })}
-              />
-            )}
-          </Feld>
-          </span>
-          {/* Direkt unter dem Namensfeld, das ergänzt hat — dort liegt der Blick. */}
-          {ergaenzt && ergaenzt.i === i && e.hierarchie[ergaenzt.i]?.kurz === ergaenzt.ov.kurz && (
-            <p className="hinweis ov-ergaenzt" role="status">
-              Aus dem OV-Verzeichnis ergänzt: {ergaenzt.ov.name} ({ergaenzt.ov.kurz}) mit Telefon und E-Mail
-              {e.hierarchie.length > 1 ? ", dazu die übergeordneten Ebenen" : ""}.{" "}
-              <button type="button" className="link" onClick={ergaenzungZuruecknehmen}>Rückgängig</button>
-            </p>
-          )}
-          {/* Ein OV-Name ohne Kürzel ist Freitext: nicht aus dem Verzeichnis, ohne
-              Telefon und E-Mail (Audit Runde 4, R4-H1). Erst nach dem Verlassen
-              des Namensfelds, nicht schon beim Tippen. */}
-          {e.organisation === OrganisationsTyp.THW &&
-            h.bezeichnung.code === 1 &&
-            ovVerzeichnis.length > 0 &&
-            h.name.trim() &&
-            !h.kurz?.trim() &&
-            nameImFokus !== i && (
-              <p className="hinweis warnung-text ov-frei-hinweis" role="status">
-                „{h.name.trim()}" ist nicht im OV-Verzeichnis — Vorschlag antippen, sonst fehlen Kürzel, Telefon und E-Mail.
-                Ein Ortsverband, den es dort nicht gibt, darf so stehen bleiben.
-              </p>
-            )}
+          {!(kompakt && i === 0) && nameUndHinweise(h, i)}
           {/* Das Kürzel (z. B. THW-OV "OODE") ergibt nur beim THW Sinn; andere Organisationen führen keine solchen Kürzel.
               „Dienststellen-Kürzel (optional)": „Kürzel" allein las ein Neuling als
               irgendeine Abkürzung und tippte „OV OL" — das Beispiel sagt, was gemeint ist. */}
@@ -798,6 +846,7 @@ export function AbschnittEinheit({ bogen, aendern: aendernRoh }: AbschnittProps)
           </button>
         )}
       </p>
+      </AufklappRahmen>
       {/* Derselbe Hinweisblock wie im Personal-Schritt, und aus demselben
           Grund: „Ort der Einheit (Pflicht)" konnte man kommentarlos leer lassen und
           „Weiter" drücken — der Fehler fiel erst fünf Schritte später in der
@@ -806,6 +855,12 @@ export function AbschnittEinheit({ bogen, aendern: aendernRoh }: AbschnittProps)
           weiterkommen und ihn nachtragen. Er steht jetzt nur nicht mehr still
           da. */}
       <Hinweise punkte={pruefpunkte(bogen, false)} aktuellerSchritt={0} />
+      {kompakt && ergaenzt && e.hierarchie[ergaenzt.i]?.kurz === ergaenzt.ov.kurz && !ebenenWeg && !vorbelegungWeg && (
+        <DaumenQuittung key={`ergaenzt:${ergaenzt.ov.kurz}`} onRueckgaengig={ergaenzungZuruecknehmen} onSchliessen={() => setErgaenzt(null)}>
+          Aus dem OV-Verzeichnis ergänzt: {ergaenzt.ov.name} ({ergaenzt.ov.kurz}) mit Telefon und E-Mail
+          {e.hierarchie.length > 1 ? ", dazu die übergeordneten Ebenen" : ""}.
+        </DaumenQuittung>
+      )}
       {ebenenWeg && !vorbelegungWeg && (
         <DaumenQuittung key={`ebene:${ebenenWeg.nonce}`} onRueckgaengig={ebeneZurueck} onSchliessen={() => setEbenenWeg(null)}>
           <strong>Entfernt:</strong> {ebenenWeg.name}
