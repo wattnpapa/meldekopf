@@ -1,16 +1,17 @@
 /**
- * Native Brücke (Capacitor): Plattform erkennen.
+ * Herkunft: Erfassungsbogen `src/app/nativ.ts` (Commit 441811c).
  *
- * Herkunft: Erfassungsbogen `src/app/nativ.ts` (Commit f2b77f1), in Phase 0
- * auf die Plattform-Erkennung gekürzt. Der Rest — In-App-QR-Scanner, Dateien
- * über das System-Share-Sheet teilen (AirDrop, Quick Share, Dateien-App),
- * App-Links empfangen — kommt unverändert mit den Eingängen (Phase 3) und der
- * Weitergabe (Phase 5), zusammen mit den Capacitor-Plugins, an denen er hängt.
+ * Native Brücke (Capacitor): In-App-QR-Scanner und Teilen von Dateien über
+ * das System-Share-Sheet (AirDrop, Dateien-App, Drucken, Mail …).
  *
- * Im Browser ist istNativ() false und die Web-Pfade bleiben unverändert.
+ * Im Browser ist istNativ() false und die Web-Pfade (Download-Links)
+ * bleiben unverändert; dieses Modul wird dann nicht aktiv.
  */
 
 import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 
 export function istNativ(): boolean {
   return Capacitor.isNativePlatform();
@@ -48,4 +49,124 @@ export function imWebBrowser(): boolean {
  */
 export function shareSheetVerfuegbar(): boolean {
   return istNativ() || (typeof navigator !== "undefined" && typeof navigator.share === "function");
+}
+
+/**
+ * Kann die Seite eine PDF in einem <iframe> anzeigen? Chrome und Samsung
+ * Internet auf Android haben keinen eingebauten PDF-Betrachter; ein
+ * eingebetteter Blob zeigt dort nur die graue Fehlerseite „Inhalt blockiert"
+ * (so gemeldet aus einem THW-OV). Die Browser sagen das selbst über
+ * navigator.pdfViewerEnabled. Fehlt die Eigenschaft (ältere Browser), wird
+ * wie bisher eingebettet. Die native App bettet nie ein, sie teilt die Datei.
+ */
+export function pdfEinbettbar(): boolean {
+  if (istNativ()) return false;
+  if (typeof navigator === "undefined") return false;
+  return navigator.pdfViewerEnabled !== false;
+}
+
+/**
+ * Name des Nahbereichs-Dienstes der Plattform — allein für die Beschriftung,
+ * damit der Knopf das nennt, was der Nutzer im Share-Sheet dann auch sucht.
+ * Im Browser bleibt nur die Gerätekennung; sie entscheidet hier über ein Wort,
+ * nicht über eine Funktion, ein Fehlgriff kostet also nichts.
+ */
+export function nahbereichDienst(): "AirDrop" | "Quick Share" | null {
+  const p = plattform();
+  if (p === "ios") return "AirDrop";
+  if (p === "android") return "Quick Share";
+  const kennung = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  if (/Android/.test(kennung)) return "Quick Share";
+  if (/iPhone|iPad|iPod|Mac OS X|Macintosh/.test(kennung)) return "AirDrop";
+  return null;
+}
+
+/**
+ * Universal Links (iOS) / App Links (Android) empfangen: Der Callback
+ * bekommt die volle URL (https://erfassungsbogen.app/#<Payload>) — beim
+ * Kaltstart über die Launch-URL, bei bereits laufender App über appUrlOpen.
+ * Liefert eine Aufräumfunktion, die den Listener wieder entfernt.
+ */
+export function bogenLinksEmpfangen(callback: (url: string) => void): () => void {
+  if (!istNativ()) return () => {};
+  const listener = App.addListener("appUrlOpen", ({ url }) => callback(url));
+  App.getLaunchUrl()
+    .then((start) => {
+      if (start?.url) callback(start.url);
+    })
+    .catch(() => {});
+  return () => {
+    listener.then((l) => l.remove()).catch(() => {});
+  };
+}
+
+/**
+ * QR-Code mit der Kamera scannen (fertige Scanner-UI des Plugins).
+ * Liefert den rohen QR-Text oder null bei Abbruch durch den Nutzer.
+ */
+export async function qrScannen(anweisung = "QR-Code des Erfassungsbogens in den Rahmen halten"): Promise<string | null> {
+  // Dynamischer Import: das Plugin zieht über sein definitions.js die komplette
+  // html5-qrcode-Bibliothek (~360 KB) mit — die gehört nicht ins Start-Bundle,
+  // zumal der native Scanner im Browser nie aufgerufen wird.
+  const { CapacitorBarcodeScanner, CapacitorBarcodeScannerCameraDirection, CapacitorBarcodeScannerTypeHint } = await import(
+    "@capacitor/barcode-scanner"
+  );
+  try {
+    const ergebnis = await CapacitorBarcodeScanner.scanBarcode({
+      hint: CapacitorBarcodeScannerTypeHint.QR_CODE,
+      cameraDirection: CapacitorBarcodeScannerCameraDirection.BACK,
+      scanInstructions: anweisung,
+    });
+    return ergebnis.ScanResult || null;
+  } catch (err) {
+    // Abbruch durch den Nutzer ist kein Fehler
+    if (/cancel|abbruch|dismiss/i.test(err instanceof Error ? err.message : String(err))) return null;
+    throw err;
+  }
+}
+
+/**
+ * Share-Sheet öffnen; Abbruch durch den Nutzer ist kein Fehler — aber auch
+ * keine Übergabe, deshalb liefert der Abbruch false: der Export-Stand des
+ * Meldekopfs (export-stand.ts) darf ihn nicht als „übergeben" verbuchen.
+ */
+async function teilen(titel: string, uri: string): Promise<boolean> {
+  try {
+    await Share.share({ title: titel, files: [uri] });
+    return true;
+  } catch (err) {
+    if (/cancel|abbruch/i.test(err instanceof Error ? err.message : String(err))) return false;
+    throw err;
+  }
+}
+
+/** Binärdatei (Base64) in den Cache schreiben und übers Share-Sheet anbieten — PDF, XLSX, … */
+export async function binaerTeilen(dateiname: string, base64: string): Promise<boolean> {
+  const datei = await Filesystem.writeFile({
+    path: dateiname,
+    data: base64,
+    directory: Directory.Cache,
+  });
+  return teilen(dateiname, datei.uri);
+}
+
+/** Einen Link (App-URL) als Text übers Share-Sheet anbieten — ohne Datei-Anhang. */
+export async function linkTeilen(titel: string, url: string): Promise<void> {
+  try {
+    await Share.share({ title: titel, text: titel, url });
+  } catch (err) {
+    if (/cancel|abbruch/i.test(err instanceof Error ? err.message : String(err))) return;
+    throw err;
+  }
+}
+
+/** Text (z. B. Bogen-JSON) als Datei übers Share-Sheet anbieten. */
+export async function textTeilen(dateiname: string, text: string): Promise<boolean> {
+  const datei = await Filesystem.writeFile({
+    path: dateiname,
+    data: text,
+    directory: Directory.Cache,
+    encoding: Encoding.UTF8,
+  });
+  return teilen(dateiname, datei.uri);
 }

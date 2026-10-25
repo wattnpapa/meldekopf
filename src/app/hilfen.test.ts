@@ -1,0 +1,1085 @@
+/**
+ * Herkunft: Erfassungsbogen `src/app/hilfen.test.ts` (Commit 441811c).
+ */
+import { describe, it, expect, vi } from "vitest";
+
+// hilfen.ts zieht über ./nativ die Capacitor-Plugins; für die reinen Helfer
+// brauchen wir davon nichts. Der Mock hält die Node-Testumgebung frei davon.
+vi.mock("./nativ", () => ({
+  istNativ: () => false,
+  textTeilen: async () => {},
+}));
+
+// Fester „Geräteschlüssel": ohne localStorage würde je Aufruf ein neuer
+// entstehen und die Prüfung, WER gezeichnet hat, wäre nicht formulierbar.
+vi.mock("./geraete-schluessel", () => ({
+  geraeteSchluesselSicherstellen: async () => new Uint8Array(32).fill(5),
+}));
+
+import {
+  Ernaehrung,
+  Fahrerlaubnis,
+  Geschlecht,
+  OrganisationsTyp,
+  PersonalErfassung,
+  StaerkeRolle,
+  SCHEMA_VERSION,
+  MINUTEN_JE_TAG,
+  datumAusIso,
+  zeitpunktAusIso,
+  type Erfassungsbogen,
+  KontaktArt,
+  type Fahrzeug,
+  type Person,
+} from "@bos/eeb-format/model";
+import {
+  betriebsstoffPlausibilitaet,
+  einheitAnzeigename,
+  bogenLaden,
+  browserKompressor,
+  fahrzeugHinweise,
+  fahrzeugUnbenannt,
+  inflateRawBegrenzt,
+  MAX_ENTPACKT,
+  migriereBogen,
+  neuePerson,
+  neuerBogen,
+  natoZeitstempel,
+  neuesFahrzeug,
+  nurSollstaerke,
+  personUnbenannt,
+  plausibilitaet,
+  pruefpunkte,
+  qrErzeugen,
+  schrittStatus,
+  staerkePlausibilitaet,
+  transportBilanz,
+  verpflegungMitziehen,
+  verschoben,
+  zeitpunktDeutsch,
+} from "./hilfen";
+import { deflateRaw } from "pako";
+import QRCode from "qrcode";
+import {
+  EEB_URL_PREFIX,
+  QR_EINZEL_MAX_VERSION,
+  QR_SEGMENT_ZIEL_VERSION,
+  decodePayload,
+  encodePayload,
+  parseSegmentUrl,
+  payloadAusText,
+  segmentePayload,
+} from "@bos/eeb-format/codec";
+import {
+  oeffentlicherSchluessel,
+  schluesselKurzform,
+  schluesselpaarErzeugen,
+  signaturVonPayload,
+  signiertePayloadBytes,
+} from "@bos/eeb-format/signatur";
+
+// Minimaler File-Ersatz: bogenLaden nutzt nur datei.text().
+function jsonDatei(inhalt: string): File {
+  return { text: async () => inhalt } as File;
+}
+
+function person(p: Partial<Person> = {}): Person {
+  return {
+    vorname: "V",
+    nachname: "N",
+    staerkeRolle: StaerkeRolle.MANNSCHAFT,
+    funktionen: [],
+    fahrerlaubnis: Fahrerlaubnis.NONE,
+    geschlecht: Geschlecht.M,
+    ernaehrung: Ernaehrung.FLEISCH,
+    kontakte: [],
+    zusatzqualifikationen: [],
+    ...p,
+  };
+}
+
+
+describe("plausibilitaet()", () => {
+  function bogen(over: Partial<Erfassungsbogen> = {}): Erfassungsbogen {
+    return { ...neuerBogen(), ...over };
+  }
+
+  it("meldet keine Hinweise für einen stimmigen Bogen", () => {
+    const basis = neuerBogen();
+    const b = bogen({
+      einheit: { ...basis.einheit, hierarchie: [{ bezeichnung: { code: 1 }, name: "Oldenburg - Ni" }] },
+      einsatz: { ...basis.einsatz, ortAuftrag: "Übung Kabelblitz" },
+      personal: [
+        person({
+          staerkeRolle: StaerkeRolle.FUEHRER,
+          geschlecht: Geschlecht.M,
+          // Mit Fahrzeug gehört ein Kraftfahrer zum stimmigen Bogen.
+          fahrerlaubnis: Fahrerlaubnis.B,
+          kontakte: [{ art: KontaktArt.MOBIL, dienstlich: true, wert: "01711234567" }],
+        }),
+        person({ geschlecht: Geschlecht.W }),
+      ],
+      fahrzeuge: [{ typ: { code: 1 }, kennzeichen: "THW-84397" }],
+    });
+    expect(plausibilitaet(b)).toEqual([]);
+  });
+
+  it("weist auf den fehlenden Namen der eigenen Einheit hin, nicht aber bei Standort-Referenz", () => {
+    const basis = neuerBogen();
+    expect(plausibilitaet(bogen()).some((h) => /unterste Ebene/.test(h))).toBe(true);
+    const mitRef = bogen({ einheit: { ...basis.einheit, standortRef: 42, hierarchie: [] } });
+    expect(plausibilitaet(mitRef).some((h) => /unterste Ebene/.test(h))).toBe(false);
+  });
+
+  it("weist auf leeren Ort/Auftrag, fehlende Erreichbarkeit und Fahrzeuge ohne Kennzeichen hin", () => {
+    const b = bogen({
+      personal: [person({ staerkeRolle: StaerkeRolle.FUEHRER })], // ohne Kontakte
+      fahrzeuge: [{ typ: { code: 1 } }],
+    });
+    const hinweise = plausibilitaet(b);
+    expect(hinweise.some((h) => /Ort\/Auftrag/.test(h))).toBe(true);
+    expect(hinweise.some((h) => /telefonische Erreichbarkeit/.test(h))).toBe(true);
+    expect(hinweise.some((h) => /Fahrzeug 1.*kein Kennzeichen/.test(h))).toBe(true);
+  });
+
+  it("lässt die Kennzeichen-Hinweise mit mitFahrzeugen=false weg (Personalseite)", () => {
+    const b = bogen({
+      personal: [person({ staerkeRolle: StaerkeRolle.FUEHRER })],
+      fahrzeuge: [{ typ: { code: 1 } }],
+    });
+    const hinweise = plausibilitaet(b, false);
+    expect(hinweise.some((h) => /kein Kennzeichen/.test(h))).toBe(false);
+    // Andere Vollständigkeitshinweise bleiben erhalten.
+    expect(hinweise.some((h) => /telefonische Erreichbarkeit/.test(h))).toBe(true);
+  });
+
+  it("warnt, wenn die Sitzplätze der Fahrzeuge für die Stärke nicht reichen", () => {
+    // FGr W (B): 10 Helfer, dazu laut StAN ein LKW Lkr gl (3 Plätze) und ein
+    // Anhänger — sieben Leute hätten keine Mitfahrgelegenheit.
+    const b = bogen({
+      personal: Array.from({ length: 10 }, () => person()),
+      fahrzeuge: [{ typ: { code: 10 } }, { typ: { code: 44 } }],
+    });
+    const hinweise = fahrzeugHinweise(b);
+    expect(hinweise.some((h) => /Sitzplätze: 3 .*für 10 Personen — 7 brauchen/.test(h))).toBe(true);
+    expect(transportBilanz(b)).toMatchObject({ plaetze: 3, benoetigt: 10, fehlend: 7 });
+  });
+
+  it("warnt nicht bei genug Sitzplätzen, ohne Fahrzeuge oder bei unbekanntem Fahrzeugtyp", () => {
+    const personal = Array.from({ length: 8 }, () => person());
+    const genug = bogen({ personal, fahrzeuge: [{ typ: { code: 4 } }] }); // GKW: 9 Plätze
+    expect(fahrzeugHinweise(genug).some((h) => /Sitzplätze/.test(h))).toBe(false);
+
+    // Keine Fahrzeuge = die Einheit reist erklärtermaßen anders an.
+    expect(fahrzeugHinweise(bogen({ personal })).some((h) => /Sitzplätze/.test(h))).toBe(false);
+
+    // MTW gl hat keine hinterlegte Platzzahl — die Bilanz bleibt unvollständig.
+    const unklar = bogen({ personal, fahrzeuge: [{ typ: { code: 24 } }] });
+    expect(fahrzeugHinweise(unklar).some((h) => /Sitzplätze/.test(h))).toBe(false);
+    expect(transportBilanz(unklar).unbekannt).toBe(1);
+  });
+
+  it("nimmt die am Fahrzeug erfasste Sitzplatzzahl vor dem Richtwert des Typs", () => {
+    // FüKomKw: im Vokabular mit 3 Plätzen hinterlegt, es gibt ihn aber auch mit
+    // Doppelkabine (7). Wer das einträgt, soll die Bilanz aufgehen sehen.
+    const personal = Array.from({ length: 7 }, () => person());
+    const richtwert = bogen({ personal, fahrzeuge: [{ typ: { code: 3 } }] });
+    expect(transportBilanz(richtwert)).toMatchObject({ plaetze: 3, fehlend: 4 });
+
+    const erfasst = bogen({ personal, fahrzeuge: [{ typ: { code: 3 }, sitzplaetze: 7 }] });
+    expect(transportBilanz(erfasst)).toMatchObject({ plaetze: 7, fehlend: 0, unbekannt: 0 });
+    expect(fahrzeugHinweise(erfasst).some((h) => /Sitzplätze/.test(h))).toBe(false);
+
+    // Auch für einen Typ ohne hinterlegten Richtwert (MTW gl) ist die Bilanz
+    // damit vollständig — und eine erfasste 0 zählt als Aussage, nicht als Lücke.
+    const ohneRichtwert = bogen({ personal, fahrzeuge: [{ typ: { code: 24 }, sitzplaetze: 0 }] });
+    expect(transportBilanz(ohneRichtwert)).toMatchObject({ plaetze: 0, unbekannt: 0, fehlend: 7 });
+  });
+
+  it("warnt bei Fahrzeugen ohne erfassten Kraftfahrer", () => {
+    // Die StAN-Vorbelegung setzt bewusst keine Fahrerlaubnisklassen — ohne den
+    // Hinweis findet der Kraftfahrer-Filter am Meldekopf die Einheit nicht.
+    const ohneKf = bogen({
+      personal: [person()],
+      fahrzeuge: [{ typ: { code: 8 }, kennzeichen: "THW-84397" }],
+    });
+    expect(plausibilitaet(ohneKf).some((h) => /kein Kraftfahrer/.test(h))).toBe(true);
+    // Auf der Personalseite (mitFahrzeugen=false) bleibt der Hinweis weg.
+    expect(plausibilitaet(ohneKf, false).some((h) => /kein Kraftfahrer/.test(h))).toBe(false);
+  });
+
+  it("warnt nicht, sobald eine Klasse erfasst ist — oder wo Klassen gar nicht erfasst werden", () => {
+    const mitKf = bogen({
+      personal: [person({ weitereFahrerlaubnisse: [Fahrerlaubnis.CE] })],
+      fahrzeuge: [{ typ: { code: 8 } }],
+    });
+    expect(plausibilitaet(mitKf).some((h) => /kein Kraftfahrer/.test(h))).toBe(false);
+
+    // Ohne Fahrzeuge braucht es keinen Fahrer, ohne Personal greift schon „Stärke ist 0".
+    expect(plausibilitaet(bogen({ personal: [person()] })).some((h) => /kein Kraftfahrer/.test(h))).toBe(false);
+    expect(plausibilitaet(bogen({ fahrzeuge: [{ typ: { code: 8 } }] })).some((h) => /kein Kraftfahrer/.test(h))).toBe(false);
+
+    // Die Stärke-Schnellerfassung kennt keine Klassen je Person — kein Fehlalarm.
+    const schnell = bogen({
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      staerkeManuell: { fuehrer: 1, unterfuehrer: 2, mannschaft: 9, gesamt: 12 },
+      personal: [person()],
+      fahrzeuge: [{ typ: { code: 8 } }],
+    });
+    expect(plausibilitaet(schnell).some((h) => /kein Kraftfahrer/.test(h))).toBe(false);
+  });
+
+  it("nimmt die Sitzplatz-Warnung in die Gesamtübersicht auf, nicht auf die Personalseite", () => {
+    const b = bogen({
+      personal: Array.from({ length: 10 }, () => person()),
+      fahrzeuge: [{ typ: { code: 10 }, kennzeichen: "THW-84397" }],
+    });
+    expect(plausibilitaet(b).some((h) => /Sitzplätze/.test(h))).toBe(true);
+    expect(plausibilitaet(b, false).some((h) => /Sitzplätze/.test(h))).toBe(false);
+  });
+
+  it("meldet fehlende Kennzeichen getrennt über fahrzeugHinweise", () => {
+    const b = bogen({
+      fahrzeuge: [{ typ: { code: 1 } }, { typ: { code: 2 }, kennzeichen: "OL-FW 2041" }],
+    });
+    const hinweise = fahrzeugHinweise(b);
+    expect(hinweise.some((h) => /Fahrzeug 1.*kein Kennzeichen/.test(h))).toBe(true);
+    expect(hinweise.some((h) => /Fahrzeug 2/.test(h))).toBe(false);
+  });
+
+  it("zählt eMail nicht als telefonische Erreichbarkeit, ein ziviles Kennzeichen aber als Kennzeichen", () => {
+    const basis = neuerBogen();
+    const b = bogen({
+      einsatz: { ...basis.einsatz, ortAuftrag: "X" },
+      personal: [person({ kontakte: [{ art: KontaktArt.EMAIL, dienstlich: true, wert: "a@b.de" }] })],
+      fahrzeuge: [{ typ: { code: 1 }, kennzeichen: "OL-FW 2041" }],
+    });
+    const hinweise = plausibilitaet(b);
+    expect(hinweise.some((h) => /telefonische Erreichbarkeit/.test(h))).toBe(true);
+    expect(hinweise.some((h) => /Kennzeichen/.test(h) && /Fahrzeug/.test(h))).toBe(false);
+  });
+
+  it("weist auf eine Stärke von 0 hin", () => {
+    expect(plausibilitaet(bogen()).some((h) => /Stärke ist 0/.test(h))).toBe(true);
+  });
+
+  it("erkennt einen umgedrehten Einsatzzeitraum", () => {
+    const b = bogen({
+      personal: [person()],
+      einsatz: { zeitraumVon: datumAusIso("2025-05-17"), zeitraumBis: datumAusIso("2025-05-14"), ortAuftrag: "X" },
+    });
+    expect(plausibilitaet(b).some((h) => /„bis“ liegt vor „von“/.test(h))).toBe(true);
+  });
+
+  it("macht aus einem Jahresdreher im Zeitraum genau einen Hinweis, der das Jahr nennt (R3-E7)", () => {
+    const b = bogen({
+      personal: [person()],
+      einsatz: { zeitraumVon: datumAusIso("2062-07-16"), zeitraumBis: datumAusIso("2026-07-10"), ortAuftrag: "X" },
+    });
+    const zeitraum = pruefpunkte(b, true, datumAusIso("2026-10-04")).filter((p) => /Einsatzzeitraum/.test(p.text));
+    expect(zeitraum.map((p) => p.text)).toEqual([
+      "Einsatzzeitraum: „bis“ liegt vor „von“ — 16.07.2062 liegt mehr als ein Jahr entfernt, Tippfehler im Jahr 2062?",
+    ]);
+  });
+
+  it("prüft die Unterbringungssumme nur bei belastbarer Grundlage (Meldekopf ohne manuelle Angabe: kein Hinweis)", () => {
+    const b = bogen({
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      personal: [],
+      staerkeManuell: { fuehrer: 1, unterfuehrer: 0, mannschaft: 9, gesamt: 10 },
+    });
+    expect(plausibilitaet(b).some((h) => /Unterbringung/.test(h))).toBe(false);
+  });
+
+  it("meldet Verpflegung für mehr Personen als die Gesamtstärke", () => {
+    const b = bogen({
+      personal: [person()],
+      sofortbedarf: { verpflegungPersonen: 5, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: false, ruhezeitErforderlich: false },
+    });
+    expect(plausibilitaet(b).some((h) => /Verpflegung für 5 Personen/.test(h))).toBe(true);
+  });
+});
+
+describe("migriereBogen() (JSON-Pfad, muss zum Codec passen)", () => {
+  it("hebt einen v2-Bogen auf die aktuelle Version und rettet davonVegetarisch", () => {
+    const alt = {
+      schemaVersion: 2,
+      stand: 0,
+      einheit: { organisation: OrganisationsTyp.THW, einheitsTyp: { code: 43 }, hierarchie: [{ bezeichnung: { code: 1 }, name: "OV" }] },
+      einsatz: { zeitraumVon: 0, zeitraumBis: 0, ortAuftrag: "" },
+      personalErfassung: PersonalErfassung.VOLLSTAENDIG,
+      // v2-Person ohne ernaehrung:
+      personal: [{ vorname: "A", nachname: "B", staerkeRolle: 0, funktionen: [], fahrerlaubnis: 0, geschlecht: 0, kontakte: [], zusatzqualifikationen: [] }],
+      fahrzeuge: [],
+      sofortbedarf: { verpflegungPersonen: 10, davonVegetarisch: 4, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: false, ruhezeitErforderlich: false },
+    } as unknown as Erfassungsbogen;
+
+    const b = migriereBogen(alt);
+    expect(b.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(b.personal[0]!.ernaehrung).toBe(Ernaehrung.FLEISCH);
+    expect(b.verpflegungManuell).toEqual({ vegetarisch: 4, vegan: 0 });
+    // Das Alt-Feld darf nicht im Sofortbedarf zurückbleiben.
+    expect((b.sofortbedarf as unknown as Record<string, unknown>).davonVegetarisch).toBeUndefined();
+  });
+
+  it("führt die getrennten Kennzeichenfelder eines v3-Bogens zusammen", () => {
+    const alt = {
+      ...neuerBogen(),
+      schemaVersion: 3,
+      fahrzeuge: [
+        { typ: { code: 1 }, thwKennzeichen: 84397 },
+        { typ: { code: 2 }, thwKennzeichen: 12 },
+        { typ: { code: 3 }, kennzeichenFreitext: "OL-FW 2041" },
+      ],
+    } as unknown as Erfassungsbogen;
+
+    const b = migriereBogen(alt);
+    expect(b.fahrzeuge.map((f) => f.kennzeichen)).toEqual(["THW-84397", "THW-00012", "OL-FW 2041"]);
+    // Die Alt-Felder dürfen nicht zurückbleiben.
+    const roh = b.fahrzeuge as unknown as Record<string, unknown>[];
+    expect(roh.every((f) => !("thwKennzeichen" in f) && !("kennzeichenFreitext" in f))).toBe(true);
+  });
+
+  it("hebt den Tageszähler-Stand eines v6-Bogens auf Minuten (Mitternacht)", () => {
+    const alt = { ...neuerBogen(), schemaVersion: 6, stand: datumAusIso("2026-05-14") } as Erfassungsbogen;
+    const b = migriereBogen(alt);
+    expect(b.stand).toBe(zeitpunktAusIso("2026-05-14T00:00"));
+    expect(b.schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it("lässt den minutengenauen Stand eines v7-Bogens unangetastet", () => {
+    const b = migriereBogen({ ...neuerBogen(), stand: zeitpunktAusIso("2026-05-14T10:39") });
+    expect(b.stand).toBe(zeitpunktAusIso("2026-05-14T10:39"));
+  });
+});
+
+describe("bogenLaden() (JSON-Datei)", () => {
+  it("lädt einen gültigen aktuellen Bogen und hebt ihn aufs aktuelle Schema", async () => {
+    const bogen = { ...neuerBogen(), einheit: { ...neuerBogen().einheit, hierarchie: [{ bezeichnung: { code: 1 }, name: "OV Test" }] } };
+    const b = await bogenLaden(jsonDatei(JSON.stringify(bogen)));
+    expect(b.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(b.einheit.hierarchie[0]!.name).toBe("OV Test");
+  });
+
+  it("migriert einen alten v2-Bogen (Ernährung, davonVegetarisch)", async () => {
+    const alt = {
+      schemaVersion: 2,
+      stand: 0,
+      einheit: { organisation: OrganisationsTyp.THW, einheitsTyp: { code: 43 }, hierarchie: [{ bezeichnung: { code: 1 }, name: "OV" }] },
+      einsatz: { zeitraumVon: 0, zeitraumBis: 0, ortAuftrag: "" },
+      personalErfassung: PersonalErfassung.VOLLSTAENDIG,
+      personal: [{ vorname: "A", nachname: "B", staerkeRolle: 0, funktionen: [], fahrerlaubnis: 0, geschlecht: 0, kontakte: [], zusatzqualifikationen: [] }],
+      fahrzeuge: [],
+      sofortbedarf: { verpflegungPersonen: 5, davonVegetarisch: 2, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: false, ruhezeitErforderlich: false },
+    };
+    const b = await bogenLaden(jsonDatei(JSON.stringify(alt)));
+    expect(b.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(b.personal[0]!.ernaehrung).toBe(Ernaehrung.FLEISCH);
+    expect(b.verpflegungManuell).toEqual({ vegetarisch: 2, vegan: 0 });
+  });
+
+  // Audit Runde 6, R6-E3: Die gesicherte Hülle des beiseitegelegten Entwurfs.
+  it("liest einen Bogen aus der gesicherten Entwurfs-Hülle", async () => {
+    const huelle = { gespeichert: 1, bogen: neuerBogen() };
+    const b = await bogenLaden(jsonDatei(JSON.stringify(huelle)));
+    expect(b.schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it("nennt bei unvollständigem Bogen in der Hülle, was fehlt, und dass die Datei nur dem dient, der die App betreut", async () => {
+    const bogen = JSON.parse(JSON.stringify(neuerBogen()));
+    delete bogen.einheit.organisation;
+    await expect(bogenLaden(jsonDatei(JSON.stringify({ gespeichert: 1, bogen })))).rejects.toThrow(
+      /gesicherte Entwurf.*Organisation der Einheit fehlt.*betreut/s,
+    );
+  });
+
+  it("lehnt kaputtes JSON ab", async () => {
+    await expect(bogenLaden(jsonDatei("{ kein json"))).rejects.toThrow(/kein gültiges JSON/i);
+  });
+
+  it("lehnt eine zu neue Schema-Version ab", async () => {
+    const b = { ...neuerBogen(), schemaVersion: SCHEMA_VERSION + 1 };
+    await expect(bogenLaden(jsonDatei(JSON.stringify(b)))).rejects.toThrow(/gültige Erfassungsbogen-Datei/i);
+  });
+
+  it("lehnt eine zu alte Schema-Version ab", async () => {
+    const b = { ...neuerBogen(), schemaVersion: 1 };
+    await expect(bogenLaden(jsonDatei(JSON.stringify(b)))).rejects.toThrow(/gültige Erfassungsbogen-Datei/i);
+  });
+
+  it("lehnt eine Datei ohne Pflichtstruktur ab", async () => {
+    // Gültige Version, aber kein Pflichtfeld: Die Meldung nennt das Feld statt der Version (R8-E3).
+    await expect(bogenLaden(jsonDatei(JSON.stringify({ schemaVersion: SCHEMA_VERSION })))).rejects.toThrow(/unvollständig: der Stand/i);
+    await expect(bogenLaden(jsonDatei(JSON.stringify({ stand: 1 })))).rejects.toThrow(/gültige Erfassungsbogen-Datei/i);
+  });
+});
+
+describe("plausibilitaet() — Stärke ohne Substanz", () => {
+  it("meldet leere Personenkarten, die trotzdem in die Stärke zählen", () => {
+    const b = { ...neuerBogen(), personal: [neuePerson(), neuePerson()] };
+    expect(plausibilitaet(b).some((t) => /2 Personenkarten ohne Angaben zählen/.test(t))).toBe(true);
+  });
+
+  it("fragt nach, wenn bei allen Personen die Geschlechts-Vorbelegung steht", () => {
+    const b = {
+      ...neuerBogen(),
+      personal: [
+        { ...neuePerson(), nachname: "Anna", geschlecht: Geschlecht.M },
+        { ...neuePerson(), nachname: "Eva", geschlecht: Geschlecht.M },
+      ],
+    };
+    expect(plausibilitaet(b).some((t) => /Geschlecht „männlich" — das ist die Vorbelegung/.test(t))).toBe(true);
+  });
+
+  it("schweigt, sobald das Geschlecht irgendwo abweicht", () => {
+    const b = {
+      ...neuerBogen(),
+      personal: [
+        { ...neuePerson(), nachname: "Anna", geschlecht: Geschlecht.W },
+        { ...neuePerson(), nachname: "Ben", geschlecht: Geschlecht.M },
+      ],
+    };
+    expect(plausibilitaet(b).some((t) => /Vorbelegung/.test(t))).toBe(false);
+  });
+});
+
+describe("plausibilitaet() — weitere Zweige", () => {
+  function bogen(over: Partial<Erfassungsbogen> = {}): Erfassungsbogen {
+    return { ...neuerBogen(), ...over };
+  }
+
+  it("erkennt eine manuelle Stärke, deren Summe nicht zur Gesamtstärke passt", () => {
+    const b = bogen({
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      personal: [],
+      staerkeManuell: { fuehrer: 1, unterfuehrer: 1, mannschaft: 1, gesamt: 5 },
+    });
+    expect(plausibilitaet(b).some((h) => /ergibt nicht die Gesamtstärke/.test(h))).toBe(true);
+  });
+
+  it("erkennt bei vollständiger Erfassung eine falsche manuelle Unterbringungssumme", () => {
+    const b = bogen({
+      personal: [person(), person()],
+      unterbringungManuell: { m: 1, w: 0, d: 0 },
+    });
+    expect(plausibilitaet(b).some((h) => /Unterbringung/.test(h))).toBe(true);
+  });
+
+  it("warnt, wenn im Meldekopf-Modus mehr Ansprechpartner als die Gesamtstärke erfasst sind", () => {
+    const b = bogen({
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      personal: [person(), person()],
+      staerkeManuell: { fuehrer: 0, unterfuehrer: 0, mannschaft: 1, gesamt: 1 },
+    });
+    expect(plausibilitaet(b).some((h) => /Ansprechpartner erfasst/.test(h))).toBe(true);
+  });
+
+  it("warnt im Meldekopf-Modus, wenn veg + vegan die Gesamtstärke übersteigen (auch ohne Sofortbedarf)", () => {
+    const b = bogen({
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      personal: [],
+      staerkeManuell: { fuehrer: 0, unterfuehrer: 0, mannschaft: 5, gesamt: 5 },
+      verpflegungManuell: { vegetarisch: 4, vegan: 3 },
+    });
+    expect(plausibilitaet(b).some((h) => /übersteigen die Gesamtstärke 5/.test(h))).toBe(true);
+  });
+
+  it("warnt nicht, wenn veg + vegan die Gesamtstärke einhalten", () => {
+    const b = bogen({
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      personal: [],
+      staerkeManuell: { fuehrer: 0, unterfuehrer: 0, mannschaft: 5, gesamt: 5 },
+      verpflegungManuell: { vegetarisch: 2, vegan: 1 },
+    });
+    expect(plausibilitaet(b).some((h) => /übersteigen die Gesamtstärke/.test(h))).toBe(false);
+  });
+
+  it("warnt, wenn mehr Vegetarier/Veganer als Verpflegungsbedarf erfasst sind", () => {
+    const b = bogen({
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      personal: [],
+      staerkeManuell: { fuehrer: 0, unterfuehrer: 0, mannschaft: 5, gesamt: 5 },
+      verpflegungManuell: { vegetarisch: 3, vegan: 0 },
+      sofortbedarf: { verpflegungPersonen: 1, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: false, ruhezeitErforderlich: false },
+    });
+    expect(plausibilitaet(b).some((h) => /mehr Vegetarier\/Veganer/.test(h))).toBe(true);
+  });
+});
+
+describe("Konstruktoren für neue Objekte", () => {
+  it("neuerBogen() ist ein leerer THW-Bogen der aktuellen Schema-Version", () => {
+    const b = neuerBogen();
+    expect(b.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(b.einheit.organisation).toBe(OrganisationsTyp.THW);
+    expect(b.personal).toEqual([]);
+    expect(b.fahrzeuge).toEqual([]);
+    expect(b.einsatz.zeitraumVon).toBe(b.einsatz.zeitraumBis);
+  });
+
+  it("neuePerson()/neuesFahrzeug() liefern sinnvolle Defaults", () => {
+    const p = neuePerson();
+    expect(p).toMatchObject({ vorname: "", nachname: "", fahrerlaubnis: Fahrerlaubnis.NONE, ernaehrung: Ernaehrung.FLEISCH });
+    expect(neuesFahrzeug()).toEqual({ typ: {} });
+  });
+});
+
+describe("schrittStatus", () => {
+  it("wertet einen Bogen mit ausschließlich leeren Personenkarten als begonnen", () => {
+    const b = neuerBogen();
+    b.personal = [neuePerson()];
+    expect(schrittStatus(b)[2]).toBe("begonnen");
+  });
+
+  // Audit Runde 4, R4-H1: Ein ausgeschriebener Einheitstyp ohne Code stand als „1 ✓" da.
+  it("zeigt Schritt 1 mit Freitext-Einheitstyp nicht als fertig und führt den Punkt in der Übersicht (R4-H1)", () => {
+    const b = neuerBogen();
+    b.einheit.einheitsTyp = { freitext: "Berg" };
+    b.einheit.hierarchie = [{ bezeichnung: { code: 1 }, name: "Ulm" }];
+    expect(schrittStatus(b)[0]).toBe("begonnen");
+    expect(pruefpunkte(b).map((p) => p.text)).toContain(
+      "Einheitstyp „Berg\" nicht erkannt — nicht aus der Liste gewählt, deshalb fehlen taktisches Zeichen und Soll-Vergleich.",
+    );
+
+    b.einheit.einheitsTyp = { code: 43 };
+    expect(schrittStatus(b)[0]).toBe("ok");
+    expect(pruefpunkte(b).some((p) => p.text.startsWith("Einheitstyp"))).toBe(false);
+
+    // Schnellerfassung (nur Stärke): der Name genügt, ein Freitext-Typ stört nicht.
+    const schnell = { ...b, personalErfassung: PersonalErfassung.NUR_STAERKE, einheit: { ...b.einheit, einheitsTyp: { freitext: "Berg" } } };
+    expect(schrittStatus(schnell)[0]).toBe("ok");
+    expect(pruefpunkte(schnell, false).some((p) => p.text.startsWith("Einheitstyp"))).toBe(false);
+  });
+
+  it("meldet für einen leeren Bogen alle Schritte als leer", () => {
+    expect(schrittStatus(neuerBogen())).toEqual(["leer", "leer", "leer", "leer", "leer"]);
+  });
+
+  it("meldet einen vollständig gefüllten Bogen als ok", () => {
+    const b = neuerBogen();
+    b.einheit.einheitsTyp = { code: 43 };
+    b.einheit.hierarchie = [{ bezeichnung: { code: 1 }, name: "OV Oldenburg - Ni" }];
+    b.einsatz.ortAuftrag = "Übung Kabelblitz";
+    // Mit Namen: eine leere Personenkarte zählt zwar in die Stärke, macht den
+    // Schritt aber nicht fertig (sie ist meist ein Fehlgriff).
+    b.personal = [{
+      ...neuePerson(),
+      nachname: "Muster",
+      vorname: "Max",
+      fahrerlaubnis: Fahrerlaubnis.B,
+      kontakte: [{ art: KontaktArt.MOBIL, dienstlich: true, wert: "0170 1234567" }],
+    }];
+    b.fahrzeuge = [{ ...neuesFahrzeug(), kennzeichen: "THW-84397" }];
+    b.sofortbedarf = { verpflegungPersonen: 1, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: false, ruhezeitErforderlich: false };
+    expect(schrittStatus(b)).toEqual(["ok", "ok", "ok", "ok", "ok"]);
+    // Ohne Rufnummer hat Schritt 3 einen Prüfpunkt — dann kein Haken (R3-N4).
+    b.personal = [{ ...b.personal[0]!, kontakte: [] }];
+    expect(schrittStatus(b)[2]).toBe("begonnen");
+  });
+
+  it("gibt 3 von 9 Namen keinen Haken (R3-N4)", () => {
+    const b = neuerBogen();
+    b.personal = [
+      ...["Huber", "Schmid", "Meier"].map((nachname) => ({ ...neuePerson(), nachname, vorname: "X" })),
+      ...Array.from({ length: 6 }, () => ({ ...neuePerson(), funktionen: [{ code: 1 }] })),
+    ];
+    expect(schrittStatus(b)[2]).toBe("begonnen");
+  });
+
+  it("wertet in der Schnellerfassung Schritt 1 schon mit dem Namen als fertig (R3-N4)", () => {
+    const b = neuerBogen();
+    b.personalErfassung = PersonalErfassung.NUR_STAERKE;
+    b.einheit.hierarchie = [{ bezeichnung: { code: 1 }, name: "Biberach" }];
+    expect(schrittStatus(b)[0]).toBe("ok");
+    b.personalErfassung = PersonalErfassung.VOLLSTAENDIG;
+    expect(schrittStatus(b)[0]).toBe("begonnen");
+  });
+
+  it("gibt reinen Sollplätzen keinen Haken (R2-N3)", () => {
+    const b = neuerBogen();
+    b.personal = [{ ...neuePerson(), funktionen: [{ code: 1 }] }, { ...neuePerson(), funktionen: [{ code: 2 }] }];
+    b.fahrzeuge = [neuesFahrzeug(), neuesFahrzeug()];
+    const s = schrittStatus(b);
+    expect(s[2]).toBe("begonnen");
+    expect(s[3]).toBe("begonnen");
+  });
+
+  it("erkennt Zwischenzustände als begonnen", () => {
+    const b = neuerBogen();
+    b.einheit.hierarchie = [{ bezeichnung: { code: 1 }, name: "OV X" }]; // Typ fehlt noch → begonnen
+    b.einsatz.einsatzbeginn = 1000; // Ort fehlt noch → begonnen
+    expect(schrittStatus(b)[0]).toBe("begonnen");
+    b.personalErfassung = PersonalErfassung.NUR_STAERKE;
+    b.staerkeManuell = { fuehrer: 0, unterfuehrer: 0, mannschaft: 0, gesamt: 0 };
+    b.personal = [neuePerson()]; // Ansprechpartner erfasst, Stärke aber 0 → begonnen
+    const s = schrittStatus(b);
+    expect(s[1]).toBe("begonnen");
+    expect(s[2]).toBe("begonnen");
+  });
+});
+
+describe("qrErzeugen(): Herkunft eines fremden Bogens", () => {
+  const GERAET = new Uint8Array(32).fill(5); // wie im Mock oben
+
+  /** Payload, wie ihn ein anderes Gerät signiert übergeben hätte. */
+  async function fremderPayload(b: Erfassungsbogen, name = "Melder") {
+    const fremd = await schluesselpaarErzeugen();
+    const payload = await signiertePayloadBytes(b, browserKompressor, fremd.privat, { name });
+    return { payload, pubkey: fremd.oeffentlich };
+  }
+
+  function ausQr(qr: { vollUrl: string }) {
+    return payloadAusText(qr.vollUrl)!;
+  }
+
+  it("zeichnet einen unveränderten Empfang gegen und erhält die Original-Signatur", async () => {
+    const b = neuerBogen();
+    b.einsatz.ortAuftrag = "Übung Kabelblitz";
+    const { payload, pubkey } = await fremderPayload(b);
+    // Der Bogen, der offen liegt, ist genau der empfangene.
+    const empfangen = decodePayload(payload, browserKompressor);
+
+    const qr = await qrErzeugen(empfangen, payload);
+
+    expect(qr.weitergeleitet).toBe(true);
+    const status = await signaturVonPayload(ausQr(qr));
+    expect(status.zustand).toBe("gueltig");
+    if (status.zustand !== "gueltig") return;
+    expect(status.stufen?.map((s) => s.kurzform)).toEqual([
+      schluesselKurzform(pubkey),
+      schluesselKurzform(await oeffentlicherSchluessel(GERAET)),
+    ]);
+  });
+
+  it("signiert nach einer Bearbeitung allein selbst (fremde Signatur deckt die Änderung nicht)", async () => {
+    const b = neuerBogen();
+    b.einsatz.ortAuftrag = "Übung Kabelblitz";
+    const { payload } = await fremderPayload(b);
+    const bearbeitet = decodePayload(payload, browserKompressor);
+    bearbeitet.einsatz.ortAuftrag = "Nachtrag durch Meldekopf";
+
+    const qr = await qrErzeugen(bearbeitet, payload);
+
+    expect(qr.weitergeleitet).toBe(false);
+    const status = await signaturVonPayload(ausQr(qr));
+    expect(status.zustand).toBe("gueltig");
+    if (status.zustand !== "gueltig") return;
+    expect(status.stufen).toBeUndefined(); // keine Kette — eigener Bogen
+    expect(status.kurzform).toBe(schluesselKurzform(await oeffentlicherSchluessel(GERAET)));
+  });
+
+  it("signiert ohne Herkunft wie bisher", async () => {
+    const qr = await qrErzeugen(neuerBogen());
+    expect(qr.weitergeleitet).toBe(false);
+    expect(qr.stufen).toBe(1); // nur die eigene Signatur
+  });
+
+  it("fällt bei unsigniertem Empfang auf die eigene Signatur zurück", async () => {
+    const b = neuerBogen();
+    const roh = encodePayload(b, browserKompressor);
+    const qr = await qrErzeugen(decodePayload(roh, browserKompressor), roh);
+    expect(qr.weitergeleitet).toBe(false);
+    expect((await signaturVonPayload(ausQr(qr))).zustand).toBe("gueltig");
+  });
+});
+
+describe("qrErzeugen(): Textlink (vollUrl)", () => {
+  it("ist Base64url-kodiert — Chat-Programme erkennen den ganzen Link", async () => {
+    const b = neuerBogen();
+    b.einsatz.ortAuftrag = "Übung Kabelblitz";
+    const qr = await qrErzeugen(b);
+    const fragment = qr.vollUrl.slice(EEB_URL_PREFIX.length);
+    // Nur A–Z a–z 0–9 - _ : an keinem dieser Zeichen bricht die Link-Erkennung ab.
+    expect(fragment).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  it("trägt denselben Payload wie das QR-Bild (dort Base41)", async () => {
+    const qr = await qrErzeugen(neuerBogen());
+    expect(payloadAusText(qr.vollUrl)).toEqual(payloadAusText(qr.teile[0]!.url));
+  });
+});
+
+describe("qrErzeugen(): QR-Budget (Modulgröße statt Datenmenge)", () => {
+  /** Modulzahl je Kante — das ist es, was auf Papier über die Punktgröße entscheidet. */
+  const module = (url: string) => 17 + 4 * QRCode.create(url, { errorCorrectionLevel: "M" }).version;
+
+  /** Bogen mit `n` ausführlich erfassten Personen — treibt den Payload gezielt hoch. */
+  function grosserBogen(n: number): Erfassungsbogen {
+    const b = neuerBogen();
+    b.personalErfassung = PersonalErfassung.VOLLSTAENDIG;
+    b.personal = Array.from({ length: n }, (_, i) =>
+      person({
+        vorname: `Vorname${i}`,
+        nachname: `Nachname${i}`,
+        funktionen: [{ freitext: `Sonderfunktion ${i}` }],
+        kontakte: [{ art: KontaktArt.MOBIL, dienstlich: false, wert: "01701234501" }],
+        zusatzqualifikationen: [{ freitext: `Qualifikation ${i}` }],
+      }),
+    );
+    return b;
+  }
+
+  it("hält einen normalen Bogen in einem Code — und den unter 89 Modulen", async () => {
+    const qr = await qrErzeugen(grosserBogen(6));
+    expect(qr.segmentiert).toBe(false);
+    expect(qr.teile).toHaveLength(1);
+    expect(module(qr.teile[0]!.url)).toBeLessThanOrEqual(17 + 4 * QR_EINZEL_MAX_VERSION); // ≤ 89
+  });
+
+  it("teilt einen großen Bogen lieber auf, als die Module fein werden zu lassen", async () => {
+    const qr = await qrErzeugen(grosserBogen(60));
+    expect(qr.segmentiert).toBe(true);
+    expect(qr.teile.length).toBeGreaterThan(1);
+    // Jeder Teil bleibt grob genug fürs Handy — das ist der Zweck der Aufteilung.
+    for (const t of qr.teile) {
+      expect(module(t.url)).toBeLessThanOrEqual(17 + 4 * QR_SEGMENT_ZIEL_VERSION); // ≤ 69
+    }
+  });
+
+  it("setzt die Teile wieder zu genau dem Payload des Textlinks zusammen", async () => {
+    const qr = await qrErzeugen(grosserBogen(60));
+    const zusammengesetzt = segmentePayload(qr.teile.map((t) => parseSegmentUrl(t.url)));
+    expect(zusammengesetzt).toEqual(payloadAusText(qr.vollUrl));
+  });
+});
+
+describe("natoZeitstempel()", () => {
+  it("setzt Tag, Uhrzeit, Monatskürzel und Jahr zusammen", () => {
+    expect(natoZeitstempel(new Date(2026, 7, 10, 20, 35))).toBe("102035aug26");
+  });
+
+  it("füllt einstellige Werte mit Null auf", () => {
+    expect(natoZeitstempel(new Date(2026, 0, 3, 7, 5))).toBe("030705jan26");
+  });
+});
+
+describe("inflateRawBegrenzt()", () => {
+  it("entpackt normale Daten unverändert", () => {
+    const original = new TextEncoder().encode("Erfassungsbogen".repeat(100));
+    expect(inflateRawBegrenzt(deflateRaw(original))).toEqual(original);
+    // Und über den regulären Weg des Kompressors ebenso.
+    expect(browserKompressor.inflateRaw(browserKompressor.deflateRaw(original))).toEqual(original);
+  });
+
+  it("bricht ab, bevor eine Deflate-Bombe den Speicher füllt", () => {
+    // 8 MiB Nullbytes packen sich auf wenige Kilobyte zusammen — genau der
+    // Fall, den eine präparierte Importdatei ausnutzen würde.
+    const bombe = deflateRaw(new Uint8Array(8 * 1024 * 1024));
+    expect(bombe.length).toBeLessThan(64 * 1024);
+    expect(() => inflateRawBegrenzt(bombe)).toThrow(RangeError);
+    expect(() => browserKompressor.inflateRaw(bombe)).toThrow(RangeError);
+  });
+
+  it("lässt die Grenze selbst noch durch und alles darüber nicht mehr", () => {
+    expect(inflateRawBegrenzt(deflateRaw(new Uint8Array(1000)), 1000)).toHaveLength(1000);
+    expect(() => inflateRawBegrenzt(deflateRaw(new Uint8Array(1001)), 1000)).toThrow(RangeError);
+  });
+
+  it("hält für echte Bögen reichlich Luft (4 MiB)", () => {
+    expect(MAX_ENTPACKT).toBe(4 * 1024 * 1024);
+  });
+});
+
+describe("verschoben", () => {
+  it("setzt einen Eintrag an die gewünschte Stelle", () => {
+    expect(verschoben(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
+    expect(verschoben(["a", "b", "c"], 0, 2)).toEqual(["b", "c", "a"]);
+    expect(verschoben(["a", "b", "c"], 1, 2)).toEqual(["a", "c", "b"]);
+  });
+
+  it("lässt die Quelle unangetastet und gibt eine neue Liste zurück", () => {
+    const quelle = ["a", "b"];
+    const ergebnis = verschoben(quelle, 0, 1);
+    expect(quelle).toEqual(["a", "b"]);
+    expect(ergebnis).not.toBe(quelle);
+  });
+
+  it("gibt die Liste bei Indizes außerhalb unverändert zurück", () => {
+    expect(verschoben(["a", "b"], 0, 0)).toEqual(["a", "b"]);
+    expect(verschoben(["a", "b"], 0, -1)).toEqual(["a", "b"]);
+    expect(verschoben(["a", "b"], 1, 2)).toEqual(["a", "b"]);
+    expect(verschoben([], 0, 0)).toEqual([]);
+  });
+});
+
+describe("zeitpunktDeutsch()", () => {
+  it("schreibt Datum und Uhrzeit wie der Papierbogen: „27.09.2026, 18:00“", () => {
+    expect(zeitpunktDeutsch(zeitpunktAusIso("2026-09-27T18:00"))).toBe("27.09.2026, 18:00");
+    expect(zeitpunktDeutsch(zeitpunktAusIso("2026-01-05T06:05"))).toBe("05.01.2026, 06:05");
+  });
+});
+
+/**
+ * Der Bedarf in Schritt 5 folgt der Stärke, solange er ihr entsprach — wer
+ * bewusst mehr bestellt hat, behält seine Zahl (Audit Arbeitsablauf W4).
+ */
+describe("verpflegungMitziehen()", () => {
+  const sb = (verpflegungPersonen: number) => ({
+    verpflegungPersonen,
+    dieselLiter: 0,
+    benzinLiter: 0,
+    gemischLiter: 0,
+    unterbringung: false,
+    ruhezeitErforderlich: false,
+  });
+
+  it("zieht den Bedarf nach, wenn er der alten Stärke entsprach", () => {
+    const vorher = { ...neuerBogen(), personal: [person(), person()], sofortbedarf: sb(2) };
+    const patch = verpflegungMitziehen(vorher, { personal: [person()] });
+    expect(patch.sofortbedarf?.verpflegungPersonen).toBe(1);
+  });
+
+  it("zieht auch einen noch nicht gesetzten Bedarf (0) nach", () => {
+    const vorher = { ...neuerBogen(), personal: [], sofortbedarf: sb(0) };
+    const patch = verpflegungMitziehen(vorher, { personal: [person(), person(), person()] });
+    expect(patch.sofortbedarf?.verpflegungPersonen).toBe(3);
+  });
+
+  it("lässt einen abweichenden Bedarf stehen", () => {
+    const vorher = { ...neuerBogen(), personal: [person(), person()], sofortbedarf: sb(5) };
+    const patch = verpflegungMitziehen(vorher, { personal: [person()] });
+    expect(patch.sofortbedarf).toBeUndefined(); // Patch unverändert
+  });
+
+  it("rührt nichts an, wenn kein Sofortbedarf erfasst ist oder die Stärke gleich bleibt", () => {
+    const ohne = { ...neuerBogen(), personal: [person()] };
+    expect(verpflegungMitziehen(ohne, { personal: [] })).toEqual({ personal: [] });
+    const gleich = { ...neuerBogen(), personal: [person()], sofortbedarf: sb(1) };
+    const patch = verpflegungMitziehen(gleich, { personal: [person({ vorname: "Neu" })] });
+    expect(patch.sofortbedarf).toBeUndefined();
+  });
+
+  it("rechnet mit der manuellen Stärke, wenn auf „Nur Stärke“ umgeschaltet wird", () => {
+    const vorher = { ...neuerBogen(), personal: [person(), person()], sofortbedarf: sb(2) };
+    const patch = verpflegungMitziehen(vorher, {
+      personalErfassung: PersonalErfassung.NUR_STAERKE,
+      staerkeManuell: { fuehrer: 1, unterfuehrer: 0, mannschaft: 9, gesamt: 10 },
+    });
+    expect(patch.sofortbedarf?.verpflegungPersonen).toBe(10);
+  });
+});
+
+/** Zahlendreher und Zeitfehler, die vorher ungeprüft in die Übergabe gingen (Audit E4). */
+describe("plausibilitaet() — Zahlendreher und Zeitfehler", () => {
+  it("meldet ein Einsatzende vor dem Einsatzbeginn mit lesbaren Zeitpunkten", () => {
+    const b = neuerBogen();
+    b.einsatz.einsatzbeginn = zeitpunktAusIso("2026-09-27T18:00");
+    b.einsatz.einsatzende = zeitpunktAusIso("2026-09-27T06:00");
+    const punkt = pruefpunkte(b).find((p) => /Einsatzende/.test(p.text))!;
+    expect(punkt.text).toBe("Einsatzende 27.09.2026, 06:00 liegt vor dem Einsatzbeginn 27.09.2026, 18:00.");
+    expect(punkt.schritt).toBe(1);
+  });
+
+  it("schweigt bei Einsatzende nach dem Beginn oder ohne einen der Zeitpunkte", () => {
+    const b = neuerBogen();
+    b.einsatz.einsatzbeginn = zeitpunktAusIso("2026-09-27T18:00");
+    expect(plausibilitaet(b).some((h) => /Einsatzende/.test(h))).toBe(false);
+    b.einsatz.einsatzende = zeitpunktAusIso("2026-09-28T06:00");
+    expect(plausibilitaet(b).some((h) => /Einsatzende/.test(h))).toBe(false);
+  });
+
+  it("stutzt bei 99 Führern und bei mehr Führern als Mannschaft", () => {
+    const b = { ...neuerBogen(), personalErfassung: PersonalErfassung.NUR_STAERKE, staerkeManuell: { fuehrer: 99, unterfuehrer: 0, mannschaft: 1, gesamt: 100 } };
+    const h = plausibilitaet(b);
+    expect(h).toContain("Stärke: 99 Führer — stimmt das?");
+    expect(h).toContain("Stärke 99 / 0 / 1 / 100: mehr Führer als Mannschaft — stimmt das?");
+  });
+
+  it("lässt kleine Trupps und normale Gruppen in Ruhe", () => {
+    // Trupp: Führer + Unterführer, keine Mannschaft — normal, kein Hinweis.
+    expect(staerkePlausibilitaet({ fuehrer: 1, unterfuehrer: 1, mannschaft: 0, gesamt: 2 })).toEqual([]);
+    expect(staerkePlausibilitaet({ fuehrer: 0, unterfuehrer: 2, mannschaft: 7, gesamt: 9 })).toEqual([]);
+    expect(staerkePlausibilitaet({ fuehrer: 3, unterfuehrer: 0, mannschaft: 1, gesamt: 4 })).toHaveLength(1);
+  });
+
+  it("meldet 0 Sitzplätze an einem Fahrzeug, das laut Typ Leute befördert — nicht am Anhänger", () => {
+    const b = neuerBogen();
+    b.fahrzeuge = [
+      { typ: { code: 4 }, kennzeichen: "THW-1", sitzplaetze: 0 }, // GKW, Richtwert 9
+      { typ: { code: 43 }, kennzeichen: "THW-2", sitzplaetze: 0 }, // Anhänger, Richtwert 0
+    ];
+    const h = fahrzeugHinweise(b);
+    expect(h).toContain("GKW THW-1: 0 Sitzplätze eingetragen (Richtwert 9) — stimmt das?");
+    expect(h.some((t) => /Anh/.test(t))).toBe(false);
+  });
+
+  it("meldet Betriebsstoff über 1000 l je Fahrzeug, mit Tausenderpunkt", () => {
+    const b = neuerBogen();
+    b.fahrzeuge = [{ typ: { code: 4 }, kennzeichen: "THW-1" }];
+    b.sofortbedarf = { verpflegungPersonen: 0, dieselLiter: 99999, benzinLiter: 800, gemischLiter: 0, unterbringung: false, ruhezeitErforderlich: false };
+    const h = betriebsstoffPlausibilitaet(b);
+    expect(h).toEqual(["Sofortbedarf: 99.999 l Diesel für 1 Fahrzeug — mehr als 1.000 l je Fahrzeug. Stimmt das?"]);
+    // Ohne Fahrzeuge gilt die Grenze einmal.
+    expect(betriebsstoffPlausibilitaet({ ...b, fahrzeuge: [] })).toHaveLength(1);
+    expect(pruefpunkte(b).some((p) => /99\.999 l Diesel/.test(p.text) && p.schritt === 4)).toBe(true);
+  });
+});
+
+/** Was die Vorbelegung offen lässt — und was schon Inhalt ist. */
+describe("personUnbenannt() / fahrzeugUnbenannt()", () => {
+  it("zählt Sollplätze ohne Namen und Erreichbarkeit als unbenannt", () => {
+    const sollplatz = { ...neuePerson(), staerkeRolle: StaerkeRolle.UNTERFUEHRER, funktionen: [{ code: 3 }] };
+    expect(personUnbenannt(sollplatz)).toBe(true);
+    expect(personUnbenannt({ ...sollplatz, nachname: "Meyer" })).toBe(false);
+    // Eine Rufnummer ohne Namen ist Inhalt — sie geht beim Typwechsel nicht verloren.
+    expect(personUnbenannt({ ...sollplatz, kontakte: [{ art: KontaktArt.MOBIL, dienstlich: true, wert: "0170" }] })).toBe(false);
+  });
+
+  it("kennt ein Fahrzeug am Kennzeichen", () => {
+    expect(fahrzeugUnbenannt({ typ: { code: 4 }, funkrufname: { kennwort: { code: 1 }, eigenerStandort: true, teile: [18, 13] } })).toBe(true);
+    expect(fahrzeugUnbenannt({ typ: { code: 4 }, kennzeichen: "THW-84397" })).toBe(false);
+    expect(fahrzeugUnbenannt({ typ: {}, kennzeichen: "  " })).toBe(true);
+  });
+
+  it("zählt Sondergerät und Sitzplätze ohne Kennzeichen als Inhalt (R3-N2)", () => {
+    const vorbelegt = { typ: { code: 4 }, stanKonform: true, funkrufname: { kennwort: { code: 1 }, eigenerStandort: true, teile: [22, 51] } };
+    expect(fahrzeugUnbenannt({ ...vorbelegt, aenderungen: "Lichtmast 2 kW" })).toBe(false);
+    expect(fahrzeugUnbenannt({ ...vorbelegt, sitzplaetze: 6 })).toBe(false);
+    expect(fahrzeugUnbenannt({ ...vorbelegt, aenderungen: "  " })).toBe(true);
+  });
+});
+
+describe("pruefpunkte: weitere Tippfehler (R2-E4)", () => {
+  it("fragt bei Rufnummer ohne Ziffer, E-Mail ohne @, Namen aus Ziffern, Sitzplätzen, doppeltem Kennzeichen und Datum", () => {
+    const b = neuerBogen();
+    b.einheit.hierarchie = [{ bezeichnung: { code: 1 }, name: "12345", telefon: "abc-xyz", email: "keinemail" }];
+    b.personal = [{ ...neuePerson(), vorname: "Max", nachname: "Muster", kontakte: [{ art: KontaktArt.MOBIL, dienstlich: true, wert: "abc" }] }];
+    b.fahrzeuge = [
+      { ...neuesFahrzeug(), kennzeichen: "THW-84397", sitzplaetze: 90 },
+      { ...neuesFahrzeug(), kennzeichen: "THW 84397" },
+    ];
+    const heute = b.einsatz.zeitraumVon;
+    b.einsatz.zeitraumBis = heute + 13000; // Jahr vertippt
+    b.einsatz.einsatzbeginn = (heute - 5) * MINUTEN_JE_TAG;
+    const texte = pruefpunkte(b, true, heute).map((p) => p.text).join("\n");
+    expect(texte).toMatch(/Rufnummer „abc-xyz" enthält keine Ziffer/);
+    expect(texte).toMatch(/E-Mail „keinemail" ohne „@"/);
+    expect(texte).toMatch(/„12345" besteht nur aus Ziffern/);
+    expect(texte).toMatch(/Muster, Max: Rufnummer „abc" ohne Ziffer/);
+    expect(texte).toMatch(/90 Sitzplätze/);
+    expect(texte).toMatch(/Kennzeichen THW-84397 steht mehrfach/);
+    expect(texte).toMatch(/mehr als ein Jahr entfernt/);
+    expect(texte).toMatch(/außerhalb des Einsatzzeitraums/);
+  });
+});
+
+describe("pruefpunkte: Schnellerfassung (R2-H9)", () => {
+  it("zählt ein leeres Ort/Auftrag bei der Schnellerfassung nicht als offenen Punkt, beim vollen Bogen schon", () => {
+    const voll = neuerBogen();
+    expect(pruefpunkte(voll).some((p) => p.text === "Ort/Auftrag ist noch leer.")).toBe(true);
+    const schnell = neuerBogen();
+    schnell.personalErfassung = PersonalErfassung.NUR_STAERKE;
+    schnell.staerkeManuell = { fuehrer: 1, unterfuehrer: 1, mannschaft: 7, gesamt: 9 };
+    expect(pruefpunkte(schnell).some((p) => p.text === "Ort/Auftrag ist noch leer.")).toBe(false);
+  });
+});
+
+describe("bogenPruefen() — Pflichtfelder (R5-E1)", () => {
+  it("ergänzt einen fehlenden Einheitstyp und nennt bei Unbrauchbarem die Ursache", async () => {
+    const { bogenPruefen, neuerBogen } = await import("./hilfen");
+    const b = JSON.parse(JSON.stringify(neuerBogen())) as Record<string, Record<string, unknown>>;
+    delete b.einheit!.einheitsTyp;
+    expect(bogenPruefen(b).einheit.einheitsTyp).toEqual({});
+    const c = JSON.parse(JSON.stringify(neuerBogen())) as Record<string, unknown>;
+    delete c.stand;
+    expect(() => bogenPruefen(c)).toThrow(/Der Bogen ist unvollständig: der Stand/);
+  });
+});
+
+describe("einheitAnzeigename() — jeder Teil einmal (R5-N6)", () => {
+  const einheit = (organisation: OrganisationsTyp, organisationName: string | undefined, ort: string, typ: string) => ({
+    organisation,
+    ...(organisationName ? { organisationName } : {}),
+    einheitsTyp: { freitext: typ },
+    hierarchie: [{ bezeichnung: { freitext: "Ort" }, name: ort }],
+  });
+
+  it("lässt den Ort weg, der schon im Organisationsnamen steht", () => {
+    expect(einheitAnzeigename(einheit(OrganisationsTyp.SONSTIGE, "DRK-Kreisverband Buchenrode e. V.", "Buchenrode", "Behandlung Kat. GELB (BHP 25)"))).toBe(
+      "DRK-Kreisverband Buchenrode e. V. Behandlung Kat. GELB (BHP 25)",
+    );
+    expect(einheitAnzeigename(einheit(OrganisationsTyp.SONSTIGE, "Berufsfeuerwehr Nordwede — MTF-Standort (Bundesausstattung)", "Nordwede", "Führungsgruppe (MTF)"))).toBe(
+      "Berufsfeuerwehr Nordwede — MTF-Standort (Bundesausstattung) Führungsgruppe (MTF)",
+    );
+  });
+
+  it("lässt den Typ weg, der dem Ort gleicht", () => {
+    expect(einheitAnzeigename(einheit(OrganisationsTyp.SONSTIGE, "Bundeswehr", "Panzerpionierzug", "Panzerpionierzug"))).toBe("Bundeswehr Panzerpionierzug");
+  });
+
+  it("lässt THW-Namen und verschiedene Teile unberührt, auch bei Teilwörtern", () => {
+    expect(einheitAnzeigename(einheit(OrganisationsTyp.THW, undefined, "Ulm", "Bergungsgruppe"))).toBe("THW Ulm Bergungsgruppe");
+    // „Ulm“ steckt in „Neu-Ulm“ nur als Wortteil mit Bindestrich — dort ist es ein eigenes Wort und entfällt zu Recht;
+    // „Ulmen“ aber ist ein anderes Wort.
+    expect(einheitAnzeigename(einheit(OrganisationsTyp.SONSTIGE, "FF Ulmen", "Ulm", "Gruppe"))).toBe("FF Ulmen Ulm Gruppe");
+  });
+});
+
+// Audit Runde 7, R7-A1: „Nur Stärke" mit den unveränderten Zahlen der Vorbelegung ist keine Zählung.
+describe("nurSollstaerke() bei der Schnellerfassung (R7-A1)", () => {
+  const vorbelegt = (): Erfassungsbogen => {
+    const b = neuerBogen();
+    b.einheit.einheitsTyp = { code: 4 };
+    b.personal = [
+      { ...neuePerson(), staerkeRolle: StaerkeRolle.UNTERFUEHRER },
+      { ...neuePerson(), staerkeRolle: StaerkeRolle.MANNSCHAFT },
+      { ...neuePerson(), staerkeRolle: StaerkeRolle.MANNSCHAFT },
+    ];
+    b.personalErfassung = PersonalErfassung.NUR_STAERKE;
+    return b;
+  };
+
+  it("gilt als Sollstärke, solange die Zahlen noch der Vorbelegung gleichen", () => {
+    const b = vorbelegt();
+    b.staerkeManuell = { fuehrer: 0, unterfuehrer: 1, mannschaft: 2, gesamt: 3 };
+    expect(nurSollstaerke(b)).toBe(true);
+    delete b.staerkeManuell;
+    expect(nurSollstaerke(b)).toBe(true);
+  });
+
+  it("gilt nicht mehr, sobald eine Zahl angefasst wurde oder eine Karte einen Namen trägt", () => {
+    const b = vorbelegt();
+    b.staerkeManuell = { fuehrer: 0, unterfuehrer: 1, mannschaft: 3, gesamt: 4 };
+    expect(nurSollstaerke(b)).toBe(false);
+    const c = vorbelegt();
+    c.staerkeManuell = { fuehrer: 0, unterfuehrer: 1, mannschaft: 2, gesamt: 3 };
+    c.personal[0] = { ...c.personal[0]!, nachname: "Meyer" };
+    expect(nurSollstaerke(c)).toBe(false);
+  });
+
+  it("gilt ohne Vorbelegungskarten nie (die Zahl ist dann die Angabe)", () => {
+    const b = vorbelegt();
+    b.personal = [];
+    b.staerkeManuell = { fuehrer: 0, unterfuehrer: 1, mannschaft: 2, gesamt: 3 };
+    expect(nurSollstaerke(b)).toBe(false);
+  });
+});
+
+
+// Audit Runde 9, R9-H2: Die Vorbelegung nach Einheitstyp zählt in der Schnellerfassung nicht und erzeugt keine Hinweise.
+describe("plausibilitaet() — Schnellerfassung mit Vorbelegung (R9-H2)", () => {
+  const vorgabe = (): Erfassungsbogen => ({
+    ...neuerBogen(),
+    personalErfassung: PersonalErfassung.NUR_STAERKE,
+    staerkeManuell: { fuehrer: 0, unterfuehrer: 1, mannschaft: 5, gesamt: 6 },
+    unterbringungManuell: { m: 9, w: 0, d: 0 },
+    personal: Array.from({ length: 9 }, () => neuePerson()),
+    fahrzeuge: [{ typ: { code: 1 } }, { typ: { code: 2 } }],
+  });
+
+  it("meldet weder Aufteilung, Ansprechpartner, Erreichbarkeit noch Kennzeichen für unbenannte Vorgabe", () => {
+    const hinweise = plausibilitaet(vorgabe());
+    expect(hinweise.filter((h) => /Aufteilung nach Geschlecht|Ansprechpartner|telefonische|Kennzeichen/.test(h))).toEqual([]);
+  });
+
+  it("zählt eingetragene Personen weiter (nicht die Vorgabekarten)", () => {
+    const b = vorgabe();
+    b.personal = [...b.personal, { ...neuePerson(), nachname: "A", vorname: "B" }, { ...neuePerson(), nachname: "C", vorname: "D" }];
+    b.staerkeManuell = { fuehrer: 0, unterfuehrer: 0, mannschaft: 1, gesamt: 1 };
+    expect(plausibilitaet(b).some((h) => /Es sind 2 Ansprechpartner erfasst, die Gesamtstärke ist aber nur 1/.test(h))).toBe(true);
+  });
+
+  it("verlangt in der Vollerfassung weiterhin Kennzeichen", () => {
+    const b: Erfassungsbogen = { ...neuerBogen(), fahrzeuge: [{ typ: { code: 1 } }] };
+    expect(plausibilitaet(b).some((h) => /Fahrzeug 1 hat noch kein Kennzeichen/.test(h))).toBe(true);
+  });
+});

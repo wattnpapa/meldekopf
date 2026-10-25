@@ -315,8 +315,9 @@ export default defineConfig({
     ],
     // Die Oberfläche bringt React nicht selbst mit (peerDependency); hat das
     // Submodul zum Entwickeln eigene node_modules, nähme Vite sonst deren
-    // Kopie — zwei Reacts, und jeder Hook in einem Baustein wirft.
-    dedupe: ["react", "react-dom"],
+    // Kopie — zwei Reacts, und jeder Hook in einem Baustein wirft. pako aus
+    // demselben Grund: @bos/eeb-satz führt es als peerDependency.
+    dedupe: ["react", "react-dom", "pako"],
   },
   plugins: [
     react(),

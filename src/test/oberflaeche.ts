@@ -1,9 +1,8 @@
 /**
  * Gemeinsames Setup der Oberflächentests (Projekt „oberflaeche").
  *
- * Herkunft: Erfassungsbogen `src/test/oberflaeche.ts` (Commit f2b77f1). Die
- * Verdrahtung der Einsatz-Sammlung (`speicherVerdrahten`) und das Zurücksetzen
- * der Speicherhüllen kommen mit Phase 2 (Sammlung lesen und zeigen) dazu.
+ * Herkunft: Erfassungsbogen `src/test/oberflaeche.ts` (Commit f2b77f1, seit
+ * Phase 2 mit der Verdrahtung der Einsatz-Sammlung aus 441811c).
  *
  * Räumt nach jedem Test das DOM und den Gerätespeicher auf — die App legt
  * ihre Daten im localStorage ab; ohne Aufräumen würde ein Test den nächsten
@@ -13,6 +12,9 @@
 import { afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { dialogeZuruecksetzen, prellschutzSetzen } from "@bos/oberflaeche/dialoge";
+import { speicherVerdrahten } from "../app/speicher-browser";
+import { leseSchreibFehlerZuruecksetzen } from "../app/speicher-schonend";
+import { einsaetzeLesenZuruecksetzen } from "../app/einsaetze-lesen";
 // Testing Library klickt schneller als jeder Finger: der Prellschutz der
 // Rückfragen (dialoge.tsx, R2-G1) ist hier aus; sein eigener Test schaltet ihn ein.
 prellschutzSetzen(0);
@@ -52,6 +54,12 @@ function speicherErsetzen(name: "localStorage" | "sessionStorage") {
 speicherErsetzen("localStorage");
 speicherErsetzen("sessionStorage");
 
+// Die Einsatz-Sammlung bekommt ihre Ablage hineingereicht (ADR-003). Im Produkt
+// tut das `main.tsx`; die Oberflächentests starten die App nicht über ihren
+// Einstieg, brauchen die Ablage aber genauso. Muss nach `speicherErsetzen`
+// stehen, damit unter Node 26 der Ersatz und nicht `undefined` eingehängt wird.
+speicherVerdrahten();
+
 const dialog = window.HTMLDialogElement?.prototype as HTMLDialogElement | undefined;
 if (dialog && typeof dialog.showModal !== "function") {
   dialog.show = function () {
@@ -75,4 +83,6 @@ afterEach(() => {
   dialogeZuruecksetzen();
   localStorage.clear();
   sessionStorage.clear();
+  leseSchreibFehlerZuruecksetzen();
+  einsaetzeLesenZuruecksetzen();
 });
