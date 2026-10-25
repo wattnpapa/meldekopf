@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Meldekopf – Einheiten erfassen, zählen, weitermelden</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-32.png" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#0f4c5c" />
+
+  <!-- ===============================================================
+       Herkunft: Erfassungsbogen `index.html` (Commit f2b77f1). Übernommen
+       sind Aufbau, Boot-Skript, Design-Token und die Regeln der Bausteine,
+       die diese App in Phase 0 zeigt (Kopfnavigation, Seitenkopf, Anzeige-
+       modi, Fußzeile, Dialoge, Karte, Formularfelder); die Regeln der
+       Erfassungsbogen-Ansichten (Assistent, Übersicht, QR, Musterung) sind
+       weggelassen und kommen mit den übernommenen Ansichten in den Phasen
+       2 bis 5 zurück. Die Kennfarbe ist die des Meldekopfs (Petrol,
+       docs/architektur.md Kap. 8.1).
+
+       Auffindbarkeit: Die App selbst ist eine leere Seite plus Bundle —
+       ein Crawler sähe ohne diese Angaben nichts als den Titel. Die Adressen
+       sind absolut: dieselbe Datei läuft auch in der Electron-/Capacitor-App,
+       wo relative Pfade auf file:// zeigen würden. %DOMAIN% setzt der Build
+       aus src/app/adressen.ts ein (Plugin `adressen` in vite.config.ts).
+       =============================================================== -->
+  <meta name="description" content="Kostenlose Offline-App für Meldekopf, Bereitstellungsraum und kleine Führungsstelle: eintreffende Einheiten erfassen, Stärke und Sofortbedarf zählen, die Lage weitergeben." />
+  <link rel="canonical" href="https://%DOMAIN%/" />
+  <meta name="author" content="Johannes Rudolph" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Meldekopf" />
+  <meta property="og:locale" content="de_DE" />
+  <meta property="og:url" content="https://%DOMAIN%/" />
+  <meta property="og:title" content="Meldekopf — Einheiten erfassen, zählen, weitermelden" />
+  <meta property="og:description" content="Die Web-App für Meldeköpfe, Bereitstellungsräume und kleine Führungsstellen: Bögen eintreffender Einheiten aufnehmen, Stärke und Sofortbedarf laufend zusammenzählen, die Lage geschlossen weitergeben. Ohne Server, ohne Anmeldung, offline." />
+
+  <!-- softwareVersion und dateModified setzt vite.config.ts beim Build ein: von
+       Hand gepflegte Werte wären nach dem nächsten Release falsch, und ein
+       veraltetes Änderungsdatum schadet mehr als ein fehlendes. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "@id": "https://%DOMAIN%/#app",
+    "name": "Meldekopf",
+    "alternateName": "Meldekopf-App",
+    "url": "https://%DOMAIN%/",
+    "description": "Offline-App für Meldekopf, Bereitstellungsraum und kleine Führungsstelle: eintreffende Einheiten erfassen, Stärke und Sofortbedarf zählen, die Lage als Sammel-PDF, CSV, Excel-Liste oder Einsatz-Datei weitergeben.",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web, Windows, Linux, Android",
+    "inLanguage": "de",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+    "license": "https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12",
+    "softwareVersion": "%APP_VERSION%",
+    "dateModified": "%BUILD_DATE%",
+    "author": { "@type": "Person", "name": "Johannes Rudolph" },
+    "isRelatedTo": { "@type": "SoftwareApplication", "name": "Einheiten-Erfassungsbogen", "url": "https://erfassungsbogen.app/" }
+  }
+  </script>
+  <script>
+    // Gespeicherten Anzeigemodus (Dunkel/Feld/Nacht) VOR dem ersten Malen anwenden:
+    // Das statische Start-Gerüst unten erscheint sofort mit dem HTML — ohne
+    // diese Zeilen wäre es bis zum Laden des App-Bundles hell und würde im
+    // Nachteinsatz genau die Blendung verursachen, die der Nacht-Modus
+    // verhindern soll. Gleiche Logik wie anzeigeModus() in anzeige-modus.ts:
+    // ohne gespeicherte Wahl zählt die Systemeinstellung (dunkel → Dunkel),
+    // eine gespeicherte Wahl — auch „standard" — geht immer vor. Dieselben
+    // Schlüssel wie im Erfassungsbogen (ADR-007).
+    try {
+      var eebModus = localStorage.getItem("eeb.anzeigemodus.v1")
+        || (localStorage.getItem("eeb.feldmodus.v1") === "1" ? "feld" : "");
+      if (!eebModus && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
+        eebModus = "dunkel";
+      if (eebModus === "feld" || eebModus === "nacht" || eebModus === "dunkel")
+        document.documentElement.classList.add(eebModus + "-modus");
+      // Nachts auch die Browserleiste dunkel, nicht in der Kennfarbe (R2-L6;
+      // danach hält themeFarbeAbgleichen() in anzeige-modus.ts sie aktuell).
+      if (eebModus === "nacht")
+        document.querySelector('meta[name="theme-color"]').content = "#221f16";
+    } catch (e) { /* Privatmodus/blockierter Speicher: Standard-Darstellung */ }
+
+    // Installierte Fassung (Desktop-App, iOS, Android) VOR dem ersten Malen
+    // kennzeichnen: Der erklärende Text unten ist Web-Inhalt für Erstbesucher
+    // und Suchmaschinen. React blendet ihn dort ohnehin aus (imWebBrowser() in
+    // nativ.ts) — ohne diese Klasse stünde er aber bis zum Mount im Gerüst und
+    // blitzte beim App-Start kurz auf. Dieselben Merkmale wie dort: native
+    // Brücke (Capacitor) oder das Paket-Schema der Desktop-App.
+    try {
+      var eebNativ = window.Capacitor && typeof window.Capacitor.isNativePlatform === "function"
+        && window.Capacitor.isNativePlatform();
+      if (eebNativ || location.protocol === "file:" || location.protocol === "capacitor:")
+        document.documentElement.classList.add("als-app");
+    } catch (e) { /* Im Zweifel bleibt es beim Web-Verhalten. */ }
+  </script>
+  <style>
+    /* ===============================================================
+       Design-Token — die eine Quelle für Farbe, Schrift, Maß und Form der
+       Web-Oberfläche. Die Anzeigemodi (.feld-modus/.dunkel-modus/.nacht-modus)
+       belegen dieselben Token neu, statt jede Komponente einzeln zu
+       überschreiben. Herkunft: Erfassungsbogen index.html; die Kennfarbe ist
+       die des Meldekopfs.
+       =============================================================== */
+    :root {
+      color-scheme: light;
+
+      /* Neutrale: leicht ins Blaue gekippt, damit sie zur Kennfarbe passen. */
+      --n-0:   #ffffff;
+      --n-50:  #f3f5f9;
+      --n-100: #e8ebf2;
+      --n-200: #d7dce7;
+      --n-300: #bcc3d3;
+      /* R3-L7: von #8b94a9 (2,79:1 auf dem Seitengrund) eine Stufe dunkler —
+         Knopfrahmen der Nebenknöpfe stehen auf --grund und brauchen 3:1. */
+      --n-400: #838ca1;
+      /* Eigener Schritt für den Dritttext: --n-400 trägt als Linie genug,
+         als Schrift auf Weiß nur 3,04:1 und verfehlt damit AA. */
+      --n-450: #6b7488;
+      --n-500: #5c6478;
+      --n-900: #11141b;
+
+      /* Rollen statt Rohwerte — nur diese werden in Komponenten benutzt. */
+      --grund:       var(--n-50);
+      --flaeche:     var(--n-0);
+      --flaeche-2:   var(--n-100);
+      --text:        var(--n-900);
+      --text-2:      var(--n-500);
+      --text-3:      var(--n-450);
+      --linie-fein:  var(--n-200);
+      --linie:       var(--n-300);
+      --linie-stark: var(--n-400);
+
+      /* Schrift AUF der Kennfarbe, zweite Stufe: Links und Fehler im
+         Aktualisierungsband. Weiß trägt dort die Aussage, diese beiden
+         ordnen sich unter. Auf Petrol gerechnet (≥ 4,5:1). */
+      --auf-akzent-2:     #cfe6ea;
+      --alarm-auf-akzent: #ffb4ab;
+
+      /* Kennfarbe des Meldekopfs: Petrol (#0f4c5c, Weiß darauf 9,5:1). Anders
+         als im Erfassungsbogen trägt der Kopfbalken hier immer dieselbe Farbe —
+         die Sammlung führt viele Organisationen, keine „gehört" dem Balken; die
+         Kennfarben der Organisationen erscheinen an den taktischen Zeichen und
+         Marken der Einheiten (docs/architektur.md Kap. 8.1). */
+      --akzent:      #0f4c5c;
+      --akzent-hell: #126d78;
+      --auf-akzent:  #ffffff;
+
+      /* Signalfarben — bewusst getrennt von der Kennfarbe, damit „erledigt"
+         und „Achtung" in jeder Organisation gleich aussehen. Alle drei Signale
+         tragen dieselbe Dreier-Rolle (Text, Fond, Linie). */
+      --gut:         #146b3a;
+      --gut-fond:    #e8f4ed;
+      --gut-linie:   #a9d3bc;
+      --warn-text:   #6d4700;
+      --warn-fond:   #fdf4dd;
+      --warn-linie:  #ddbe79;
+      --alarm:       #a4231c;
+      --alarm-fond:  #fdecea;
+      --alarm-linie: #eaa79d;
+      /* Fond der Eingangs-Quittung (.eingegangen): eine Stufe entschiedener
+         als --gut-fond, gegen --text-2 auf mindestens 4,5:1 gerechnet. */
+      --eingang-fond: #d3e9dc;
+
+      /* Form: rechteckig und kantenbetont — Behördenformular, nicht App-Kachel. */
+      --radius:       0px;
+      --strich:       1px;
+      --strich-stark: 1px;
+      --fokus:        3px;
+      /* Grundmaß jedes Tippziels: 44 px (Apple), der Feld-Modus hebt auf 48. */
+      --ziel-basis:   2.75rem;
+      --ziel:         0rem; /* Zuschlag auf alle Tippziele; der Feld-Modus erhöht ihn */
+
+      /* Bewegung: erklärt Zustand und quittiert Aktionen — nie Dekoration.
+         Drei Dauern, eine Kurve; „Bewegung reduzieren" schaltet unten alles ab. */
+      --dauer-1: 120ms; /* unmittelbare Rückmeldung (Hover, Fokusfarbe) */
+      --dauer-2: 200ms; /* Zustandswechsel (Overlay, Einblendung, Stempel) */
+      --dauer-3: 450ms; /* ausklingende Quittung (geänderte Summenzahl) */
+      --kurve: cubic-bezier(0.16, 1, 0.3, 1); /* entschieden abbremsend, kein Nachfedern */
+
+      /* Schrift: Archivo (DIN-Linie) fürs Lesen, dicktengleich für Daten. */
+      --schrift: "Archivo Variable", Archivo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --schrift-daten: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+      /* Sechs Grade, jeder mit genau einer Aufgabe. */
+      --t-xs:  0.8125rem; /* gesperrte Versalzeile, Fußzeile, Etiketten */
+      --t-s:   0.875rem;  /* Nebentext, Tabellen, Kartenfußnoten */
+      --t-m:   1rem;      /* Fließtext, Eingaben, h4 */
+      --t-l:   1.125rem;  /* Einleitung, Eintragstitel, h3 */
+      --t-xl:  1.375rem;  /* h2, Zählwerte im Stepper */
+      --t-2xl: 1.75rem;   /* h1 */
+      /* Die Zählwert-Figur: die Stärke — die eine Zahl, wegen der die Lage
+         gelesen wird. */
+      --t-zahl: 2rem;
+
+      --r-1: 0.25rem;
+      --r-2: 0.5rem;
+      --r-3: 0.75rem;
+      --r-4: 1rem;
+      --r-5: 1.5rem;
+      --r-6: 2rem;
+
+      /* Seitenkopf. Eigene Token, damit die Plattform-Layer ihn ohne
+         Spezifitäts-Wettrennen zurücksetzen können und der Nacht-Modus ihn
+         abdunkeln kann. */
+      --kopf-fond:  var(--akzent);
+      --kopf-auf:   var(--auf-akzent);
+      /* Zweitschrift im Balken als fester Ton, nicht als halbdurchsichtiges
+         Weiß: Deckkraft nimmt der Feld-Modus nicht zurück. Auf Petrol gerechnet. */
+      --kopf-auf-2: #cfe6ea;
+      --kopf-linie: rgba(255, 255, 255, 0.3);
+      --kopf-strich: 3px;
+      --kopf-innen: var(--r-3) var(--r-4);
+      /* Harte Unterkante: der Kopf endet an einer Linie, statt in den Inhalt
+         auszulaufen. Auf der Kennfarbe liegt sie als dunklerer Schatten. */
+      --kopf-kante:       4px;
+      --kopf-kante-farbe: rgba(0, 0, 0, 0.35);
+
+      /* Rückwärtskompatible Aliasse der übernommenen Regeln. */
+      --blau: var(--akzent);
+      --blau-hell: var(--akzent-hell);
+      --rand: var(--linie);
+      --grau: var(--grund);
+      --fehler: var(--alarm);
+      --erledigt: var(--gut);
+    }
+    /* Ein Grad, ein Schritt: auf dem Telefon rückt die Zählwert-Figur eine Stufe zurück. */
+    @media (max-width: 30rem) {
+      :root { --t-zahl: 1.625rem; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--schrift);
+      font-size: var(--t-m);
+      line-height: 1.5;
+      color: var(--text);
+      background: var(--grund);
+      -webkit-font-smoothing: antialiased;
+      /* Letzte Absicherung für große Systemschrift: ein Wort, das breiter ist
+         als seine Zeile, bricht, statt die Seite seitlich verschiebbar zu
+         machen (Audit Runde 2, R2-M1). */
+      overflow-wrap: break-word;
+    }
+    #app { min-height: 100dvh; display: flex; flex-direction: column; }
+    main { width: 100%; max-width: 60rem; margin: 0 auto; padding: var(--r-5) var(--r-4) calc(min(6rem, 108px) + env(safe-area-inset-bottom)); }
+    /* Seitenrand gedeckelt wie das Kartenpolster (.karte, R2-M1). */
+    main { padding-inline: min(var(--r-4), 18px); }
+    /* Ohne feste Fußleiste (Startseite) reicht der normale Abstand nach unten. */
+    main.start, main.ohne-nav { padding-bottom: var(--r-6); }
+    main.start ~ footer.seite, main.ohne-nav ~ footer.seite { padding-bottom: var(--r-6); }
+    /* Hinweistext ohne JavaScript — gleiche Maße wie <main>. */
+    .ohne-js { width: 100%; max-width: 40rem; margin: 0 auto; padding: var(--r-5) var(--r-4); }
+    /* Überschriften tragen Gewicht statt Farbe — die Kennfarbe bleibt dem
+       Seitenkopf und der primären Aktion vorbehalten. */
+    h1 {
+      font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.02em;
+      line-height: 1.15; color: var(--text); margin: 0 0 var(--r-2); text-wrap: balance;
+    }
+    h2 {
+      font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.015em;
+      line-height: 1.2; color: var(--text); margin: 0 0 var(--r-3);
+      border: none; padding: 0; text-wrap: balance;
+    }
+    h3 { font-size: var(--t-l); font-weight: 700; color: var(--text); margin: var(--r-4) 0 var(--r-1); }
+    h4 { font-size: var(--t-m); font-weight: 700; color: var(--text); margin: var(--r-4) 0 var(--r-1); }
+    h5 { font-size: var(--t-s); font-weight: 700; color: var(--text); margin: var(--r-3) 0 var(--r-1); }
+    /* R4-M1: Überschriften und Zusammenfassungen dürfen im Wort brechen. */
+    h1, h2, h3, h4, h5, summary { overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto; }
+    /* Dasselbe für Links der Fußzeile („nachrichtenvordruck.app" bei 320 px und 200 % Schrift). */
+    footer.seite a, footer.seite button.link { max-width: 100%; overflow-wrap: anywhere; }
+    /* Startseite linksbündig: ein Satzspiegel mit fester linker Kante wirkt
+       verbindlicher als die zentrierte Mittelachse. */
+    .start { text-align: left; }
+    .start > p { max-width: 48ch; color: var(--text-2); font-size: var(--t-l); margin: 0 0 var(--r-2); }
+    .start > p.offline-badge { max-width: 100%; width: max-content; font-size: var(--t-s); }
+    /* Noch nicht offline bereit (R2-O1, R3-L7): in Warnfarbe samt Rahmen. */
+    .start > p.offline-badge.offline-laedt { color: var(--warn-text); border-color: currentColor; }
+    .start > p.meldung, .start > p.fehler {
+      font-size: var(--t-s); margin: var(--r-5) 0 0;
+      background: none; border: none; border-radius: 0; padding: 0; animation: none;
+      width: max-content; max-width: 100%;
+    }
+    .start > p.meldung { color: var(--text); }
+    .start > p.fehler { color: var(--alarm); }
+    /* Zwei Knöpfe mit verschiedener Wirkung brauchen eine Lücke, die ein Handschuh
+       sieht (R4-G4): mindestens 12 px, auch wo sie umbrechen und übereinanderstehen. */
+    .knopfreihe { display: flex; flex-wrap: wrap; gap: 12px; }
+    .knopfreihe > button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+    .aktionen { display: flex; gap: 12px; justify-content: flex-start; flex-wrap: wrap; margin-top: var(--r-5); }
+    .aktionen > button, .aktionen > .datei-knopf {
+      min-height: calc(2.75rem + var(--ziel)); padding: 0.6rem 1.1rem; font-size: var(--t-m);
+    }
+    @media (max-width: 30rem) {
+      .aktionen { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+    }
+    /* R4-G6: Bedienelemente zoomen nicht per Doppeltipp (Safari auf dem iPhone). */
+    button, a, summary, select, input, textarea, label, [role="button"], .datei-knopf { touch-action: manipulation; }
+    button, .datei-knopf {
+      font: inherit; font-size: var(--t-s); font-weight: 600;
+      padding: 0.5rem 0.9rem;
+      min-height: calc(var(--ziel-basis) + var(--ziel));
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+      border: var(--strich-stark) solid var(--linie-stark);
+      border-radius: var(--radius); background: var(--flaeche); cursor: pointer;
+      /* iOS-WKWebView tönt Button-Text sonst in Systemblau. */
+      color: var(--text); -webkit-appearance: none; appearance: none;
+      /* Nur Farben, nie Maße: der Knopf steht wie gedruckt, die Farbe folgt. */
+      transition: color var(--dauer-1), border-color var(--dauer-1), background-color var(--dauer-1);
+    }
+    @media (hover: hover) { button:hover, .datei-knopf:hover { border-color: var(--akzent); color: var(--akzent); } }
+    button.primaer, .datei-knopf.primaer { background: var(--akzent); color: var(--auf-akzent); border-color: var(--akzent); }
+    @media (hover: hover) { button.primaer:hover { background: var(--akzent-hell); border-color: var(--akzent-hell); color: var(--auf-akzent); } }
+    button.gefahr { color: var(--alarm); border-color: var(--alarm); }
+    button:disabled { opacity: 0.4; cursor: default; }
+    /* Sichtbarer Tastaturfokus in der Kennfarbe — überall gleich. */
+    button:focus-visible, .datei-knopf:focus-within, a:focus-visible {
+      outline: var(--fokus) solid var(--akzent); outline-offset: 1px;
+    }
+    /* Für das Auge weg, für Tastatur und Vorlesesoftware da. */
+    .nur-sr {
+      position: absolute; width: 1px; height: 1px; overflow: hidden;
+      clip-path: inset(50%); white-space: nowrap;
+      margin: 0; padding: 0; border: 0;
+    }
+    /* Sprungmarke: erster Tabstopp jeder Ansicht, sichtbar erst bei Fokus
+       (R8-M1, R8-O1, R8-G3, R8-S1: rückt um ihre eigene Höhe nach oben). */
+    .sprungmarke {
+      position: absolute; left: var(--r-2); top: 0; z-index: 100;
+      transform: translateY(calc(-100% - 8px));
+      padding: 0.5rem 0.9rem; border-radius: var(--radius);
+      background: var(--flaeche); color: var(--akzent);
+      border: var(--strich-stark) solid var(--akzent);
+      font-size: min(var(--t-s), 16px); font-weight: 600; text-decoration: none; line-height: 1.3;
+      white-space: nowrap; max-width: calc(100vw - 2 * var(--r-2)); overflow: hidden; text-overflow: ellipsis;
+      min-height: 0; transition: transform var(--dauer-1) ease-out;
+    }
+    @media (hover: hover) { .sprungmarke:hover { background: var(--flaeche); color: var(--akzent); } }
+    .sprungmarke:focus { transform: translateY(var(--r-2)); }
+
+    /* ---------------------------------------------------------------
+       Kopfnavigation — die Leiste über der App (Markup aus src/app/kopfnav.ts),
+       auf den Design-Token, damit sie im Dunkel-, Feld- und Nacht-Modus
+       mitgeht. Über dem Kopfbalken, nicht darin: neutral auf --flaeche.
+       --------------------------------------------------------------- */
+    .kopfnav { background: var(--flaeche); border-bottom: var(--strich) solid var(--linie-fein); }
+    /* Satzspiegel wie main und .kopf-inhalt (60rem). */
+    .kopfnav-inner {
+      width: 100%; max-width: 60rem; margin: 0 auto;
+      padding: 0 var(--r-3);
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--r-4);
+    }
+    /* Höhe aus den Trefferflächen der Bedienelemente (--ziel-basis = 2.75rem),
+       Schrift gedeckelt (R5-M2, R6-M6): bei 200 % wuchs die Leiste auf den
+       vierfachen Platz. */
+    .kopfnav-logo {
+      display: inline-flex; align-items: center; min-height: min(var(--ziel-basis), 44px);
+      margin-right: auto; font-weight: 700; font-size: min(var(--t-s), 18px);
+      color: var(--akzent); text-decoration: none;
+    }
+    .kopfnav-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--r-3); }
+    /* min-width (R3-G4): kurze Einträge waren 29 px breit. */
+    .kopfnav-links a {
+      display: inline-flex; align-items: center; justify-content: center; min-height: min(var(--ziel-basis), 44px); min-width: min(var(--ziel-basis), 44px);
+      font-size: min(var(--t-xs), 16px); color: var(--text-2); text-decoration: none; white-space: nowrap;
+    }
+    .kopfnav-links a:hover { color: var(--akzent-hell); text-decoration: underline; }
+    .kopfnav-eintrag { position: relative; display: inline-flex; }
+    /* Rechteckig wie alles andere (Null-Radius-Regel). Der Schatten bleibt: Das
+       Menü schwebt tatsächlich über dem Inhalt. */
+    .kopfnav-unter {
+      position: absolute; top: 100%; left: calc(-1 * var(--r-2)); z-index: 30;
+      display: none; grid-template-columns: 1fr; gap: 1px;
+      margin-top: var(--r-2); padding: var(--r-1);
+      background: var(--flaeche); border: var(--strich) solid var(--linie);
+      border-radius: var(--radius); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    .kopfnav-unter-breit { grid-template-columns: 1fr 1fr; }
+    .kopfnav-unter a { display: flex; align-items: center; min-height: var(--ziel-basis); padding: 0 var(--r-2); }
+    .kopfnav-unter a:hover { background: var(--flaeche-2); text-decoration: none; }
+    /* Der unsichtbare Streifen überbrückt den Abstand zwischen Eintrag und Menü. */
+    .kopfnav-unter::before { content: ""; position: absolute; left: 0; right: 0; top: calc(-1 * var(--r-2)); height: var(--r-2); }
+    .kopfnav-eintrag:focus-within .kopfnav-unter { display: grid; }
+    /* Nur mit echtem Zeiger aufklappen: Auf Touchgeräten würde der erste Tipp
+       sonst das Menü öffnen, statt dem Link zu folgen. */
+    @media (hover: hover) and (pointer: fine) {
+      .kopfnav-eintrag:hover .kopfnav-unter { display: grid; }
+    }
+    /* Auf dem Telefon bleibt sichtbar, was dort wirklich gebraucht wird (R2-G3). */
+    @media (max-width: 30rem) {
+      .kopfnav-links .nur-breit { display: none; }
+    }
+    @media (max-width: 22.4rem) {
+      .kopfnav-logo { display: none; }
+    }
+    /* In der installierten Fassung (Klasse aus der Frühweiche im Kopf) gibt es
+       die Themenwelt nicht — React lässt die Leiste dort ohnehin weg
+       (imWebBrowser() in nativ.ts); ohne diese Regel blitzte sie bis zum Mount auf. */
+    .als-app .kopfnav { display: none; }
+
+    /* Der Sprung setzt den Fokus auf <main>; dort ist der Rahmen überflüssig. */
+    main:focus { outline: none; }
+    /* Umschalter Standard/Feld/Dunkel/Nacht als kompakte Segmente. In schmalen
+       Spalten (Fußzeile auf dem Telefon) darf die Segmentzeile umbrechen. */
+    .anzeige-schalter {
+      display: inline-flex; flex-wrap: wrap; max-width: 100%;
+      border: var(--strich) solid var(--linie); border-radius: var(--radius); overflow: hidden;
+    }
+    /* Die Segmente tragen das volle Zielmaß (44/48 px): ein Fehlgriff mit
+       Handschuh schaltete sonst auf „Nacht" statt zurück zur Startseite.
+       min-width (R3-G4): „Feld" war quer 41 px breit. */
+    .anzeige-schalter button {
+      min-width: calc(var(--ziel-basis) + var(--ziel));
+      border: none; border-radius: 0; background: var(--flaeche); color: var(--text-2);
+      padding: 0.25rem 0.7rem; font-size: var(--t-xs); min-height: calc(var(--ziel-basis) + var(--ziel));
+      flex: 1 1 auto;
+    }
+    /* R3-L7, R5-G7: mindestens 2 px --linie-stark zwischen den Segmenten. */
+    .anzeige-schalter button + button { border-left: max(var(--strich), 2px) solid var(--linie-stark); }
+    .anzeige-schalter button.aktiv { background: var(--akzent); color: var(--auf-akzent); }
+    /* R4-G5: Zweckzeile unter dem Namen nur in der aufgeklappten Wahl; in den
+       Segmenten bleibt der Name allein. */
+    .anzeige-schalter button .modus-kurz { display: none; }
+    /* R5-N4: Der Schalter trägt dort, wo die Segmente allein stehen, den Namen „Ansicht:“. */
+    .anzeige-mit-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; max-width: 100%; }
+    .anzeige-name { font-size: var(--t-xs); font-weight: 600; }
+    /* Der Klappknopf (R2-H7) ist nur auf dem Telefon sichtbar, siehe Startkopf unten. */
+    .anzeige-schalter .anzeige-klappe { display: none; }
+    /* Im Kopf sitzt der Umschalter rechts in der Titelzeile; der Titel darf
+       ihn nach einem Umbruch nicht zerquetschen. */
+    .seiten-kopf .titelzeile h1 { flex: 1 1 14rem; }
+    .seiten-kopf .titelzeile .anzeige-schalter { margin-left: auto; border-color: var(--kopf-linie); }
+    /* Immer sichtbarer Rücksprung zur Startseite im Kopfbereich (kommt mit der
+       Einsatzansicht, Phase 2): ein Knopf im Zielmaß, der wie ein Wort aussieht. */
+    .zur-start {
+      display: inline-flex; align-items: center; border: none; background: none;
+      padding: 0.2rem 0; margin-top: 0; min-height: calc(var(--ziel-basis) + var(--ziel));
+      color: var(--akzent); font-size: var(--t-m); font-weight: 600; cursor: pointer;
+      max-width: 100%; overflow-wrap: anywhere;
+    }
+    @media (hover: hover) { .zur-start:hover { border: none; background: none; text-decoration: underline; } }
+
+    /* ---------------------------------------------------------------
+       Seitenkopf: jede Web-Ansicht beginnt mit derselben Kopfleiste über
+       die volle Fensterbreite, in der Kennfarbe und mit harter Unterkante.
+       Der Balken selbst ist randlos; nur sein Inhalt (.kopf-inhalt) bleibt
+       auf dem Satzspiegel von main.
+       --------------------------------------------------------------- */
+    .seiten-kopf {
+      background: var(--kopf-fond); color: var(--kopf-auf);
+      border-bottom: var(--kopf-kante) solid var(--kopf-kante-farbe);
+    }
+    .seiten-kopf .kopf-inhalt {
+      width: 100%; max-width: 60rem; margin: 0 auto;
+      display: flex; flex-direction: column;
+      padding: var(--kopf-innen);
+    }
+    .seiten-kopf .titelzeile { padding: var(--r-2) 0 var(--r-3); display: flex; align-items: center; gap: var(--r-3); flex-wrap: wrap; }
+    .seiten-kopf .kopf-inhalt > .zur-start { align-self: flex-start; }
+    /* Im Kopf gilt die Kopf-Schriftfarbe, nicht die Überschriftenfarbe der Seite. */
+    .seiten-kopf h1, .seiten-kopf h2 { color: var(--kopf-auf); }
+    .seiten-kopf h1 { margin: 0; }
+    .seiten-kopf a { color: var(--kopf-auf); }
+    /* Startseite: der Titel ist hier die Hauptsache und darf größer stehen. */
+    .seiten-kopf.start-kopf .kopf-inhalt { padding-bottom: var(--r-4); }
+    /* R3-H5: Auf schmalen Telefonen verdichtet sich der Startkopf — der
+       Anzeigemodus als Klappknopf neben dem Titel, das Logo der Kopfleiste
+       entfällt. Die Container-Abfrage zählt in der tatsächlichen Schrift. */
+    .seiten-kopf.start-kopf { container: startkopf / inline-size; }
+    @container startkopf (max-width: 22rem) {
+      .seiten-kopf.start-kopf .anzeige-schalter.klappbar .anzeige-klappe { display: inline-flex; align-items: center; gap: 0.3em; }
+      .seiten-kopf.start-kopf .anzeige-schalter.klappbar:not(.offen) > button:not(.anzeige-klappe) { display: none; }
+      .seiten-kopf.start-kopf .anzeige-schalter.klappbar.offen { flex: 1 1 100%; }
+      .seiten-kopf.start-kopf .anzeige-schalter.klappbar.offen .anzeige-klappe { flex: 1 1 100%; justify-content: center; }
+      /* R4-M6: Die Zeile darf umbrechen; der Titel behält mindestens die Breite
+         seines längsten Worts, der Knopf rutscht darunter statt darüber. */
+      .seiten-kopf.start-kopf .titelzeile { flex-wrap: wrap; align-items: flex-start; }
+      .seiten-kopf.start-kopf .titelzeile h1 {
+        flex: 1 1 0; min-width: min-content; font-size: min(var(--t-l), 6.4vw);
+        overflow-wrap: normal; hyphens: manual; -webkit-hyphens: manual;
+      }
+      .seiten-kopf.start-kopf .anzeige-schalter { flex: 0 0 auto; margin-left: auto; }
+    }
+    .seiten-kopf.start-kopf h1 { font-size: clamp(var(--t-xl), 4vw, var(--t-2xl)); }
+
+    /* Karten: Kante statt Schatten. Die Trennung entsteht über Linie und
+       Fläche — wie ein Formularabschnitt auf Papier (R2-M1: Polster gedeckelt). */
+    section.karte, .karte {
+      background: var(--flaeche); border: var(--strich) solid var(--linie); border-radius: var(--radius);
+      padding: var(--r-4); margin-bottom: var(--r-4);
+      padding-inline: min(var(--r-4), 18px);
+    }
+    /* Die Stand-Karte der Startseite trägt die schwere Deckzeile eines
+       gedruckten Formularabschnitts (Deckzeilen-Regel, DESIGN.md des
+       Erfassungsbogens): 4 px in Textfarbe, nicht in der Kennfarbe. */
+    .start > .karte.start-stand { margin-top: var(--r-5); max-width: 44rem; border-top: 4px solid var(--text); }
+    .start > .karte.start-stand > h2 { margin-bottom: var(--r-2); }
+    .start > .karte.start-stand > p { margin: 0 0 var(--r-2); }
+    .start > .karte.start-stand > p:last-child { margin-bottom: 0; }
+    .start > .karte.start-stand a { color: var(--akzent-hell); }
+    /* Beschriftungen dunkel und halbfett statt hellgrau — im Feld muss ein
+       Feldname genauso sicher lesbar sein wie sein Inhalt. */
+    label.feld { display: block; margin: var(--r-3) 0 0; font-size: var(--t-xs); font-weight: 600; color: var(--text-2); }
+    label.feld > input, label.feld > select, label.feld > textarea, label.feld > output {
+      display: block; width: 100%; margin-top: var(--r-1);
+    }
+    input, select, textarea {
+      font: inherit; font-size: var(--t-m); padding: 0.45rem 0.55rem;
+      border: var(--strich-stark) solid var(--linie-stark);
+      border-radius: var(--radius); background: var(--flaeche); color: var(--text);
+      max-width: 100%;
+      transition: border-color var(--dauer-1);
+    }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea {
+      min-height: calc(var(--ziel-basis) + var(--ziel));
+    }
+    /* 24 px ist die WCAG-Schwelle für das sichtbare Ziel; der Feld-Modus hebt weiter auf 1.7rem. */
+    input[type="checkbox"], input[type="radio"] {
+      accent-color: var(--akzent); width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0;
+    }
+    input[type="number"], output.abgeleitet { font-variant-numeric: tabular-nums; }
+    /* Kursiv: ein Beispiel darf nicht wie ein eingetragener Wert aussehen (R2-N9). */
+    input::placeholder, textarea::placeholder { color: var(--text-3); font-style: italic; }
+    input:focus, select:focus, textarea:focus {
+      outline: var(--fokus) solid var(--akzent); outline-offset: 0; border-color: var(--akzent);
+    }
+    /* Jede Kästchen-Zeile ist ein Tippziel in voller Zeilenhöhe. */
+    label.inline {
+      display: flex; align-items: center; gap: 0.6rem; margin: var(--r-3) 0;
+      min-height: calc(var(--ziel-basis) + var(--ziel)); cursor: pointer;
+    }
+    label.inline > input { flex: 0 0 auto; }
+    .fehler { color: var(--alarm); }
+    .warnung {
+      color: var(--warn-text); background: var(--warn-fond); border: var(--strich) solid var(--warn-linie);
+      border-radius: var(--radius); padding: 0.5rem 0.7rem; font-size: var(--t-s);
+    }
+    .hinweis { font-size: var(--t-xs); color: var(--text-2); }
+
+    /* Startseite: Offline-Versprechen als grünes Etikett unter der Einleitung. */
+    .offline-badge {
+      display: inline-block; margin: var(--r-3) 0 0; padding: 0.3rem 0.7rem;
+      border: var(--strich) solid var(--gut); border-radius: var(--radius); background: transparent;
+      color: var(--gut); font-size: var(--t-s); font-weight: 600;
+    }
+    /* Erklärender Fließtext am Ende der Startseite (Quelle: start-inhalt.ts).
+       Reine Rollen-Token, damit Dunkel-, Feld- und Nacht-Modus ohne eigene
+       Blöcke greifen. */
+    .start-seo {
+      max-width: 44rem; margin: var(--r-6) 0 0;
+      border-top: var(--strich) solid var(--linie); padding-top: var(--r-5);
+    }
+    .start-seo > h2 { margin-top: var(--r-6); }
+    .start-seo > h2:first-child { margin-top: 0; }
+    .start-seo > h3 { margin-top: var(--r-4); }
+    .start-seo p, .start-seo ul { margin: 0 0 var(--r-3); color: var(--text-2); }
+    .start-seo ul { padding-left: 1.2rem; }
+    .start-seo li { margin-bottom: var(--r-2); }
+    .start-seo a { color: var(--akzent-hell); }
+    /* In der installierten Fassung (Klasse aus der Frühweiche im Kopf) gibt es
+       den Text nicht. */
+    .als-app .start-seo { display: none; }
+    /* Einleitung und Überschrift bei großer Schrift gedeckelt (R5-M2). */
+    .start > p.start-intro { font-size: min(var(--t-l), 20px); }
+    @media (max-width: 40rem) and (max-height: 40rem) {
+      .start > p.start-intro { font-size: min(var(--t-l), 16px); margin-bottom: 0; }
+    }
+
+    /* Kopfzeile einer Karte oder eines Dialogs: Titel links, Aktion rechts;
+       bei Platzmangel klappt die Aktion unter den Titel (R2-M1). */
+    .kopfzeile { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1rem; }
+    .kopfzeile h2 { border: none; margin: 0; }
+    .kopfzeile > :first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
+    .kopfzeile > :last-child:not(:first-child) { flex: 0 1 auto; min-width: 0; margin-left: auto; }
+    .kopfzeile > span { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; justify-content: flex-end; }
+    .kopfzeile > span > * { max-width: 100%; }
+
+    /* Aktualisierungsband (aktualisierung.tsx): Kennfarbe als Fläche, Zweitschrift gerechnet. */
+    .update-banner {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
+      background: var(--blau); color: var(--auf-akzent); padding: 0.5rem 1rem; font-size: var(--t-s);
+    }
+    .update-banner .primaer { background: var(--auf-akzent); color: var(--blau); border-color: var(--auf-akzent); }
+    .update-banner .link { color: var(--auf-akzent-2); }
+    .update-banner .fehler { color: var(--alarm-auf-akzent); flex-basis: 100%; }
+
+    /* Verworfener Tipp (tipp-schutz.ts, R5-S2, R5-G5): Der Knopf unter dem
+       Finger bekommt kurz einen Rahmen, über dem Finger steht „Einen Moment …". */
+    .tipp-moment {
+      position: fixed; z-index: 60; transform: translateX(-50%);
+      pointer-events: none; padding: 6px 14px; border-radius: 999px;
+      background: var(--text); color: var(--flaeche);
+      font-size: min(var(--t-s), 18px); font-weight: 700; line-height: 1.2; white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+    .tipp-moment[hidden] { display: none; }
+    [data-tipp-gesperrt] { outline: 3px dashed var(--text); outline-offset: 2px; }
+
+    /* ---------------------------------------------------------------
+       Seiten-Fußzeile: nach Zweck gruppierte Spalten mit gesperrter Versal-
+       Beschriftung, linksbündig wie der Rest der Seite, oben von einer
+       Haarlinie abgesetzt. margin-top: auto schiebt sie ans Seitenende.
+       --------------------------------------------------------------- */
+    footer.seite {
+      width: 100%; max-width: 60rem;
+      align-self: center;
+      margin: auto 0 0;
+      padding: var(--r-5) var(--r-4) 5rem;
+      display: flex; flex-direction: column; gap: var(--r-4);
+      border-top: var(--strich) solid var(--linie);
+      font-size: var(--t-s); color: var(--text-2);
+    }
+    /* R7-G5: Die Spalten brauchen bei Zoom 200 bis 250 % im Feld-Modus keine 9rem Mindestbreite. */
+    .fuss-gruppen {
+      display: grid; gap: var(--r-4) var(--r-5);
+      grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
+    }
+    .fuss-gruppe { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+    /* Diese Links stehen als eigene Zeilen in einer Liste — sie bekommen das
+       volle Zielmaß (44/48 px), die Höhe ist der Abstand (R2-G3). */
+    .fuss-gruppe a,
+    .fuss-gruppe button.link {
+      display: inline-flex; align-items: center;
+      min-height: calc(var(--ziel-basis) + var(--ziel));
+      min-width: calc(var(--ziel-basis) + var(--ziel));
+    }
+    .fuss-gruppe button.link + button.link { margin-top: var(--r-3); }
+    .fuss-gruppe button.link.gefahr { margin-top: var(--r-5); }
+    .fuss-titel {
+      font-family: var(--schrift-daten); font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-2);
+    }
+    /* Ruhige, aber eindeutige Links: Textfarbe mit feiner Unterstreichung,
+       die beim Überfahren in die Kennfarbe wechselt. */
+    footer.seite .fuss-gruppe a,
+    footer.seite .fuss-gruppe button.link {
+      color: var(--text); font-size: var(--t-s);
+      text-decoration: underline; text-decoration-color: var(--linie); text-underline-offset: 0.2em;
+    }
+    @media (hover: hover) {
+      footer.seite .fuss-gruppe a:hover,
+      footer.seite .fuss-gruppe button.link:hover {
+        color: var(--akzent); text-decoration-color: currentColor;
+      }
+    }
+    footer.seite .fuss-gruppe button.link.gefahr { text-decoration-color: var(--alarm); }
+    @media (hover: hover) { footer.seite .fuss-gruppe button.link.gefahr:hover { color: var(--alarm); } }
+    .fuss-marke { margin: 0; color: var(--text-2); }
+    footer.seite a { color: var(--akzent-hell); }
+    /* Werkzeugzeile (src/app/werkzeuge.ts): letzte Zeile jeder Fußzeile. */
+    footer.seite .fuss-werkzeuge {
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: 0 var(--r-2);
+      padding-top: var(--r-2);
+      border-top: var(--strich) solid var(--linie-fein);
+      font-size: var(--t-s); color: var(--text-2);
+    }
+    footer.seite .fuss-werkzeuge a {
+      display: inline-flex; align-items: center;
+      min-height: calc(var(--ziel-basis) + var(--ziel));
+      color: var(--text-2); font-size: var(--t-s);
+      text-decoration: underline; text-decoration-color: var(--linie); text-underline-offset: 0.2em;
+    }
+    @media (hover: hover) {
+      footer.seite .fuss-werkzeuge a:hover { color: var(--akzent); text-decoration-color: currentColor; }
+    }
+    button.link {
+      border: none; background: none; font-size: inherit;
+      min-height: 0; display: inline; font-weight: inherit;
+      color: var(--akzent-hell); text-decoration: underline; cursor: pointer;
+      text-align: inherit;
+      /* Senkrechtes Innenmaß statt Mindesthöhe: 24 px Trefferfläche (WCAG 2.5.8)
+         ohne die Zeilenhöhe anzufassen. */
+      padding: calc(0.28rem + 0.5 * var(--ziel)) 0;
+    }
+    @media (hover: hover) { button.link:hover { border: none; background: none; color: var(--akzent); } }
+
+    /* ---------------------------------------------------------------
+       Dialoge: Rückfragen (dialoge.tsx) und die Fenster der Fußzeile.
+       --------------------------------------------------------------- */
+    dialog {
+      border: var(--strich-stark) solid var(--linie-stark); border-radius: var(--radius);
+      width: min(34rem, calc(100vw - min(2rem, 32px))); padding: min(var(--r-4), 16px) min(var(--r-5), 24px);
+      background: var(--flaeche); color: var(--text); font-size: var(--t-m);
+      /* Der Browser-Standard rechnet den Rand mit 2em (bei 200 % 64 px je Seite). */
+      max-width: calc(100vw - min(2rem, 32px)); max-height: calc(100dvh - min(2rem, 32px));
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+    /* Dialoge steigen kurz ein; das Schließen bleibt schlagartig. */
+    dialog[open] { animation: dialog-auf var(--dauer-2) var(--kurve); }
+    dialog[open]::backdrop { animation: einblenden var(--dauer-2) ease-out; }
+    dialog h2 { border: none; }
+    dialog h3 { color: var(--text); }
+    /* R2-M8: Hinter einem offenen modalen Dialog rollt die Seite nicht mit. */
+    html:has(dialog:modal) { overflow: hidden; }
+    dialog:modal { overscroll-behavior: contain; }
+    /* R8-M5: Die Kopfzeile bleibt oben im Dialog stehen; „Schließen" hat das Zielmaß. */
+    dialog > .kopfzeile:first-child { position: sticky; top: 0; z-index: 3; background: var(--flaeche); padding-block: var(--r-2); box-shadow: 0 1px 0 var(--linie-fein); align-items: center; }
+    dialog > .kopfzeile:first-child h2 { min-width: 0; overflow-wrap: break-word; hyphens: auto; }
+    dialog:has(> .kopfzeile:first-child) { padding-top: 0; }
+    dialog > .kopfzeile:first-child { padding-top: min(var(--r-4), 16px); }
+    html.schrift-gross dialog > .kopfzeile:first-child h2 { font-size: min(var(--t-xl), 22px); line-height: 1.2; }
+    html.schrift-gross dialog > .kopfzeile:first-child > button { font-size: min(var(--t-m), 18px); padding-inline: min(1.1rem, 16px); }
+    dialog > .kopfzeile:first-child > button { flex: 0 0 auto; min-height: calc(44px + var(--ziel)); }
+    dialog button.link { min-height: calc(44px + var(--ziel)); }
+    /* Eigene Abfragen (Eingabe/Rückfrage/Hinweis) statt window.prompt & Co. —
+       siehe src/app/dialoge.tsx. Die Antwortknöpfe stehen als Zeile am Fuß, die
+       bejahende zuerst; auf dem Telefon wird daraus ein Stapel voller Breite. */
+    dialog.abfrage p { margin: 0 0 var(--r-3); }
+    dialog.abfrage label.feld { margin-top: var(--r-3); }
+    dialog.abfrage .kopiertext { width: 100%; font-family: var(--schrift-daten); font-size: var(--t-xs); }
+    .abfrage-aktionen { display: flex; flex-wrap: wrap; gap: var(--r-2); margin-top: var(--r-4); }
+    .aktionen.abgesetzt { margin-top: var(--r-4); padding-top: var(--r-3); border-top: var(--strich) solid var(--linie); }
+    .abfrage-aktionen.abgesetzt { margin-top: var(--r-5); padding-top: var(--r-4); border-top: var(--strich) solid var(--linie); }
+    .abfrage-weg { margin: 0.9rem 0; }
+    .abfrage-weg button { width: 100%; }
+    .abfrage-weg .hinweis { margin: 0.25rem 0 0; }
+    @media (max-width: 540px) {
+      .abfrage-aktionen { flex-direction: column; align-items: stretch; }
+    }
+    /* R4-M1, R7-W1: Frage und Wege rollen im Rumpf (mit Schattenkante als
+       Hinweis), die Antwortzeile am Fuß steht fest und überdeckt nichts. */
+    dialog.abfrage[open] { display: flex; flex-direction: column; overflow: hidden; }
+    dialog.abfrage form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; }
+    dialog.abfrage .abfrage-rumpf {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      background:
+        linear-gradient(var(--flaeche) 30%, transparent) top / 100% 1.6rem no-repeat local,
+        linear-gradient(transparent, var(--flaeche) 70%) bottom / 100% 1.6rem no-repeat local,
+        radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.28), transparent) top / 100% 0.5rem no-repeat scroll,
+        radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.28), transparent) bottom / 100% 0.5rem no-repeat scroll;
+    }
+    dialog.abfrage .abfrage-fuss, dialog.abfrage form > .abfrage-aktionen { flex: 0 0 auto; }
+    dialog.abfrage .abfrage-fuss .abfrage-weg { margin: var(--r-3) 0 0; }
+    dialog.abfrage .abfrage-fuss .abfrage-aktionen:not(.abgesetzt) { margin-top: var(--r-3); }
+    dialog.abfrage form > .abfrage-aktionen { margin-top: var(--r-3); }
+    /* Querformat und knappe Höhe: Antwort und „Abbrechen" nebeneinander (R8-G1, R8-M2: erst ab 280 px Breite). */
+    @media (max-height: 480px) and (min-width: 280px) {
+      dialog.abfrage .abfrage-fuss { display: flex; flex-wrap: nowrap; align-items: stretch; gap: var(--r-4); margin-top: var(--r-3); }
+      dialog.abfrage .abfrage-fuss .abfrage-weg { flex: 1 1 0; min-width: 0; margin: 0; }
+      dialog.abfrage .abfrage-fuss .abfrage-aktionen,
+      dialog.abfrage .abfrage-fuss .abfrage-aktionen:not(.abgesetzt),
+      dialog.abfrage .abfrage-fuss .abfrage-aktionen.abgesetzt { flex: 1 1 0; min-width: 0; margin: 0; padding: 0; border: 0; }
+      dialog.abfrage .abfrage-fuss .abfrage-aktionen > button,
+      dialog.abfrage .abfrage-fuss .abfrage-weg > button { width: 100%; height: 100%; }
+      /* R8-G5: Steht eine zerstörende Wahl im Dialog, rückt „Abbrechen" zusätzlich ab. */
+      dialog.abfrage .abfrage-fuss .abfrage-aktionen.abgesetzt { margin-left: var(--r-2); }
+    }
+    /* Große Schrift in Rückfragen gedeckelt (Runde 8). */
+    dialog.abfrage h2 { font-size: min(var(--t-xl), 24px); overflow-wrap: break-word; hyphens: auto; }
+    dialog.abfrage p { font-size: min(var(--t-m), 20px); }
+    dialog.abfrage .hinweis { font-size: min(var(--t-xs), 16px); }
+    dialog.abfrage .abfrage-weg > button { display: flex; align-items: center; justify-content: center; text-align: center; }
+
+    /* ---------------------------------------------------------------
+       Bewegung — die Keyframes zu den --dauer-Token oben. Alles endet im
+       Ruhezustand des Elements: fällt eine Animation aus, steht der Inhalt
+       trotzdem vollständig da.
+       --------------------------------------------------------------- */
+    @keyframes einblenden { from { opacity: 0; } }
+    @keyframes dialog-auf { from { opacity: 0; transform: translateY(0.5rem); } }
+    @keyframes stempel { from { opacity: 0; transform: scale(1.03); } }
+    .zahl-geaendert { animation: quittung var(--dauer-3) ease-out; }
+    @keyframes quittung { from { background: var(--flaeche-2); } }
+    .eingegangen { animation: eingang-quittung var(--dauer-3) ease-out; }
+    @keyframes eingang-quittung { 0%, 45% { background: var(--eingang-fond); } }
+    /* Systemeinstellung „Bewegung reduzieren": alles aus, Zustände springen. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after, ::backdrop {
+        transition-duration: 0ms !important;
+        animation-duration: 0ms !important;
+      }
+      /* Ausnahme: die Quittungen sind keine Bewegung, sondern ein Farbwechsel,
+         der eine Auskunft trägt (welche Zahl, welche Zeile) — sie dürfen laufen. */
+      .zahl-geaendert { animation-duration: var(--dauer-3) !important; }
+      .eingegangen { animation-duration: var(--dauer-3) !important; }
+    }
+    /* Der Wechsel des Anzeigemodus springt (anzeige-modus.ts setzt die Klasse
+       für einen Frame um die Umschaltung). */
+    .modus-wechsel, .modus-wechsel *, .modus-wechsel *::before,
+    .modus-wechsel *::after, .modus-wechsel ::backdrop {
+      transition-duration: 0ms !important;
+    }
+
+    /* Safe-Area (Notch, Statusleiste, Home-Indicator). env() ist auf Geräten
+       ohne Aussparung 0; setzt viewport-fit=cover im viewport-Meta voraus. */
+    #app {
+      padding-top: env(safe-area-inset-top);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    /* ---------------------------------------------------------------
+       Feld-Modus: große Tippziele + maximaler Kontrast für den Einsatz
+       draußen (Handschuhe, pralle Sonne). anzeige-modus.ts setzt die Klasse
+       auf <html>. Bewusst als später Block: gewinnt die Kaskade.
+       --------------------------------------------------------------- */
+    .feld-modus {
+      color-scheme: light;
+      font-size: 112%;
+      --grund:       #e8eaef;
+      --flaeche:     #ffffff;
+      --flaeche-2:   #dfe3ea;
+      --text:        #000000;
+      --text-2:      #262b36;
+      --text-3:      #262b36;
+      /* R3-L7: Markenrahmen auf Weiß 4,02:1 statt 1,79:1. */
+      --warn-linie:  #9c7a24;
+      --linie-fein:  #111318;
+      --linie:       #111318;
+      --linie-stark: #111318;
+      --strich:       2px;
+      --strich-stark: 2px;
+      --fokus:        4px;
+      --ziel:         0.25rem; /* zieht alle Tippziele von 44 auf 48 px */
+      /* Die 112 % heben die ganze Leiter; die beiden kleinsten Grade bekommen
+         zusätzlich je einen Schritt, weil sie draußen zuerst wegbrechen. */
+      --t-xs: 0.875rem;
+      --t-s:  0.9375rem;
+      /* Draußen tritt nichts zurück — auch die Quittung nicht. */
+      --eingang-fond: #a9d3bc;
+    }
+    /* R5-L3: Der Kopfbalken des Feld-Modus trägt Weiß mit mindestens 7:1.
+       Petrol (#0f4c5c) erreicht 9,5:1 — der Balken bleibt, wie er ist. */
+    .feld-modus label.feld { color: var(--text); font-weight: 700; }
+    .feld-modus input[type="checkbox"], .feld-modus input[type="radio"] { width: 1.7rem; height: 1.7rem; }
+
+    /* ---------------------------------------------------------------
+       Dunkel-Modus: neutrale dunkle Darstellung — dieselbe Oberfläche, nur
+       invertierte Flächen- und Textwerte. Anders als der Nacht-Modus bleibt
+       sie farbneutral und behält die Kennfarbe im Kopfbalken; sie ist die
+       Wahl fürs abgedunkelte Büro oder den Dienstabend, nicht für die
+       Dunkeladaption. Die Systemeinstellung „dunkel" ist nur die Vorgabe
+       beim ersten Start (Boot-Skript oben); eine getroffene Wahl geht vor.
+       --------------------------------------------------------------- */
+    .dunkel-modus {
+      color-scheme: dark;
+      --grund:       #0f1116;
+      --flaeche:     #171a21;
+      --flaeche-2:   #21252e;
+      --text:        #e7eaf1;
+      --text-2:      #aab2c2;
+      --text-3:      #848da0;
+      --linie-fein:  #272c36;
+      --linie:       #3a414f;
+      /* R2-L3: Feldrahmen 3,45:1 auf --flaeche, 3,04:1 auf --flaeche-2. */
+      --linie-stark: #676f80;
+      /* Auf dunklem Grund trägt nicht der Grundton der Kennfarbe, sondern ihr
+         aufgehellter Ton (10:1 auf --flaeche); die Schrift darauf ist der tiefe Ton. */
+      --akzent:      #8fd0d8;
+      --akzent-hell: #a9dde3;
+      --auf-akzent:  #0a2a2f;
+      --gut:         #6cd18a;
+      --gut-fond:    #16261d;
+      --gut-linie:   #2f5340;
+      --eingang-fond: #223f2d;
+      --alarm:       #ff9d94;
+      --alarm-fond:  #2a1715;
+      --alarm-linie: #5c2a24;
+      --warn-text:   #f0cf88;
+      --warn-fond:   #2a2416;
+      --warn-linie:  #6b5a2c;
+      /* Der Kopfbalken behält die Kennfarbe: Petrol ist dunkel genug (R4-L2
+         betraf die hellen Rottöne), die App bleibt auf den ersten Blick erkennbar. */
+      --kopf-fond:   #0f4c5c;
+      --kopf-auf:    #ffffff;
+      --kopf-kante-farbe: rgba(0, 0, 0, 0.5);
+    }
+    .dunkel-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
+    /* Helle Schrift auf dunklem Grund läuft optisch zu: eine Spur Sperrung und
+       ein Hauch mehr Durchschuss. Gilt für beide dunklen Modi. */
+    .dunkel-modus body, .nacht-modus body { letter-spacing: 0.006em; line-height: 1.55; }
+
+    /* ---------------------------------------------------------------
+       Nacht-Modus: gedimmte, warme Darstellung für Nachteinsätze (Zelt,
+       Fahrzeugkabine) — wenig Blaulichtanteil, keine grellen Flächen,
+       schont die Dunkeladaption. Bewusst als letzter Block.
+       --------------------------------------------------------------- */
+    .nacht-modus {
+      color-scheme: dark;
+      --grund:       #0d0c08;
+      --flaeche:     #17150f;
+      --flaeche-2:   #221f16;
+      --text:        #d9cdb6;
+      --text-2:      #a2977e;
+      /* R3-L7: 4,44:1 auf dem Feldgrund (Platzhalter). */
+      --text-3:      #8c816b;
+      --linie-fein:  #2b271d;
+      --linie:       #423c2d;
+      /* Feldrahmen nachts ≥ 3:1 (R2-L3). */
+      --linie-stark: #746a51;
+      /* Auch die Kennfarbe weicht nachts einem warmen Ton: ein sattes Petrol
+         wäre genau das Licht, das die Dunkeladaption zerstört. */
+      --akzent:      #a8791a;
+      --akzent-hell: #c9932c;
+      --auf-akzent:  #100d07;
+      --gut:         #8fae63;
+      --gut-fond:    #1d241a;
+      --gut-linie:   #40523a;
+      --eingang-fond: #28321e;
+      --alarm:       #e08a7e;
+      --alarm-fond:  #291410;
+      --alarm-linie: #5e2f26;
+      --warn-text:   #d9b96a;
+      --warn-fond:   #2a2415;
+      --warn-linie:  #6b501c;
+      /* Der Kopfbalken bleibt nachts dunkel: eine vollflächig eingefärbte
+         Fläche wäre die hellste Stelle im Bild und würde blenden. */
+      --kopf-fond:  #221f16;
+      --kopf-auf:   #d9cdb6;
+      --kopf-auf-2: #a2977e;
+      --kopf-linie: #423c2d;
+      /* Auf dunklem Grund trennt eine hellere Kante, keine schwarze. */
+      --kopf-kante-farbe: #5c5440;
+    }
+    /* R4-L4: Native Bedienelemente stehen nachts nicht reinweiß im warmen Bild. */
+    .nacht-modus input[type="radio"], .nacht-modus input[type="checkbox"],
+    .nacht-modus input::-webkit-calendar-picker-indicator, .nacht-modus input::-webkit-inner-spin-button {
+      filter: sepia(1) saturate(0.6) brightness(0.78);
+    }
+    /* R8-L7: Der Haken im gewählten Kästchen 5,3:1 gegen die Füllung. */
+    .nacht-modus input[type="checkbox"] { accent-color: #6b4d0e; }
+    .nacht-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
+
+    /* Große Systemschrift (schrift-stufe.ts setzt die Klasse): Startkopf quer gedeckelt (R7-H8, R7-S4). */
+    @media (orientation: landscape) and (max-height: 31.25rem) {
+      .kopfnav-links .nur-breit { display: none; }
+      html.schrift-gross .seiten-kopf.start-kopf h1 { font-size: min(var(--t-l), 20px); }
+      html.schrift-gross .seiten-kopf.start-kopf .kopf-inhalt { padding-block: 6px; }
+      html.schrift-gross .seiten-kopf.start-kopf .titelzeile { padding-block: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Statisches Start-Gerüst: dieselbe Struktur, die app.tsx auf der
+       Startseite rendert. Es erscheint sofort mit dem HTML (Kopf + Intro sind
+       das Largest Contentful Paint) und wird beim React-Mount durch die echte
+       Oberfläche ersetzt — bei identischem Markup ohne sichtbaren Wechsel.
+       Knöpfe bewusst NICHT vorab zeigen: sie wären bis zum Mount ohne Funktion. -->
+  <div id="app">
+    <button type="button" class="sprungmarke">Zum Inhalt springen</button>
+    <!-- Die Kopfleiste über der App, NACH der Sprungmarke, damit die weiterhin
+         der erste Tabstopp ist. Erzeugt aus derselben Quelle wie die
+         React-Fassung, sonst spränge die Seite beim Mount. -->
+    <!-- kopfnav:anfang (erzeugt aus src/app/kopfnav.ts — nicht von Hand ändern) -->
+    <div class="kopfnav">
+      <div class="kopfnav-inner">
+        <a href="./" class="kopfnav-logo">Meldekopf</a>
+        <nav class="kopfnav-links" aria-label="Hauptnavigation">
+          <a href="https://erfassungsbogen.app/">Erfassungsbogen</a>
+          <a href="./datenschutz.html">Datenschutz</a>
+          <a href="./impressum.html">Impressum</a>
+        </nav>
+      </div>
+    </div>
+    <!-- kopfnav:ende -->
+    <header class="seiten-kopf start-kopf">
+      <div class="kopf-inhalt">
+        <div class="titelzeile">
+          <h1>Meldekopf</h1>
+        </div>
+      </div>
+    </header>
+    <main id="inhalt" tabindex="-1" class="start">
+      <p class="start-intro">Für Meldeköpfe, Bereitstellungsräume und kleine Führungsstellen im ELW: eintreffende Einheiten erfassen, Stärke und Sofortbedarf laufend zählen, die Lage geschlossen weitergeben.</p>
+      <p class="offline-badge">Alle Daten bleiben auf diesem Gerät. Nach dem ersten Laden funktioniert die App auch ohne Netz.</p>
+      <!-- Dieselbe Karte wie StandKarte in app.tsx. -->
+      <section class="karte start-stand" aria-labelledby="stand-titel">
+        <h2 id="stand-titel">Im Aufbau</h2>
+        <p>Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute steht das Gerüst: Startseite, Anzeigemodi für Sonne und Nacht, Offline-Start.</p>
+        <p>Bis die Übernahme abgeschlossen ist, sammelst du Bögen weiter im <a href="https://erfassungsbogen.app/">Erfassungsbogen</a>.</p>
+      </section>
+      <!-- Derselbe Text, den die React-Startseite unten zeigt — erzeugt aus
+           src/app/start-inhalt.ts, damit beide Pfade nicht auseinanderlaufen
+           (Prüfung: src/test/start-inhalt.test.ts). -->
+      <!-- start-inhalt:anfang (erzeugt aus src/app/start-inhalt.ts — nicht von Hand ändern) -->
+      <section class="start-seo" aria-label="Über die Meldekopf-App">
+        <h2>Wofür der Meldekopf da ist</h2>
+        <p>Am Meldekopf, am Eingang des Bereitstellungsraums und in der kleinen Führungsstelle im ELW laufen die Bögen vieler Einheiten zusammen. Diese App nimmt eintreffende Einheiten auf, zählt Stärke (Führer / Unterführer / Mannschaft // Gesamt) und Sofortbedarf über alle anwesenden Einheiten laufend zusammen und gibt die Lage geschlossen an die nächste Führungsstelle weiter.</p>
+        <p>Sie ist für ein Gerät gebaut: ein Tablet oder Laptop am Eingang, im Fahrzeug oder auf der Motorhaube. Kein Server, keine Anmeldung, keine Kopplung der Geräte. Was mehrere Geräte oder einen Verlauf über Tage braucht, gehört in den Stab und damit nach S1-Control.</p>
+        <h2>Eingänge: So kommen die Bögen herein</h2>
+        <ul>
+          <li>QR-Code: vom Bildschirm der Einheit oder vom Ausdruck, mit der Kamera oder einem USB-Handscanner.</li>
+          <li>Fotos und Bildschirmfotos aus Messenger und Mail, einzeln oder als ganzer Stapel.</li>
+          <li>Datei, PDF oder Link, etwa per AirDrop, Quick Share oder USB-Stick.</li>
+          <li>Einheit ohne Bogen: nur Stärke, Führungskraft und Fahrzeuge erfassen; für den vollständigen Bogen öffnet sich der Erfassungsbogen per Link, und der Bogen kommt per Link zurück.</li>
+        </ul>
+        <p>Jede Meldung landet in der Historie ihrer Einheit; eine Folgemeldung zeigt, was sich seit der letzten geändert hat. Abrücken, Zug zuordnen, Aufteilen und Zusammenführen gehören dazu, ebenso der Abgleich vom Papier, wenn ein Gerät ausgefallen ist.</p>
+        <h2>Weitergabe: So geht die Lage weiter</h2>
+        <ul>
+          <li>Sammel-PDF mit Lageblatt im Papier-Layout: eine Zeile je Einheit, Summen, Stand am Meldekopf.</li>
+          <li>CSV-Übersicht für die Lagekarte und CSV mit allen Daten.</li>
+          <li>Excel-Liste im Format „Oldenburg“ für die Einheitenliste der Führungsstelle.</li>
+          <li>Einsatz-Datei für S1-Control und für ein zweites Meldekopf-Gerät bei der Ablösung.</li>
+        </ul>
+        <p>Jede Weitergabe merkt sich, was der Empfänger schon hat, und gibt auf Wunsch nur das heraus, was seitdem dazugekommen ist. Ein zweites Fenster zeigt die Lage auf dem Fernseher im Raum: Einsatzname, Zeit, Stärke und die Einheiten, ohne Personennamen.</p>
+        <h2>Die Produktfamilie</h2>
+        <p>Der <a href="https://erfassungsbogen.app/">Erfassungsbogen</a> ist die App der einzelnen Einheit: Sie füllt ihren Bogen aus, druckt ihn und gibt ihn per QR-Code, Link oder Datei weiter. Der Meldekopf sammelt diese Bögen. <a href="https://github.com/wattnpapa/S1-Control">S1-Control</a> ist die Führungsstelle mit vollem Stab: Sie liest die Einsatz-Datei des Meldekopfs ein und führt die Lage über Tage, Geräte und Sachgebiete weiter. Alle drei sprechen dasselbe Format.</p>
+        <h2>Offline statt Cloud</h2>
+        <p>Alle Daten bleiben auf dem Gerät. Es gibt keinen Server, an den eine Meldung geschickt würde, keine Anmeldung und kein Konto. Nach dem ersten Aufruf läuft die Seite ohne Netz und lässt sich auf dem Startbildschirm ablegen. Wie gezählt wird, wer die Seite aufruft, steht im <a href="./datenschutz.html">Datenschutzhinweis</a>.</p>
+        <p>Die App ist kostenlos und quelloffen unter der EUPL-1.2; der Quellcode liegt auf <a href="https://github.com/wattnpapa/meldekopf">GitHub</a>.</p>
+        <h2>Stand</h2>
+        <p>Die App ist im Aufbau. Die Einsatz-Sammlung wird Schritt für Schritt aus dem Erfassungsbogen hierher übernommen, wo sie seit 2026 in acht Prüfrunden auf Feldtauglichkeit geprüft wurde. Bis die Übernahme abgeschlossen ist, steht die Sammlung im <a href="https://erfassungsbogen.app/">Erfassungsbogen</a> weiter zur Verfügung.</p>
+      </section>
+      <!-- start-inhalt:ende -->
+    </main>
+  </div>
+  <!-- Ohne JavaScript bleibt der Bildschirm sonst leer — wer hier landet (auch
+       ein Crawler ohne JS) soll wenigstens erfahren, was das Angebot ist. -->
+  <noscript>
+    <div class="ohne-js">
+      <h2>Meldekopf — Einheiten erfassen, zählen, weitermelden</h2>
+      <p>
+        Die Meldekopf-App nimmt die Erfassungsbögen eintreffender Einheiten auf,
+        zählt Stärke und Sofortbedarf über alle anwesenden Einheiten zusammen und
+        gibt die Lage als Sammel-PDF, CSV, Excel-Liste oder Einsatz-Datei weiter —
+        auf einem Gerät, ohne Server, ohne Anmeldung, ohne Netz.
+      </p>
+      <p>
+        Zum Arbeiten brauchst du JavaScript: Die Sammlung wird vollständig im
+        Browser verarbeitet, es gibt keinen Server, an den sie geschickt würde.
+        Aktiviere bitte JavaScript und lade die Seite neu.
+      </p>
+      <p>
+        <a href="https://erfassungsbogen.app/">Erfassungsbogen (App der Einheit)</a> ·
+        <a href="./datenschutz.html">Datenschutz</a> ·
+        <a href="./impressum.html">Impressum</a> ·
+        <a href="https://github.com/wattnpapa/meldekopf">Quellcode auf GitHub</a>
+      </p>
+    </div>
+  </noscript>
+  <script type="module" src="/src/app/main.tsx"></script>
+</body>
+</html>
