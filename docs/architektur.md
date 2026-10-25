@@ -1,7 +1,8 @@
 # Architektur der Meldekopf-App (Arc42)
 
-Stand: 2026-10-25, Projektanlage. Dieses Dokument beschreibt den **Soll-Stand**
-und wird mit dem Code zum Ist-Stand. Wo es konkrete Zahlen nennt, stammen sie
+Stand: 2026-10-25, Phase 0 (Gerüst) umgesetzt. Dieses Dokument beschreibt den
+**Soll-Stand** und wird mit dem Code zum Ist-Stand; wo ein Abschnitt den
+Ist-Stand der Phase 0 nennt, ist er als solcher markiert. Wo es konkrete Zahlen nennt, stammen sie
 aus dem Erfassungsbogen (Commit `c789947`, Zweig `claude/lucid-faraday-r4h32d`)
 und wurden dort nachgemessen; sie sind als Ausgangsgröße zu lesen, nicht als
 Zusage. Die Arc42-Doku des Erfassungsbogens
@@ -134,7 +135,7 @@ flowchart LR
 | System | Richtung | Zweck | Protokoll |
 | --- | --- | --- | --- |
 | GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig | Auslieferung der PWA; danach offline | HTTPS, statische Dateien |
-| GoatCounter | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart; einziger Fremd-Host in der CSP | HTTPS `sendBeacon` / Bild |
+| GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart; einziger Fremd-Host in der CSP. Die Site ist bei GoatCounter noch anzulegen; bis dahin läuft der Impuls ins Leere und die App merkt davon nichts. | HTTPS `sendBeacon` / Bild |
 | GitHub Releases | ein-/ausgehend | Installer, APK, `latest*.yml` für electron-updater | HTTPS |
 | Capacitor-Plugins | intern | Barcode-Scanner, Dateisystem, Teilen, App-Links | Bridge |
 | Zweiter Bildschirm | intern | Lagemonitor als zweites Fenster derselben Herkunft, liest denselben `localStorage` | `window.open`, `storage`-Ereignis |
@@ -232,6 +233,16 @@ neu; im Erfassungsbogen liegt alles flach in `src/app/`. Sie gliedern die
 übernommenen Dateien nach dem Ablauf am Meldekopf (Eingang, Erfassung, Lage,
 Weitergabe), ohne Dateien zu zerschneiden.
 
+**Ist-Stand Phase 0 (2026-10-25):** `src/app/` enthält `main.tsx`, `app.tsx`
+(nur Startseite), `start-inhalt.ts`, `adressen.ts` (Domain und Zähl-Host an
+einer Stelle), `fusszeile.tsx` (gekürzt), `nativ.ts` und `aktualisierung.tsx`
+(je auf den Web-Teil gekürzt), `statistik.ts`, `werkzeuge.ts` — und als
+**Kopien aus dem Erfassungsbogen mit Herkunft im Kopfkommentar**, die in
+Phase 1 nach `@bos/oberflaeche` wandern: `dialoge.tsx`, `modal-overlay.ts`,
+`anzeige-modus.ts`, `anzeige-schalter.tsx`, `tipp-schutz.ts`, `tastatur.ts`,
+`schrift-stufe.ts`, `kopfnav.ts`, `kopfnav-ui.tsx`, `seiten-kopf.tsx`, dazu
+der Token-Block in `index.html`. Alle mit ihren Tests.
+
 ### 5.3 Zuordnung Anforderung → Baustein
 
 | Anforderung | Bausteine |
@@ -299,11 +310,11 @@ gegen die Releases dieses Repos.
 
 | Ziel | Weg | Anmerkung |
 | --- | --- | --- |
-| Web/PWA | GitHub Pages, Domain meldekopf.erfassungsbogen.app (Subdomain, CNAME im DNS von erfassungsbogen.app), `release.yml` Job `pages` | Eigene Site je Repo ist der Grund für das eigene Repo (ADR-002). meldekopf.app war vergeben. |
+| Web/PWA | GitHub Pages, Domain meldekopf.erfassungsbogen.app (Subdomain, CNAME im DNS von erfassungsbogen.app), `release.yml` Jobs `build-pages`/`deploy-pages` | Eigene Site je Repo ist der Grund für das eigene Repo (ADR-002). meldekopf.app war vergeben. Der Domainname steht genau einmal in `src/app/adressen.ts`; der Build schreibt daraus `dist/CNAME` und setzt `%DOMAIN%` in Canonical, Open Graph, robots.txt und Textseiten ein (Plugin `adressen` in `vite.config.ts`). Ein anderer Name ist eine Zeile dort plus DNS. Live, sobald `main` gebaut hat, Pages im Repo auf „GitHub Actions" steht und der DNS-Eintrag existiert. |
 | Windows x64/arm64 | NSIS-Installer aus `electron-builder`, GitHub Releases | `appId` `de.meldekopf.app`, `productName` „Meldekopf", `publish.url` auf dieses Repo. |
 | macOS | dmg/zip; Job zunächst still wie beim Erfassungsbogen | Signierung erst mit hinterlegten Secrets. |
 | Linux | deb, pacman | |
-| Android | Capacitor, APK im Release; Play Store später | Paket `de.meldekopf.app`, App-Links `meldekopf.erfassungsbogen.app` mit `assetlinks.json`. |
+| Android | Capacitor, APK im Release; Play Store später | Paket `de.meldekopf.app`, App-Links `meldekopf.erfassungsbogen.app` mit `assetlinks.json`. Job `build-android` in `release.yml` ist bis zur Übernahme von `android/` (Phase 5) stillgelegt (`if: false`) und aus `needs` des Release-Jobs genommen. |
 | iOS | folgt dem Stand des Erfassungsbogens | AASA mit Team-ID, Associated Domains. |
 
 Pipeline wie `release.yml` des Erfassungsbogens: `prepare` (Datums-Version,
@@ -315,10 +326,37 @@ Tag) → `check` (typecheck, lint, test, e2e, kern-kopien, bundle-budget, SBOM,
 ### 8.1 Oberfläche
 
 Übernommen: Design-Token, „Amtlich"-Optik, Archivo im Bundle, Anzeigemodi
-Hell/Dunkel/Feld/Nacht nur per Schalter, Kopfbalken in der Kennfarbe der
-Organisation. Eigenes Icon und eigene Grundfarbe für den Meldekopf, damit auf
-einem Gerät mit beiden Apps klar ist, welche offen ist. Entscheidung zur
-Farbe: offen, siehe Start-Prompt.
+Hell/Dunkel/Feld/Nacht nur per Schalter. Eigenes Icon und eigene Grundfarbe
+für den Meldekopf, damit auf einem Gerät mit beiden Apps klar ist, welche
+offen ist.
+
+**Kennfarbe: Petrol `#0f4c5c`** (Hover/Links `#126d78`, im Dunkel-Modus der
+aufgehellte Ton `#8fd0d8`, nachts wie im Erfassungsbogen Bernstein). Gründe:
+(1) Sie liegt im Farbkreis neben dem Dienstblau des Erfassungsbogens
+(`#12275e`) — kühl, dunkel, dieselbe Familie — und ist auf einem Startbild-
+schirm trotzdem auf den ersten Blick ein anderes Icon. (2) Sie kollidiert mit
+keiner Kennfarbe einer Organisation aus `org-farben.ts` (Blau, Rot, Grün,
+Oliv, Grau, Weiß), die später an taktischen Zeichen und Marken der Einheiten
+steht. (3) Weiß darauf misst 9,5:1: Die Kopf-Töne des Erfassungsbogens
+(Weiß, Zweitschrift, 7:1-Regel des Feld-Modus, R5-L3) tragen ohne Nach-
+rechnen; der Feld-Modus muss den Balken nicht abdunkeln, der Dunkel-Modus
+darf ihn behalten (R4-L2 betraf die hellen Rottöne). (4) Sie ist nicht das
+Bernstein des Nacht-Modus. Die Töne sind mit derselben Kontrastrechnung
+geprüft wie in `org-farben.ts` (Leuchtdichte nach WCAG 2.1).
+
+**Abweichung vom Erfassungsbogen:** Der Kopfbalken des Meldekopfs trägt
+immer die Meldekopf-Farbe, nicht die Kennfarbe einer Organisation. Die
+Sammlung führt Einheiten vieler Organisationen; ein Balken, der je nach
+offenem Bogen die Farbe wechselt, sagte hier nichts Wahres. Die Organisation
+bleibt an taktischem Zeichen und Marke der Einheit erkennbar. `org-farben.ts`
+kommt deshalb erst mit den Zeichen (Phase 2) und färbt dann nur Zeichen und
+Marken, nicht die Seite.
+
+**Icon:** dieselbe Formensprache wie der Erfassungsbogen (gerundetes Quadrat
+mit Verlauf, weißer Bogen mit Eselsohr), aber als Stapel aus drei Bögen —
+die Sammlung — und mit der Stärkezeile x / y / z // g als vier Kästchen,
+das Gesamtfeld gefüllt. Master in `public/icon*.svg`, PNG-Fassungen über
+`npm run icons` (`scripts/render-icons.mjs`).
 
 ### 8.2 Persistenz
 
@@ -385,10 +423,23 @@ ersten Build, dann festschreiben).
 ### 8.6 Abhängigkeiten
 
 Laufzeit wie der Erfassungsbogen ohne das, was nur der Assistent braucht;
-erste Messung beim Gerüst. SBOM und `npm audit` im CI. Submodul-Pins beim
-Start auf den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format`
-`eb58ad6`, `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
+die Pakete kommen mit den Phasen, die sie brauchen (Phase 0: React,
+`@capacitor/core` für die Plattform-Erkennung, `@fontsource-variable/archivo`,
+`electron-updater`). SBOM und `npm audit` im CI. Submodul-Pins beim Start auf
+den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
+`bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
 `bos-taktische-zeichen` `cb9c227`.
+
+**Erste Messung (Phase 0, `scripts/bundle-budget.json`):** JavaScript gesamt
+289.350 Byte, Startbündel 257.389 Byte, `dist/` 499.894 Byte; SBOM 1.025
+Komponenten, davon 27 mit Laufzeit-Rolle. Zum Vergleich der Erfassungsbogen
+am selben Tag: 5.500.797 / 1.198.089 Byte. Das Budget wird je Phase bewusst
+angehoben (`npm run bundle-budget -- --setze`, Begründung im Commit).
+
+**Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
+bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab
+(„Cannot read properties of null (reading 'edgesOut')"); mit Node 24
+(`.nvmrc`) ist npm 11 dabei.
 
 ## 9. Architekturentscheidungen
 
@@ -517,6 +568,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Übergang per Link zwischen PWAs auf iOS offline | Gerätetest; bis dahin QR. |
 | Bestandsdaten bleiben im Erfassungsbogen liegen | Übergangszeit mit Hinweis dort; Datensicherung als Weg (ADR-007). |
 | Doppelte Pflege, bis der Erfassungsbogen abbaut | Übergangszeit bewusst kurz halten; Abbau ist der erste Schritt nach Fertigstellung. |
+| GoatCounter-Site `meldekopf.goatcounter.com` existiert noch nicht | Anlegen (kostenlos, Site-Code `meldekopf`); bis dahin keine Zahlen, aber auch kein Fehler in der App. Host nur in `src/app/adressen.ts`. |
 | Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 
 ## 12. Glossar

@@ -1,8 +1,10 @@
 # Funktionsumfang der Meldekopf-App
 
-Stand: 2026-10-25, Projektanlage. Spalte **Stand** je Funktion: `übernehmen`
-(existiert im Erfassungsbogen, wird herausgelöst), `neu` (gibt es noch
-nirgends), `erledigt` (in dieser App fertig). Die Spalte **Herkunft** nennt
+Stand: 2026-10-25, Phase 0 (Gerüst) umgesetzt. Spalte **Stand** je Funktion:
+`übernehmen` (existiert im Erfassungsbogen, wird herausgelöst), `neu` (gibt es
+noch nirgends), `erledigt` (in dieser App fertig), `Kopie (Phase 0)` (in
+Phase 0 als Kopie aus dem Erfassungsbogen eingebunden, wandert in Phase 1 in
+`@bos/oberflaeche`). Die Spalte **Herkunft** nennt
 die Dateien im Erfassungsbogen (`src/app/`), aus denen die Funktion kommt;
 Gherkin-Szenarien stehen in `features/` dort.
 
@@ -119,19 +121,19 @@ erklären, warum etwas so ist, wie es ist. Diese Begründungen gehen mit.
 
 | Funktion | Beschreibung | Herkunft | Stand |
 | --- | --- | --- | --- |
-| Anzeigemodi | Hell, Dunkel, Feld (Sonne, 7:1), Nacht; nur per Schalter, ohne gespeicherte Wahl die Systemeinstellung; Kopfbalken in Kennfarbe der Organisation. | `anzeige-modus.ts`, `anzeige-schalter.tsx`, `org-farben.ts` | übernehmen |
-| Dialogschicht | `frageText`, `frageFelder`, `frageJaNein`, `frageWahl`, `zeigeHinweis` statt Systemdialoge. | `dialoge.tsx`, `modal-overlay.ts` | übernehmen |
-| Tipp-Schutz | Fingerstellen-Sperre nach Handlungen, die unter dem Finger etwas austauschen; Prellschutz an Quittungen. | `tipp-schutz.ts` | übernehmen |
-| Schriftstufen und Tastatur | `schrift-gross` ab 22 px Grundschrift; `tastatur-offen` blendet die Fußleiste unter der Bildschirmtastatur aus. | `schrift-stufe.ts`, `tastatur.ts` | übernehmen |
+| Anzeigemodi | Hell, Dunkel, Feld (Sonne, 7:1), Nacht; nur per Schalter, ohne gespeicherte Wahl die Systemeinstellung; Kopfbalken in Kennfarbe der Organisation. | `anzeige-modus.ts`, `anzeige-schalter.tsx`, `org-farben.ts` | Kopie (Phase 0); Kopfbalken fest in der Meldekopf-Farbe, `org-farben.ts` folgt mit den Zeichen (Phase 2) |
+| Dialogschicht | `frageText`, `frageFelder`, `frageJaNein`, `frageWahl`, `zeigeHinweis` statt Systemdialoge. | `dialoge.tsx`, `modal-overlay.ts` | Kopie (Phase 0) |
+| Tipp-Schutz | Fingerstellen-Sperre nach Handlungen, die unter dem Finger etwas austauschen; Prellschutz an Quittungen. | `tipp-schutz.ts` | Kopie (Phase 0) |
+| Schriftstufen und Tastatur | `schrift-gross` ab 22 px Grundschrift; `tastatur-offen` blendet die Fußleiste unter der Bildschirmtastatur aus. | `schrift-stufe.ts`, `tastatur.ts` | Kopie (Phase 0) |
 | Zurück-Geste | Schließt zuerst das oberste offene Fenster, wie Escape. | Teile von `app.tsx` | übernehmen |
-| Kopfnavigation, Fußzeile | Gemeinsame Kopfzeile mit den Inhaltsseiten; Fußzeile mit Datensicherung, Anzeigemodus, Pflichtangaben, Offline-Vorrat. | `kopfnav.ts`, `kopfnav-ui.tsx`, `fusszeile.tsx`, `seiten-kopf.tsx`, `offline-bereit.ts`, `offline-vorrat.ts` | übernehmen, gekürzt |
-| Offline-Start | Service Worker (Workbox) mit zweistufigem Vorrat; Fortschritt „2,1 von 6,7 MB". | `vite.config.ts` (VitePWA), `offline-vorrat.ts`, `nachladen.ts` | übernehmen |
-| Update-Hinweise | Service-Worker-Banner im Web, Auto-Update-Status im Desktop. | `aktualisierung.tsx` | übernehmen |
+| Kopfnavigation, Fußzeile | Gemeinsame Kopfzeile mit den Inhaltsseiten; Fußzeile mit Datensicherung, Anzeigemodus, Pflichtangaben, Offline-Vorrat. | `kopfnav.ts`, `kopfnav-ui.tsx`, `fusszeile.tsx`, `seiten-kopf.tsx`, `offline-bereit.ts`, `offline-vorrat.ts` | Kopfnav, Seitenkopf: Kopie (Phase 0); Fußzeile gekürzt (Phase 0: Pflichtangaben, Projekt, Ansicht, Werkzeugzeile); Offline-Vorrat offen (Phase 2) |
+| Offline-Start | Service Worker (Workbox) mit zweistufigem Vorrat; Fortschritt „2,1 von 6,7 MB". | `vite.config.ts` (VitePWA), `offline-vorrat.ts`, `nachladen.ts` | Service Worker und zweistufiger Vorrat erledigt (Phase 0); Fortschrittsanzeige offen (Phase 2) |
+| Update-Hinweise | Service-Worker-Banner im Web, Auto-Update-Status im Desktop. | `aktualisierung.tsx` | Web erledigt (Phase 0); Desktop-Status mit Electron-Release (Phase 5) |
 | Fehlerfänger | Abgefangener Renderfehler mit verständlicher Meldung statt weißem Bildschirm. | `fehlerfaenger.tsx`, `fehler-im-bild.tsx`, `feste-warnung.tsx` | übernehmen |
-| Nutzungsmessung | Ein Treffer je Kaltstart an GoatCounter, cookielos, ohne Fremdcode, Widerspruch per Schlüssel. | `statistik.ts` | übernehmen |
-| Electron-Hülle | Desktop-Fenster, Auto-Update, Berechtigungen (Kamera erlaubt), externe Links im Systembrowser, zweites Fenster für den Lagemonitor. | `electron/main.js` | übernehmen |
+| Nutzungsmessung | Ein Treffer je Kaltstart an GoatCounter, cookielos, ohne Fremdcode, Widerspruch per Schlüssel. | `statistik.ts` | erledigt (Phase 0), eigene GoatCounter-Site `meldekopf.goatcounter.com` |
+| Electron-Hülle | Desktop-Fenster, Auto-Update, Berechtigungen (Kamera erlaubt), externe Links im Systembrowser, zweites Fenster für den Lagemonitor. | `electron/main.js` | Hülle übernommen (Phase 0), Release-Build ungeprüft bis Phase 5 |
 | Capacitor-Hülle | Android (und später iOS): Barcode-Scanner, Dateisystem, Teilen, App-Links. | `android/`, `capacitor.config.json`, `nativ.ts` | übernehmen |
-| Startseite | Erklärender Text einmal als Daten, daraus React-Ansicht und statisches Gerüst in `index.html`. | `start-inhalt.ts`, `scripts/start-inhalt.mts` | übernehmen, neuer Text |
+| Startseite | Erklärender Text einmal als Daten, daraus React-Ansicht und statisches Gerüst in `index.html`. | `start-inhalt.ts`, `scripts/start-inhalt.mts` | erledigt (Phase 0, neuer Text) |
 | Erststart | Erklärt das Grundprinzip beim ersten Aufruf. | `app.tsx`, `daten-und-anzeige.feature` | übernehmen, neuer Text |
 
 ## 10. Bewusst nicht in dieser App

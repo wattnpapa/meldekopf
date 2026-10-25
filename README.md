@@ -3,10 +3,13 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** Projektanlage am 2026-10-25. Es gibt noch keinen Code. Die Doku
-> unter `docs/` beschreibt, was gebaut wird und wie; der Funktionsumfang
-> wird aus der Einsatz-Sammlung des
-> [Erfassungsbogens](https://github.com/wattnpapa/erfassungsbogen) übernommen.
+> **Stand:** 2026-10-25, Phase 0 (Gerüst) steht: Repo mit dem geteilten Kern
+> als Submodule, Build, Tests, CI, PWA mit Offline-Start, Startseite mit
+> Anzeigemodi und Pflichtangaben, eigenes Icon und eigene Kennfarbe. Noch
+> keine Sammlung — die kommt ab Phase 2. Die Doku unter `docs/` beschreibt,
+> was gebaut wird und wie; der Funktionsumfang wird aus der Einsatz-Sammlung
+> des [Erfassungsbogens](https://github.com/wattnpapa/erfassungsbogen)
+> übernommen (Reihenfolge in [docs/uebernahme-aus-erfassungsbogen.md](docs/uebernahme-aus-erfassungsbogen.md), Abschnitt G).
 
 ## Die Produktfamilie
 
@@ -59,6 +62,27 @@ Die vollständige Liste steht in [docs/funktionsumfang.md](docs/funktionsumfang.
 Web-App (PWA) unter meldekopf.erfassungsbogen.app über GitHub Pages, Desktop-App (Electron:
 Windows x64/arm64, macOS, Linux), Android-App (Capacitor). Derselbe Aufbau wie
 beim Erfassungsbogen, damit Build, Release und Härtung übernommen werden können.
+
+## Entwicklung
+
+```bash
+git clone --recurse-submodules https://github.com/wattnpapa/meldekopf.git
+cd meldekopf
+npm ci                 # Node 24 (.nvmrc); mit npm 10 scheitert die Auflösung der Submodule, dann: npx npm@11 ci
+npm run dev            # http://localhost:5173
+npm run build          # dist/ für GitHub Pages, mit CNAME aus src/app/adressen.ts
+npm test               # Vitest: Logik (Node) und Oberfläche (jsdom)
+npm run test:e2e       # Cucumber + Playwright gegen den produktiven Build
+npm run kern-kopien    # genau eine Kopie je Kern-Baustein (ADR-003)
+npm run bundle-budget  # gebauten Stand gegen scripts/bundle-budget.json messen
+npm run sbom           # Stückliste als CycloneDX
+```
+
+Der Kern unter `vendor/` wird hier nicht geändert (ADR-003). Der Domainname
+steht genau einmal in `src/app/adressen.ts`; Kopfnavigation und Startseiten-
+text werden aus `src/app/kopfnav.ts` und `src/app/start-inhalt.ts` erzeugt
+(`npm run kopfnav`, `npm run start-inhalt`), die Tests schlagen an, wenn
+`index.html` veraltet ist.
 
 ## Lizenz
 
