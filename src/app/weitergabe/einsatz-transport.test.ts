@@ -1,5 +1,6 @@
 /**
  * Herkunft: Erfassungsbogen `src/app/einsatz-transport.test.ts` (Commit 441811c).
+ * Geändert: `pdfMitStream` trägt /Length wie die PDFs von pdfmake.
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { deflate } from "pako";
@@ -55,7 +56,10 @@ function bogen(over: Partial<Erfassungsbogen> = {}): Erfassungsbogen {
 
 /** Baut minimale „PDF"-Bytes mit einem stream…endstream-Block um die Nutzlast. */
 function pdfMitStream(payload: Uint8Array): Uint8Array {
-  const pre = new TextEncoder().encode("%PDF-1.7\n1 0 obj\n<< /Type /EmbeddedFile /Filter /FlateDecode >>\nstream\n");
+  // Mit /Length wie in den PDFs von pdfmake: Ohne sie schnitt die Suche nach
+  // „endstream" ein Datenbyte 0x0D mit ab, und der Test scheiterte zufällig
+  // (rund 1 von 256 Läufen, siehe pdf-stroeme in @bos/eeb-satz).
+  const pre = new TextEncoder().encode(`%PDF-1.7\n1 0 obj\n<< /Type /EmbeddedFile /Filter /FlateDecode /Length ${payload.length} >>\nstream\n`);
   const post = new TextEncoder().encode("\nendstream\nendobj\n%%EOF");
   const out = new Uint8Array(pre.length + payload.length + post.length);
   out.set(pre, 0);

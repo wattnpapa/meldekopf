@@ -5,14 +5,15 @@
  * hier neu geschrieben und bewusst klein (Übernahme-Doku, Abschnitt E): die
  * Startseite mit der Weiche „Bögen sammeln" (laufende Sammlungen öffnen, neue
  * anlegen), der Einsatzliste und der zuletzt offenen Sammlung (W5); die
- * offene Sammlung zeigt einsatz-ansicht.tsx. Eingangs-Weiche, Link-Empfang
- * und Schnellerfassung kommen mit den Phasen 3 und 4 hierher; die Weiche der
+ * offene Sammlung zeigt einsatz-ansicht.tsx. Die Eingänge (Scan, Dateien,
+ * Einsatz importieren, Link-Empfang) liefert eingang/aufnahme.tsx; die
+ * Schnellerfassung kommt mit Phase 4; die Weiche der
  * Startseite bleibt die eine Stelle für Aktionen (Begründung in kopfnav.ts).
  */
 
 import { Fragment, useState, type ReactNode } from "react";
-import { EinsatzArt, einsatzAnlegen, type Einsatzsammlung } from "@bos/meldekopf/einsaetze";
-import { frageFelder, zeigeHinweis } from "@bos/oberflaeche/dialoge";
+import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
+import { einsatzErfragen } from "./einsatz-erfragen";
 import { ERFASSUNGSBOGEN_URL } from "./adressen";
 import { Aktualisierungshinweise } from "./aktualisierung";
 import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
@@ -23,45 +24,15 @@ import { KOPFNAV } from "./kopfnav";
 import { imWebBrowser } from "./nativ";
 import { SeitenKopf } from "@bos/oberflaeche/seiten-kopf";
 import { START_ABSCHNITTE, type Teil } from "./start-inhalt";
-import { ART_LABEL, EinsatzListe, letzteMeldungText } from "./einsaetze-ui";
+import { EinsatzListe, letzteMeldungText } from "./einsaetze-ui";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 import { EinsatzAnsicht } from "./einsatz-ansicht";
-import { SpeicherVollFehler, istSpeicherVoll } from "./eintrag-zeiten";
+import { useAufnahme } from "./eingang/aufnahme";
+import { QrScannerWeb } from "./eingang/qr-scanner-web";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
-import { fehlerText } from "./nachladen";
 import { SpeicherWarnung } from "./speicher-warnung";
 import { UhrWarnung } from "./uhr-warnung";
 
-const ART_WAHL = Object.entries(ART_LABEL).map(([wert, label]) => ({ wert, label }));
-
-/**
- * Neue Sammlung erfragen und anlegen (Erfassungsbogen `einsatzErfragen`).
- * Voller Speicher: der Dialog schloss, und es gab weder Sammlung noch Meldung
- * — nur einen Fehler in der Konsole (Audit Runde 2, R2-O2). Deshalb sagt es
- * die App.
- */
-async function einsatzErfragen(): Promise<Einsatzsammlung | null> {
-  const werte = await frageFelder({
-    titel: "Neue Einsatz-Sammlung anlegen",
-    hinweis: "Die Sammelmappe des Meldekopfs für eintreffende Bögen — mit Stärke-Summen über alle anwesenden Einheiten.",
-    ok: "Einsatz anlegen",
-    felder: [
-      { name: "name", label: "Name", platzhalter: "z. B. Hochwasser Weser" },
-      { name: "art", label: "Art", auswahl: ART_WAHL },
-      { name: "ort", label: "Ort / Auftrag (optional)", optional: true, platzhalter: "z. B. Deichabschnitt Nord" },
-    ],
-  });
-  if (!werte) return null;
-  try {
-    return einsatzAnlegen(werte.name!, Number(werte.art) as EinsatzArt, werte.ort);
-  } catch (e) {
-    await zeigeHinweis({
-      titel: "Sammlung nicht angelegt",
-      text: istSpeicherVoll(e) ? new SpeicherVollFehler(e).message : fehlerText(e),
-    });
-    return null;
-  }
-}
 
 /** Untertitel der Startseite — derselbe Satz wie im statischen Gerüst der index.html. */
 export const START_INTRO =
@@ -120,12 +91,13 @@ export function StandKarte() {
     <section className="karte start-stand" aria-labelledby="stand-titel">
       <h2 id="stand-titel">Im Aufbau</h2>
       <p>
-        Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute: Sammlungen
-        anlegen und führen, Summen und Lage lesen, ausgeben als PDF, CSV und Excel, Datensicherung einspielen.
+        Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute: Bögen
+        aufnehmen (Scan, Handscanner, Fotos, Dateien, Link), Sammlungen führen, Summen und Lage lesen, ausgeben
+        als PDF, CSV und Excel, Datensicherung einspielen.
       </p>
       <p>
-        Bögen aufnehmen (Scan, Datei, Schnellerfassung) folgt als Nächstes. Bis dahin sammelst du Bögen im{" "}
-        <a href={ERFASSUNGSBOGEN_URL}>Erfassungsbogen</a> und spielst seine Datensicherung hier ein.
+        Die Schnellerfassung einer Einheit ohne Bogen folgt als Nächstes. Bis dahin erfasst du sie im{" "}
+        <a href={ERFASSUNGSBOGEN_URL}>Erfassungsbogen</a> und scannst ihren QR-Code hier ein.
       </p>
     </section>
   );
@@ -141,6 +113,10 @@ export function App() {
     letztenEinsatzMerken(id);
   };
   const einsaetzeNeuLaden = () => setEinsaetze(einsaetzeLaden());
+  // Rückmeldung der letzten Aufnahme oder Handlung, auf Startseite und in der Einsatzansicht.
+  const [meldung, setMeldung] = useState("");
+  const [fehler, setFehler] = useState("");
+  const aufnahme = useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNeuLaden, setMeldung, setFehler });
   const offenerEinsatz = offenerEinsatzId ? einsaetze.find((s) => s.id === offenerEinsatzId) : undefined;
 
   async function neuerEinsatz() {
@@ -150,6 +126,21 @@ export function App() {
     setOffenerEinsatzId(s.id);
   }
 
+  // Kiosk-Scan: die aufgenommenen Bögen bleiben im Einsatz — der Knopf beendet
+  // nur den Durchgang, deshalb „Fertig". Liegen Teile eines noch
+  // unvollständigen Bogens im Sammelstand, gehen sie beim Schließen verloren —
+  // dann ist es ehrlicher ein „Abbrechen".
+  const scanner = aufnahme.scannerOffen && (
+    <QrScannerWeb
+      onErgebnis={(text) => void aufnahme.scanErgebnisWeb(text)}
+      fortschritt={aufnahme.scanFortschritt}
+      onAbbruch={() => aufnahme.scanAbbrechen(true)}
+      onBild={(e) => void aufnahme.ladeQrBild(e)}
+      teile={aufnahme.segmentStand}
+      abbruchText={aufnahme.segmentStand.length > 0 ? "Abbrechen" : "Fertig"}
+    />
+  );
+
   if (offenerEinsatz) {
     return (
       <>
@@ -157,7 +148,16 @@ export function App() {
         <EinsatzAnsicht
           einsatz={offenerEinsatz}
           einsaetze={einsaetze}
-          onZurueck={() => setOffenerEinsatzId(null)}
+          aufnahme={aufnahme}
+          meldung={meldung}
+          fehler={fehler}
+          onZurueck={() => {
+            setOffenerEinsatzId(null);
+            setMeldung("");
+            setFehler("");
+            aufnahme.setEinlese(null);
+            aufnahme.setStapelBericht([]);
+          }}
           onGeaendert={einsaetzeNeuLaden}
           onGeloescht={() => {
             // Quittung mit Rückweg: die Startseite (R2-D6, zuletztGeloeschterEinsatz in einsaetze-ui).
@@ -165,6 +165,7 @@ export function App() {
             einsaetzeNeuLaden();
           }}
         />
+        {scanner}
         <Fusszeile />
         <Dialogschicht />
       </>
@@ -204,9 +205,18 @@ export function App() {
               <button type="button" className={laufende.length > 0 ? "" : "primaer"} onClick={() => void neuerEinsatz()}>
                 Neue Einsatz-Sammlung…
               </button>
+              {/* Ohne offene Sammlung: Der Bogen fragt nach dem Einlesen, wohin. */}
+              <button type="button" onClick={() => { setMeldung(""); setFehler(""); void aufnahme.scanneQr(); }}>
+                Bogen scannen…
+              </button>
+              <label className="datei-knopf">
+                Einsatz importieren…
+                <input type="file" accept=".json,application/json,.pdf,application/pdf" className="nur-sr" onChange={(e) => void aufnahme.importiereEinsatzDatei(e)} />
+              </label>
             </div>
           </section>
         </div>
+        {(meldung || fehler) && <p className={fehler ? "fehler" : "meldung"} role="status">{fehler || meldung}</p>}
         <StandKarte />
         {/* Die Überschrift bleibt wörtlich wie im Erfassungsbogen: Szenarien
             und Anleitung verweisen auf sie. */}
@@ -217,6 +227,7 @@ export function App() {
         {/* Nur im Web: In der installierten Fassung ist „was ist das hier?" beantwortet. */}
         {web && <StartInhalt />}
       </main>
+      {scanner}
       <Fusszeile />
       <Dialogschicht />
     </>

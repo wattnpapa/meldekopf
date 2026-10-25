@@ -11,16 +11,21 @@
  * einer eigenen Komponente, weil `app.tsx` im Meldekopf nur noch Startseite und
  * Weiche trägt (Übernahme-Doku, Abschnitt E).
  *
- * Die Eingänge (Scan, Datei, Bilderstapel, Schnellerfassung) kommen mit den
- * Phasen 3 und 4. Bis dahin sagt die Ansicht, wie Bögen heute hierher kommen,
- * statt still nichts zu tun.
+ * Die Eingänge (Scan, Datei, Bilderstapel, Link) kommen aus
+ * eingang/aufnahme.tsx (Phase 3); die Schnellerfassung folgt mit Phase 4 —
+ * bis dahin sagt ihr Knopf, wie eine Einheit ohne Bogen heute hierher kommt.
  */
 
 import { useEffect, useRef, useState } from "react";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { arbeiten } from "@bos/oberflaeche/arbeitet";
 import { zeigeHinweis } from "@bos/oberflaeche/dialoge";
+import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
+import { EinleseQuittung } from "@bos/oberflaeche/einlese-quittung";
 import { EinsatzDetail } from "./einsaetze-ui";
+import type { Aufnahme } from "./eingang/aufnahme";
+import { LAGE_ABGLEICH_KURZ, teileMerker } from "./eingang/qr-stapel";
+import { StapelQuittung } from "./eingang/stapel-quittung";
 import { einsaetzeLaden, einsaetzePapierkorb } from "./einsaetze-lesen";
 import { meldungsNummern } from "./einheiten-tabelle";
 import { blobAlsDownload, bytesAlsDatei, dateinameTeil } from "./hilfen";
@@ -44,28 +49,34 @@ import {
 import { lageAngabenLaden } from "./weitergabe/lage-angaben";
 
 /**
- * Was die Einsatzansicht heute zum Aufnehmen sagt. Ehrlich statt still: Der
- * Knopf steht da, weil die übernommene Ansicht ihn trägt, und der Weg dahinter
- * folgt mit Phase 3 (Eingänge) und Phase 4 (Schnellerfassung).
+ * Was „Einheit manuell erfassen…" bis zur Schnellerfassung (Phase 4) sagt:
+ * ehrlich statt still, mit dem Weg, den es heute schon gibt.
  */
-function eingangFolgt(): Promise<void> {
+function schnellerfassungFolgt(): Promise<void> {
   return zeigeHinweis({
-    titel: "Bögen aufnehmen: kommt als Nächstes",
+    titel: "Einheit ohne Bogen: kommt als Nächstes",
     text:
-      "Scannen, Dateien, Fotos und die Schnellerfassung übernimmt diese App im nächsten Ausbauschritt. " +
-      "Bis dahin: Bögen im Erfassungsbogen sammeln und dort über „Datensicherung“ eine Sicherung erstellen — " +
-      "hier in der Fußzeile unter „Datensicherung“ eingespielt, erscheinen die Sammlungen mit allen Meldungen.",
+      "Die Schnellerfassung (nur Stärke, Führungskraft, Fahrzeuge) übernimmt diese App im nächsten Ausbauschritt. " +
+      "Bis dahin: die Einheit im Erfassungsbogen erfassen und ihren QR-Code hier mit „Bogen scannen…“ einlesen.",
   });
 }
 
 export function EinsatzAnsicht({
   einsatz,
   einsaetze,
+  aufnahme,
+  meldung,
+  fehler: appFehler,
   onZurueck,
   onGeaendert,
   onGeloescht,
 }: {
   einsatz: Einsatzsammlung;
+  /** Die Eingänge (eingang/aufnahme.tsx). */
+  aufnahme: Aufnahme;
+  /** Rückmeldung der letzten Aufnahme oder Handlung (app.tsx). */
+  meldung: string;
+  fehler: string;
   /** Alle Sammlungen — die Speicherwarnung rechnet neu, sobald sie sich ändern. */
   einsaetze: Einsatzsammlung[];
   onZurueck: () => void;
@@ -243,11 +254,29 @@ export function EinsatzAnsicht({
         einsatz={einsatz}
         onZurueck={onZurueck}
         onGeaendert={onGeaendert}
-        onScannen={() => void eingangFolgt()}
-        onManuell={() => void eingangFolgt()}
-        onDateiImport={() => void eingangFolgt()}
-        onBilderImport={() => void eingangFolgt()}
-        onEinlesen={() => void eingangFolgt()}
+        onScannen={() => aufnahme.scanneInEinsatz(einsatz.id)}
+        onManuell={() => void schnellerfassungFolgt()}
+        onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
+        onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}
+        onEinlesen={(daten, bilder) => void aufnahme.importiereStapel(einsatz.id, daten, bilder)}
+        abgleichAnstoss={aufnahme.abgleichAnstoss}
+        abgleichKnopfImBericht={aufnahme.stapelBericht.includes(LAGE_ABGLEICH_KURZ)}
+        einleseQuittung={
+          <>
+            <EinleseQuittung fehler={aufnahme.einlese?.fehler ?? ""} meldung={aufnahme.einlese?.meldung ?? ""} einzelheiten={aufnahme.einlese?.einzelheiten} />
+            {/* Stapel-Fortschritt und -Bericht holen sich selbst ins Bild (R2-A2). */}
+            <StapelQuittung
+              stand={aufnahme.stapelStand}
+              onAbbrechen={aufnahme.stapelAbbrechen}
+              bericht={aufnahme.stapelBericht}
+              onSchliessen={() => aufnahme.setStapelBericht([])}
+              onAbgleich={() => aufnahme.setAbgleichAnstoss((n) => n + 1)}
+              merker={teileMerker(einsatz.id)}
+            />
+          </>
+        }
+        eingang={aufnahme.eingang}
+        zusammenlegungEintragId={aufnahme.zusammenlegung?.einsatzId === einsatz.id ? aufnahme.zusammenlegung.eintragId : null}
         onExport={() => void exportiereEinsatz(einsatz)}
         onCsvExport={(umfang) => void exportiereEinsatzCsv(einsatz, umfang)}
         onCsvDetailExport={(umfang) => void exportiereEinsatzCsvDetail(einsatz, umfang)}
@@ -266,10 +295,20 @@ export function EinsatzAnsicht({
         ausgabeQuittung={ausgabeQuittung}
         onGeloescht={onGeloescht}
       />
-      {fehler && (
-        <p className="fehler" role="status" style={{ textAlign: "center" }}>
-          {fehler}
+      {(meldung || fehler || appFehler) && (
+        <p className={fehler || appFehler ? "fehler" : "meldung"} role="status" style={{ textAlign: "center" }}>
+          {fehler || appFehler || meldung}
         </p>
+      )}
+      {aufnahme.zusammenlegung && aufnahme.zusammenlegung.einsatzId === einsatz.id && (
+        <DaumenQuittung
+          onRueckgaengig={aufnahme.zusammenlegungZuruecknehmen}
+          rueckgaengigName="Rückgängig — Meldung als eigene Einheit führen"
+          onSchliessen={() => aufnahme.setZusammenlegung(null)}
+        >
+          {/* Handlung und Rückweg vorn, Namen hinten (R5-E4); ein einziges „Rückgängig" (R5-E3). */}
+          <strong>Zusammengelegt:</strong> „{aufnahme.zusammenlegung.neu}" als Fassung von „{aufnahme.zusammenlegung.alt}" — „Rückgängig" führt sie als eigene Einheit.
+        </DaumenQuittung>
       )}
     </>
   );
