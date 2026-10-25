@@ -31,6 +31,7 @@ import { EinsatzAnsicht } from "./einsatz-ansicht";
 import { useAufnahme } from "./eingang/aufnahme";
 import { offlineText, useOfflineStand } from "./offline-bereit";
 import { nachAbgleichFortsetzen, useFensterAbgleich } from "./fenster-abgleich";
+import { FesteWarnung } from "@bos/oberflaeche/feste-warnung";
 import { entwurfPlatzFrei, erfassungFuer } from "./schnellerfassung/angefangen";
 import type { ExportUmfang } from "./weitergabe/export-stand";
 import { entwurfLaden, entwurfVerwerfen } from "./entwurf";
@@ -235,6 +236,21 @@ export function App() {
           onManuell={() => void manuellErfassen(offenerEinsatz.id)}
           exportUmfang={exportUmfang}
           setExportUmfang={setExportUmfang}
+          offlineWarnung={
+            offline.stand === "laedt" ? (
+              <FesteWarnung
+                klasse="speicher-fehler offline-warnung"
+                rolle="status"
+                kurz={offlineText(offline)}
+                aktionen={
+                  offline.abgebrochen && offline.online ? (
+                    <button type="button" onClick={() => window.location.reload()}>Jetzt neu laden</button>
+                  ) : undefined
+                }
+                aktionenImmer
+              />
+            ) : undefined
+          }
           onGeloescht={() => {
             // Quittung mit Rückweg: die Startseite (R2-D6, zuletztGeloeschterEinsatz in einsaetze-ui).
             setOffenerEinsatzId(null);

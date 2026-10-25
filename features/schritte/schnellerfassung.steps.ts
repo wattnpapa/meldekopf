@@ -7,7 +7,7 @@
  * Die Schnellerfassung ist eine Seite ohne Schritte, „In Einsatz übernehmen"
  * steht in der festen Leiste; der Sprung zu „6. Übersicht" entfällt.
  */
-import { When } from "@cucumber/cucumber";
+import { Then, When } from "@cucumber/cucumber";
 import type { Page } from "playwright";
 import type { EebWelt } from "../support/welt";
 
@@ -46,3 +46,36 @@ When(
     await manuellAufnehmen(this.page, organisation, name);
   },
 );
+
+// ------------------------------------------------- Zweites Fenster (R2-O4)
+
+const ZWEITES = new WeakMap<EebWelt, Page>();
+function zweites(welt: EebWelt): Page {
+  const p = ZWEITES.get(welt);
+  if (!p) throw new Error("Es ist kein zweites Fenster offen.");
+  return p;
+}
+
+When("ich die App in einem zweiten Fenster öffne", async function (this: EebWelt) {
+  const p = await this.page.context().newPage();
+  await p.goto(this.page.url(), { waitUntil: "domcontentloaded" });
+  ZWEITES.set(this, p);
+});
+
+When("ich im zweiten Fenster das Feld {string} mit {string} fülle", async function (this: EebWelt, name: string, wert: string) {
+  await zweites(this).locator("main").getByLabel(name, { exact: true }).fill(wert);
+  // Verlassen des Felds: erst dann speichert die Erfassung den Entwurf sicher.
+  await zweites(this).keyboard.press("Tab");
+});
+
+When("ich im zweiten Fenster auf {string} klicke", async function (this: EebWelt, name: string) {
+  await zweites(this).getByRole("button", { name, exact: true }).click();
+});
+
+Then("sehe ich im zweiten Fenster den Dialog {string}", async function (this: EebWelt, titel: string) {
+  await zweites(this).getByRole("dialog", { name: titel }).waitFor({ state: "visible" });
+});
+
+Then("sehe ich im zweiten Fenster die Überschrift {string}", async function (this: EebWelt, text: string) {
+  await zweites(this).getByRole("heading", { name: text }).first().waitFor({ state: "visible" });
+});

@@ -260,3 +260,17 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Dann sehe ich den Dialog "Angefangene Erfassung"
     Wenn ich im Dialog auf "Verwerfen und neue Einheit erfassen" klicke
     Dann steht im Feld "Ort der Einheit (Pflicht)" der Wert ""
+
+  # Audit Phase 6 (Fehler, F4): Dieselbe Erfassung in zwei Fenstern. Ist sie
+  # im einen übernommen, legt das andere keine zweite Einheit an.
+  Szenario: Eine im anderen Fenster übernommene Erfassung wird nicht doppelt angelegt
+    Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich das Feld "Ort der Einheit (Pflicht)" mit "Brake" fülle
+    Und ich auf "Mannschaft: erhöhen" klicke
+    Und ich die App in einem zweiten Fenster öffne
+    Dann sehe ich im zweiten Fenster die Überschrift "Einheit erfassen"
+    Wenn ich auf "In Einsatz übernehmen" klicke
+    Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
+    Wenn ich im zweiten Fenster auf "In Einsatz übernehmen" klicke
+    Dann sehe ich im zweiten Fenster den Dialog "Erst die Fassung klären"
+    Und sehe ich die Überschrift "Einheiten (2 gemeldet"

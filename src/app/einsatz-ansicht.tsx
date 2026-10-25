@@ -16,7 +16,7 @@
  * Schnellerfassung (schnellerfassung/, Phase 4), die app.tsx einhängt.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { arbeiten } from "@bos/oberflaeche/arbeitet";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
@@ -59,6 +59,7 @@ export function EinsatzAnsicht({
   onManuell,
   exportUmfang,
   setExportUmfang,
+  offlineWarnung,
 }: {
   einsatz: Einsatzsammlung;
   /** Die Eingänge (eingang/aufnahme.tsx). */
@@ -80,6 +81,12 @@ export function EinsatzAnsicht({
    */
   exportUmfang: ExportUmfang;
   setExportUmfang: (u: ExportUmfang) => void;
+  /**
+   * Offline-Vorrat noch nicht vollständig: dieselbe Zeile wie auf der
+   * Startseite, auch hier, wo gearbeitet wird — ein Neuladen ohne Netz zeigte
+   * sonst die Fehlerseite des Browsers (Audit Phase 6, Offline O1).
+   */
+  offlineWarnung?: ReactNode;
 }) {
   const [fehler, setFehler] = useState("");
   const [ausgabeQuittung, setAusgabeQuittung] = useState<string | null>(null);
@@ -242,6 +249,7 @@ export function EinsatzAnsicht({
   return (
     <>
       <SpeicherWarnung stand={einsaetze} />
+      {offlineWarnung}
       <UhrWarnung />
       <EinsatzDetail
         einsatz={einsatz}

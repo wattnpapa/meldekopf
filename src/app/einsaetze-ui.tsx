@@ -86,6 +86,7 @@ import { Auswahl, STAERKE_LEGENDE } from "@bos/oberflaeche/bausteine";
 import { SeitenKopf } from "@bos/oberflaeche/seiten-kopf";
 import { AnzeigeLeistenKnopf, AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
 import {
+  eintreffzeitErben,
   SpeicherVollFehler,
   abrueckzeitSetzen,
   eintreffzeit,
@@ -3026,7 +3027,10 @@ function EinheitKarte(props: {
 
   function aufteilenAusfuehren(wahl: AufteilungsWahl, opt: AufteilungOptionen) {
     const vorher = new Set(alle.map((e) => e.id));
+    const eingetroffen = eintreffzeit(kopf);
     const r = meldungAufteilen(einsatzId, kopf.id, wahl, opt);
+    // Beide Teile behalten die Eintreffzeit der Einheit (Audit Phase 6, P1).
+    if (r) eintreffzeitErben(einsatzId, [r.rest.id, r.abgeteilt.id], eingetroffen);
     setAufteilen(false);
     // Nach dem Aufteilen stand die neue Karte wortlos in der Liste; dass es
     // über „Zusammenführen…" zurückgeht, sagte die App nicht (R2-D6).

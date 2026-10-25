@@ -36,6 +36,7 @@ import {
   eintreffzeit,
   eintreffzeitSetzen,
   nummerUndZugSetzen,
+  eintreffzeitErben,
   einheitEntfernen,
   einheitVerschieben,
   folgemeldungErbt,
@@ -468,5 +469,17 @@ describe("nummerUndZugSetzen (Schnellerfassung, Zettel)", () => {
     nummerUndZugSetzen(einsatzId, eintragId, { zug: "2.Zug", nummer: 7 });
     expect(eintrag(einsatzId, eintragId).zugEtikett).toBe("2. Zug");
     expect(eintrag(einsatzId, eintragId).nummer).toBe(7);
+  });
+});
+
+describe("eintreffzeitErben (Aufteilen, Audit Phase 6)", () => {
+  it("gibt beiden Teilen die Eintreffzeit der Einheit, ohne Korrektur-Vermerk", () => {
+    const { einsatzId, eintragId } = buehne();
+    const zweite = meldungHinzufuegen(einsatzId, bogen("Ellwangen"))!.eintrag.id;
+    const zeit = new Date("2026-09-28T20:10").getTime();
+    eintreffzeitErben(einsatzId, [eintragId, zweite], zeit);
+    expect(eintrag(einsatzId, eintragId).eingetroffenAm).toBe(zeit);
+    expect(eintrag(einsatzId, zweite).eingetroffenAm).toBe(zeit);
+    expect(eintrag(einsatzId, zweite).vermerke ?? []).toEqual([]);
   });
 });

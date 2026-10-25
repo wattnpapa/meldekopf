@@ -3,7 +3,7 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** 2026-10-25, Phase 5 (Hüllen) steht:
+> **Stand:** 2026-10-25, Phasen 0 bis 6 umgesetzt (Phase 6: Rollenaudit, alle P0/P1 behoben):
 > Einsatz-Sammlungen anlegen und führen, Summen, Einheitenliste und -tabelle,
 > Zug, Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
 > Lagemonitor, Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
@@ -60,6 +60,7 @@ Die vollständige Liste steht in [docs/funktionsumfang.md](docs/funktionsumfang.
 | [docs/funktionsumfang.md](docs/funktionsumfang.md) | Funktionsumfang, nach Bereichen, mit Herkunft im Erfassungsbogen |
 | [docs/architektur.md](docs/architektur.md) | Architektur nach Arc42: Kontext, Bausteine, Laufzeit, Verteilung, Querschnitt, Entscheidungen |
 | [docs/uebernahme-aus-erfassungsbogen.md](docs/uebernahme-aus-erfassungsbogen.md) | Welche Module woher kommen, was in den Kern wandert, Reihenfolge der Umsetzung |
+| [docs/audits/runde-1/README.md](docs/audits/runde-1/README.md) | Rollenaudits (zwölf THW-Rollen) gegen den Produktionsbuild, Befunde und ihr Stand |
 | [docs/start-prompt.md](docs/start-prompt.md) | Einstieg für die erste Entwicklungs-Session |
 | [CLAUDE.md](CLAUDE.md) | Hinweise für Claude Code |
 

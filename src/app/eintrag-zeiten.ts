@@ -260,6 +260,29 @@ function eintragAendern(einsatzId: string, eintragId: string, aendern: (e: Melde
   sammlungenSchreiben(liste);
 }
 
+/**
+ * Eintreffzeit nach dem Aufteilen: Rest und abgeteilter Teil sind mit der
+ * Einheit eingetroffen, nicht beim Tippen auf „Aufteilen". Der Kern legt
+ * beide als neue Einträge mit `empfangenAm = jetzt` an; ohne diese Zeile
+ * standen Lageblatt, Lagemonitor und CSV danach auf der Uhrzeit des
+ * Aufteilens (Audit Phase 6, Fehler und Folgenschweres, P1). Kein Vermerk:
+ * Die Zeit ändert sich nicht, sie wird nur weitergegeben.
+ */
+export function eintreffzeitErben(einsatzId: string, eintragIds: string[], zeitpunkt: number): void {
+  const liste = alleSammlungen();
+  const s = liste.find((x) => x.id === einsatzId);
+  if (!s) return;
+  let geaendert = false;
+  for (const e of s.eintraege) {
+    if (!eintragIds.includes(e.id) || eintreffzeit(e) === zeitpunkt) continue;
+    e.eingetroffenAm = zeitpunkt;
+    geaendert = true;
+  }
+  if (!geaendert) return;
+  s.geaendert = Date.now();
+  sammlungenSchreiben(liste);
+}
+
 /** Eintreffzeit einer Meldung korrigieren (Nachtragen vom Papier). */
 export function eintreffzeitSetzen(einsatzId: string, eintragId: string, zeitpunkt: number): void {
   eintragAendern(einsatzId, eintragId, (e) => {

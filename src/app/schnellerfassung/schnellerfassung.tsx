@@ -144,6 +144,19 @@ export function Schnellerfassung({
 
   async function uebernehmen() {
     const b = bogen;
+    // Ein anderes Fenster hat diese Erfassung geändert oder schon übernommen:
+    // erst entscheiden, welche Fassung gilt. Sonst entstand aus zwei Fenstern
+    // eine zweite Einheit mit doppelter Stärke (Audit Phase 6, Fehler F4).
+    if (fenster.konflikt) {
+      await zeigeHinweis({
+        titel: "Erst die Fassung klären",
+        text:
+          fenster.art === "entfernt"
+            ? "Diese Erfassung wurde in einem anderen Fenster übernommen oder verworfen. Übernommen steht sie schon in der Lage; hier „Neu laden, hier verwerfen“ wählen, oder bewusst „Bogen hier wieder speichern“."
+            : "Ein anderes Fenster hat diese Erfassung geändert. Zuerst in der Leiste unten wählen, welche Fassung gilt.",
+      });
+      return;
+    }
     // Ohne Namen keine Meldung: Eine Einheit „THW" mit Stärke 0 ließ sich
     // niemandem zuordnen (Audit Runde 3, R3-E3, R3-G3).
     if (!einheitOrt(b.einheit) && b.einheit.standortRef == null) {
