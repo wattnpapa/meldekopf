@@ -1,5 +1,6 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/hilfen.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/hilfen.ts` (Commit 441811c). Geändert:
+ * signiert ohne Absenderkarte (siehe qrErzeugen).
  *
  * Browser-Helfer für die SPA: Kompression (pako), QR-Erzeugung,
  * Datei speichern/laden, Vokabular-Anzeige.
@@ -49,7 +50,6 @@ import {
   type Kompressor,
 } from "@bos/eeb-format/codec";
 import { gegengezeichnetePayloadBytes, signiertePayloadBytes } from "@bos/eeb-format/signatur";
-import { absenderkarteLaden } from "./absenderkarte";
 import { geraeteSchluesselSicherstellen } from "./geraete-schluessel";
 import { binaerTeilen, istNativ, textTeilen } from "./nativ";
 import { sitzplaetzeFuer, sitzplaetzeRichtwert, sitzplatzBilanz, type SitzplatzBilanz } from "@bos/vokabulare/sitzplaetze";
@@ -258,8 +258,12 @@ async function teilBild(url: string, teilNr: number, anzahl: number): Promise<Qr
  * erzeugt. Signieren und Segmentieren sind orthogonal: die Segment-Chunks setzen
  * den signierten Payload 1:1 wieder zusammen, die Signatur bleibt intakt.
  *
- * Ist eine Absenderkarte hinterlegt (freiwillig, siehe absenderkarte.ts), reist
- * sie in der Stufe mitsigniert mit.
+ * Im Erfassungsbogen reist eine hinterlegte Absenderkarte in der Stufe
+ * mitsigniert mit. Der Meldekopf signiert OHNE Karte: Die Absenderkarte als
+ * Sender bleibt beim Erfassungsbogen (docs/architektur.md Kap. 8.2), und eine
+ * Karte, die mit einer eingespielten Sicherung aus dem Erfassungsbogen kam,
+ * zeigt diese App nirgends an — sie reiste sonst ungesehen in jeden QR-Code.
+ * Gegenzeichnen bezeugt die Weitergabe mit dem Geräteschlüssel allein.
  *
  * `herkunft` = der beim Empfang gescannte Payload. Ist der Bogen seither
  * unverändert, wird dieser Payload GEGENGEZEICHNET: die Original-Signatur bleibt
@@ -267,19 +271,18 @@ async function teilBild(url: string, teilNr: number, anzahl: number): Promise<Qr
  * bearbeitet wurde, ist es ein eigener Bogen und wird allein selbst signiert.
  */
 export async function qrErzeugen(b: Erfassungsbogen, herkunft?: Uint8Array | null): Promise<QrSatz> {
-  const karte = absenderkarteLaden();
   const privat = await geraeteSchluesselSicherstellen();
   let payload: Uint8Array | null = null;
   if (herkunft && unveraendert(herkunft, b)) {
     try {
-      payload = await gegengezeichnetePayloadBytes(herkunft, privat, karte);
+      payload = await gegengezeichnetePayloadBytes(herkunft, privat);
     } catch {
       // Unsignierter oder unlesbarer Empfang → regulär selbst signieren.
       payload = null;
     }
   }
   const weitergeleitet = payload != null;
-  payload ??= await signiertePayloadBytes(b, browserKompressor, privat, karte);
+  payload ??= await signiertePayloadBytes(b, browserKompressor, privat);
   // Nicht raten, sondern den Payload befragen: er sagt, wie viele Stufen drinstehen.
   const stufen = entpackePayload(payload).stufen.length;
   const url = EEB_URL_PREFIX + datenKodieren(payload);
@@ -321,7 +324,6 @@ export async function bogenVollUrl(b: Erfassungsbogen): Promise<string> {
     b,
     browserKompressor,
     await geraeteSchluesselSicherstellen(),
-    absenderkarteLaden(),
   );
   return EEB_URL_PREFIX + base64UrlKodieren(payload);
 }
@@ -350,7 +352,6 @@ export async function vorlageTransportErzeugen(b: Erfassungsbogen): Promise<Vorl
     b,
     browserKompressor,
     await geraeteSchluesselSicherstellen(),
-    absenderkarteLaden(),
   );
   const qrUrl = EEB_URL_PREFIX + EEB_VORLAGE_MARKER + datenKodieren(payload);
   const link = EEB_URL_PREFIX + EEB_VORLAGE_MARKER + base64UrlKodieren(payload);

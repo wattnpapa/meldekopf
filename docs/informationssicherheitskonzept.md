@@ -217,6 +217,10 @@ des Erfassungsbogens.
 > Telefon der damaligen Absenderperson mitsigniert in jedem QR-Code, den der
 > Meldekopf erzeugt — ohne dass die App die Karte anzeigt oder einzeln löschen
 > lässt. Es gilt der Code; Maßnahme M11.
+>
+> *Erledigt 2026-10-25:* Der Meldekopf signiert ohne Absenderkarte (`hilfen.ts`,
+> Test in `hilfen.test.ts`); die Karte eines ursprünglichen Absenders bleibt in
+> dessen Stufe.
 
 > *Prüfvermerk zu Kap. 8.2 der Architektur (Speicherschlüssel):* Die Tabelle
 > dort weicht vom Code ab. (1) `eeb.einsaetze-papierkorb.v1` gibt es nicht; der

@@ -445,11 +445,12 @@ hält fremde Personendaten vieler Einheiten über Tage. Seit Phase 2 liegen
 [datenschutz-folgenabschaetzung.md](datenschutz-folgenabschaetzung.md) vor,
 zugeschnitten aus den Vorlagen des Erfassungsbogens (`441811c`).
 
-Offen (Prüfvermerk ISK/DSFA): Hinterlegte Absenderkarten reisen in jeden
-QR-Code der Sammel- und Einzel-PDF mit (`qrErzeugen` in `hilfen.ts`), auch
-eine, die mit einer Sicherung aus dem Erfassungsbogen kam; der Meldekopf
-zeigt sie nirgends an. Das widerspricht Kap. 8.2 („Absenderkarte als Sender
-bleibt beim Erfassungsbogen") und ist zu entscheiden.
+Entschieden 2026-10-25: Der Meldekopf signiert ohne Absenderkarte
+(`qrErzeugen`, `bogenVollUrl` in `hilfen.ts`). Vorher reiste eine hinterlegte
+Karte in jeden QR-Code der Sammel- und Einzel-PDF mit, auch eine, die mit
+einer Sicherung aus dem Erfassungsbogen kam und hier nirgends angezeigt
+wird. Beim Gegenzeichnen bleibt die Karte des ursprünglichen Absenders in
+seiner Stufe erhalten; die eigene Stufe trägt keine.
 
 ### 8.4 Kompatibilität
 

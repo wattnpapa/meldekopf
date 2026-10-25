@@ -1,6 +1,8 @@
 /**
  * Herkunft: Erfassungsbogen `src/app/hilfen.test.ts` (Commit 441811c).
  */
+import { entpackePayload } from "@bos/eeb-format/codec";
+import { absenderkarteLoeschen, absenderkarteSpeichern } from "./absenderkarte";
 import { describe, it, expect, vi } from "vitest";
 
 // hilfen.ts zieht über ./nativ die Capacitor-Plugins; für die reinen Helfer
@@ -665,6 +667,20 @@ describe("qrErzeugen(): Herkunft eines fremden Bogens", () => {
     if (status.zustand !== "gueltig") return;
     expect(status.stufen).toBeUndefined(); // keine Kette — eigener Bogen
     expect(status.kurzform).toBe(schluesselKurzform(await oeffentlicherSchluessel(GERAET)));
+  });
+
+  it("Meldekopf: eine hinterlegte Absenderkarte reist nicht mit — weder im eigenen noch im gegengezeichneten Code", async () => {
+    // Kam mit einer eingespielten Sicherung aus dem Erfassungsbogen; diese App zeigt sie nirgends an.
+    absenderkarteSpeichern({ name: "Unsichtbar", telefon: "0441 0" });
+    const eigen = entpackePayload(ausQr(await qrErzeugen(neuerBogen())));
+    expect(eigen.stufen.every((st) => st.karte === undefined)).toBe(true);
+    const b = neuerBogen();
+    const { payload } = await fremderPayload(b, "Melder");
+    const weiter = entpackePayload(ausQr(await qrErzeugen(decodePayload(payload, browserKompressor), payload)));
+    expect(weiter.stufen).toHaveLength(2);
+    expect(weiter.stufen[0]!.karte).toBeDefined(); // die Karte des Absenders bleibt, sie ist Teil seiner Signatur
+    expect(weiter.stufen[1]!.karte).toBeUndefined(); // die eigene Stufe trägt keine
+    absenderkarteLoeschen();
   });
 
   it("signiert ohne Herkunft wie bisher", async () => {

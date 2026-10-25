@@ -403,6 +403,10 @@ Ergänzend:
 > an Empfänger, für die die Einwilligung der Person nie gedacht war, und ohne
 > dass die App die Karte zeigt oder einzeln löschen lässt. Es gilt der Code
 > (R13, M11).
+>
+> *Erledigt 2026-10-25:* Der Meldekopf signiert ohne Absenderkarte (`hilfen.ts`,
+> Test in `hilfen.test.ts`); die Karte eines ursprünglichen Absenders bleibt in
+> dessen Stufe.
 
 > *Prüfvermerk zur Übung:* `docs/funktionsumfang.md` sagt, für einen als
 > Übung gekennzeichneten Bogen **oder Einsatz** greife die Datenschutzfrist
