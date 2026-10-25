@@ -7,3 +7,4 @@ sbom.cdx.json
 coverage/
 *.log
 .DS_Store
+*.tsbuildinfo
