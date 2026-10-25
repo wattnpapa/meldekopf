@@ -1,6 +1,7 @@
 /**
  * Vitest-Konfiguration. Herkunft: Erfassungsbogen `vitest.config.ts`
- * (Commit f2b77f1), unverändert bis auf diesen Kopf.
+ * (Commit f2b77f1); dazu die Aliasse der Bausteine aus Phase 1
+ * (`@bos/eeb-satz`, `@bos/oberflaeche`).
  */
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
@@ -21,6 +22,12 @@ const kernAliasse = [
   { find: /^@bos\/vokabulare$/, replacement: kernPfad("bos-vokabulare", "index") },
   { find: /^@bos\/taktische-zeichen\/(.*)$/, replacement: kernPfad("bos-taktische-zeichen", "$1") },
   { find: /^@bos\/taktische-zeichen$/, replacement: kernPfad("bos-taktische-zeichen", "index") },
+  { find: /^@bos\/eeb-satz\/(.*)$/, replacement: kernPfad("bos-eeb-satz", "$1") },
+  // .tsx-Module und ein Stylesheet: die Endung löst Vite selbst auf.
+  {
+    find: /^@bos\/oberflaeche\/(.*)$/,
+    replacement: fileURLToPath(new URL("./vendor/bos-oberflaeche/src/$1", import.meta.url)),
+  },
 ];
 
 // Zwei Suiten in einem Lauf:

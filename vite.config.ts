@@ -193,6 +193,30 @@ function contentSecurityPolicy(): Plugin {
  * Vite fasst Inline-CSS nicht an — unminifiziert gingen Kommentare und
  * Einrückung mit jedem Seitenaufruf über die Leitung.
  */
+/**
+ * Setzt die Design-Token aus `@bos/oberflaeche/stil/token.css` an der Marke
+ * `/* oberflaeche:token *\/` in den Inline-Stil der index.html (Phase 1,
+ * ADR-004). Inline wie bisher, nicht als eigene Datei: Das Start-Gerüst
+ * braucht die Token vor dem ersten Malen, und ein zweiter Request vor dem
+ * ersten Bild wäre genau das, was der Inline-Stil vermeidet. Läuft vor dem
+ * Minifizieren, damit `inlineCssMinify` die Token mit verdichtet; fehlt die
+ * Marke, bricht der Bau ab, statt eine App ohne Token auszuliefern.
+ */
+function oberflaecheToken(): Plugin {
+  const MARKE = "/* oberflaeche:token */";
+  return {
+    name: "oberflaeche-token",
+    transformIndexHtml: {
+      order: "pre",
+      handler(html: string) {
+        if (!html.includes(MARKE)) throw new Error(`index.html: Marke ${MARKE} fehlt — ohne sie fehlen die Design-Token.`);
+        const css = readFileSync(pfad("vendor/bos-oberflaeche/src/stil/token.css"), "utf8");
+        return html.replace(MARKE, () => css.trimEnd().split("\n").map((z) => (z ? `    ${z}` : z)).join("\n").trimStart());
+      },
+    },
+  };
+}
+
 function inlineCssMinify(): Plugin {
   return {
     name: "eeb-inline-css-minify",
@@ -283,10 +307,20 @@ export default defineConfig({
       { find: /^@bos\/vokabulare$/, replacement: pfad("vendor/bos-vokabulare/src/index.ts") },
       { find: /^@bos\/taktische-zeichen\/(.*)$/, replacement: pfad("vendor/bos-taktische-zeichen/src/$1.ts") },
       { find: /^@bos\/taktische-zeichen$/, replacement: pfad("vendor/bos-taktische-zeichen/src/index.ts") },
+      // Die beiden Bausteine aus Phase 1: Ausgabe ohne Oberfläche (ADR-005)
+      // und Oberfläche (ADR-004). Die Oberfläche hat .tsx-Module und ein
+      // Stylesheet; die Endung löst Vite selbst auf.
+      { find: /^@bos\/eeb-satz\/(.*)$/, replacement: pfad("vendor/bos-eeb-satz/src/$1.ts") },
+      { find: /^@bos\/oberflaeche\/(.*)$/, replacement: pfad("vendor/bos-oberflaeche/src/$1") },
     ],
+    // Die Oberfläche bringt React nicht selbst mit (peerDependency); hat das
+    // Submodul zum Entwickeln eigene node_modules, nähme Vite sonst deren
+    // Kopie — zwei Reacts, und jeder Hook in einem Baustein wirft.
+    dedupe: ["react", "react-dom"],
   },
   plugins: [
     react(),
+    oberflaecheToken(),
     bauStempel(),
     adressen(),
     sitemap(),

@@ -36,6 +36,8 @@ const KERN_PAKETE = [
   "@bos/meldekopf",
   "@bos/vokabulare",
   "@bos/taktische-zeichen",
+  "@bos/eeb-satz",
+  "@bos/oberflaeche",
 ];
 
 interface PaketDatei {

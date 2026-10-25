@@ -10,3 +10,9 @@
 [submodule "vendor/bos-taktische-zeichen"]
 	path = vendor/bos-taktische-zeichen
 	url = https://github.com/wattnpapa/bos-taktische-zeichen.git
+[submodule "vendor/bos-oberflaeche"]
+	path = vendor/bos-oberflaeche
+	url = https://github.com/wattnpapa/bos-oberflaeche.git
+[submodule "vendor/bos-eeb-satz"]
+	path = vendor/bos-eeb-satz
+	url = https://github.com/wattnpapa/bos-eeb-satz.git

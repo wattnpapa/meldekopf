@@ -46,7 +46,7 @@ import { fileURLToPath } from "node:url";
 const WURZEL = fileURLToPath(new URL("..", import.meta.url));
 
 /** Hauptrepo zuerst, danach die vier Kern-Submodule (ADR-003). */
-const PAKET_ORTE = ["", "vendor/eeb-format", "vendor/bos-meldekopf", "vendor/bos-vokabulare", "vendor/bos-taktische-zeichen"];
+const PAKET_ORTE = ["", "vendor/eeb-format", "vendor/bos-meldekopf", "vendor/bos-vokabulare", "vendor/bos-taktische-zeichen", "vendor/bos-eeb-satz", "vendor/bos-oberflaeche"];
 
 interface LockEintrag {
   name?: string;

@@ -24,7 +24,9 @@
       "@bos/vokabulare": ["./vendor/bos-vokabulare/src/index.ts"],
       "@bos/vokabulare/*": ["./vendor/bos-vokabulare/src/*.ts"],
       "@bos/taktische-zeichen": ["./vendor/bos-taktische-zeichen/src/index.ts"],
-      "@bos/taktische-zeichen/*": ["./vendor/bos-taktische-zeichen/src/*.ts"]
+      "@bos/taktische-zeichen/*": ["./vendor/bos-taktische-zeichen/src/*.ts"],
+      "@bos/eeb-satz/*": ["./vendor/bos-eeb-satz/src/*.ts"],
+      "@bos/oberflaeche/*": ["./vendor/bos-oberflaeche/src/*"]
     }
   },
   "include": [

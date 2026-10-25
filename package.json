@@ -79,7 +79,9 @@
   },
   "dependencies": {
     "@bos/eeb-format": "file:vendor/eeb-format",
+    "@bos/eeb-satz": "file:vendor/bos-eeb-satz",
     "@bos/meldekopf": "file:vendor/bos-meldekopf",
+    "@bos/oberflaeche": "file:vendor/bos-oberflaeche",
     "@bos/taktische-zeichen": "file:vendor/bos-taktische-zeichen",
     "@bos/vokabulare": "file:vendor/bos-vokabulare",
     "@capacitor/core": "^8.5.2",
