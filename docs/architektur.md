@@ -249,9 +249,10 @@ PDF-Satz und Exporte unter `weitergabe/`, QR-Leser und Unlesbares unter
 Fußzeilen-Gruppe „Daten" steht in `daten-gruppe.tsx`. `main.tsx` verdrahtet
 Speicher, geprüfte Uhr, Fehlerfänger (aus `@bos/oberflaeche`, mit Sichern und
 Löschen dieser App) und das Lagemonitor-Fenster. Die Eingänge (Scan, Datei,
-Bilderstapel, Link, Schnellerfassung) folgen mit Phase 3 und 4; ihre Knöpfe
-in der Einsatzansicht sagen bis dahin, wie Bögen über die Datensicherung
-herkommen. `vorlagen.ts` und `uebergabe-stand.ts` liegen als reine
+Bilderstapel, Link) liegen seit Phase 3 unter `eingang/`, die
+Schnellerfassung seit Phase 4 unter `schnellerfassung/`; `app.tsx` lädt sie
+erst auf Knopfdruck nach (`React.lazy`), weil sie OV-Verzeichnis und
+StAN-Tabellen mitbringt. `vorlagen.ts` und `uebergabe-stand.ts` liegen als reine
 Datenmodule bei, damit eine Sicherung aus dem Erfassungsbogen verlustfrei
 bleibt. Die Stilregeln der Sammlung (518 Regeln aus der `index.html` des
 Erfassungsbogens, nach den benutzten Klassen ausgewählt, mit ihren
@@ -412,6 +413,7 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.unlesbar.v1`, `eeb.entwurf.beschaedigt.v1`, `eeb.offline-zusatz.v1` | Beiseitegelegter unlesbarer Bestand; Stand des Offline-Vorrats | `unlesbar.ts`, `offline-bereit.ts` |
 | `eeb.export-stand.v1` | Vorgängerfassung des Export-Stands, nur lesend für Bestände | `export-stand.ts` |
 | `sessionStorage`: `eeb.papierabgleich.v1.<Einsatz>`, `eeb.wartet.fragment` | Zwischenstand Papier-Abgleich; wartender Link | `papier-abgleich-entwurf.ts`, `wartender-link.ts` |
+| `sessionStorage`: `eeb.vorbelegung.rueckweg`, `eeb.fahrzeug.rueckweg`, `eeb.ebene.rueckweg` | Rückweg nach „Vorbelegung entfernen“, „Fahrzeug entfernen“, „Ebene entfernen“ in der Schnellerfassung, 15 Minuten | `schnellerfassung/vorbelegung-rueckweg.ts`, `schnellerfassung/rueckweg-sitzung.ts` |
 
 **Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen; eine
 eingespielte Sicherung aus dem Erfassungsbogen bringt sie mit, die

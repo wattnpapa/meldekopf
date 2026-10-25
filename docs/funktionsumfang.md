@@ -19,7 +19,7 @@ erklären, warum etwas so ist, wie es ist. Diese Begründungen gehen mit.
 | --- | --- | --- | --- |
 | Einsatz anlegen | Name, Art (Einsatz, Übung, Bereitstellungsraum), Ort. Eingabetaste legt an, Esc bricht ab, ohne Namen kein Einsatz. | `einsaetze-ui.tsx`, `@bos/meldekopf/einsaetze` (`einsatzAnlegen`), `einsatz-sammlung.feature` | erledigt (Phase 2) |
 | Einsatzliste auf der Startseite | Alle Sammlungen mit Summen, zuletzt geöffnete zuerst; „Fortsetzen" für die zuletzt offene Sammlung (12 Stunden gemerkt). | `einsaetze-ui.tsx` (`EinsatzListe`), `kartenstapel.tsx` | erledigt (Phase 2) |
-| Einsatzansicht | Detailsicht mit Summenzeile, Karten- oder Tabellensicht, Filterleiste ab der zweiten Meldung, Knöpfe für Eingang, Weitergabe, Lagemonitor. | `einsaetze-ui.tsx` (`EinsatzDetail`) | erledigt (Phase 2); Aufnahme-Knöpfe verdrahtet (Phase 3), „Einheit manuell erfassen…“ weist bis Phase 4 auf den Erfassungsbogen |
+| Einsatzansicht | Detailsicht mit Summenzeile, Karten- oder Tabellensicht, Filterleiste ab der zweiten Meldung, Knöpfe für Eingang, Weitergabe, Lagemonitor. | `einsaetze-ui.tsx` (`EinsatzDetail`) | erledigt (Phase 2); Aufnahme-Knöpfe verdrahtet (Phase 3), „Einheit manuell erfassen…“ öffnet die Schnellerfassung (Phase 4) |
 | Übung | Ein als Übung gekennzeichneter Bogen oder Einsatz wird nicht zur Lage gezählt; Wasserzeichen im PDF; die Datenschutzfrist greift beim Übungsbogen nicht (eine Sammlung der Art „Übung" nimmt ihre Meldungen davon nicht aus). | `uebung-wasserzeichen.ts`, `uebung.feature` | erledigt (Phase 2) |
 | Einsatz löschen, Papierkorb | Gelöschte Sammlungen liegen 30 Tage im Papierkorb und kommen zurück; endgültiges Löschen fragt in der App zurück. | `@bos/meldekopf/papierkorb`, `papierkorb-frist.ts`, `papierkorb-ui.test.tsx` | erledigt (Phase 2) |
 | Ruhende Sammlungen | Nach 90 Tagen ohne Änderung löscht der Kern die Sammlung; die App merkt sich Name, Zeitraum und Zahl der Meldungen und sagt es einmal auf der Startseite. | `aufraeum-hinweis.ts` | erledigt (Phase 2) |
@@ -46,12 +46,12 @@ erklären, warum etwas so ist, wie es ist. Diese Begründungen gehen mit.
 
 | Funktion | Beschreibung | Herkunft | Stand |
 | --- | --- | --- | --- |
-| Nur-Stärke-Bogen | Einheit, Stärke (F/UF/M), Führungskraft, Fahrzeuge; in wenigen Minuten erfasst, als Bogen gedruckt und in die Sammlung aufgenommen. Zähler statt Personenliste. | `nur-staerke.ts`, `bogen-transport.feature` („Meldekopf-Schnellerfassung"), Teile von `schritte/` | übernehmen, reduziert |
-| Namen schnell einsetzen | Namensliste aus der Zwischenablage oder vom Papier als Text einfügen, Rollen aus der Funktion ableiten. | `personal-schnell.ts` | übernehmen |
-| Eintreffzeit | Beim manuellen Erfassen Vorschlag aus dem Beginn der Erfassung; Plausibilität (gestern, Zukunft). | `nacherfassung.tsx` (`EintreffzeitFeld`, `eintreffzeitPruefen`) | übernehmen |
-| Vorbelegung aus StAN | THW-Einheitstyp wählt Sollausstattung (Personal, Fahrzeuge) und Funkrufnamen vor. | `@bos/vokabulare/thw-stan-*`, `thw-funkrufnamen`, `vorbelegung-rueckweg.ts` | übernehmen |
-| Vollständiger Bogen | Nicht in dieser App: „Vollständig erfassen" öffnet den Erfassungsbogen per Link mit dem Payload; der Bogen kommt per Link zurück in die Sammlung. | neu | neu |
-| Entwurf der Fremderfassung | Angefangene Schnellerfassung überlebt Neuladen; sie ist an die Ziel-Sammlung gebunden. | `entwurf.ts` (`Entwurf.fremd`) | übernehmen, reduziert |
+| Nur-Stärke-Bogen | Einheit, Stärke (F/UF/M), Führungskraft, Fahrzeuge; in wenigen Minuten erfasst, als Bogen gedruckt und in die Sammlung aufgenommen. Zähler statt Personenliste. | `nur-staerke.ts`, `bogen-transport.feature` („Meldekopf-Schnellerfassung"), Teile von `schritte/` | erledigt (Phase 4, `schnellerfassung/schnellerfassung.tsx`, `staerke.tsx`); eine Seite statt des Assistenten, Führungskraft als eine Zeile (Name, Telefon); gedruckt wird über die Sammel-PDF |
+| Namen schnell einsetzen | Namensliste aus der Zwischenablage oder vom Papier als Text einfügen, Rollen aus der Funktion ableiten. | `personal-schnell.ts` | entfällt (Phase 4): Die Schnellerfassung führt keine Personenliste; Namenslisten gehören in den vollständigen Bogen im Erfassungsbogen |
+| Eintreffzeit | Beim manuellen Erfassen Vorschlag aus dem Beginn der Erfassung; Plausibilität (gestern, Zukunft). | `nacherfassung.tsx` (`EintreffzeitFeld`, `eintreffzeitPruefen`) | erledigt (Phase 4, mit Nr. laut Zettel und Zug) |
+| Vorbelegung aus StAN | THW-Einheitstyp wählt Sollausstattung (Personal, Fahrzeuge) und Funkrufnamen vor. | `@bos/vokabulare/thw-stan-*`, `thw-funkrufnamen`, `vorbelegung-rueckweg.ts` | erledigt (Phase 4, `schnellerfassung/einheit.tsx`): Einheitstyp, OV-Verzeichnis, Funkrufnamen der Fahrzeuge; Sollplätze nur im Erfassungsbogen, weil die Schnellerfassung die Stärke zählt |
+| Vollständiger Bogen | Nicht in dieser App: „Vollständig erfassen" öffnet den Erfassungsbogen per Link mit dem Payload; der Bogen kommt per Link zurück in die Sammlung. | neu | erledigt (Phase 4): „Im Erfassungsbogen vollständig erfassen…“ öffnet ihn mit dem Payload im Fragment; zurück per QR-Code oder Link. Ein Rücksprung-Parameter (`rueck=meldekopf`) fehlt noch, er braucht das Gegenstück im Erfassungsbogen (Phase 7) |
+| Entwurf der Fremderfassung | Angefangene Schnellerfassung überlebt Neuladen; sie ist an die Ziel-Sammlung gebunden. | `entwurf.ts` (`Entwurf.fremd`) | erledigt (Phase 4); `entwurf.ts` ist noch die ungekürzte Fassung |
 
 ## 4. Die Lage: Summen, Liste, Tabelle
 

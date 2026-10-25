@@ -27,7 +27,7 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > dieser Teil der Risiken von dort hierher (ADR-001).
 >
 > **Wächst mit dem Code.** Die Eingänge (Scan, Datei, Bilderstapel, Link)
-> sind seit Phase 3 live, die Schnellerfassung kommt mit Phase 4, Android mit
+> sind seit Phase 3 live, die Schnellerfassung seit Phase 4, Android folgt mit
 > Phase 5. Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem sie im Code
 > entstehen; mit jeder Phase ist dieses Dokument nachzuziehen.
 
@@ -105,7 +105,7 @@ Personennamen.
 | Herkunft der Vorlage | `docs/datenschutz-folgenabschaetzung.md` des Erfassungsbogens, Commit `441811c` |
 | Version dieses Dokuments | 0.1 (Entwurf), Phase 2 |
 | Datum | `[Datum der Freigabe einfügen]` |
-| Nächste Überprüfung | `[Datum, spätestens mit Phase 4 (Schnellerfassung) und bei wesentlicher Änderung der Software oder des Einsatzzwecks]` |
+| Nächste Überprüfung | `[Datum, spätestens mit Phase 5 (Android-Hülle) und bei wesentlicher Änderung der Software oder des Einsatzzwecks]` |
 | Anlass der DSFA | Ersteinführung der App bei `[Organisation]` / Übernahme der Einsatz-Sammlung aus dem Erfassungsbogen / Regelmäßige Überprüfung |
 
 ## 3. Systembeschreibung (Kurzfassung)
@@ -126,7 +126,7 @@ die für die DSFA relevante Kurzfassung:
   JSON-Datei, PDF mit QR oder eingebettetem Bogen, Link mit Payload im
   Fragment, Einsatz-Datei einer Ablösung, dazu die Datensicherung (auch die
   des Erfassungsbogens). **Schnellerfassung** einer Einheit ohne Bogen
-  (geplant, Phase 4; `src/app/schnellerfassung/`).
+  (live seit Phase 4; `src/app/schnellerfassung/`).
 - **Ausgang** (live): Sammel-PDF mit eingebetteter Sammlung, Lageblatt,
   Blanko-Vordruck, Übersichts-CSV, CSV mit allen Daten, Excel-Liste
   „Oldenburg", Einsatz-Datei, Datensicherung.
@@ -185,7 +185,7 @@ Datenschutzbeauftragte/n zu bestätigen.
 
 - Aufnahme eintreffender Einheiten an Meldekopf, Bereitstellungsraum oder
   kleiner Führungsstelle (Bogen per QR/Datei/Link; Schnellerfassung
-  ohne Bogen ab Phase 4).
+  ohne Bogen).
 - Laufende Zusammenzählung von Stärke (F/UF/M//Ges), Sofortbedarf
   (Verpflegung, Unterbringung M/W/D, Kraftstoff, Ruhezeit) und Fahrzeugen
   über alle anwesenden Einheiten, je Zug.
@@ -246,7 +246,7 @@ Datenschutzbeauftragte/n zu bestätigen.
 
 | Kategorie | Felder | Pflicht/optional | Fundstelle |
 | --- | --- | --- | --- |
-| Identität | Vorname, Nachname | Im Bogen je Personaleintrag; eine Nur-Stärke-Meldung (Phase 4) kommt ohne Namen aus | `Person` (`@bos/eeb-format/model`) |
+| Identität | Vorname, Nachname | Im Bogen je Personaleintrag; eine Nur-Stärke-Meldung aus der Schnellerfassung trägt höchstens die Führungskraft (Name, Telefon) | `Person` (`@bos/eeb-format/model`) |
 | Funktion/Qualifikation | Funktionen, Zusatzqualifikationen, Fahrerlaubnisse, Zählrolle | Teils Pflicht, teils optional | `Person` |
 | Unterbringungs-/Verpflegungsangaben | Geschlecht (M/W/D), Ernährungsform | Je Person | `Person` — kein Gesundheitsdatum nach Art. 9 |
 | Kontaktdaten | Telefon, E-Mail (i. d. R. Führungskräfte und Ebenen) | Optional | `Kontakt` |
@@ -278,9 +278,14 @@ versehentlich in Freitexten, M7), biometrische Daten, strafrechtliche Daten.
   wartet bis zur Antwort im Sitzungsspeicher. „Im Erfassungsbogen öffnen“
   öffnet `erfassungsbogen.app` in einem neuen Tab mit dem Bogen im Fragment;
   das Fragment geht nicht an den Server, nach Ablauf der Datenschutzfrist
-  ohne Personendaten. **Geplant, Phase 4:** Schnellerfassung als
-  Nur-Stärke-Bogen, „Vollständig erfassen" per Link im Erfassungsbogen
-  (Payload im Fragment, kein Netzversand).
+  ohne Personendaten.
+- **Schnellerfassung (live seit Phase 4):** Nur-Stärke-Bogen mit Einheit,
+  Zählern, Führungskraft (Name, Telefon) und Fahrzeugen; jede Eingabe steht
+  sofort im Entwurf (`eeb.entwurf.v1`, an die Sammlung gebunden), bis sie
+  übernommen oder verworfen wird. Abgelegt wird über denselben Weg wie ein
+  gescannter Bogen, als `quelle: "manuell"` ohne Signatur. „Im
+  Erfassungsbogen vollständig erfassen…“ öffnet `erfassungsbogen.app` mit dem
+  bisher Erfassten im Fragment (kein Netzversand des Inhalts).
 - **Eingang heute:** „Sicherung einspielen" ersetzt nach Rückfrage den ganzen
   Gerätebestand durch den der Datei (Prüfung vorher, Aufzählung beider
   Bestände, Haken bei Verlust).
@@ -348,7 +353,7 @@ fällig macht, schon.
 | Speicherort | Inhalt | Personendaten | Frist / Löschweg |
 | --- | --- | --- | --- |
 | `eeb.einsaetze.v1` | Sammlungen mit allen Meldungen, Fassungen, Rohpayload, Signaturnachweis, Zusätzen der Führungsstelle; Papierkorb als Markierung | **Ja, Kernbestand** | Datenschutzfrist je Meldung 90 Tage nach `stand` (Übungsbögen ausgenommen); Aufräumfrist 90 Tage ohne Änderung der Sammlung (Ankündigung ab Tag 60); Papierkorb 30 Tage; „Entfernen" je Einheit; „Einsatz löschen"; „Alle Daten löschen" |
-| `eeb.entwurf.v1`, `eeb.entwurf.ersetzt.v1` | Entwurf und Rückholplatz — heute nur aus einer Erfassungsbogen-Sicherung, ab Phase 4 die Schnellerfassung | Ja | Datenschutzfrist beim Lesen; „Alle Daten löschen"; ohne Oberfläche (R13) |
+| `eeb.entwurf.v1`, `eeb.entwurf.ersetzt.v1` | Angefangene Schnellerfassung (seit Phase 4, mit Zettel-Angaben); Rückholplatz nur aus einer Erfassungsbogen-Sicherung | Ja (Führungskraft) | Übernehmen oder „Erfassung verwerfen…“ leert den Entwurf; Datenschutzfrist beim Lesen; „Alle Daten löschen"; ein eigener Bogen aus einer Sicherung wird vor dem Ersetzen genannt (R13) |
 | `eeb.entwurf.beschaedigt.v1`, `eeb.unlesbar.v1` | Beiseitegelegter unlesbarer Bestand | Möglich | 90 Tage ab Beiseitelegen; „Beiseitegelegtes entfernen…"; „Alle Daten löschen" |
 | `eeb.vorlagen.v1` (und ggf. `eeb.musterung.v1`) | Vorlagen aus einer Erfassungsbogen-Sicherung | **Ja (ganze Mannschaften)** | **Keine Datenschutzfrist** (Vorlagen sind wie im Erfassungsbogen ausgenommen); Papierkorbfrist 30 Tage nur für bereits gelöschte; sonst nur „Alle Daten löschen" oder Einspielen einer anderen Sicherung (R13) |
 | `eeb.absenderkarte.v1` | Eigene Absenderkarte aus einer Erfassungsbogen-Sicherung | Ja | Keine Frist, nicht einzeln löschbar; „Alle Daten löschen" (R13) |
@@ -360,7 +365,7 @@ fällig macht, schon.
 | `eeb.uhr.v1`, `eeb.sicherung.zuletzt.v1`, `eeb.anzeigemodus.v1`, `eeb.einheiten-ansicht` | Uhrstand, letzte Sicherung, Anzeige | Nein | „Alle Daten löschen" |
 | `skipgc` | Widerspruch gegen die Reichweitenmessung | Nein | Bleibt bei „Alle Daten löschen" bewusst stehen; Löschen der Websitedaten |
 | `sessionStorage`: `eeb.papierabgleich.v1.<Einsatz>` | Eingaben des Papier-Abgleichs (Nummer, Zeiten, Status, Zug, Notiz) | Möglich (Notiz) | Tab-Ende, Übernehmen, Verwerfen, „Alle Daten löschen"; nicht in der Sicherung |
-| `sessionStorage`: `eeb.wartet.fragment`, `eeb.vorbelegung.rueckweg` | Wartender Link (ganzer Bogen; live seit Phase 3), Rückweg „Vorbelegung entfernen" (geplant, Phase 4) | Ja bzw. nein | bis zur Antwort bzw. 15 Minuten; Tab-Ende; „Alle Daten löschen" leert alle `eeb.`-Einträge des Sitzungsspeichers |
+| `sessionStorage`: `eeb.wartet.fragment`, `eeb.vorbelegung.rueckweg`, `eeb.fahrzeug.rueckweg`, `eeb.ebene.rueckweg` | Wartender Link (ganzer Bogen, seit Phase 3); Rückwege der Schnellerfassung nach „Vorbelegung“, „Fahrzeug“ oder „Ebene entfernen“ (seit Phase 4) | Ja bzw. möglich (Kennzeichen, Kontakt einer Ebene) | bis zur Antwort bzw. 15 Minuten; Tab-Ende; „Alle Daten löschen" leert alle `eeb.`-Einträge des Sitzungsspeichers |
 | Arbeitsspeicher | Rückweg nach „Entfernen" einer Meldung; Teile mehrteiliger Bögen beim Bilderstapel (höchstens eine Stunde) | Ja | Neuladen, Schließen der Quittung; bewusst kein dauerhafter Papierkorb für einzelne fremde Meldungen |
 
 Ergänzend:
@@ -469,8 +474,9 @@ nicht prüfbar.
   Kopien beim Empfänger.
 - **Rückwege** nach dem Entfernen einer Meldung bleiben im Arbeitsspeicher —
   bewusst kein dauerhafter Papierkorb für fremde Personendaten.
-- Die **Schnellerfassung** (Phase 4) kommt ohne Personenliste aus: Stärke
-  als Zähler, eine Führungskraft, Fahrzeuge.
+- Die **Schnellerfassung** kommt ohne Personenliste aus: Stärke als
+  Zähler, eine Führungskraft, Fahrzeuge. Namenslisten entstehen nur im
+  Erfassungsbogen.
 - Die **Notiz der Führungsstelle** reist nie im QR-Code, nur in Sammel-PDF,
   Lageblatt und Tabellen.
 - CSV und Excel sind gegen Formel-Injection gesichert (Integrität beim
@@ -641,8 +647,8 @@ Gegenüber der DSFA des Erfassungsbogens:
   R10) — sie sind aus dem Erfassungsbogen übernommen und hier die wichtigste
   technische Entlastung.
 - **Mit den Phasen fortzuschreiben:** Eingänge, wartender Link und
-  Signaturprüfung (Phase 3, fortgeschrieben 2026-10-25), Schnellerfassung und Link zum Erfassungsbogen
-  (Phase 4), Android-Hülle (Phase 5).
+  Signaturprüfung (Phase 3), Schnellerfassung und Link zum Erfassungsbogen
+  (Phase 4; beide fortgeschrieben 2026-10-25), Android-Hülle (Phase 5).
 
 Diese Einschätzung ersetzt keine rechtliche Prüfung.
 
