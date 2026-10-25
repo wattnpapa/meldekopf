@@ -331,7 +331,7 @@ export function Schnellerfassung({
       </SeitenKopf>
       <main id="inhalt" tabIndex={-1} className="schnellerfassung mit-uebernehmen">
         <p className="hinweis">
-          Es reichen der Name der Einheit und die Stärke; Fahrzeuge und Führungskraft können offen bleiben.
+          Es reichen der Ort der Einheit und die Stärke; Fahrzeuge, Führungskraft und Kontaktstellen können offen bleiben.
           {!gespeichert && !fenster.konflikt && <strong> Nicht gespeichert — der Gerätespeicher nimmt nichts an. Bitte zügig übernehmen.</strong>}
         </p>
         {/* Die Uhrzeit vom Meldeblock gleich oben mitnehmen, statt sie danach je Karte über „ändern" (R2-A5). */}

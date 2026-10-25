@@ -2948,6 +2948,130 @@
       .seiten-kopf.assistent-kopf .kopf-oberzeile .zur-start { min-width: 0;}
     }
 
+    /* Nachzug, zweiter Teil: dieselben Regeln in ihren Media- und
+       Container-Bedingungen (Telefon, Querformat, schmaler Kopf, große
+       Schrift), wo oben nur die Grundregel stand. Nicht übernommen: das
+       Ausblenden der Überschrift im schmalen Kopf — dort steht hier nicht der
+       Name der App, sondern „Einheit erfassen". */
+    @media (max-width: 29.999rem) {
+      .seiten-kopf.assistent-kopf .titelzeile h1 { font-size: var(--t-l); flex: 1 1 auto;}
+      .seiten-kopf.assistent-kopf .kopf-oberzeile { order: 0; flex: 1 1 0; min-width: 0;}
+      .seiten-kopf.assistent-kopf .kopf-oberzeile .anzeige-schalter { flex: 0 0 auto;}
+    }
+    @container kopf (max-width: 24rem) {
+      .anzeige-schalter.klappbar .anzeige-klappe { display: inline-flex; align-items: center; gap: 0.3em;}
+      .anzeige-schalter.klappbar:not(.offen) > button:not(.anzeige-klappe) { display: none;}
+    }
+    @container kopf (max-width: 17.5rem) {
+      .seiten-kopf.assistent-kopf .titelzeile h1 { font-size: var(--t-m); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+      /* R4-M2 (Rest): Die Bedienelemente des Kopfes wachsen nicht mit der
+        Schrift, wie es die Fußleiste schon tut: Rücksprung, Anzeige-Klappe und
+        Reiter bleiben beim Zielmaß (44 px + Feld-Zuschlag) und auf höchstens
+        18–20 px Schrift. Bei 200 % standen Rücksprung und Klappe auf zwei
+        Zeilen à 88 px, der Kopf war 393 px hoch, und über der Fußleiste blieb
+        in der Erfassung kein einziges Feld. Überschriften und Inhalt wachsen
+        weiter mit. */
+      .seiten-kopf.assistent-kopf .kopf-oberzeile { gap: var(--r-2);}
+    }
+    /* Umsortieren (siehe SortierKnoepfe in personal.tsx): Pfeile statt Ziehen,
+      weil der Bogen am Einsatzort auf dem Telefon ausgefüllt wird. Die Knöpfe
+      tragen nur ein Zeichen und dürfen trotzdem nicht kleiner als ein Finger
+      sein — daher feste Breite statt Text-Padding. Sie sitzen rechts neben den
+      Feldern, vor dem Löschknopf: erst die Ordnung, dann der Abgang. */
+    /* Volles Zielmaß je Pfeil (44/48 px, vorher 36) und 8 px Luft dazwischen
+      (Feld: 12 px): drei Pfeile mit 4 px Abstand waren ein Griff ins Blaue —
+      ein Fehlgriff sortiert nur um, aber in der Tabelle folgt direkt das
+      Löschen. Der Abstand hängt an --ziel, damit der Feld-Modus ihn wie die
+      Ziele mitzieht. */
+    .sortieren { display: inline-flex; gap: calc(0.5rem + var(--ziel));}
+    /* Große Systemschrift (Audit Runde 2, R2-M1): ein Finger wird mit der
+      Schrift nicht breiter. Bei 200 % waren die drei Pfeile je 88 px breit
+      und sprengten die 164 px schmale Personenkarte; gedeckelt bleiben sie
+      beim Handschuhmaß stehen (Deckel knapp über dem Feld-Modus-Maß, das
+      damit unverändert bleibt), und reicht auch das nicht, brechen sie um
+      statt über den Rand zu ragen. */
+    /* Mindestens 12 px zwischen den Pfeilen (R5-G2): Knöpfe mit verschiedener
+      Wirkung liegen nie dichter (Deckel-Regel, DESIGN.md). */
+    .sortieren { flex-wrap: wrap; max-width: 100%; gap: calc(12px + var(--ziel));}
+    /* Ein fokussiertes Feld rollt über die feste Fußleiste, nicht darunter:
+      Tippte man auf ein Feld, das gerade unter der Leiste verschwand, traf
+      man „Weiter" (Audit „Handschuh", G6). */
+    html { scroll-padding-bottom: calc(min(6rem, 108px) + env(safe-area-inset-bottom));}
+    @container assistent-nav (max-width: 19rem) {
+      footer.nav.assistent-nav .anzeige-leiste-text { display: none;}
+    }
+    @container assistent-nav (max-width: 260px) {
+      footer.nav.assistent-nav > .anzeige-leiste { grid-area: auto; grid-row: 2; grid-column: 2;}
+      footer.nav.assistent-nav > .uebernehmen { grid-area: auto; grid-row: 1; grid-column: 1 / -1; justify-self: stretch;}
+      footer.nav.assistent-nav > .primaer { grid-area: auto; grid-row: 3; grid-column: 1 / -1; justify-self: stretch;}
+      /* R6-G2: Ohne Abschluss-Knopf bleiben zwei Zeilen (Primärknopf, darunter
+        „←" und „◐"); die leere erste Zeile kostete nur Abstand. */
+      footer.nav.assistent-nav:not(.mit-uebernehmen) > .primaer { grid-row: 1;}
+      footer.nav.assistent-nav > .primaer { min-width: 0;}
+    }
+    @media (orientation: landscape) and (max-height: 31.25rem) {
+      /* Schmaler, nicht kleiner: 0.25rem Polster, die Knöpfe behalten das
+        Grundmaß (44/48 px) — quer wird genauso mit Handschuh getippt. */
+      footer.nav { padding-top: 0.25rem; padding-bottom: max(0.25rem, env(safe-area-inset-bottom));}
+      footer.nav button { min-height: calc(var(--ziel-basis) + var(--ziel)); padding-block: 0.3rem;}
+      /* flex-shrink und max-width: 100% (R2-M1) — bei 200 % Systemschrift
+        ragte der Umschalter quer um 11 px über den Rand („Nacht"); so bricht
+        er in sich um. Bei normaler Schrift passt die Zeile, es schrumpft
+        nichts. */
+      .seiten-kopf.assistent-kopf .kopf-oberzeile { order: 1; flex: 0 1 auto; max-width: 100%; gap: var(--r-3);}
+    }
+    @container (max-width: 12.5rem) {
+      .staerke-leiste span { overflow-wrap: break-word;}
+    }
+    @media (max-width: 279.98px) {
+      dialog.abfrage .abfrage-fuss .abfrage-aktionen.abgesetzt { margin-top: 8px; padding-top: 8px;}
+    }
+    @media (max-width: 279.98px), (max-height: 240px) {
+      /* Zoom-Fenster und sehr niedrige Fenster: 12 statt 24 px vor „Abbrechen", sonst bleibt kein Platz für den Text. */
+      dialog.abfrage .abfrage-fuss .abfrage-aktionen:not(.abgesetzt) { margin-top: var(--r-3);}
+    }
+    @media (max-width: 16rem) {
+      footer.nav.assistent-nav > .primaer { padding-inline: 4px; min-width: calc(44px + var(--ziel));}
+    }
+    @container assistent-nav (max-width: 260px) {
+      footer.nav.assistent-nav > .anzeige-leiste { grid-row: 1; grid-column: 2;}
+      footer.nav.assistent-nav > .primaer { grid-area: auto; grid-row: 1; grid-column: 3; justify-self: stretch; min-width: 0;}
+      footer.nav.assistent-nav:not(.mit-uebernehmen) > .primaer { grid-row: 1;}
+      footer.nav.assistent-nav.mit-uebernehmen > .primaer { grid-row: 2;}
+      footer.nav.assistent-nav > .primaer { font-size: min(var(--t-s), 13px); white-space: nowrap; min-height: calc(44px + var(--ziel));}
+    }
+    @media (max-width: 16rem) {
+      .seiten-kopf.assistent-kopf .kopf-oberzeile { flex: 1 1 100%;}
+    }
+    @container assistent-nav (max-width: 22rem) {
+      footer.nav.assistent-nav .anzeige-leiste-text { display: none;}
+      footer.nav.assistent-nav .anzeige-leiste-knopf { min-width: min(calc(var(--ziel-basis) + var(--ziel)), calc(44px + var(--ziel)));}
+    }
+    @container (max-width: 30rem) {
+      table.einheiten-tabelle tbody th { font-size: min(var(--t-s), 13px); padding-inline: 6px;}
+      table.einheiten-tabelle > * > tr > :first-child { max-width: none;}
+    }
+    @container (max-width: 12.5rem) {
+      html.schrift-gross .staerke-leiste span { overflow-wrap: normal;}
+    }
+    @container (max-width: 200px) {
+      table.einheiten-tabelle > * > tr > :first-child { position: sticky; min-width: 0; width: 45cqw; max-width: 45cqw; overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto; padding-inline: 4px;}
+      table.einheiten-tabelle tbody th { font-size: 11px;}
+    }
+    @media (max-width: 16rem) {
+      .seiten-kopf.assistent-kopf .kopf-oberzeile { flex: 1 1 0; min-width: 0;}
+    }
+
+    /* Eigene Regel: Im Erfassungsbogen ist die Überschrift des Assistenten am
+       Telefon ausgeblendet (App-Name). Hier sagt sie, was die Seite tut, und
+       bekommt eine eigene Zeile; die Marke „Aufnahme für: …" steht darunter.
+       Daneben brach „Einheit erfassen" bei 390 px mitten im Wort um. */
+    @media (max-width: 29.999rem) {
+      .seiten-kopf.assistent-kopf .titelzeile:has(.modus-marke) { flex-wrap: wrap; row-gap: var(--r-1); }
+      .seiten-kopf.assistent-kopf .titelzeile:has(.modus-marke) h1 { flex: 1 1 100%; hyphens: manual; }
+      .seiten-kopf.assistent-kopf .titelzeile .modus-marke:last-child:not(:only-child) { flex: 0 1 auto; }
+    }
+
     /* ---------------------------------------------------------------
        Kennfarbe in den Anzeigemodi. Die Token der Modi selbst kommen aus
        @bos/oberflaeche (oben); hier steht nur, was die Kennfarbe dieser App
