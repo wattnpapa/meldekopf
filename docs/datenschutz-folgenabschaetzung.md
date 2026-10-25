@@ -27,8 +27,8 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > dieser Teil der Risiken von dort hierher (ADR-001).
 >
 > **Wächst mit dem Code.** Die Eingänge (Scan, Datei, Bilderstapel, Link)
-> sind seit Phase 3 live, die Schnellerfassung seit Phase 4, Android folgt mit
-> Phase 5. Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem sie im Code
+> sind seit Phase 3 live, die Schnellerfassung seit Phase 4, die Android-Hülle
+> seit Phase 5. Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem sie im Code
 > entstehen; mit jeder Phase ist dieses Dokument nachzuziehen.
 
 ## Hinweis zu diesem Dokument
@@ -105,7 +105,7 @@ Personennamen.
 | Herkunft der Vorlage | `docs/datenschutz-folgenabschaetzung.md` des Erfassungsbogens, Commit `441811c` |
 | Version dieses Dokuments | 0.1 (Entwurf), Phase 2 |
 | Datum | `[Datum der Freigabe einfügen]` |
-| Nächste Überprüfung | `[Datum, spätestens mit Phase 5 (Android-Hülle) und bei wesentlicher Änderung der Software oder des Einsatzzwecks]` |
+| Nächste Überprüfung | `[Datum, spätestens mit dem ersten signierten Android-Release und bei wesentlicher Änderung der Software oder des Einsatzzwecks]` |
 | Anlass der DSFA | Ersteinführung der App bei `[Organisation]` / Übernahme der Einsatz-Sammlung aus dem Erfassungsbogen / Regelmäßige Überprüfung |
 
 ## 3. Systembeschreibung (Kurzfassung)
@@ -116,8 +116,9 @@ die für die DSFA relevante Kurzfassung:
 
 - **Plattformen:** Web/PWA unter meldekopf.erfassungsbogen.app (live);
   Desktop als Electron-Hülle für Windows und Linux (im Release, unsigniert;
-  macOS still). Android (Capacitor) folgt mit Phase 5, iOS dem Stand des
-  Erfassungsbogens.
+  macOS still). Android (Capacitor) seit Phase 5, als signierte APK im
+  Release, sobald der Keystore hinterlegt ist; ohne Selbst-Update, also ohne
+  Abfrage von GitHub aus der App. iOS folgt dem Stand des Erfassungsbogens.
 - **Keine Server-Infrastruktur.** Jede Verarbeitung läuft auf dem Gerät.
   Keine zentrale Datenbank, keine Nutzerkonten, keine Anmeldung, keine
   Kopplung mehrerer Meldekopf-Geräte (ADR-008).
@@ -648,7 +649,7 @@ Gegenüber der DSFA des Erfassungsbogens:
   technische Entlastung.
 - **Mit den Phasen fortzuschreiben:** Eingänge, wartender Link und
   Signaturprüfung (Phase 3), Schnellerfassung und Link zum Erfassungsbogen
-  (Phase 4; beide fortgeschrieben 2026-10-25), Android-Hülle (Phase 5).
+  (Phase 4; beide fortgeschrieben 2026-10-25), Android-Hülle (Phase 5, fortgeschrieben 2026-10-25).
 
 Diese Einschätzung ersetzt keine rechtliche Prüfung.
 

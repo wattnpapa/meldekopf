@@ -3,7 +3,7 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** 2026-10-25, Phase 4 (Schnellerfassung) steht:
+> **Stand:** 2026-10-25, Phase 5 (Hüllen) steht:
 > Einsatz-Sammlungen anlegen und führen, Summen, Einheitenliste und -tabelle,
 > Zug, Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
 > Lagemonitor, Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
@@ -63,11 +63,16 @@ Die vollständige Liste steht in [docs/funktionsumfang.md](docs/funktionsumfang.
 | [docs/start-prompt.md](docs/start-prompt.md) | Einstieg für die erste Entwicklungs-Session |
 | [CLAUDE.md](CLAUDE.md) | Hinweise für Claude Code |
 
-## Plattformen (geplant)
+## Plattformen
 
-Web-App (PWA) unter meldekopf.erfassungsbogen.app über GitHub Pages, Desktop-App (Electron:
-Windows x64/arm64, macOS, Linux), Android-App (Capacitor). Derselbe Aufbau wie
-beim Erfassungsbogen, damit Build, Release und Härtung übernommen werden können.
+Web-App (PWA) unter meldekopf.erfassungsbogen.app über GitHub Pages; Desktop-App
+(Electron) mit Installern für Windows x64/arm64 und Linux (deb, pacman) in den
+GitHub Releases; macOS ist wie beim Erfassungsbogen vorerst still. Die
+Android-App (Capacitor, `android/`) baut in der CI; als signierte APK erscheint
+sie im Release, sobald die Secrets `ANDROID_KEYSTORE_BASE64` und
+`ANDROID_KEYSTORE_PASSWORD` im Repo hinterlegt sind (Schlüsselalias
+`meldekopf`). Für den App Link braucht `public/.well-known/assetlinks.json`
+dann noch den SHA-256-Fingerabdruck dieses Schlüssels.
 
 ## Entwicklung
 

@@ -22,7 +22,7 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 >
 > **Wächst mit dem Code.** Die Eingänge (Kamera-Scan, USB-Handscanner,
 > Bilderstapel, Datei/PDF, Link) sind seit Phase 3 live, die Schnellerfassung
-> seit Phase 4, die Android-Hülle folgt mit Phase 5 (Reihenfolge in
+> seit Phase 4, die Android-Hülle seit Phase 5 (signiertes Release ausstehend; Reihenfolge in
 > [uebernahme-aus-erfassungsbogen.md](uebernahme-aus-erfassungsbogen.md),
 > Abschnitt G). Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem
 > sie im Code entstehen. Bei jeder dieser Phasen ist dieses Dokument
@@ -124,7 +124,7 @@ der/dem IT-Sicherheitsbeauftragten der jeweiligen Organisation.
 | Geltungsbereich dieses Dokuments | Die Anwendung „Meldekopf" selbst (Client-Software) samt Lagemonitor-Fenster sowie ihre Build-, Auslieferungs- und Update-Kette. **Nicht enthalten:** die physische und organisatorische IT-Sicherheit der einsetzenden Organisation (Gebäude, Fahrzeuge, Netzwerk, sonstige Fachverfahren), die Erfassungsbogen-App (eigenes ISK) und S1-Control |
 | Version dieses Dokuments | 0.1 (Entwurf), Phase 2 |
 | Datum der Freigabe | `[Datum der Freigabe einfügen]` |
-| Nächste Überprüfung | `[Datum, spätestens mit Phase 5 (Android-Hülle), bei Versions-Update mit sicherheitsrelevanten Änderungen oder nach 12 Monaten]` |
+| Nächste Überprüfung | `[Datum, spätestens mit dem ersten signierten Android-Release, bei Versions-Update mit sicherheitsrelevanten Änderungen oder nach 12 Monaten]` |
 | Anlass | Ersteinführung der App bei `[Organisation]` / Regelmäßige Überprüfung |
 
 ## 3. Strukturanalyse
@@ -146,7 +146,7 @@ Lage zeigt.
 | A1 | Web-App / PWA | Hauptauslieferungsform unter meldekopf.erfassungsbogen.app (GitHub Pages, Subdomain von erfassungsbogen.app); als Progressive Web App offlinefähig (Service Worker, Workbox) | Browser (Desktop/Mobil) | live |
 | A1a | Lagemonitor-Fenster | Zweites Fenster derselben Herkunft (`?lagemonitor=<Einsatz>`), liest denselben `localStorage`, nur Anzeige; für einen am Gerät angeschlossenen Fernseher (`src/app/lagemonitor-ui.tsx`) | wie A1/A2 | live (Phase 2) |
 | A2 | Desktop-App | Electron-Hülle um dieselbe Web-App; Auslieferung über GitHub Releases mit Auto-Update (`electron-updater`) | Windows (x64, arm64), Linux (deb, pacman); macOS still | Hülle vorhanden, Release-Jobs `build-win`/`build-linux` aktiv, unsigniert |
-| A3 | Android-App | Capacitor-Hülle um dieselbe Web-App | Android | **geplant, Phase 5** (`android/` fehlt, Job `build-android` mit `if: false`) |
+| A3 | Android-App | Capacitor-Hülle um dieselbe Web-App | Android | Hülle seit Phase 5 im Repo (`android/`, Debug-APK in der CI); **signierte APK im Release erst mit den Keystore-Secrets**. Rechte: Internet (Reichweitenmessung), Kamera über den Barcode-Scanner; kein Selbst-Update, keine Installationsberechtigung |
 | A4 | iOS-App | Capacitor-Hülle | iOS | **folgt dem Stand des Erfassungsbogens**, derzeit nicht vorhanden |
 
 > *Prüfvermerk zu A2:* Der macOS-Build ist in `release.yml` wie im
@@ -289,7 +289,7 @@ organisatorische Entscheidung (M12).
 | B1 | Quellcode-Repository | `wattnpapa/meldekopf`, öffentlich auf GitHub, samt sechs Submodulen unter `vendor/`: `eeb-format` (`eb58ad6`), `bos-meldekopf` (`59a986c`), `bos-vokabulare` (`2f94a46`), `bos-taktische-zeichen` (`cb9c227`), `bos-eeb-satz` (`c9ae5b2`), `bos-oberflaeche` (`acd5273`). Die vier ersten teilt die App mit dem Erfassungsbogen; `bos-eeb-satz` (Ausgabe ohne Oberfläche) und `bos-oberflaeche` (Dialoge, Anzeigemodi, Bausteine) sind seit Phase 1 neu. Änderungen am Kern nur im jeweiligen Repo, hier per gepinntem Commit (ADR-003) |
 | B2 | CI/CD-Pipeline | GitHub Actions: `ci.yml` (Kern-Kopien-Prüfung, Typprüfung, Tests, Build, Bundle-Budget, SBOM, `npm audit`, E2E) auf allen Zweigen; `release.yml` bei Push auf `main`: `prepare` → `check` → `build-pages`/`deploy-pages`, `build-win`, `build-linux` → `release`; `build-mac` und `build-android` mit `if: false` |
 | B3 | Abhängigkeiten (Software-Lieferkette) | npm-Pakete gemäß `package-lock.json`, gepinnt; Submodule über `file:` |
-| B4 | Code-Signing-Material | macOS-Zertifikat und Apple-API-Schlüssel sowie Android-Keystore als CI-Secrets vorgesehen; beide Jobs stillgelegt. Windows und Linux ohne Signierung |
+| B4 | Code-Signing-Material | macOS-Zertifikat und Apple-API-Schlüssel sowie Android-Keystore als CI-Secrets vorgesehen; der macOS-Job ist stillgelegt, der Android-Job baut ohne Keystore nur eine ungenutzte Debug-APK. Windows und Linux ohne Signierung |
 | B5 | Auto-Update-Kanal | `electron-updater` gegen die GitHub Releases dieses Repositorys (eigener Kanal `latest-arm64` für Windows auf ARM) |
 
 > *Prüfvermerk zu B1 (Widerspruch Doku ↔ Code):* `docs/architektur.md`
@@ -571,11 +571,11 @@ dieses Dokuments.
 
 | Anforderung (sinngemäß) | Status | Fundstelle/Anmerkung |
 | --- | --- | --- |
-| Minimale Rechtevergabe der Anwendung | Erfüllt | `electron/main.js`: nur `media`, `clipboard-*`; Android-Rechte folgen mit Phase 5 |
+| Minimale Rechtevergabe der Anwendung | Erfüllt | `electron/main.js`: nur `media`, `clipboard-*`; Android: `INTERNET` und die Kamera des Barcode-Scanners, ohne `REQUEST_INSTALL_PACKAGES` (das Selbst-Update des Erfassungsbogens ist nicht übernommen) |
 | Sichere Speicherung sensibler Daten auf dem Endgerät | Teilweise erfüllt | Fachdaten in `localStorage`; privater Schlüssel unverschlüsselt (6.3); Fremdbestand D2p/D3 ohne Oberfläche (R11) |
 | Deaktivierung nicht benötigter Schnittstellen | Erfüllt | CSP: genau ein Fremd-Host; kein Fremdcode |
 | Sichere Update-Mechanismen | Teilweise erfüllt | `electron-updater` vorhanden, Pakete unsigniert (6.4) |
-| Zusage „offline bereit" entspricht dem Gerätezustand | Teilweise erfüllt | Service Worker mit zweistufigem Vorrat (Phase 0); Fortschrittsanzeige und die Neuregistrierung bei abgebrochenem Erstladen (`offline-bereit.ts`, `offline-vorrat.ts`) sind noch nicht übernommen (funktionsumfang.md: „offen, Phase 2") |
+| Zusage „offline bereit" entspricht dem Gerätezustand | Erfüllt | Service Worker mit zweistufigem Vorrat (Phase 0); seit Phase 5 nennt die Startseite den echten Stand mit Fortschritt und bietet nach abgebrochenem Erstladen das Neuladen an (`offline-bereit.ts`, `offline-vorrat.ts`); bei gesperrtem Speicher sagt sie das (R5-O7) |
 | Anzeige auf zusätzlichem Bildschirm ohne Personendaten | Erfüllt (technisch) | Lagemonitor ohne Personennamen (5.7); Aufstellung organisatorisch (M12) |
 
 ### 6.2 SYS.2.1 Allgemeiner Client / CON.10 Entwicklung von Webanwendungen
@@ -602,7 +602,7 @@ dieses Dokuments.
 | Anforderung (sinngemäß) | Status | Fundstelle/Anmerkung |
 | --- | --- | --- |
 | Automatisierte Tests vor Veröffentlichung | Erfüllt | `ci.yml` und Stufe `check` in `release.yml`: Kern-Kopien, Typprüfung, Vitest, Build, Bundle-Budget, Cucumber/Playwright gegen den Build. Ein Lint-Schritt, den `docs/architektur.md` Kap. 7 für `check` nennt, steht in `ci.yml` nicht |
-| Signierte/verifizierbare Auslieferungspakete | Nicht erfüllt | Windows und Linux unsigniert; macOS und Android stillgelegt |
+| Signierte/verifizierbare Auslieferungspakete | Nicht erfüllt | Windows und Linux unsigniert; macOS stillgelegt; Android signiert, sobald der Keystore hinterlegt ist |
 | Versionierte, nachvollziehbare Abhängigkeiten | Erfüllt | `package-lock.json`; sechs Submodule mit gepinnten Commits; CI-Gate `kern-kopien` gegen Kopien von Kern-Code |
 | Regelmäßige Prüfung auf Schwachstellen (SCA) | Erfüllt | `.github/dependabot.yml` (wöchentlich, `@bos/*` ausgenommen); `npm audit --omit=dev --audit-level=high` blockierend, `npm audit` über alles als Hinweis |
 | Stückliste der ausgelieferten Software (SBOM) | Erfüllt | `npm run sbom` (CycloneDX), im CI als Artefakt, im Release als Asset |
@@ -673,7 +673,7 @@ Dieses Konzept ist zu überprüfen und fortzuschreiben:
 
 - mit jeder Übernahme-Phase: Phase 3 (Eingänge: Signaturprüfung, wartender
   Link, Dekompressionsdeckel, Kamera; fortgeschrieben 2026-10-25), Phase 4 (Schnellerfassung, Entwurf,
-  Link zum Erfassungsbogen; fortgeschrieben 2026-10-25), Phase 5 (Android, Release-Signierung),
+  Link zum Erfassungsbogen; fortgeschrieben 2026-10-25), Phase 5 (Android, Release-Signierung; Hülle fortgeschrieben 2026-10-25),
 - bei jeder App-Version mit sicherheitsrelevanten Änderungen (CSP,
   Schlüsselverwaltung, Update-Mechanismus, neue Speicherorte, neue Hosts),
 - bei wesentlichen Änderungen des Einsatzkontexts oder Geräteumfangs der

@@ -345,7 +345,7 @@ gegen die Releases dieses Repos.
 | Windows x64/arm64 | NSIS-Installer aus `electron-builder`, GitHub Releases | `appId` `de.meldekopf.app`, `productName` „Meldekopf", `publish.url` auf dieses Repo. |
 | macOS | dmg/zip; Job zunächst still wie beim Erfassungsbogen | Signierung erst mit hinterlegten Secrets. |
 | Linux | deb, pacman | |
-| Android | Capacitor, APK im Release; Play Store später | Paket `de.meldekopf.app`, App-Links `meldekopf.erfassungsbogen.app` mit `assetlinks.json`. Job `build-android` in `release.yml` ist bis zur Übernahme von `android/` (Phase 5) stillgelegt (`if: false`) und aus `needs` des Release-Jobs genommen. |
+| Android | Capacitor, APK im Release; Play Store später | Paket `de.meldekopf.app`, App-Links `meldekopf.erfassungsbogen.app` mit `assetlinks.json`. Seit Phase 5 läuft `build-android` wieder und steht in `needs` des Release-Jobs. Ohne die Secrets `ANDROID_KEYSTORE_BASE64` und `ANDROID_KEYSTORE_PASSWORD` baut er nur eine Debug-APK als Prüfung und hängt nichts ans Release (eine APK mit Wegwerf-Schlüssel ließe sich nicht durch die signierte ersetzen). `ci.yml` baut auf jedem Zweig eine Debug-APK. `public/.well-known/assetlinks.json` fehlt noch: Es braucht den SHA-256-Fingerabdruck des Release-Schlüssels. Kein Selbst-Update in der App (keine Abfrage von `api.github.com`, Kap. 3.2). |
 | iOS | folgt dem Stand des Erfassungsbogens | AASA mit Team-ID, Associated Domains. |
 
 Pipeline wie `release.yml` des Erfassungsbogens: `prepare` (Datums-Version,
@@ -426,8 +426,8 @@ Altschlüssel des Anzeigemodus und wird nur gelesen.
 
 Der Papierkorb der Sammlungen ist kein eigener Schlüssel, sondern
 `geloeschtAm` an der Sammlung in `eeb.einsaetze.v1`. `eeb.offline-zusatz.v1`
-und `eeb.wartet.fragment` kommen erst mit `offline-bereit.ts` bzw.
-`wartender-link.ts`. Prüfvermerk 2026-10-25 (ISK/DSFA): Die Tabelle nannte
+schreibt `offline-bereit.ts` (seit Phase 5), `eeb.wartet.fragment`
+`wartender-link.ts` (seit Phase 3). Prüfvermerk 2026-10-25 (ISK/DSFA): Die Tabelle nannte
 `eeb.einsaetze-papierkorb.v1` und `eeb.signieren.v1`, die es im Code nicht
 gibt; korrigiert.
 
