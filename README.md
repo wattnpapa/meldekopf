@@ -3,10 +3,13 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** 2026-10-25, Phase 0 (Gerüst) steht: Repo mit dem geteilten Kern
-> als Submodule, Build, Tests, CI, PWA mit Offline-Start, Startseite mit
-> Anzeigemodi und Pflichtangaben, eigenes Icon und eigene Kennfarbe. Noch
-> keine Sammlung — die kommt ab Phase 2. Die Doku unter `docs/` beschreibt,
+> **Stand:** 2026-10-25, Phase 1 (geteilte Bausteine) steht: Repo mit dem
+> geteilten Kern als Submodule, Build, Tests, CI, PWA mit Offline-Start,
+> Startseite mit Anzeigemodi und Pflichtangaben, eigenes Icon und eigene
+> Kennfarbe; Dialoge, Anzeigemodi, Kopfnavigation und Design-Token kommen aus
+> dem gemeinsamen Oberflächen-Baustein `@bos/oberflaeche`, die Ausgabe ohne
+> Oberfläche wächst in `@bos/eeb-satz`. Noch keine Sammlung — die kommt ab
+> Phase 2. Die Doku unter `docs/` beschreibt,
 > was gebaut wird und wie; der Funktionsumfang wird aus der Einsatz-Sammlung
 > des [Erfassungsbogens](https://github.com/wattnpapa/erfassungsbogen)
 > übernommen (Reihenfolge in [docs/uebernahme-aus-erfassungsbogen.md](docs/uebernahme-aus-erfassungsbogen.md), Abschnitt G).
@@ -78,7 +81,10 @@ npm run bundle-budget  # gebauten Stand gegen scripts/bundle-budget.json messen
 npm run sbom           # Stückliste als CycloneDX
 ```
 
-Der Kern unter `vendor/` wird hier nicht geändert (ADR-003). Der Domainname
+Der Kern unter `vendor/` wird hier nicht geändert (ADR-003); das gilt auch
+für die beiden Bausteine `vendor/bos-eeb-satz` (Ausgabe ohne Oberfläche,
+ADR-005) und `vendor/bos-oberflaeche` (Oberfläche, ADR-004). Änderungen daran
+gehen in deren Repo und kommen per gepinntem Commit hierher. Der Domainname
 steht genau einmal in `src/app/adressen.ts`; Kopfnavigation und Startseiten-
 text werden aus `src/app/kopfnav.ts` und `src/app/start-inhalt.ts` erzeugt
 (`npm run kopfnav`, `npm run start-inhalt`), die Tests schlagen an, wenn

@@ -1,8 +1,8 @@
 # Architektur der Meldekopf-App (Arc42)
 
-Stand: 2026-10-25, Phase 0 (Gerüst) umgesetzt. Dieses Dokument beschreibt den
-**Soll-Stand** und wird mit dem Code zum Ist-Stand; wo ein Abschnitt den
-Ist-Stand der Phase 0 nennt, ist er als solcher markiert. Wo es konkrete Zahlen nennt, stammen sie
+Stand: 2026-10-25, Phase 1 (geteilte Bausteine) umgesetzt. Dieses Dokument
+beschreibt den **Soll-Stand** und wird mit dem Code zum Ist-Stand; wo ein
+Abschnitt den Ist-Stand einer Phase nennt, ist er als solcher markiert. Wo es konkrete Zahlen nennt, stammen sie
 aus dem Erfassungsbogen (Commit `c789947`, Zweig `claude/lucid-faraday-r4h32d`)
 und wurden dort nachgemessen; sie sind als Ausgangsgröße zu lesen, nicht als
 Zusage. Die Arc42-Doku des Erfassungsbogens
@@ -207,8 +207,8 @@ flowchart LR
 | `@bos/eeb-format` | Datenmodell (`SCHEMA_VERSION` 9), Codec, Signatur, Datenschutzfrist. | vorhanden |
 | `@bos/meldekopf` | Einsatz-Sammlung als reine Logik: Revisionen, Dedupe, Fristen, Aufteilen, Zusammenführen, Diff, Papierkorb, Text-Darstellung. | vorhanden (3.167 Zeilen) |
 | `@bos/vokabulare`, `@bos/taktische-zeichen` | Nachschlagetabellen, Zeichenauflösung. | vorhanden |
-| `@bos/eeb-satz` (<https://github.com/wattnpapa/bos-eeb-satz>) | Was beide Apps ausgeben und keine Oberfläche ist: pdfmake-Dokumentdefinition (Einzel- und Sammel-PDF, Lageblatt), CSV-Schreiber, XLSX-Schreiber, Oldenburg-Spalten, QR-Gruppierung mehrteiliger Bögen, PDF-Bild-Leser. | neu, aus `pdf-dokument.ts` (2.258), `bogen-csv.ts` (423), `einsatz-csv.ts` (290), `oldenburg-xlsx.ts` (615), `xlsx.ts` (319), `csv.ts` (51), `qr-boegen.ts` (48), `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts` |
-| `@bos/oberflaeche` (<https://github.com/wattnpapa/bos-oberflaeche>) | Was beide Apps zeigen: Design-Token (CSS), Dialogschicht, Modal-Overlay, Kopfnavigation, Anzeigemodi, Organisationsfarben, Tipp-Schutz, Schriftstufen, Tastatur-Erkennung, Quittungen, Feld-Bausteine. **Darf React und DOM**, aber keine Fachlogik und keine Persistenz außer den eigenen Anzeige-Schlüsseln. | neu, aus `dialoge.tsx` (487), `modal-overlay.ts` (259), `kopfnav.ts`/`kopfnav-ui.tsx` (338), `anzeige-modus.ts`/`anzeige-schalter.tsx` (383), `org-farben.ts` (358), `tipp-schutz.ts` (288), `schrift-stufe.ts`, `tastatur.ts`, `daumen-quittung.tsx`, `schritte/bausteine.tsx` (742, Auswahl) |
+| `@bos/eeb-satz` (<https://github.com/wattnpapa/bos-eeb-satz>) | Was beide Apps ausgeben und keine Oberfläche ist: pdfmake-Dokumentdefinition (Einzel- und Sammel-PDF, Lageblatt), CSV-Schreiber, XLSX-Schreiber, Oldenburg-Spalten, QR-Gruppierung mehrteiliger Bögen, PDF-Bild-Leser. | neu, aus `pdf-dokument.ts` (2.258), `bogen-csv.ts` (423), `einsatz-csv.ts` (290), `oldenburg-xlsx.ts` (615), `xlsx.ts` (319), `csv.ts` (51), `qr-boegen.ts` (48), `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts`. **Ist-Stand Phase 1:** erste Stufe `csv`, `xlsx`, `pdf-stroeme`, `pdf-bilder`, `taktische-zeichen-bogen`, `uebung-wasserzeichen`; der Rest hängt im Erfassungsbogen an App-Modulen (ADR-005, Nachtrag) |
+| `@bos/oberflaeche` (<https://github.com/wattnpapa/bos-oberflaeche>) | Was beide Apps zeigen: Design-Token (CSS), Dialogschicht, Modal-Overlay, Kopfnavigation, Anzeigemodi, Organisationsfarben, Tipp-Schutz, Schriftstufen, Tastatur-Erkennung, Quittungen, Feld-Bausteine. **Darf React und DOM**, aber keine Fachlogik und keine Persistenz außer den eigenen Anzeige-Schlüsseln. | neu, aus `dialoge.tsx` (487), `modal-overlay.ts` (259), `kopfnav.ts`/`kopfnav-ui.tsx` (338), `anzeige-modus.ts`/`anzeige-schalter.tsx` (383), `org-farben.ts` (358), `tipp-schutz.ts` (288), `schrift-stufe.ts`, `tastatur.ts`, `daumen-quittung.tsx`, `schritte/bausteine.tsx` (742, Auswahl). **Ist-Stand Phase 1:** vollständig nach Abschnitt C der Übernahme-Doku, dazu `zahl-eingabe` und `stil/token.css` |
 | Electron-Hülle | Fenster, Auto-Update, Berechtigungen, Lagemonitor-Fenster. | `electron/main.js` |
 | Capacitor-Hülle | Android-Projekt; iOS folgt. | `android/`, `capacitor.config.json` |
 | Statische Seiten | Anleitung, Datenschutz, Impressum; weniger als beim Erfassungsbogen (keine Organisations-Landingpages). | `public/` (Auswahl) |
@@ -233,15 +233,20 @@ neu; im Erfassungsbogen liegt alles flach in `src/app/`. Sie gliedern die
 übernommenen Dateien nach dem Ablauf am Meldekopf (Eingang, Erfassung, Lage,
 Weitergabe), ohne Dateien zu zerschneiden.
 
-**Ist-Stand Phase 0 (2026-10-25):** `src/app/` enthält `main.tsx`, `app.tsx`
+**Ist-Stand Phase 1 (2026-10-25):** `src/app/` enthält `main.tsx`, `app.tsx`
 (nur Startseite), `start-inhalt.ts`, `adressen.ts` (Domain und Zähl-Host an
-einer Stelle), `fusszeile.tsx` (gekürzt), `nativ.ts` und `aktualisierung.tsx`
-(je auf den Web-Teil gekürzt), `statistik.ts`, `werkzeuge.ts` — und als
-**Kopien aus dem Erfassungsbogen mit Herkunft im Kopfkommentar**, die in
-Phase 1 nach `@bos/oberflaeche` wandern: `dialoge.tsx`, `modal-overlay.ts`,
-`anzeige-modus.ts`, `anzeige-schalter.tsx`, `tipp-schutz.ts`, `tastatur.ts`,
-`schrift-stufe.ts`, `kopfnav.ts`, `kopfnav-ui.tsx`, `seiten-kopf.tsx`, dazu
-der Token-Block in `index.html`. Alle mit ihren Tests.
+einer Stelle), `kennfarbe.ts` (Petrol, wird dem Anzeigemodus hineingereicht),
+`fusszeile.tsx` (gekürzt), `nativ.ts` und `aktualisierung.tsx` (je auf den
+Web-Teil gekürzt), `statistik.ts`, dazu `kopfnav.ts` und `werkzeuge.ts` nur
+noch mit den Daten dieser App. Die Phase-0-Kopien (`dialoge`,
+`modal-overlay`, `anzeige-modus`, `anzeige-schalter`, `tipp-schutz`,
+`tastatur`, `schrift-stufe`, `kopfnav-ui`, `seiten-kopf`) sind entfallen; sie
+kommen aus `@bos/oberflaeche`. Die Design-Token stehen dort als
+`stil/token.css` und werden beim Bauen an der Marke `/* oberflaeche:token */`
+in den Inline-Stil der `index.html` gesetzt (Plugin `oberflaeche-token` in
+`vite.config.ts`); die Kennfarbe steht davor, alle übrigen Regeln danach.
+Die Tests, die an der `index.html` dieser App hängen (Boot-Skript,
+Kennfarbe), liegen unter `src/test/`.
 
 ### 5.3 Zuordnung Anforderung → Baustein
 
@@ -428,11 +433,20 @@ die Pakete kommen mit den Phasen, die sie brauchen (Phase 0: React,
 `electron-updater`). SBOM und `npm audit` im CI. Submodul-Pins beim Start auf
 den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
-`bos-taktische-zeichen` `cb9c227`.
+`bos-taktische-zeichen` `cb9c227`. Seit Phase 1 dazu `bos-eeb-satz`
+`3c4f75b` und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
+`441811c`). Beide brauchen zum Prüfen die Kern-Bausteine als gebaute
+Nachbarordner; ihre CI checkt sie gepinnt daneben aus. Aliasse wie beim Kern
+(`vite.config.ts`, `vitest.config.ts`, `tsconfig.json`), für die Oberfläche
+ohne feste Endung (`.tsx`, `.css`); `resolve.dedupe` hält React einfach,
+falls ein Submodul eigene `node_modules` mitbringt. `kern-kopien` und `sbom`
+kennen beide Pakete.
 
 **Erste Messung (Phase 0, `scripts/bundle-budget.json`):** JavaScript gesamt
 289.927 Byte, Startbündel 257.389 Byte, `dist/` 558.518 Byte; SBOM 1.025
-Komponenten, davon 27 mit Laufzeit-Rolle. Zum Vergleich der Erfassungsbogen
+Komponenten, davon 27 mit Laufzeit-Rolle. **Phase 1:** 292.309 / 259.771
+Byte (+2,4 KB aus dem Stand `441811c` der Oberflächen-Module, Runde 9),
+`dist/` 560.873 Byte; SBOM 1.035 Komponenten, davon 29 mit Laufzeit-Rolle. Zum Vergleich der Erfassungsbogen
 am selben Tag: 5.500.797 / 1.198.089 Byte. Das Budget wird je Phase bewusst
 angehoben (`npm run bundle-budget -- --setze`, Begründung im Commit).
 
@@ -495,6 +509,15 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   genannten Dateien; `schritte/bausteine.tsx` nur, soweit die
   Schnellerfassung sie braucht. Der Erfassungsbogen stellt um, sobald der
   Baustein steht (nach Fertigstellung der Meldekopf-App).
+- **Nachtrag Phase 1:** Was je App verschieden ist, kommt herein statt
+  fest verdrahtet: Kennfarbe ohne offenen Bogen (`standardThemeFarbeSetzen`;
+  das Boot-Skript färbt den Meta-Tag nachts vor dem Bundle um, deshalb setzt
+  die App sie ausdrücklich), Kopfnav-Einträge und Logo, Werkzeugliste, die
+  Wege des Fehlerfängers, sortierte Code-Tabellen. `stil/token.css` trägt
+  keine Kennfarbe; die App setzt `:root { --akzent … }` vor die Token und die
+  Werte für `.dunkel-modus` danach. Das Lint des Bausteins ist typgeprüft;
+  drei Regeln sind für den übernommenen Code entschärft (Begründung in
+  `eslint.config.mjs` dort).
 
 ### ADR-005: Reine Ausgabe-Bausteine in den Kern (`@bos/eeb-satz`)
 
@@ -508,6 +531,20 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   pdfmake im Test, das ist unter `node` möglich.
 - **Alternative verworfen:** Kopie in beiden Apps. Das Layout folgt
   amtlichen Bögen und ändert sich mit ihnen; zwei Kopien laufen auseinander.
+- **Nachtrag Phase 1 (Widerspruch Doku ↔ Code):** Die Entscheidung ging
+  davon aus, die Ausgabe-Dateien seien ohne DOM und ohne React. Das stimmt
+  für sie selbst, nicht für ihre Importe: `pdf-dokument`, `bogen-csv`,
+  `einsatz-csv`, `oldenburg-xlsx`, `blanko`, `pdf-qr`, `qr-boegen` hängen im
+  Erfassungsbogen an App-Modulen mit `localStorage`, DOM oder Capacitor
+  (Liste in der Übernahme-Doku, Abschnitt B). Aufgenommen ist deshalb erst
+  die eigenständige Stufe (`csv`, `xlsx`, `pdf-stroeme`, `pdf-bilder`,
+  `taktische-zeichen-bogen`, `uebung-wasserzeichen`; `pako` als
+  peerDependency). Die zweite Stufe folgt, wenn diese App die
+  App-Module übernommen hat; dann wird je Abhängigkeit entschieden, ob ihr
+  reiner Teil in den Kern geht oder hineingereicht wird. Die Satz-Tests mit
+  pdfmake laufen im Erfassungsbogen schon unter `node`; ob auch unter
+  `jsdom`, prüft die zweite Stufe. Scheitert das, gilt der Rückweg (Satz in
+  beiden Apps mit gemeinsamer Testfixture).
 
 ### ADR-006: Kein Assistent; vollständiger Bogen per Link im Erfassungsbogen
 
@@ -563,7 +600,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | --- | --- |
 | Zwei Apps auf einem Gerät verwirren unter Stress | Klare Namen, Icons, Farben; der Übergang per Link nennt, wohin es geht; Rückfallebene QR. Audit-Runde mit den THW-Reviewer-Rollen nach Phase 3. |
 | Oberflächen-Baustein wird zur Bremse (Pin-Updates in drei Repos) | Klein halten (ADR-004); Rückweg aus ADR-003: Kopie einfrieren, Herkunfts-Commit festhalten. |
-| PDF-Satz im Kern braucht pdfmake unter `node` im Test | Beim Anlegen prüfen; sonst Satz in beiden Apps mit gemeinsamer Testfixture. |
+| PDF-Satz im Kern braucht pdfmake unter `node` im Test | Im Erfassungsbogen laufen die Satz-Tests unter `node`; im Kern zusätzlich unter `jsdom` zu prüfen, wenn `pdf-dokument` folgt (zweite Stufe, ADR-005 Nachtrag); sonst Satz in beiden Apps mit gemeinsamer Testfixture. |
+| Ausgabe-Dateien hängen an App-Modulen | Zweite Stufe von `@bos/eeb-satz` erst nach Übernahme der App-Module (Phase 2/3); bis dahin bleibt die Ausgabe in den Apps. |
 | S1-Control versteht den Einsatz-Datei-Umschlag (Stände, Lage) noch nicht | Prüfen; `einsaetzeAusJson` kopiert unbekannte Felder, der Umschlag ist additiv. |
 | Übergang per Link zwischen PWAs auf iOS offline | Gerätetest; bis dahin QR. |
 | Bestandsdaten bleiben im Erfassungsbogen liegen | Übergangszeit mit Hinweis dort; Datensicherung als Weg (ADR-007). |

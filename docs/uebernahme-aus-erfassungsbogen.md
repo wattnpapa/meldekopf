@@ -1,12 +1,16 @@
 # Übernahme aus dem Erfassungsbogen
 
-Stand: 2026-10-25, Phase 0 (Gerüst) umgesetzt gegen den Erfassungsbogen auf
-Commit `f2b77f1` (Herkunfts-Commit in den Kopfkommentaren). Zeilenzahlen sind
+Stand: 2026-10-25, Phase 1 (geteilte Bausteine) umgesetzt gegen den
+Erfassungsbogen auf Commit `441811c` (Phase 0: `f2b77f1`; Herkunfts-Commit
+jeweils in den Kopfkommentaren). Zwischen beiden liegt „Runde 9: 53 Befunde
+behoben“ mit Änderungen an `dialoge.tsx`, `tastatur.ts`, `tipp-schutz.ts`,
+`pdf-dokument.ts`, `bogen-csv.ts`, `oldenburg-xlsx.ts`; die Bausteine tragen
+den Stand von `441811c`. Zeilenzahlen sind
 Produktivcode ohne Tests, gemessen im Erfassungsbogen (Commit `c789947`). Jede
 Datei bringt ihre Testdatei (`*.test.ts[x]`) mit. Spalte **Stand**: `offen`,
 `übernommen`, `entfällt`, `Kopie (Phase 0)` (in Phase 0 als Kopie in
-`src/app/` der Meldekopf-App eingebunden, wandert in Phase 1 an den hier
-genannten Ort).
+`src/app/` der Meldekopf-App eingebunden, in Phase 1 an den hier genannten
+Ort gewandert).
 
 Grundregel: **Die Meldekopf-App wird fertig gebaut, bevor der Erfassungsbogen
 etwas abbaut.** Bis dahin existieren die Module in beiden Repos; Änderungen am
@@ -27,16 +31,30 @@ Kopfkommentar festhalten).
 Reine Ausgabe, ohne DOM und React. Repo <https://github.com/wattnpapa/bos-eeb-satz> (angelegt 2026-10-25, mit
 Gerüst), Submodul in beiden Apps.
 
+**Widerspruch Doku ↔ Code (festgestellt in Phase 1):** Diese Liste nahm an,
+die Dateien ließen sich unverändert verschieben. Im Erfassungsbogen
+(`441811c`) importieren aber `pdf-dokument`, `bogen-csv`, `einsatz-csv`,
+`oldenburg-xlsx`, `blanko`, `pdf-qr` und `qr-boegen` App-Module, die selbst
+`localStorage`, DOM oder Capacitor benutzen: `hilfen` (über `nativ`),
+`eintrag-zeiten`, `export-stand`, `fassung-vorrang`, `auswertung`,
+`einheiten-tabelle`, `org-farben`, `qr-stapel`, `qr-decoder` (zxing-wasm).
+Unverändert in den Kern verschoben, verletzten sie ADR-003 Regel 2 und 3. Es
+gilt der Code: Phase 1 hat nur die eigenständigen Dateien aufgenommen. Die
+übrigen folgen, sobald diese App die genannten Module aus Abschnitt D
+übernommen hat (Phase 2 und 3) und feststeht, welcher reine Teil davon mit in
+den Kern geht oder hineingereicht wird; spätestens mit der Weitergabe
+(Phase 5).
+
 | Datei im Erfassungsbogen | Zeilen | Anmerkung | Stand |
 | --- | --- | --- | --- |
-| `pdf-dokument.ts` | 2.258 | pdfmake-Dokumentdefinition: Einzel-PDF, Sammel-PDF, Lageblatt, Probesatz, WinAnsi. Braucht pdfmake zum Messen im Test; prüfen, ob unter `node` lauffähig. | offen |
-| `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts` | 225 | QR aus PDF-Bildobjekten lesen, ohne Renderer. | offen |
-| `bogen-csv.ts`, `einsatz-csv.ts`, `csv.ts` | 764 | CSV-Langformat, Übersichts-CSV, Formatgrundlagen. | offen |
-| `oldenburg-xlsx.ts`, `xlsx.ts` | 934 | Oldenburg-Spalten, minimaler XLSX-Writer. | offen |
-| `qr-boegen.ts` | 48 | QR-Texte zu vollständigen Bögen gruppieren. | offen |
-| `taktische-zeichen-bogen.ts` | 67 | Zeichen aus einem konkreten Bogen auflösen. | offen |
-| `uebung-wasserzeichen.ts` | 20 | | offen |
-| `blanko.ts` | 84 | Leerer Bogen. | offen |
+| `pdf-dokument.ts` | 2.258 | pdfmake-Dokumentdefinition: Einzel-PDF, Sammel-PDF, Lageblatt, Probesatz, WinAnsi. Braucht pdfmake zum Messen im Test; im Erfassungsbogen laufen diese Tests schon unter `node` (Projekt `logik`), im Baustein müssen sie zusätzlich unter `jsdom` laufen. | offen (hängt an App-Modulen, s. oben) |
+| `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts` | 225 | QR aus PDF-Bildobjekten lesen, ohne Renderer. | `pdf-bilder`, `pdf-stroeme` übernommen (Phase 1); `pdf-qr` offen (braucht den QR-Decoder der App, wird hineingereicht) |
+| `bogen-csv.ts`, `einsatz-csv.ts`, `csv.ts` | 764 | CSV-Langformat, Übersichts-CSV, Formatgrundlagen. | `csv` übernommen (Phase 1); `bogen-csv`, `einsatz-csv` offen (hängen an App-Modulen, s. oben) |
+| `oldenburg-xlsx.ts`, `xlsx.ts` | 934 | Oldenburg-Spalten, minimaler XLSX-Writer. | `xlsx` übernommen (Phase 1); `oldenburg-xlsx` offen (s. oben) |
+| `qr-boegen.ts` | 48 | QR-Texte zu vollständigen Bögen gruppieren. | offen (hängt an `qr-stapel` der App) |
+| `taktische-zeichen-bogen.ts` | 67 | Zeichen aus einem konkreten Bogen auflösen. | übernommen (Phase 1) |
+| `uebung-wasserzeichen.ts` | 20 | | übernommen (Phase 1) |
+| `blanko.ts` | 84 | Leerer Bogen. | offen (hängt an `pdf-dokument`) |
 
 Bleibt in den Apps: `pdf.ts` (306, QR-Bild erzeugen, Download, Vorschau,
 plattformabhängig).
@@ -44,22 +62,25 @@ plattformabhängig).
 ## C. Geht neu in den Oberflächen-Baustein (`@bos/oberflaeche`, ADR-004)
 
 Darf React und DOM, keine Fachlogik. Repo <https://github.com/wattnpapa/bos-oberflaeche> (angelegt 2026-10-25, mit
-Gerüst), Submodul in beiden Apps.
+Gerüst), Submodul in beiden Apps. App-Eigenes wird hineingereicht: die
+Kennfarbe ohne offenen Bogen (`standardThemeFarbeSetzen`), Kopfnav-Einträge
+und Logo (`KopfnavQuelle`), die Werkzeugliste, die Wege des Fehlerfängers
+(`FehlerfaengerWege`), sortierte Code-Tabellen der Auswahl.
 
 | Datei im Erfassungsbogen | Zeilen | Anmerkung | Stand |
 | --- | --- | --- | --- |
-| `dialoge.tsx`, `modal-overlay.ts` | 746 | Dialogschicht statt Systemdialoge. | Kopie (Phase 0) |
-| `anzeige-modus.ts`, `anzeige-schalter.tsx` | 383 | Hell/Dunkel/Feld/Nacht. | Kopie (Phase 0); Standard-Kennfarbe ist die des Meldekopfs |
-| `org-farben.ts` | 358 | Kennfarben, Kopf-Töne 4,5:1 und 7:1. | offen |
-| `kopfnav.ts`, `kopfnav-ui.tsx`, `seiten-kopf.tsx` | 394 | Kopfnavigation; Einträge je App konfigurierbar. | Kopie (Phase 0) mit eigenen Einträgen; zeigt, dass die Einträge Daten sein müssen |
-| `tipp-schutz.ts` | 288 | Fingerstellen-Sperre, Prellschutz. | Kopie (Phase 0) |
-| `schrift-stufe.ts`, `tastatur.ts` | 167 | | Kopie (Phase 0) |
-| `daumen-quittung.tsx`, `quittung.ts`, `einlese-quittung.tsx` | 235 | Quittungen am unteren Rand. | offen |
-| `eintrag-bewegung.ts`, `kartenstapel.tsx` | 213 | Zugang/Abgang an Listen. | offen |
-| `fehlerfaenger.tsx`, `fehler-im-bild.tsx`, `feste-warnung.tsx` | 298 | | offen |
-| `schritte/bausteine.tsx` | 742 | Nur die Feld- und Auswahlbausteine, die die Schnellerfassung braucht; Rest bleibt im Erfassungsbogen. | offen |
-| `arbeitet.ts`, `werkzeuge.ts`, `tabellen-scroll.tsx` | 167 | Kleinteile; einzeln prüfen. | offen |
-| CSS: Design-Token, Grundlayout, `lagemonitor.css` | | Token-Datei aus `src/` des Erfassungsbogens; app-spezifische Regeln bleiben. | Token und Grundregeln als Kopie in `index.html` (Phase 0, Auswahl); `lagemonitor.css` offen |
+| `dialoge.tsx`, `modal-overlay.ts` | 746 | Dialogschicht statt Systemdialoge. | übernommen (Phase 1), eingebunden |
+| `anzeige-modus.ts`, `anzeige-schalter.tsx` | 383 | Hell/Dunkel/Feld/Nacht. | übernommen (Phase 1), eingebunden; Kennfarbe wird hineingereicht (`kennfarbe.ts`) |
+| `org-farben.ts` | 358 | Kennfarben, Kopf-Töne 4,5:1 und 7:1. | übernommen (Phase 1); hier eingebunden mit den Zeichen (Phase 2) |
+| `kopfnav.ts`, `kopfnav-ui.tsx`, `seiten-kopf.tsx` | 394 | Kopfnavigation; Einträge je App konfigurierbar. | übernommen (Phase 1), eingebunden; Einträge in `src/app/kopfnav.ts` |
+| `tipp-schutz.ts` | 288 | Fingerstellen-Sperre, Prellschutz. | übernommen (Phase 1), eingebunden |
+| `schrift-stufe.ts`, `tastatur.ts` | 167 | | übernommen (Phase 1), eingebunden |
+| `daumen-quittung.tsx`, `quittung.ts`, `einlese-quittung.tsx` | 235 | Quittungen am unteren Rand. | übernommen (Phase 1); eingebunden mit den Eingängen (Phase 3) |
+| `eintrag-bewegung.ts`, `kartenstapel.tsx` | 213 | Zugang/Abgang an Listen. | übernommen (Phase 1); eingebunden mit der Liste (Phase 2) |
+| `fehlerfaenger.tsx`, `fehler-im-bild.tsx`, `feste-warnung.tsx` | 298 | Sichern, Löschen, Herunterladen kommen von der App. | übernommen (Phase 1); eingebunden mit der Datensicherung (Phase 2) |
+| `schritte/bausteine.tsx` | 742 | Nur die Feld- und Auswahlbausteine, die die Schnellerfassung braucht; Rest bleibt im Erfassungsbogen. | übernommen (Phase 1) als `bausteine` samt `zahl-eingabe`: Feld, Auswahl, VokabAuswahl (sortiert nicht selbst), Vorschlagsfeld, Zahlenfeld, Stepper, Hinweise. Im Erfassungsbogen bleiben `VokabListe`, `Vollstaendigkeit`, `KennzahlenFeld`, `SchrittProps` |
+| `arbeitet.ts`, `werkzeuge.ts`, `tabellen-scroll.tsx` | 167 | Kleinteile; einzeln prüfen. | übernommen (Phase 1); `werkzeuge` nur das Markup, die Liste bleibt in `src/app/werkzeuge.ts` |
+| CSS: Design-Token, Grundlayout, `lagemonitor.css` | | Token-Datei aus `src/` des Erfassungsbogens; app-spezifische Regeln bleiben. | Token und Modus-Belegung als `stil/token.css` im Baustein (Phase 1), beim Bauen in die `index.html` eingesetzt (Plugin `oberflaeche-token`); Kennfarbe und übrige Regeln bleiben in der `index.html`. Grundlayout und `lagemonitor.css` offen |
 
 ## D. Übernimmt die Meldekopf-App unverändert (Kopfkommentar mit Herkunft)
 
@@ -117,7 +138,7 @@ beginnt der Abbau im Erfassungsbogen.
 | Phase | Inhalt | Fertig, wenn |
 | --- | --- | --- |
 | 0 Gerüst | Repo mit Submodulen (vier Pins aus A), Vite/TS/Vitest/Cucumber-Konfiguration, CSP, PWA, CI (`ci.yml`), leere App mit Startseite und Anzeigemodus; Pages-Deploy auf meldekopf.erfassungsbogen.app; Bundle-Budget erstmals gemessen. **Umgesetzt 2026-10-25**; Pages live, sobald `main` gebaut hat, Pages im Repo auf „GitHub Actions“ steht und der DNS-Eintrag existiert. | `npm run build`, `npm test`, Pages live. |
-| 1 Geteilte Bausteine | `@bos/eeb-satz` und `@bos/oberflaeche` (Repos mit Gerüst vorhanden), Dateien aus B und C mit Tests hineinbewegen, ADR-003-Regeln und CI je Repo, hier als Submodule pinnen. Der Erfassungsbogen bleibt unverändert (nutzt weiter seine Kopien). | Beide Submodule bauen; `kern-kopien` grün. |
+| 1 Geteilte Bausteine | `@bos/eeb-satz` und `@bos/oberflaeche` (Repos mit Gerüst vorhanden), Dateien aus B und C mit Tests hineinbewegen, ADR-003-Regeln und CI je Repo, hier als Submodule pinnen. Der Erfassungsbogen bleibt unverändert (nutzt weiter seine Kopien). **Umgesetzt 2026-10-25**: C vollständig, B in einer ersten Stufe (eigenständige Dateien, s. Widerspruch in B). | Beide Submodule bauen; `kern-kopien` grün. |
 | 2 Sammlung lesen und zeigen | D: Persistenz-Anbindung, `einsaetze-ui`, Auswertung, Liste, Tabelle, Zug, Status, Aufteilen/Zusammenführen, Fristen, Uhr, Datensicherung. Eine Datensicherung aus dem Erfassungsbogen lädt und zeigt die Sammlung. **ISK und DSFA anlegen.** | Szenarien `einsatz-detail`, `einheiten-liste` grün. |
 | 3 Eingänge | Scanner, Handscanner, Bilderstapel, Datei/PDF, Link, Rückfragen, Fassungs-Vorrang, Quittungen. | `einsatz-sammlung`, `qr-scannen` grün. |
 | 4 Schnellerfassung | Nur-Stärke-Formular, Namen, Eintreffzeit, StAN-Vorbelegung, Entwurf; „Vollständig erfassen" per Link (Gegenstück im Erfassungsbogen: Rücksprung annehmen, ist dort eine kleine Ergänzung und darf schon jetzt gebaut werden). | Szenario „Einheit manuell in den Einsatz erfassen" grün. |
