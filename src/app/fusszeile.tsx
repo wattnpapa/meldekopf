@@ -4,8 +4,9 @@
  *
  * Herkunft: Erfassungsbogen `src/app/fusszeile.tsx` (Commit f2b77f1), in
  * Phase 0 auf das gekürzt, was die leere App braucht. Die Gruppe „Daten"
- * (Datensicherung, Geräteschlüssel, Alle Daten löschen) kommt mit der
- * Sammlung (Phase 2), die Blanko-Vorlage mit `@bos/eeb-satz` (Phase 5); die
+ * (Datensicherung, Geräteschlüssel, Alle Daten löschen) steht seit Phase 2 in
+ * daten-gruppe.tsx (Stand 441811c); der Blanko-Vordruck liegt in der
+ * Einsatzansicht; die
  * Beispielbögen bleiben beim Erfassungsbogen (Übernahme-Doku, Abschnitt F).
  * Aufbau der Dialoge und der Gruppen wie dort (Audit Runde 2, R2-G3:
  * Zielmaß der Zeilen; R2-L6/R4-L2: Zweitschrift in gerechneten Tönen).
@@ -16,6 +17,7 @@ import { ERFASSUNGSBOGEN_URL, REPO_URL } from "./adressen";
 import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
 import { nutzungsKanal, statistikAbgewaehlt, statistikAbwaehlen } from "./statistik";
 import { WERKZEUGE, WERKZEUGE_TITEL } from "./werkzeuge";
+import { DatenGruppe } from "./daten-gruppe";
 
 const KONTAKT = "johannes.rudolph@thw-oldenburg.de";
 
@@ -147,6 +149,7 @@ export function Fusszeile() {
           Bedienelement und kein Link — er bekommt eine eigene, benannte
           Spalte statt zwischen den Links zu stehen. */}
       <div className="fuss-gruppen">
+        <DatenGruppe Dialog={Dialog} />
         <nav className="fuss-gruppe" aria-label="Rechtliches">
           <span className="fuss-titel">Rechtliches</span>
           <button type="button" className="link" onClick={() => impressum.current?.showModal()}>Impressum</button>

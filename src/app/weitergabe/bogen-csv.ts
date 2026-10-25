@@ -1,0 +1,427 @@
+/**
+ * Herkunft: Erfassungsbogen `src/app/bogen-csv.ts` (Commit 441811c).
+ *
+ * Voll-CSV („alle Daten") eines Erfassungsbogens bzw. einer ganzen
+ * Einsatz-Sammlung — für Excel/Tabellenkalkulation in der Führungsstelle oder
+ * der nachgelagerten Verwaltung (Verpflegungsabrechnung, Personalnachweis,
+ * Fahrzeugaufstellung).
+ *
+ * Gegenstück zu {@link einsatzCsvInhalt}: dort eine Zeile je Einheit mit den
+ * Summen (Lagekarte), hier ALLES, was im Bogen steht — bis zur einzelnen Person
+ * und zum einzelnen Fahrzeug.
+ *
+ * ## Warum Langformat mit Satzart-Spalte
+ *
+ * Ein Bogen ist nicht flach: eine Einheit hat n Personen und m Fahrzeuge. Das
+ * in eine Tabelle zu pressen geht auf drei Arten, und zwei davon sind schlecht:
+ *  - Spalten je Person („Person 1 Nachname", „Person 2 Nachname", …) — die
+ *    Spaltenzahl hinge an der größten Einheit und wäre nicht auswertbar.
+ *  - Drei getrennte Dateien — der Nutzer hat ausdrücklich EINE Datei gewünscht.
+ *  - Eine Zeile je Satz, unterschieden durch eine `Satzart`-Spalte. So bleibt
+ *    jede Zeile ein Datensatz, Excel kann filtern („Satzart = Person") und
+ *    pivotieren. Dafür sind die Blöcke der jeweils anderen Satzarten leer.
+ *
+ * Damit eine gefilterte Ansicht für sich lesbar bleibt, wiederholt der
+ * Kontext-Block vorne (Einsatz, Einheit, Teil, Zug, Stand, Übung) auf JEDER
+ * Zeile — sonst wüsste man bei „Satzart = Person" nicht mehr, zu wem sie gehört.
+ *
+ * ## Auswahl
+ *
+ * Aus einer Sammlung kommt die neueste Revision JEDER Einheit — auch abgerückte
+ * und in andere Einheiten aufgegangene. Das entspricht genau der Einheitenliste
+ * am Meldekopf; die `Status`-Spalte hält sie auseinander. Achtung beim naiven
+ * Summieren: die Zahlen aufgegangener Truppteile stecken zusätzlich in der
+ * Einheit, in die sie aufgegangen sind (dafür gibt es den Übersichts-Export).
+ *
+ * Enthält Personendaten im Klartext (Namen, Kontakte) — bleibt wie alle
+ * Exporte rein lokal.
+ */
+
+import {
+  Ernaehrung,
+  Geschlecht,
+  PersonalErfassung,
+  StaerkeRolle,
+  alleFahrerlaubnisse,
+  staerke,
+  unterbringungMWD,
+  verpflegung,
+  datumZuIso,
+  type EebDatum,
+  type EebZeitpunkt,
+  type Erfassungsbogen,
+  type Fahrzeug,
+  type Person,
+} from "@bos/eeb-format/model";
+import {
+  FE_TEXT,
+  datumDeutsch,
+  einheitAnzeigename,
+  einheitOrt,
+  fahrzeugSitzplaetze,
+  funkrufText,
+  kontaktText,
+  nurSollstaerke,
+  orgLabel,
+  vokabText,
+  vokabularFuer,
+  zeitpunktDeutsch,
+} from "../hilfen";
+import { csvDatei, csvZeile, jaNein } from "@bos/eeb-satz/csv";
+import { HERKUNFT_TEXT, eintreffzeit, zeitLang } from "../eintrag-zeiten";
+import { meldungsNummern } from "../einheiten-tabelle";
+import { MeldeStatus, type Einsatzsammlung, type MeldeEintrag, type MeldeQuelle } from "@bos/meldekopf/einsaetze";
+import { geltendeJeEinheit } from "../fassung-vorrang";
+import { nachtragGrundText, ortHinweisText, ortHinweise } from "./export-stand";
+
+// ------------------------------------------------------------------ Spalten
+
+/**
+ * Spaltenreihenfolge der Datei. Vier Blöcke: Kontext (auf jeder Zeile gefüllt),
+ * dann je ein Block pro Satzart. Zeilen werden über einen Datensatz mit genau
+ * diesen Schlüsseln gebaut — so kann keine Zeile aus dem Raster laufen.
+ */
+const SPALTEN = [
+  // Kontext — auf jeder Zeile
+  "Einsatz",
+  // Laufende Nummer der Meldung wie an der Karte und auf dem Lageblatt
+  // (Audit Runde 3, R3-K7); beim Einzelbogen leer.
+  "Meldung Nr.",
+  "Einheit",
+  "Teil",
+  "Zug",
+  "Stand",
+  "Übung",
+  "Satzart",
+  "Nr",
+  // Satzart „Einheit"
+  "Organisation",
+  "Organisationsname",
+  "Einheitstyp",
+  "Standort",
+  "Zugehörigkeit",
+  "Telefon Einheit",
+  "E-Mail Einheit",
+  // Ort/Auftrag aus dem Bogen der Einheit — nicht der Auftrag der
+  // Führungsstelle (der steht in „Auftrag/Notiz (Führungsstelle)"). Hieß
+  // „Auftrag" und wurde dafür gehalten (R3-K7).
+  "Ort/Auftrag (Bogen)",
+  "Zeitraum von",
+  "Zeitraum bis",
+  "Einsatzbeginn",
+  "Einsatzende",
+  "Personalerfassung",
+  "Stärke F",
+  "Stärke U",
+  "Stärke M",
+  "Stärke gesamt",
+  "Verpflegung gesamt",
+  "Verpflegung Fleisch",
+  "Verpflegung veg.",
+  "Verpflegung vegan",
+  "Unterbringung M",
+  "Unterbringung W",
+  "Unterbringung D",
+  "Unterbringung nötig",
+  "Ruhezeit nötig",
+  "Diesel (l)",
+  "Benzin (l)",
+  "Gemisch (l)",
+  "Anzahl Fahrzeuge",
+  "Sonstiges",
+  "Quelle",
+  "Status",
+  // Zusätze der Führungsstelle (MeldeEintrag), wie in der Übersicht-CSV —
+  // fehlten hier ganz (R3-K7).
+  "Eingetroffen",
+  "Abgerückt",
+  "Auftrag/Notiz (Führungsstelle)",
+  "Signatur",
+  // „Anderer Einsatz?" wie an der Karte (R5-K5).
+  "Hinweis zur Meldung",
+  // Satzart „Person"
+  "Nachname",
+  "Vorname",
+  "Rolle",
+  "Funktionen",
+  "Fahrerlaubnis",
+  "Geschlecht",
+  "Ernährung",
+  "Kontakte",
+  "Zusatzqualifikationen",
+  // Satzart „Fahrzeug"
+  "Fahrzeugtyp",
+  "Kennzeichen",
+  "Funkrufname",
+  "Sitzplätze",
+  "StAN-konform",
+  "Änderungen/Sondergerät",
+] as const;
+
+type Spalte = (typeof SPALTEN)[number];
+type Satz = Partial<Record<Spalte, string | number>>;
+
+// ------------------------------------------------------------------- Texte
+
+const SATZART_EINHEIT = "Einheit";
+const SATZART_PERSON = "Person";
+const SATZART_FAHRZEUG = "Fahrzeug";
+
+const ROLLE_TEXT: Record<StaerkeRolle, string> = {
+  [StaerkeRolle.FUEHRER]: "Führer",
+  [StaerkeRolle.UNTERFUEHRER]: "Unterführer",
+  [StaerkeRolle.MANNSCHAFT]: "Mannschaft",
+};
+
+const GESCHLECHT_TEXT: Record<Geschlecht, string> = {
+  [Geschlecht.M]: "m",
+  [Geschlecht.W]: "w",
+  [Geschlecht.D]: "d",
+};
+
+const ERNAEHRUNG_TEXT: Record<Ernaehrung, string> = {
+  [Ernaehrung.FLEISCH]: "Fleisch",
+  [Ernaehrung.VEGETARISCH]: "Vegetarisch",
+  [Ernaehrung.VEGAN]: "Vegan",
+};
+
+const ERFASSUNG_TEXT: Record<PersonalErfassung, string> = {
+  [PersonalErfassung.VOLLSTAENDIG]: "Vollständig",
+  [PersonalErfassung.NUR_STAERKE]: "Nur Stärke",
+};
+
+const STATUS_TEXT: Record<MeldeStatus, string> = {
+  [MeldeStatus.ANWESEND]: "Anwesend",
+  [MeldeStatus.ABGERUECKT]: "Abgerückt",
+  [MeldeStatus.AUFGEGANGEN]: "Aufgegangen",
+};
+
+// Derselbe Wortlaut wie auf der Karte (Audit Runde 2, R2-K6).
+const QUELLE_TEXT: Record<MeldeQuelle, string> = HERKUNFT_TEXT;
+
+function datumText(d: EebDatum | undefined): string {
+  return d != null ? datumDeutsch(datumZuIso(d)) : "";
+}
+
+/**
+ * „14.05.2025, 08:30" — Datum wie im Bogen, Uhrzeit als lokale Wandzeit; dieselbe
+ * Form wie Stand, Eingetroffen und Abgerückt (Audit Runde 3, R3-K7).
+ */
+function zeitpunktText(z: EebZeitpunkt | undefined): string {
+  return z == null ? "" : zeitpunktDeutsch(z);
+}
+
+/** Ganze Zugehörigkeitskette: „OV Oldenburg (OODE) › RB Bremen". */
+function zugehoerigkeitText(b: Erfassungsbogen): string {
+  const tabelle = vokabularFuer(b.einheit.organisation, "ebene");
+  return b.einheit.hierarchie
+    .map((h) => {
+      const art = vokabText(h.bezeichnung, tabelle);
+      return [art, h.name, h.kurz ? `(${h.kurz})` : ""].filter(Boolean).join(" ");
+    })
+    .filter(Boolean)
+    .join(" › ");
+}
+
+// -------------------------------------------------------------- Satzzeilen
+
+/** Kontext-Block — wiederholt sich auf jeder Zeile eines Bogens. */
+interface Kontext {
+  /** Name der Einsatz-Sammlung; beim Einzelbogen leer. */
+  einsatz?: string;
+  /** Laufende Nummer der Meldung (R3-K7). */
+  meldungNr?: number;
+  eingetroffen?: string;
+  abgerueckt?: string;
+  notiz?: string;
+  teil?: string;
+  zug?: string;
+  quelle?: string;
+  status?: string;
+  signatur?: string;
+  /** Ort, den der Bogen nennt, wenn er nicht zur Lage passt (R5-K5). */
+  fremderOrt?: string;
+}
+
+function kontextFelder(b: Erfassungsbogen, k: Kontext, satzart: string, nr?: number): Satz {
+  return {
+    Einsatz: k.einsatz ?? "",
+    "Meldung Nr.": k.meldungNr ?? "",
+    Einheit: einheitAnzeigename(b.einheit),
+    Teil: k.teil ?? "",
+    Zug: k.zug ?? "",
+    // Eine Zeitform in der ganzen Datei: „04.10.2026, 14:36" (R3-K7).
+    Stand: zeitpunktDeutsch(b.stand),
+    "Übung": jaNein(b.uebung === true),
+    Satzart: satzart,
+    Nr: nr ?? "",
+  };
+}
+
+function einheitSatz(b: Erfassungsbogen, k: Kontext): Satz {
+  const st = staerke(b);
+  const vp = verpflegung(b);
+  const u = unterbringungMWD(b);
+  const sb = b.sofortbedarf;
+  const ebene0 = b.einheit.hierarchie[0];
+  return {
+    ...kontextFelder(b, k, SATZART_EINHEIT),
+    Organisation: orgLabel(b.einheit.organisation),
+    Organisationsname: b.einheit.organisationName ?? "",
+    Einheitstyp: vokabText(b.einheit.einheitsTyp, vokabularFuer(b.einheit.organisation, "einheitstyp"), "name"),
+    Standort: einheitOrt(b.einheit),
+    "Zugehörigkeit": zugehoerigkeitText(b),
+    "Telefon Einheit": ebene0?.telefon ?? "",
+    "E-Mail Einheit": ebene0?.email ?? "",
+    "Ort/Auftrag (Bogen)": b.einsatz.ortAuftrag,
+    "Zeitraum von": datumText(b.einsatz.zeitraumVon),
+    "Zeitraum bis": datumText(b.einsatz.zeitraumBis),
+    Einsatzbeginn: zeitpunktText(b.einsatz.einsatzbeginn),
+    Einsatzende: zeitpunktText(b.einsatz.einsatzende),
+    // Niemand hat gezählt: Die Stärke ist die Sollstärke der Vorbelegung (R9-A2).
+    Personalerfassung: ERFASSUNG_TEXT[b.personalErfassung] + (nurSollstaerke(b) ? " — Sollstärke, nicht gemeldet" : ""),
+    "Stärke F": st.fuehrer,
+    "Stärke U": st.unterfuehrer,
+    "Stärke M": st.mannschaft,
+    "Stärke gesamt": st.gesamt,
+    "Verpflegung gesamt": vp.gesamt,
+    "Verpflegung Fleisch": vp.fleisch,
+    "Verpflegung veg.": vp.vegetarisch,
+    "Verpflegung vegan": vp.vegan,
+    "Unterbringung M": u.m,
+    "Unterbringung W": u.w,
+    "Unterbringung D": u.d,
+    // Leer statt „nein", wenn gar kein Sofortbedarf erfasst wurde: „nicht
+    // gefragt" und „ausdrücklich nicht nötig" sind verschiedene Aussagen.
+    "Unterbringung nötig": sb ? jaNein(sb.unterbringung) : "",
+    "Ruhezeit nötig": sb ? jaNein(sb.ruhezeitErforderlich) : "",
+    "Diesel (l)": sb?.dieselLiter ?? 0,
+    "Benzin (l)": sb?.benzinLiter ?? 0,
+    "Gemisch (l)": sb?.gemischLiter ?? 0,
+    "Anzahl Fahrzeuge": b.fahrzeuge.length,
+    Sonstiges: b.sonstiges ?? "",
+    Quelle: k.quelle ?? "",
+    Status: k.status ?? "",
+    Eingetroffen: k.eingetroffen ?? "",
+    "Abgerückt": k.abgerueckt ?? "",
+    "Auftrag/Notiz (Führungsstelle)": k.notiz ?? "",
+    Signatur: k.signatur ?? "",
+    "Hinweis zur Meldung": k.fremderOrt != null ? ortHinweisText(k.fremderOrt) : "",
+  };
+}
+
+function personSatz(b: Erfassungsbogen, k: Kontext, p: Person, nr: number): Satz {
+  const funktionen = vokabularFuer(b.einheit.organisation, "funktion");
+  return {
+    ...kontextFelder(b, k, SATZART_PERSON, nr),
+    Nachname: p.nachname,
+    Vorname: p.vorname,
+    Rolle: ROLLE_TEXT[p.staerkeRolle],
+    Funktionen: p.funktionen.map((f) => vokabText(f, funktionen)).filter(Boolean).join(", "),
+    // FE_TEXT schreibt „—" für „keine" — das ist Anzeige-Kosmetik. In einer
+    // Tabelle gehört dahin die leere Zelle, sonst zählt jeder Filter den
+    // Gedankenstrich als Fahrerlaubnis mit. Mehrere Klassen (B + A) stehen
+    // kommagetrennt in derselben Zelle.
+    Fahrerlaubnis: alleFahrerlaubnisse(p).map((k) => FE_TEXT[k]).join(", "),
+    Geschlecht: GESCHLECHT_TEXT[p.geschlecht],
+    "Ernährung": ERNAEHRUNG_TEXT[p.ernaehrung],
+    Kontakte: p.kontakte.map(kontaktText).join(" / "),
+    Zusatzqualifikationen: p.zusatzqualifikationen.map((q) => vokabText(q, funktionen)).filter(Boolean).join(", "),
+  };
+}
+
+function fahrzeugSatz(b: Erfassungsbogen, k: Kontext, f: Fahrzeug, nr: number): Satz {
+  return {
+    ...kontextFelder(b, k, SATZART_FAHRZEUG, nr),
+    Fahrzeugtyp: vokabText(f.typ, vokabularFuer(b.einheit.organisation, "fahrzeug"), "name"),
+    Kennzeichen: f.kennzeichen ?? "",
+    Funkrufname: funkrufText(f, b.einheit),
+    // Erfasste Zahl, sonst Richtwert des Typs; ohne beides bleibt die Zelle
+    // leer — eine 0 hieße hier „fährt niemanden mit" und wäre eine Behauptung.
+    "Sitzplätze": fahrzeugSitzplaetze(f, b.einheit.organisation) ?? "",
+    // undefined = Frage für diesen Fahrzeugtyp nicht anwendbar → leer lassen.
+    "StAN-konform": f.stanKonform == null ? "" : jaNein(f.stanKonform),
+    "Änderungen/Sondergerät": f.aenderungen ?? "",
+  };
+}
+
+/** Alle Zeilen eines Bogens: Einheit, dann Personal, dann Fahrzeuge. */
+function bogenSaetze(b: Erfassungsbogen, k: Kontext): Satz[] {
+  return [
+    einheitSatz(b, k),
+    ...b.personal.map((p, i) => personSatz(b, k, p, i + 1)),
+    ...b.fahrzeuge.map((f, i) => fahrzeugSatz(b, k, f, i + 1)),
+  ];
+}
+
+function zuDatei(saetze: Satz[], zusatzSpalte?: { name: string; werte: (satz: Satz, index: number) => string; schluss?: string }): string {
+  const kopf = csvZeile([...SPALTEN, ...(zusatzSpalte ? [zusatzSpalte.name] : [])]);
+  const zeilen = saetze.map((s, i) => csvZeile([...SPALTEN.map((sp) => s[sp] ?? ""), ...(zusatzSpalte ? [zusatzSpalte.werte(s, i)] : [])]));
+  // Schlusszeile (Nachtrag, R5-K6): ein Satz „Hinweis" mit dem Text im ersten Feld.
+  const schluss = zusatzSpalte?.schluss ? [csvZeile([zusatzSpalte.schluss, ...SPALTEN.slice(1).map((sp) => (sp === "Satzart" ? "Hinweis" : "")), ""])] : [];
+  return csvDatei([kopf, ...zeilen, ...schluss]);
+}
+
+// --------------------------------------------------------------- Öffentlich
+
+/** Einzelner Erfassungsbogen → CSV-Text (mit BOM). */
+export function bogenCsvInhalt(b: Erfassungsbogen): string {
+  return zuDatei(bogenSaetze(b, {}));
+}
+
+function kontextAusMeldung(e: MeldeEintrag, einsatz: string, meldungNr?: number, fremderOrt?: string): Kontext {
+  return {
+    fremderOrt,
+    einsatz,
+    meldungNr,
+    eingetroffen: zeitLang(eintreffzeit(e)),
+    abgerueckt: e.abgerueckAm != null ? zeitLang(e.abgerueckAm) : "",
+    notiz: e.notiz ?? "",
+    teil: e.teilEtikett,
+    zug: e.zugEtikett,
+    quelle: QUELLE_TEXT[e.quelle],
+    status: STATUS_TEXT[e.status],
+    signatur: e.signatur
+      ? e.signatur.zustand === "gueltig"
+        ? `gültig${e.signatur.kurzform ? ` (${e.signatur.kurzform})` : ""}`
+        : "ungültig"
+      : "",
+  };
+}
+
+/**
+ * Einsatz-Sammlung → CSV-Text (mit BOM): jede gemeldete Einheit in ihrer
+ * neuesten Revision, nach Anzeigename sortiert, je Einheit die Einheits-,
+ * Personal- und Fahrzeugzeilen.
+ */
+export function einsatzDetailCsvInhalt(
+  s: Einsatzsammlung,
+  /** Nummern aus der ganzen Sammlung — beim Teilexport „nur neue" sonst verschoben. */
+  nummern: Map<string, number> = meldungsNummern(s.eintraege),
+): string {
+  const meldungen = geltendeJeEinheit(s.eintraege).sort(
+    (a, b) =>
+      (nummern.get(a.einheitSchluessel) ?? Infinity) - (nummern.get(b.einheitSchluessel) ?? Infinity) ||
+      einheitAnzeigename(a.bogen.einheit).localeCompare(einheitAnzeigename(b.bogen.einheit), "de") ||
+      (a.teilEtikett ?? "").localeCompare(b.teilEtikett ?? "", "de"),
+  );
+  const gruende = s.nachtragGruende;
+  const orte = ortHinweise(s);
+  // Je Satz die Einheit, zu der er gehört — für die Spalte „Im Nachtrag wegen" (R5-W7).
+  const einheitJeSatz: string[] = [];
+  const saetze = meldungen.flatMap((e) => {
+    const teil = bogenSaetze(e.bogen, kontextAusMeldung(e, s.name, nummern.get(e.einheitSchluessel), orte[e.einheitSchluessel]));
+    for (const _ of teil) einheitJeSatz.push(e.einheitSchluessel);
+    return teil;
+  });
+  if (!gruende) return zuDatei(saetze);
+  // Als Nachtrag: Grund auf jeder Zeile (wie der Kontext, damit eine gefilterte
+  // Ansicht lesbar bleibt) und eine Schlusszeile, die die Datei als Teilmenge
+  // kennzeichnet (R5-K6).
+  const seit = s.nachtragSeit != null ? ` seit ${zeitLang(s.nachtragSeit)}` : "";
+  return zuDatei(saetze, {
+    name: "Im Nachtrag wegen",
+    werte: (_satz, i) => nachtragGrundText(gruende[einheitJeSatz[i]!]),
+    schluss: `NACHTRAG${seit} — nicht die ganze Lage (${meldungen.length} ${meldungen.length === 1 ? "Einheit" : "Einheiten"} in dieser Datei)`,
+  });
+}
