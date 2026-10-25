@@ -29,6 +29,7 @@ import { einsaetzeLaden } from "./einsaetze-lesen";
 import { EinsatzAnsicht } from "./einsatz-ansicht";
 import { useAufnahme } from "./eingang/aufnahme";
 import { offlineText, useOfflineStand } from "./offline-bereit";
+import { nachAbgleichFortsetzen, useFensterAbgleich } from "./fenster-abgleich";
 import { entwurfPlatzFrei, erfassungFuer } from "./schnellerfassung/angefangen";
 import type { ExportUmfang } from "./weitergabe/export-stand";
 import { entwurfLaden } from "./entwurf";
@@ -136,10 +137,15 @@ export function App() {
   const offenerEinsatz = offenerEinsatzId ? einsaetze.find((s) => s.id === offenerEinsatzId) : undefined;
   // Schnellerfassung für den offenen Einsatz. Beim Kaltstart geht es zurück in
   // eine angefangene Erfassung, außer sie wurde über „‹ Einsatz" verlassen (R5-N3).
+  // Nach „Anderen Stand laden" (Fensterabgleich) geht es in die Erfassung zurück (R4-S4).
   const [erfassungOffen, setErfassungOffen] = useState(() => {
     const e = offenerEinsatzId ? erfassungFuer(offenerEinsatzId, entwurfLaden()) : null;
-    return !!e && !e.fremd?.startseite;
+    return !!e && (!e.fremd?.startseite || nachAbgleichFortsetzen());
   });
+  // Zweites Fenster (App und Browser, Lagemonitor): Sammlungen sofort neu
+  // einlesen, wenn das andere Fenster sie ändert (R2-O4). Den Entwurf der
+  // Schnellerfassung gleicht schnellerfassung.tsx selbst ab.
+  useFensterAbgleich(erfassungOffen, einsaetzeNeuLaden, { rueckholplatz: false });
 
   async function manuellErfassen(einsatzId: string) {
     if (!(await entwurfPlatzFrei(einsatzId))) return;

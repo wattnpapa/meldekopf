@@ -23,7 +23,7 @@ erklären, warum etwas so ist, wie es ist. Diese Begründungen gehen mit.
 | Übung | Ein als Übung gekennzeichneter Bogen oder Einsatz wird nicht zur Lage gezählt; Wasserzeichen im PDF; die Datenschutzfrist greift beim Übungsbogen nicht (eine Sammlung der Art „Übung" nimmt ihre Meldungen davon nicht aus). | `uebung-wasserzeichen.ts`, `uebung.feature` | erledigt (Phase 2) |
 | Einsatz löschen, Papierkorb | Gelöschte Sammlungen liegen 30 Tage im Papierkorb und kommen zurück; endgültiges Löschen fragt in der App zurück. | `@bos/meldekopf/papierkorb`, `papierkorb-frist.ts`, `papierkorb-ui.test.tsx` | erledigt (Phase 2) |
 | Ruhende Sammlungen | Nach 90 Tagen ohne Änderung löscht der Kern die Sammlung; die App merkt sich Name, Zeitraum und Zahl der Meldungen und sagt es einmal auf der Startseite. | `aufraeum-hinweis.ts` | erledigt (Phase 2) |
-| Zwei Fenster, ein Speicher | Änderungen aus einem anderen Fenster derselben App werden sofort übernommen (`storage`-Ereignis), nichts überschreibt sich still. | `fenster-abgleich.tsx`, `fenster-unterschied.ts` | Module übernommen (Phase 2), Verdrahtung in `app.tsx` mit Phase 3 |
+| Zwei Fenster, ein Speicher | Änderungen aus einem anderen Fenster derselben App werden sofort übernommen (`storage`-Ereignis), nichts überschreibt sich still. | `fenster-abgleich.tsx`, `fenster-unterschied.ts` | erledigt: Sammlungen frischen sich bei Änderungen aus dem anderen Fenster auf (`app.tsx`); die Schnellerfassung warnt, wenn ein anderes Fenster dieselbe Erfassung ändert, und fragt vor jedem Verwerfen. Ohne Rückholplatz: Die Rückfragen sagen, welche Fassung verloren geht (Option `rueckholplatz: false`) |
 
 ## 2. Eingänge: Bögen aufnehmen
 

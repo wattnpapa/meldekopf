@@ -34,6 +34,7 @@ import { EintreffzeitFeld, eintreffzeitPruefen } from "./nacherfassung";
 import { AbschnittEinheit } from "./einheit";
 import { AbschnittStaerke } from "./staerke";
 import { AbschnittFahrzeuge } from "./fahrzeuge";
+import { FensterKonflikt, useFensterAbgleich } from "../fenster-abgleich";
 
 /** Ab so langer Erfassung ohne „Eingetroffen um" fragt die Übernahme nach der Zeit (R3-S6). */
 export const ERFASSUNG_PAUSE_MS = 5 * 60_000;
@@ -78,6 +79,13 @@ export function Schnellerfassung({
 
   // Jede Änderung landet sofort im Entwurf: Ein Neuladen oder ein leerer Akku
   // nimmt die halbe Erfassung nicht mit.
+  // Dieselbe Erfassung in einem zweiten Fenster (installierte App und Browser):
+  // nicht still überschreiben, sondern fragen (R2-O4). Einen Rückholplatz wie im
+  // Erfassungsbogen gibt es hier nicht.
+  const bogenRef = useRef(bogen);
+  bogenRef.current = bogen;
+  const fenster = useFensterAbgleich(true, () => {}, { eigenerBogen: () => bogenRef.current, rueckholplatz: false });
+
   useEffect(() => {
     if (beendet.current) return;
     setGespeichert(
@@ -85,7 +93,7 @@ export function Schnellerfassung({
         fremd: { einsatzId: einsatz.id, beginn, zettel: { zeit: zeit || undefined, nr: nummer || undefined, zug: zug || undefined } },
       }),
     );
-  }, [bogen, zeit, nummer, zug, einsatz.id, beginn]);
+  }, [bogen, zeit, nummer, zug, einsatz.id, beginn, fenster.runde]);
 
   // Jede Bearbeitung datiert den Stand neu — Zeitgruppe im PDF und Reihenfolge der Fassungen.
   const aendern = (patch: Partial<Erfassungsbogen>) => setBogen((b) => ({ ...b, ...patch, stand: stempelZeitpunkt() }));
@@ -323,7 +331,7 @@ export function Schnellerfassung({
       <main id="inhalt" tabIndex={-1} className="schnellerfassung mit-uebernehmen">
         <p className="hinweis">
           Es reichen der Name der Einheit und die Stärke; Fahrzeuge und Führungskraft können offen bleiben.
-          {!gespeichert && <strong> Nicht gespeichert — der Gerätespeicher nimmt nichts an. Bitte zügig übernehmen.</strong>}
+          {!gespeichert && !fenster.konflikt && <strong> Nicht gespeichert — der Gerätespeicher nimmt nichts an. Bitte zügig übernehmen.</strong>}
         </p>
         {/* Die Uhrzeit vom Meldeblock gleich oben mitnehmen, statt sie danach je Karte über „ändern" (R2-A5). */}
         <EintreffzeitFeld wert={zeit} onAendern={setZeit} nummer={nummer} onNummer={setNummer} zug={zug} onZug={setZug} zuege={zuege} />
@@ -341,6 +349,7 @@ export function Schnellerfassung({
           </button>
         </p>
       </main>
+      {fenster.konflikt && <FensterKonflikt abgleich={fenster} />}
       {/* Der Abschluss in der festen Leiste, in eigener Zeile (R3-G3). */}
       <footer className="nav assistent-nav mit-uebernehmen">
         <button type="button" className="uebernehmen" onClick={() => void uebernehmen()}>

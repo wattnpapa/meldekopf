@@ -16,14 +16,14 @@ import { Dialogschicht } from "@bos/oberflaeche/dialoge";
 import { FensterKonflikt, useFensterAbgleich } from "./fenster-abgleich";
 
 /** Nachbau des Autosave aus app.tsx: speichert bei jeder Änderung und bei jeder Entscheidung. */
-function Buehne({ onEinsaetze = () => {} }: { onEinsaetze?: () => void }) {
+function Buehne({ onEinsaetze = () => {}, rueckholplatz }: { onEinsaetze?: () => void; rueckholplatz?: boolean }) {
   const [ort, setOrt] = useState("Ort A");
   const eigener = () => {
     const b = neuerBogen();
     b.einsatz.ortAuftrag = ort;
     return b;
   };
-  const fenster = useFensterAbgleich(true, onEinsaetze, { eigenerBogen: eigener });
+  const fenster = useFensterAbgleich(true, onEinsaetze, { eigenerBogen: eigener, rueckholplatz });
   useEffect(() => {
     entwurfSpeichern(eigener());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- wie app.tsx: nur bei Änderung und Entscheidung
@@ -307,5 +307,53 @@ describe("Fensterabgleich", () => {
       window.dispatchEvent(new StorageEvent("storage", { key: null }));
     });
     expect(neu).toHaveBeenCalledOnce();
+  });
+
+  describe("ohne Rückholplatz (Meldekopf)", () => {
+    it("„Meine Fassung behalten“ sagt, dass die andere Fassung verloren geht, und legt nichts beiseite", async () => {
+      const nutzer = userEvent.setup();
+      render(
+        <>
+          <Buehne rueckholplatz={false} />
+          <Dialogschicht />
+        </>,
+      );
+      const b = neuerBogen();
+      b.einsatz.ortAuftrag = "Ort aus Fenster B";
+      anderesFensterSchreibt(ENTWURF_SCHLUESSEL, entwurfZuJson(b));
+
+      await nutzer.click(screen.getByRole("button", { name: "Meine Fassung behalten" }));
+      const frage = await screen.findByRole("dialog", { name: "Meine Fassung behalten?" });
+      expect(frage.textContent).toContain("geht dabei verloren");
+      expect(frage.textContent).not.toContain("Zuletzt geschlossener Bogen");
+      await nutzer.click(within(frage).getByRole("button", { name: "Meine Fassung behalten" }));
+
+      expect(gespeicherterOrt()).toBe("Ort A");
+      expect(ersetztenEntwurfLaden()).toBeNull();
+    });
+
+    it("„Anderen Stand laden“ fragt und lädt neu, ohne die eigene Fassung beiseitezulegen", async () => {
+      const nutzer = userEvent.setup();
+      const neuLaden = vi.fn();
+      vi.stubGlobal("location", { ...window.location, reload: neuLaden });
+      render(
+        <>
+          <Buehne rueckholplatz={false} />
+          <Dialogschicht />
+        </>,
+      );
+      const b = neuerBogen();
+      b.einsatz.ortAuftrag = "Ort aus Fenster B";
+      anderesFensterSchreibt(ENTWURF_SCHLUESSEL, entwurfZuJson(b));
+
+      await nutzer.click(screen.getByRole("button", { name: "Anderen Stand laden" }));
+      const frage = await screen.findByRole("dialog", { name: "Stand aus dem anderen Fenster laden?" });
+      expect(frage.textContent).toContain("Deine Fassung hier");
+      expect(frage.textContent).toContain("geht dabei verloren");
+      await nutzer.click(within(frage).getByRole("button", { name: "Stand laden" }));
+      expect(neuLaden).toHaveBeenCalled();
+      expect(ersetztenEntwurfLaden()).toBeNull();
+      vi.unstubAllGlobals();
+    });
   });
 });

@@ -1,5 +1,9 @@
 /**
  * Herkunft: Erfassungsbogen `src/app/fenster-abgleich.tsx` (Commit 441811c).
+ * Geändert: Option `rueckholplatz: false` für den Meldekopf. Dort gibt es keinen
+ * „Zuletzt geschlossenen Bogen" auf der Startseite; die Rückfragen sagen dann,
+ * dass die andere Fassung verloren geht, statt einen Platz zu versprechen, den
+ * niemand sieht.
  *
  * Abgleich zwischen zwei Fenstern derselben App (Audit Runde 2, R2-O4).
  *
@@ -106,6 +110,8 @@ export interface FensterAbgleich {
   runde: number;
   /** Der offene Bogen dieses Fensters (für die Warnung, die beide Stände nennt). */
   eigenerBogen?: () => Erfassungsbogen | null;
+  /** Gibt es einen Rückholplatz, auf den die unterlegene Fassung kommt? */
+  rueckholplatz: boolean;
   /**
    * Eigene Fassung behalten: Der Stand des anderen Fensters kommt auf den
    * Rückholplatz, die eigene Fassung überschreibt beim nächsten Speichern.
@@ -129,6 +135,8 @@ export function useFensterAbgleich(
     onRueckholung?: () => void;
     /** Das andere Fenster hat den ganzen Speicher geleert und hier ist kein Bogen offen (Vorgabe: Seite neu laden). */
     beiAllesGeloescht?: () => void;
+    /** false: kein Rückholplatz — die unterlegene Fassung geht nach Rückfrage verloren (Vorgabe: true). */
+    rueckholplatz?: boolean;
   } = {},
 ): FensterAbgleich {
   const [konflikt, setKonflikt] = useState<KonfliktArt | null>(null);
@@ -172,6 +180,7 @@ export function useFensterAbgleich(
     art: bogenOffen ? konflikt : null,
     runde,
     eigenerBogen: () => optRef.current.eigenerBogen?.() ?? null,
+    rueckholplatz: opt.rueckholplatz !== false,
     behalten: async () => {
       if (konflikt === "entfernt") {
         // Das andere Fenster hat den Entwurf gelöscht; „behalten" schreibt ihn
@@ -183,6 +192,22 @@ export function useFensterAbgleich(
       }
       const anderes = entwurfAusAnderemFenster();
       const eigener = optRef.current.eigenerBogen?.() ?? null;
+      if (optRef.current.rueckholplatz === false) {
+        if (anderes && bogenHatInhalt(anderes.bogen) && !gleich(anderes.bogen, eigener)) {
+          const ja = await frageJaNein({
+            titel: "Meine Fassung behalten?",
+            text: `„${einheitAnzeigename(anderes.bogen.einheit) || "(ohne Namen)"}" aus dem anderen Fenster (Stand ${zeitMitSekunden(anderes.gespeichert)}${eigener ? unterschiedFuer(eigener, anderes.bogen) : ""}) geht dabei verloren. Deine Fassung wird ab jetzt gespeichert.`,
+            ok: "Meine Fassung behalten",
+            gefahr: true,
+            fokus: "abbruch",
+          });
+          if (!ja) return;
+        }
+        entwurfUeberschreibenErlauben();
+        setKonflikt(null);
+        setRunde((r) => r + 1);
+        return;
+      }
       if (anderes && bogenHatInhalt(anderes.bogen) && !gleich(anderes.bogen, eigener)) {
         const name = einheitAnzeigename(anderes.bogen.einheit);
         const anderesStand = `Stand ${zeitMitSekunden(anderes.gespeichert)}`;
@@ -222,7 +247,17 @@ export function useFensterAbgleich(
       // eigene Fassung auf den Rückholplatz legen.
       const anderes = entwurfAusAnderemFenster();
       const eigener = optRef.current.eigenerBogen?.() ?? null;
-      if (konflikt !== "entfernt" && eigener && bogenHatInhalt(eigener) && !gleich(anderes?.bogen, eigener)) {
+      if (optRef.current.rueckholplatz === false && konflikt !== "entfernt" && eigener && bogenHatInhalt(eigener) && !gleich(anderes?.bogen, eigener)) {
+        const dortStand = anderes ? ` Geladen wird der Stand des anderen Fensters (${zeitMitSekunden(anderes.gespeichert)}${unterschiedFuer(eigener, anderes.bogen, " — dort anders: ")}).` : "";
+        const ja = await frageJaNein({
+          titel: "Stand aus dem anderen Fenster laden?",
+          text: `Deine Fassung hier („${einheitAnzeigename(eigener.einheit) || "(ohne Namen)"}", Stand ${standKurz(eigener)} Uhr) geht dabei verloren.${dortStand}`,
+          ok: "Stand laden",
+          gefahr: true,
+          fokus: "abbruch",
+        });
+        if (!ja) return;
+      } else if (konflikt !== "entfernt" && eigener && bogenHatInhalt(eigener) && !gleich(anderes?.bogen, eigener)) {
         const alt = ersetztenEntwurfLaden();
         const nimmt = rueckholungNimmt(false, alt);
         const altFaellt = nimmt && !!alt && bogenHatInhalt(alt.bogen) && !gleich(alt.bogen, eigener) && !gleich(alt.bogen, anderes?.bogen);
@@ -310,10 +345,17 @@ export function FensterKonflikt({ abgleich }: { abgleich: FensterAbgleich }) {
                 <strong>Anders:</strong> {alleUnterschiede}.
               </p>
             )}
-            <p>
-              „Anderen Stand laden“ übernimmt die Fassung des anderen Fensters; deine kommt unter „Zuletzt
-              geschlossener Bogen“ auf die Startseite. „Meine Fassung behalten“ macht es umgekehrt.
-            </p>
+            {abgleich.rueckholplatz ? (
+              <p>
+                „Anderen Stand laden“ übernimmt die Fassung des anderen Fensters; deine kommt unter „Zuletzt
+                geschlossener Bogen“ auf die Startseite. „Meine Fassung behalten“ macht es umgekehrt.
+              </p>
+            ) : (
+              <p>
+                „Anderen Stand laden“ übernimmt die Fassung des anderen Fensters, deine geht verloren. „Meine Fassung
+                behalten“ macht es umgekehrt. Vorher fragt die App nach.
+              </p>
+            )}
           </>
         )
       }

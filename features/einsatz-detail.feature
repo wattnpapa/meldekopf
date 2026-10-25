@@ -234,3 +234,10 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Wenn ich die Einheit "DLRG" "Wardenburg" manuell in den Einsatz aufnehme
     Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
     Und sehe ich den Text "Suche"
+
+  # R2-O4: Zwei Fenster derselben App (installierte App und ein Link im
+  # Browser) sehen dieselbe Sammlung; was das eine aufnimmt, zeigt das andere
+  # sofort, ohne Neuladen.
+  Szenario: Ein zweites Fenster nimmt eine Einheit auf, das erste zeigt sie sofort
+    Wenn in einem zweiten Fenster die Einheit "DLRG" "Wardenburg" manuell aufgenommen wird
+    Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
