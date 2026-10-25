@@ -53,8 +53,10 @@ tastaturWaechterStarten();
 // Große Systemschrift: Das Stylesheet verdichtet dann die niedrigen Fenster (R5-M3).
 schriftStufeStarten();
 
-// Einen Start zählen (Browser, PWA, App). Schlägt ohne Netz still fehl.
-statistikStarten();
+// Einen Start zählen (Browser, PWA, App). Schlägt ohne Netz still fehl. Nicht
+// im Lagemonitor-Fenster: Es ist derselbe Start am selben Gerät, und zählte
+// sonst als zweiter (anders als im Erfassungsbogen, 441811c).
+if (!lagemonitorKennung()) statistikStarten();
 
 /**
  * Was der Fehlerfänger aus @bos/oberflaeche von dieser App braucht (R5-E1):

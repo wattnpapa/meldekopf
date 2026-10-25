@@ -2,7 +2,8 @@
  * Electron-Hauptprozess: lädt die gebaute Web-App (dist/) als Offline-Desktop-App.
  *
  * Herkunft: Erfassungsbogen `electron/main.js` (Commit f2b77f1), unverändert;
- * der Lagemonitor-Fensterweg bleibt stehen und greift ab Phase 5.
+ * der Lagemonitor-Fensterweg ist seit Phase 2 aktiv (das Lagemonitor-Fenster
+ * der App kommt mit der Sammlung).
  *
  * Der Renderer ist die unveränderte Web-App — kein Node-Zugriff, kein Preload.
  * Capacitor meldet hier istNativ() = false, daher greifen automatisch die

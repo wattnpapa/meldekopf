@@ -135,7 +135,7 @@ flowchart LR
 | System | Richtung | Zweck | Protokoll |
 | --- | --- | --- | --- |
 | GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig | Auslieferung der PWA; danach offline | HTTPS, statische Dateien |
-| GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart; einziger Fremd-Host in der CSP. Bewusst ohne das offizielle `count.js` von `gc.zgo.at` (wie im Erfassungsbogen): `statistik.ts` baut den Treffer selbst gegen dieselbe Zähl-URL `/count`, sonst wäre `gc.zgo.at` ein zweiter Fremd-Host und das Skript scheiterte unter `file://` und `capacitor://`. | HTTPS `sendBeacon` / Bild |
+| GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart (das Lagemonitor-Fenster zählt nicht mit, `main.tsx`); einziger Fremd-Host in der CSP. Bewusst ohne das offizielle `count.js` von `gc.zgo.at` (wie im Erfassungsbogen): `statistik.ts` baut den Treffer selbst gegen dieselbe Zähl-URL `/count`, sonst wäre `gc.zgo.at` ein zweiter Fremd-Host und das Skript scheiterte unter `file://` und `capacitor://`. | HTTPS `sendBeacon` / Bild |
 | GitHub Releases | ein-/ausgehend | Installer, APK, `latest*.yml` für electron-updater | HTTPS |
 | Capacitor-Plugins | intern | Barcode-Scanner, Dateisystem, Teilen, App-Links | Bridge |
 | Zweiter Bildschirm | intern | Lagemonitor als zweites Fenster derselben Herkunft, liest denselben `localStorage` | `window.open`, `storage`-Ereignis |
@@ -347,7 +347,7 @@ gegen die Releases dieses Repos.
 | iOS | folgt dem Stand des Erfassungsbogens | AASA mit Team-ID, Associated Domains. |
 
 Pipeline wie `release.yml` des Erfassungsbogens: `prepare` (Datums-Version,
-Tag) → `check` (typecheck, lint, test, e2e, kern-kopien, bundle-budget, SBOM,
+Tag) → `check` (typecheck, test, e2e, kern-kopien, bundle-budget, SBOM,
 `npm audit`) → Plattform-Builds → Release → Pages.
 
 ## 8. Querschnittliche Konzepte
@@ -405,8 +405,8 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.uhr.v1` | Zuletzt akzeptierter Uhrstand | `datenschutz-uhr.ts` |
 | `eeb.entwurf.v1` | Angefangene Schnellerfassung (`Entwurf.fremd`) | `entwurf.ts`, reduziert |
 | `eeb.anzeigemodus.v1` | Anzeigemodus | `@bos/oberflaeche/anzeige-modus` |
-| `eeb.einsaetze-papierkorb.v1` | Papierkorb der Sammlungen (Kern) | `@bos/meldekopf/papierkorb` |
-| `eeb.geraeteschluessel.v1`, `eeb.signieren.v1` | Privater Ed25519-Schlüssel zum Gegenzeichnen; Schalter, ob signiert wird | `geraete-schluessel.ts` |
+| `eeb.einheiten-ansicht`, `eeb.speicherprobe` | Karten oder Tabelle (geräteweit); kurzzeitiger Schreibtest des Speichers | `einheiten-tabelle.ts`, `speicher-schonend.ts` |
+| `eeb.geraeteschluessel.v1` | Privater Ed25519-Schlüssel zum Gegenzeichnen; signiert wird immer. Er steht auch in jeder Datensicherungsdatei | `geraete-schluessel.ts` |
 | `eeb.sicherung.zuletzt.v1` | Zeitpunkt der letzten Datensicherung | `sicherung.ts` |
 | `eeb.unlesbar.v1`, `eeb.entwurf.beschaedigt.v1`, `eeb.offline-zusatz.v1` | Beiseitegelegter unlesbarer Bestand; Stand des Offline-Vorrats | `unlesbar.ts`, `offline-bereit.ts` |
 | `eeb.export-stand.v1` | Vorgängerfassung des Export-Stands, nur lesend für Bestände | `export-stand.ts` |
@@ -421,7 +421,16 @@ Datenmodul seit Phase 2 — es gibt keine Oberfläche dafür),
 zeigt nur empfangene Absenderkarten an). `eeb.feldmodus.v1` ist der
 Altschlüssel des Anzeigemodus und wird nur gelesen.
 
-Fristen: Datenschutzfrist 90 Tage nach `stand` (Übungen ausgenommen),
+Der Papierkorb der Sammlungen ist kein eigener Schlüssel, sondern
+`geloeschtAm` an der Sammlung in `eeb.einsaetze.v1`. `eeb.offline-zusatz.v1`
+und `eeb.wartet.fragment` kommen erst mit `offline-bereit.ts` bzw.
+`wartender-link.ts`. Prüfvermerk 2026-10-25 (ISK/DSFA): Die Tabelle nannte
+`eeb.einsaetze-papierkorb.v1` und `eeb.signieren.v1`, die es im Code nicht
+gibt; korrigiert.
+
+Fristen: Datenschutzfrist 90 Tage nach `stand` (Übungsbögen ausgenommen; der
+Kern prüft den Haken am Bogen, eine Sammlung der Art „Übung" nimmt ihre
+Meldungen nicht aus),
 Papierkorb 30 Tage, Aufräumfrist ruhender Sammlungen 90 Tage; alle über die
 geprüfte Geräteuhr (`datenschutz-uhr.ts`), nie durch bloßen Zeitablauf nach
 einem Uhrsprung.
@@ -429,12 +438,18 @@ einem Uhrsprung.
 ### 8.3 Sicherheit und Datenschutz
 
 Wie der Erfassungsbogen (dort Kap. 8.3): CSP ohne Fremdcode, Electron ohne
-Node im Renderer, Berechtigungen nur Kamera, externe Links im Systembrowser,
+Node im Renderer, Berechtigungen nur Kamera und Zwischenablage, externe Links im Systembrowser,
 Ed25519-Signaturkette. Die DSFA dieser App ist die schwere der beiden: Sie
-hält fremde Personendaten vieler Einheiten über Tage. Die Vorlage des
-Erfassungsbogens (`docs/datenschutz-folgenabschaetzung.md` dort) wird
-übernommen und auf diese App zugeschnitten; dasselbe für das ISK. Beides
-entsteht, sobald die App erstmals Nutzdaten hält (Phase 2 der Übernahme).
+hält fremde Personendaten vieler Einheiten über Tage. Seit Phase 2 liegen
+[informationssicherheitskonzept.md](informationssicherheitskonzept.md) und
+[datenschutz-folgenabschaetzung.md](datenschutz-folgenabschaetzung.md) vor,
+zugeschnitten aus den Vorlagen des Erfassungsbogens (`441811c`).
+
+Offen (Prüfvermerk ISK/DSFA): Hinterlegte Absenderkarten reisen in jeden
+QR-Code der Sammel- und Einzel-PDF mit (`qrErzeugen` in `hilfen.ts`), auch
+eine, die mit einer Sicherung aus dem Erfassungsbogen kam; der Meldekopf
+zeigt sie nirgends an. Das widerspricht Kap. 8.2 („Absenderkarte als Sender
+bleibt beim Erfassungsbogen") und ist zu entscheiden.
 
 ### 8.4 Kompatibilität
 
@@ -461,7 +476,7 @@ die Pakete kommen mit den Phasen, die sie brauchen (Phase 0: React,
 den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
 `bos-taktische-zeichen` `cb9c227`. Seit Phase 1 dazu `bos-eeb-satz`
-`3c4f75b` und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
+`c9ae5b2` und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
 `441811c`). Beide brauchen zum Prüfen die Kern-Bausteine als gebaute
 Nachbarordner; ihre CI checkt sie gepinnt daneben aus. Aliasse wie beim Kern
 (`vite.config.ts`, `vitest.config.ts`, `tsconfig.json`), für die Oberfläche
