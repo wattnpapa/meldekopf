@@ -135,7 +135,7 @@ flowchart LR
 | System | Richtung | Zweck | Protokoll |
 | --- | --- | --- | --- |
 | GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig | Auslieferung der PWA; danach offline | HTTPS, statische Dateien |
-| GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart; einziger Fremd-Host in der CSP. Die Site ist bei GoatCounter noch anzulegen; bis dahin läuft der Impuls ins Leere und die App merkt davon nichts. | HTTPS `sendBeacon` / Bild |
+| GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart; einziger Fremd-Host in der CSP. Bewusst ohne das offizielle `count.js` von `gc.zgo.at` (wie im Erfassungsbogen): `statistik.ts` baut den Treffer selbst gegen dieselbe Zähl-URL `/count`, sonst wäre `gc.zgo.at` ein zweiter Fremd-Host und das Skript scheiterte unter `file://` und `capacitor://`. | HTTPS `sendBeacon` / Bild |
 | GitHub Releases | ein-/ausgehend | Installer, APK, `latest*.yml` für electron-updater | HTTPS |
 | Capacitor-Plugins | intern | Barcode-Scanner, Dateisystem, Teilen, App-Links | Bridge |
 | Zweiter Bildschirm | intern | Lagemonitor als zweites Fenster derselben Herkunft, liest denselben `localStorage` | `window.open`, `storage`-Ereignis |
@@ -568,7 +568,6 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Übergang per Link zwischen PWAs auf iOS offline | Gerätetest; bis dahin QR. |
 | Bestandsdaten bleiben im Erfassungsbogen liegen | Übergangszeit mit Hinweis dort; Datensicherung als Weg (ADR-007). |
 | Doppelte Pflege, bis der Erfassungsbogen abbaut | Übergangszeit bewusst kurz halten; Abbau ist der erste Schritt nach Fertigstellung. |
-| GoatCounter-Site `meldekopf.goatcounter.com` existiert noch nicht | Anlegen (kostenlos, Site-Code `meldekopf`); bis dahin keine Zahlen, aber auch kein Fehler in der App. Host nur in `src/app/adressen.ts`. |
 | Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 
 ## 12. Glossar
