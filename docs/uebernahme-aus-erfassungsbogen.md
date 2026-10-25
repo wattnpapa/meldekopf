@@ -1,6 +1,6 @@
 # Übernahme aus dem Erfassungsbogen
 
-Stand: 2026-10-25, Phase 1 (geteilte Bausteine) umgesetzt gegen den
+Stand: 2026-10-25, Phase 2 (Sammlung lesen und zeigen) umgesetzt gegen den
 Erfassungsbogen auf Commit `441811c` (Phase 0: `f2b77f1`; Herkunfts-Commit
 jeweils in den Kopfkommentaren). Zwischen beiden liegt „Runde 9: 53 Befunde
 behoben“ mit Änderungen an `dialoge.tsx`, `tastatur.ts`, `tipp-schutz.ts`,
@@ -86,39 +86,40 @@ und Logo (`KopfnavQuelle`), die Werkzeugliste, die Wege des Fehlerfängers
 
 | Datei | Zeilen | Zielordner hier | Stand |
 | --- | --- | --- | --- |
-| `einsaetze-ui.tsx` | 3.924 | `src/app/` | offen |
-| `einsaetze-lesen.ts`, `speicher-browser.ts`, `speicher-schonend.ts`, `speicher-fehler-text.ts`, `speicher-warnung.tsx` | 441 | `src/app/` | offen |
-| `eintrag-zeiten.ts`, `fassung-vorrang.ts`, `entfernte-meldungen.ts`, `meldungs-vergleich.ts` | 1.364 | `src/app/` | offen |
-| `einsatz-abgleich.ts`, `einsatz-wiederherstellen.ts`, `einsatz-transport.ts` | 850 | `src/app/weitergabe/` | offen |
-| `export-stand.ts`, `lage-angaben.ts` | 815 | `src/app/weitergabe/` | offen |
-| `auswertung.ts`, `einheiten-liste.ts`, `einheiten-tabelle.ts`, `einheiten-index.ts`, `haeufige-funktionen.ts`, `zug-name.ts` | 1.614 | `src/app/` | offen |
-| `aufteilen-ui.tsx`, `zusammenfuehren-ui.tsx` | 381 | `src/app/` | offen |
-| `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lagemonitor-beginn.ts`, `lagemonitor-speicher.ts`, `lagemonitor.css` | 761 | `src/app/` | offen |
-| `papier-abgleich-ui.tsx`, `papier-abgleich-entwurf.ts` | 518 | `src/app/` | offen |
-| `qr-scanner-web.tsx`, `qr-decoder.ts`, `qr-bild.ts`, `qr-stapel.ts`, `kamera.ts`, `stapel-quittung.tsx`, `teil-quittung.tsx`, `tastaturbelegung.ts` | 1.545 | `src/app/eingang/` | offen |
-| `datei-fehler.ts`, `wartender-link.ts`, `unlesbar.ts`, `unlesbar-hinweis.tsx` | 600 | `src/app/eingang/` | offen |
-| `nacherfassung.tsx`, `nur-staerke.ts`, `personal-schnell.ts`, `vorbelegung-rueckweg.ts`, `beispielnamen.ts` | 633 | `src/app/schnellerfassung/` | offen |
-| `datenschutz-uhr.ts`, `uhr-korrektur.ts`, `uhr-warnung.tsx`, `uhr-folgen.ts`, `papierkorb-frist.ts`, `aufraeum-hinweis.ts` | 890 | `src/app/` | offen |
-| `sicherung.ts`, `sicherung-datei.ts` | 483 | `src/app/` | offen |
-| `geraete-schluessel.ts`, `absenderkarte.ts`, `rolle-marke.tsx` | 274 | `src/app/` (Absenderkarte nur lesend) | offen |
-| `fenster-abgleich.tsx`, `fenster-unterschied.ts` | 424 | `src/app/` | offen |
-| `nativ.ts`, `aktualisierung.tsx`, `nachladen.ts`, `offline-bereit.ts`, `offline-vorrat.ts`, `statistik.ts`, `debug-plattform.tsx` | 1.283 | `src/app/` | offen |
+| `einsaetze-ui.tsx` | 3.924 | `src/app/` | übernommen (Phase 2), eingebunden über `einsatz-ansicht.tsx` |
+| `einsaetze-lesen.ts`, `speicher-browser.ts`, `speicher-schonend.ts`, `speicher-fehler-text.ts`, `speicher-warnung.tsx` | 441 | `src/app/` | übernommen (Phase 2) |
+| `eintrag-zeiten.ts`, `fassung-vorrang.ts`, `entfernte-meldungen.ts`, `meldungs-vergleich.ts` | 1.364 | `src/app/` | übernommen (Phase 2) |
+| `einsatz-abgleich.ts`, `einsatz-wiederherstellen.ts`, `einsatz-transport.ts` | 850 | `src/app/weitergabe/` | übernommen (Phase 2); Import-Knopf mit Phase 3 |
+| `export-stand.ts`, `lage-angaben.ts` | 815 | `src/app/weitergabe/` | übernommen (Phase 2) |
+| `auswertung.ts`, `einheiten-liste.ts`, `einheiten-tabelle.ts`, `einheiten-index.ts`, `haeufige-funktionen.ts`, `zug-name.ts` | 1.614 | `src/app/` | übernommen (Phase 2) |
+| `aufteilen-ui.tsx`, `zusammenfuehren-ui.tsx` | 381 | `src/app/` | übernommen (Phase 2) |
+| `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lagemonitor-beginn.ts`, `lagemonitor-speicher.ts`, `lagemonitor.css` | 761 | `src/app/` | übernommen (Phase 2), Fenster aus `main.tsx`; Electron-Fenster Phase 5 |
+| `papier-abgleich-ui.tsx`, `papier-abgleich-entwurf.ts` | 518 | `src/app/` | übernommen (Phase 2) |
+| `qr-scanner-web.tsx`, `qr-decoder.ts`, `qr-bild.ts`, `qr-stapel.ts`, `kamera.ts`, `stapel-quittung.tsx`, `teil-quittung.tsx`, `tastaturbelegung.ts` | 1.545 | `src/app/eingang/` | `qr-decoder.ts`, `qr-bild.ts`, `qr-stapel.ts` übernommen (Phase 2, Abhängigkeiten der Einsatzansicht); Rest offen (Phase 3) |
+| `datei-fehler.ts`, `wartender-link.ts`, `unlesbar.ts`, `unlesbar-hinweis.tsx` | 600 | `src/app/eingang/` | `datei-fehler.ts`, `unlesbar.ts`, `unlesbar-hinweis.tsx` übernommen (Phase 2), dazu `unlesbar-aufraeumen.ts`; `wartender-link.ts` offen (Phase 3) |
+| `nacherfassung.tsx`, `nur-staerke.ts`, `personal-schnell.ts`, `vorbelegung-rueckweg.ts`, `beispielnamen.ts` | 633 | `src/app/schnellerfassung/` | `nacherfassung.tsx`, `nur-staerke.ts` übernommen (Phase 2, Abhängigkeiten der Einsatzansicht); Rest offen (Phase 4) |
+| `datenschutz-uhr.ts`, `uhr-korrektur.ts`, `uhr-warnung.tsx`, `uhr-folgen.ts`, `papierkorb-frist.ts`, `aufraeum-hinweis.ts` | 890 | `src/app/` | übernommen (Phase 2) |
+| `sicherung.ts`, `sicherung-datei.ts` | 483 | `src/app/` | übernommen (Phase 2); die Gruppe „Daten" der Fußzeile steht in `daten-gruppe.tsx` |
+| `geraete-schluessel.ts`, `absenderkarte.ts`, `rolle-marke.tsx` | 274 | `src/app/` (Absenderkarte nur lesend) | übernommen (Phase 2) |
+| `fenster-abgleich.tsx`, `fenster-unterschied.ts` | 424 | `src/app/` | übernommen (Phase 2), Verdrahtung in `app.tsx` mit Phase 3 |
+| `nativ.ts`, `aktualisierung.tsx`, `nachladen.ts`, `offline-bereit.ts`, `offline-vorrat.ts`, `statistik.ts`, `debug-plattform.tsx` | 1.283 | `src/app/` | `nativ.ts` (volle Fassung), `nachladen.ts`, `debug-plattform.tsx` übernommen (Phase 2); `aktualisierung.tsx`, `statistik.ts` Phase 0; `offline-bereit.ts`, `offline-vorrat.ts` offen |
 | `electron/main.js`, `android/`, `capacitor.config.json`, `vite.config.ts`, `vitest.config.ts`, `cucumber.mjs`, `tsconfig.json`, `.github/workflows/*` | | Wurzel; Namen und IDs ersetzen | übernommen (Phase 0) bis auf `android/` (Phase 5; Job in `release.yml` stillgelegt). `vite.config.ts` neu: Plugin `adressen` (Domain, CNAME) |
+| `vorlagen.ts`, `uebergabe-stand.ts` | 474 | `src/app/` | übernommen (Phase 2) als reine Datenmodule: Die Datensicherung zählt, prüft und erhält Vorlagen eines eingespielten Erfassungsbogen-Bestands; keine Oberfläche dafür (Abweichung von Abschnitt F, damit eine Sicherung verlustfrei hin und zurück geht) |
 | `scripts/bundle-budget.ts`, `kern-kopien-pruefen.ts`, `sbom.ts`, `precache-aufteilung.ts`, `start-inhalt.mts`, `kopfnav.mts`, `content-stil.mts`, `render-icons.mjs`, `screenshots.mjs`, `og-bild.mjs`, `sitemap.ts` | | `scripts/` | übernommen (Phase 0): `bundle-budget`, `kern-kopien-pruefen`, `sbom`, `precache-aufteilung`, `start-inhalt`, `kopfnav` (schreibt auch die Textseiten), `render-icons` (ohne Android), `sitemap`, `ensure-update-metadata.cjs`. Offen: `content-stil`, `screenshots`, `og-bild` |
-| `features/einsatz-sammlung`, `einsatz-detail`, `einheiten-liste`, `qr-scannen`, `uebung`, Teile von `uebergabe` und `daten-und-anzeige`, `schritte/`, `support/`, `fixtures.ts` | | `features/` | `support/` übernommen, `schritte/` die allgemeinen Schritte, `daten-und-anzeige` die Szenarien zu Anzeigemodus, Offline-Start und Pflichtangaben (Phase 0); Rest offen |
+| `features/einsatz-sammlung`, `einsatz-detail`, `einheiten-liste`, `qr-scannen`, `uebung`, Teile von `uebergabe` und `daten-und-anzeige`, `schritte/`, `support/`, `fixtures.ts` | | `features/` | `support/` übernommen, `schritte/` die allgemeinen Schritte, `daten-und-anzeige` die Szenarien zu Anzeigemodus, Offline-Start und Pflichtangaben (Phase 0); Rest offen; Phase 2: `einsatz-detail` (18 von 25 Szenarien, dazu neu die Datensicherung) und `einheiten-liste` (13 von 14), Schritte in `schritte/sammlung.steps.ts`, `fixtures.ts`, Grundlage `support/sammlung.ts` |
 | `src/test/` (Startinhalt-Vergleich), `stilregeln-*.test.ts` (Meldekopf-Anteile) | | | `src/test/` übernommen (Phase 0: `oberflaeche.ts`, `pwa-register.ts`, `start-inhalt.test.ts`, `kopfnav.test.ts`); Stilregel-Tests offen |
 
 ## E. Übernimmt die Meldekopf-App gekürzt oder neu geschrieben
 
 | Datei | Zeilen | Was anders wird | Stand |
 | --- | --- | --- | --- |
-| `app.tsx` | 4.701 | Nur der Sammlungs-Anteil: Einsatzliste, Einsatzansicht, Eingangs-Weiche („Wohin damit?"), Link-Empfang, Schnellerfassung, Fußzeilen-Verdrahtung, Datensicherung, Alle Daten löschen. Assistent, Vorlagen, Musterung, eigener Bogen entfallen. Ziel deutlich unter 2.000 Zeilen. | offen |
-| `main.tsx` | 67 | Gleich, ohne Vorlagen-Links. | übernommen (Phase 0), die Verdrahtungen der späteren Phasen folgen |
-| `entwurf.ts` | 446 | Nur `Entwurf.fremd` (angefangene Schnellerfassung); Rückholplatz und Fensterabgleich des eigenen Bogens entfallen. | offen |
-| `hilfen.ts` | 1.281 | Anzeige-Helfer (`einheitAnzeigename`, Funktions-/Kennzeichen-/Funkruftext), `bogenLaden`, `migriereBogen`-Aufruf; Vorlagen-Transport entfällt. Kandidat für den Kern, wenn beide Apps denselben Rest brauchen. | offen |
-| `bogen-pruefung.ts` | 212 | Plausibilität nur für die Schnellerfassung. | offen |
+| `app.tsx` | 4.701 | Nur der Sammlungs-Anteil: Einsatzliste, Einsatzansicht, Eingangs-Weiche („Wohin damit?"), Link-Empfang, Schnellerfassung, Fußzeilen-Verdrahtung, Datensicherung, Alle Daten löschen. Assistent, Vorlagen, Musterung, eigener Bogen entfallen. Ziel deutlich unter 2.000 Zeilen. | Phase 2: Startseite mit Weiche „Bögen sammeln", Einsatzliste, zuletzt offene Sammlung; Einsatzansicht und Ausgabewege in `einsatz-ansicht.tsx`. Eingangs-Weiche, Link-Empfang, Schnellerfassung offen (Phase 3/4) |
+| `main.tsx` | 67 | Gleich, ohne Vorlagen-Links. | übernommen (Phase 0); seit Phase 2 mit Speicher, Uhr, Fehlerfänger und Lagemonitor-Fenster |
+| `entwurf.ts` | 446 | Nur `Entwurf.fremd` (angefangene Schnellerfassung); Rückholplatz und Fensterabgleich des eigenen Bogens entfallen. | zunächst unverändert übernommen (Phase 2, Abhängigkeit der Datensicherung); Kürzung mit der Schnellerfassung (Phase 4) |
+| `hilfen.ts` | 1.281 | Anzeige-Helfer (`einheitAnzeigename`, Funktions-/Kennzeichen-/Funkruftext), `bogenLaden`, `migriereBogen`-Aufruf; Vorlagen-Transport entfällt. Kandidat für den Kern, wenn beide Apps denselben Rest brauchen. | unverändert übernommen (Phase 2); Kürzung offen |
+| `bogen-pruefung.ts` | 212 | Plausibilität nur für die Schnellerfassung. | unverändert übernommen (Phase 2, Abhängigkeit von `hilfen.ts`); Kürzung mit Phase 4 |
 | `schritte/einheit.tsx`, `fahrzeuge.tsx`, `personal.tsx` | 2.922 | Nicht übernehmen. Die Schnellerfassung ist ein eigenes, kleines Formular aus `@bos/oberflaeche`-Bausteinen: Einheit (Organisation, Typ, Name, Ort, Funkrufname), Stärke-Zähler, Führungskraft, Fahrzeuge (Typ, Kennzeichen, Sitzplätze). Vorbilder aus den Schritten abschreiben, nicht einbinden. | offen |
-| `fusszeile.tsx` | 1.318 | Ohne Vorlagen, Beispielbögen, Absenderkarte-Bearbeitung. | Phase 0: Pflichtangaben, Projekt, Ansicht, Werkzeugzeile; Datensicherung, Geräteschlüssel, Alle Daten löschen folgen mit Phase 2 |
+| `fusszeile.tsx` | 1.318 | Ohne Vorlagen, Beispielbögen, Absenderkarte-Bearbeitung. | Phase 0: Pflichtangaben, Projekt, Ansicht, Werkzeugzeile; Phase 2: Gruppe „Daten" (`daten-gruppe.tsx`) |
 | `start-inhalt.ts` | 296 | Neuer Text für den Meldekopf (Zweck, Eingänge, Weitergabe, Familie). | übernommen, neuer Text (Phase 0) |
 | `public/*.html` | | Nur Anleitung (Meldekopf-Teil), Datenschutz, Impressum, Hinweis zur Produktfamilie; Organisations-Landingpages bleiben beim Erfassungsbogen. `meldekopf.html` dort wird zur Weiche hierher. | Datenschutz, Impressum, 404 (Phase 0); Anleitung offen (Phase 5) |
 
@@ -139,7 +140,7 @@ beginnt der Abbau im Erfassungsbogen.
 | --- | --- | --- |
 | 0 Gerüst | Repo mit Submodulen (vier Pins aus A), Vite/TS/Vitest/Cucumber-Konfiguration, CSP, PWA, CI (`ci.yml`), leere App mit Startseite und Anzeigemodus; Pages-Deploy auf meldekopf.erfassungsbogen.app; Bundle-Budget erstmals gemessen. **Umgesetzt 2026-10-25**; Pages live, sobald `main` gebaut hat, Pages im Repo auf „GitHub Actions“ steht und der DNS-Eintrag existiert. | `npm run build`, `npm test`, Pages live. |
 | 1 Geteilte Bausteine | `@bos/eeb-satz` und `@bos/oberflaeche` (Repos mit Gerüst vorhanden), Dateien aus B und C mit Tests hineinbewegen, ADR-003-Regeln und CI je Repo, hier als Submodule pinnen. Der Erfassungsbogen bleibt unverändert (nutzt weiter seine Kopien). **Umgesetzt 2026-10-25**: C vollständig, B in einer ersten Stufe (eigenständige Dateien, s. Widerspruch in B). | Beide Submodule bauen; `kern-kopien` grün. |
-| 2 Sammlung lesen und zeigen | D: Persistenz-Anbindung, `einsaetze-ui`, Auswertung, Liste, Tabelle, Zug, Status, Aufteilen/Zusammenführen, Fristen, Uhr, Datensicherung. Eine Datensicherung aus dem Erfassungsbogen lädt und zeigt die Sammlung. **ISK und DSFA anlegen.** | Szenarien `einsatz-detail`, `einheiten-liste` grün. |
+| 2 Sammlung lesen und zeigen | D: Persistenz-Anbindung, `einsaetze-ui`, Auswertung, Liste, Tabelle, Zug, Status, Aufteilen/Zusammenführen, Fristen, Uhr, Datensicherung. Eine Datensicherung aus dem Erfassungsbogen lädt und zeigt die Sammlung. **ISK und DSFA anlegen.** **Umgesetzt 2026-10-25**, mit dem ganzen Abhängigkeitsbaum von `einsaetze-ui` (Lagemonitor, Papier-Abgleich, Ausgabewege); die Szenarien legen die Sammlung bis Phase 3 direkt auf das Gerät. | Szenarien `einsatz-detail`, `einheiten-liste` grün. |
 | 3 Eingänge | Scanner, Handscanner, Bilderstapel, Datei/PDF, Link, Rückfragen, Fassungs-Vorrang, Quittungen. | `einsatz-sammlung`, `qr-scannen` grün. |
 | 4 Schnellerfassung | Nur-Stärke-Formular, Namen, Eintreffzeit, StAN-Vorbelegung, Entwurf; „Vollständig erfassen" per Link (Gegenstück im Erfassungsbogen: Rücksprung annehmen, ist dort eine kleine Ergänzung und darf schon jetzt gebaut werden). | Szenario „Einheit manuell in den Einsatz erfassen" grün. |
 | 5 Weitergabe, Lagemonitor, Papier | Sammel-PDF, Lageblatt, CSV, XLSX, Einsatz-Datei, Export-Stand, Rückimport mit Abgleich, Lagemonitor, Papier-Abgleich. Electron und Android bauen im Release. | Alle übernommenen Szenarien grün; Release mit Installern und APK. |

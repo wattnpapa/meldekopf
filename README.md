@@ -3,16 +3,18 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** 2026-10-25, Phase 1 (geteilte Bausteine) steht: Repo mit dem
-> geteilten Kern als Submodule, Build, Tests, CI, PWA mit Offline-Start,
-> Startseite mit Anzeigemodi und Pflichtangaben, eigenes Icon und eigene
-> Kennfarbe; Dialoge, Anzeigemodi, Kopfnavigation und Design-Token kommen aus
-> dem gemeinsamen Oberflächen-Baustein `@bos/oberflaeche`, die Ausgabe ohne
-> Oberfläche wächst in `@bos/eeb-satz`. Noch keine Sammlung — die kommt ab
-> Phase 2. Die Doku unter `docs/` beschreibt,
-> was gebaut wird und wie; der Funktionsumfang wird aus der Einsatz-Sammlung
-> des [Erfassungsbogens](https://github.com/wattnpapa/erfassungsbogen)
-> übernommen (Reihenfolge in [docs/uebernahme-aus-erfassungsbogen.md](docs/uebernahme-aus-erfassungsbogen.md), Abschnitt G).
+> **Stand:** 2026-10-25, Phase 2 (Sammlung lesen und zeigen) steht:
+> Einsatz-Sammlungen anlegen und führen, Summen, Einheitenliste und -tabelle,
+> Zug, Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
+> Lagemonitor, Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
+> (auch die des Erfassungsbogens). Bögen aufnehmen (Scan, Datei, Link,
+> Schnellerfassung) kommt mit Phase 3 und 4; bis dahin kommen Sammlungen über
+> die Datensicherung herein. Dialoge, Anzeigemodi, Kopfnavigation und
+> Design-Token liefert `@bos/oberflaeche`, die Ausgabe ohne Oberfläche wächst
+> in `@bos/eeb-satz`. Die Doku unter `docs/` beschreibt, was gebaut wird und
+> wie; der Funktionsumfang wird aus der Einsatz-Sammlung des
+> [Erfassungsbogens](https://github.com/wattnpapa/erfassungsbogen) übernommen
+> (Reihenfolge in [docs/uebernahme-aus-erfassungsbogen.md](docs/uebernahme-aus-erfassungsbogen.md), Abschnitt G).
 
 ## Die Produktfamilie
 

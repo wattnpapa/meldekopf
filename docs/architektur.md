@@ -1,6 +1,6 @@
 # Architektur der Meldekopf-App (Arc42)
 
-Stand: 2026-10-25, Phase 1 (geteilte Bausteine) umgesetzt. Dieses Dokument
+Stand: 2026-10-25, Phase 2 (Sammlung lesen und zeigen) umgesetzt. Dieses Dokument
 beschreibt den **Soll-Stand** und wird mit dem Code zum Ist-Stand; wo ein
 Abschnitt den Ist-Stand einer Phase nennt, ist er als solcher markiert. Wo es konkrete Zahlen nennt, stammen sie
 aus dem Erfassungsbogen (Commit `c789947`, Zweig `claude/lucid-faraday-r4h32d`)
@@ -233,7 +233,31 @@ neu; im Erfassungsbogen liegt alles flach in `src/app/`. Sie gliedern die
 übernommenen Dateien nach dem Ablauf am Meldekopf (Eingang, Erfassung, Lage,
 Weitergabe), ohne Dateien zu zerschneiden.
 
-**Ist-Stand Phase 1 (2026-10-25):** `src/app/` enthält `main.tsx`, `app.tsx`
+**Ist-Stand Phase 2 (2026-10-25):** Die Sammlung ist da. `app.tsx` trägt die
+Startseite mit der Weiche „Bögen sammeln" (laufende Sammlungen öffnen, neue
+anlegen), die Einsatzliste und die zuletzt offene Sammlung
+(`letzter-einsatz.ts`, 12 h). Die offene Sammlung zeigt `einsatz-ansicht.tsx`:
+`EinsatzDetail` aus `einsaetze-ui.tsx` mit den Ausgabewegen (Sammel-PDF,
+Lageblatt, Blanko, CSV, Alle-Daten-CSV, Excel „Oldenburg", Export-Stand je
+Format). Übernommen ist der ganze Abhängigkeitsbaum von `einsaetze-ui`
+(rund 20.000 Zeilen aus `441811c`, mit Tests): Persistenz-Anbindung,
+Auswertung, Einheitenliste und -tabelle, Fassungs-Vorrang, Fristen und Uhr,
+Datensicherung, Aufteilen/Zusammenführen, Lagemonitor, Papier-Abgleich,
+PDF-Satz und Exporte unter `weitergabe/`, QR-Leser und Unlesbares unter
+`eingang/`, `nacherfassung`/`nur-staerke` unter `schnellerfassung/`. Die
+Fußzeilen-Gruppe „Daten" steht in `daten-gruppe.tsx`. `main.tsx` verdrahtet
+Speicher, geprüfte Uhr, Fehlerfänger (aus `@bos/oberflaeche`, mit Sichern und
+Löschen dieser App) und das Lagemonitor-Fenster. Die Eingänge (Scan, Datei,
+Bilderstapel, Link, Schnellerfassung) folgen mit Phase 3 und 4; ihre Knöpfe
+in der Einsatzansicht sagen bis dahin, wie Bögen über die Datensicherung
+herkommen. `vorlagen.ts` und `uebergabe-stand.ts` liegen als reine
+Datenmodule bei, damit eine Sicherung aus dem Erfassungsbogen verlustfrei
+bleibt. Die Stilregeln der Sammlung (518 Regeln aus der `index.html` des
+Erfassungsbogens, nach den benutzten Klassen ausgewählt, mit ihren
+Audit-Kommentaren) stehen in der `index.html` zwischen den Token und der
+Kennfarbe.
+
+Ist-Stand Phase 1, weiter gültig: `src/app/` enthält `main.tsx`, `app.tsx`
 (nur Startseite), `start-inhalt.ts`, `adressen.ts` (Domain und Zähl-Host an
 einer Stelle), `kennfarbe.ts` (Petrol, wird dem Anzeigemodus hineingereicht),
 `fusszeile.tsx` (gekürzt), `nativ.ts` und `aktualisierung.tsx` (je auf den
@@ -380,7 +404,7 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1` | Lagemonitor: Beginn, Funkrufname, Helligkeit | `lagemonitor-*.ts` |
 | `eeb.uhr.v1` | Zuletzt akzeptierter Uhrstand | `datenschutz-uhr.ts` |
 | `eeb.entwurf.v1` | Angefangene Schnellerfassung (`Entwurf.fremd`) | `entwurf.ts`, reduziert |
-| `eeb.anzeigemodus.v1` | Anzeigemodus | `anzeige-modus.ts` |
+| `eeb.anzeigemodus.v1` | Anzeigemodus | `@bos/oberflaeche/anzeige-modus` |
 | `eeb.einsaetze-papierkorb.v1` | Papierkorb der Sammlungen (Kern) | `@bos/meldekopf/papierkorb` |
 | `eeb.geraeteschluessel.v1`, `eeb.signieren.v1` | Privater Ed25519-Schlüssel zum Gegenzeichnen; Schalter, ob signiert wird | `geraete-schluessel.ts` |
 | `eeb.sicherung.zuletzt.v1` | Zeitpunkt der letzten Datensicherung | `sicherung.ts` |
@@ -388,7 +412,10 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.export-stand.v1` | Vorgängerfassung des Export-Stands, nur lesend für Bestände | `export-stand.ts` |
 | `sessionStorage`: `eeb.papierabgleich.v1.<Einsatz>`, `eeb.wartet.fragment` | Zwischenstand Papier-Abgleich; wartender Link | `papier-abgleich-entwurf.ts`, `wartender-link.ts` |
 
-**Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen),
+**Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen; eine
+eingespielte Sicherung aus dem Erfassungsbogen bringt sie mit, die
+Datensicherung zählt und erhält sie unverändert, `vorlagen.ts` als reines
+Datenmodul seit Phase 2 — es gibt keine Oberfläche dafür),
 `eeb.entwurf.ersetzt.v1` (Rückholplatz des eigenen Bogens),
 `eeb.absenderkarte.v1` als Sender (bleibt beim Erfassungsbogen; der Meldekopf
 zeigt nur empfangene Absenderkarten an). `eeb.feldmodus.v1` ist der
@@ -446,7 +473,18 @@ kennen beide Pakete.
 289.927 Byte, Startbündel 257.389 Byte, `dist/` 558.518 Byte; SBOM 1.025
 Komponenten, davon 27 mit Laufzeit-Rolle. **Phase 1:** 292.309 / 259.771
 Byte (+2,4 KB aus dem Stand `441811c` der Oberflächen-Module, Runde 9),
-`dist/` 560.873 Byte; SBOM 1.035 Komponenten, davon 29 mit Laufzeit-Rolle. Zum Vergleich der Erfassungsbogen
+`dist/` 560.873 Byte; SBOM 1.035 Komponenten, davon 29 mit Laufzeit-Rolle.
+**Phase 2:** 3.214.436 / 653.019 Byte. Die Sammlung samt Auswertung,
+Fristen, Datensicherung, Lagemonitor und Papier-Abgleich liegt im
+Startbündel; pdfmake mit Schriften (rund 2 MB) im nachgeladenen PDF-Chunk,
+zxing-wasm (0,9 MB) als eigene Datei. Neue Laufzeit-Abhängigkeiten wie im
+Erfassungsbogen: `@capacitor/app`, `@capacitor/barcode-scanner`,
+`@capacitor/filesystem`, `@capacitor/share`, `@noble/ed25519`, `jsqr`,
+`pako` 3, `pdfmake`, `qrcode`, `zxing-wasm`. **pdfmake ist auf 0.3.11
+festgehalten** (Stand des Erfassungsbogens): 0.3.13 startet für die
+Kompression einen Worker aus einer `blob:`-URL, den die CSP (`script-src`
+ohne `blob:`) verbietet, und der Satz wartet dann ohne Ende. Ein Update von
+pdfmake braucht deshalb den Verhaltenstest „Sammel-PDF bündelt alle Bögen". Zum Vergleich der Erfassungsbogen
 am selben Tag: 5.500.797 / 1.198.089 Byte. Das Budget wird je Phase bewusst
 angehoben (`npm run bundle-budget -- --setze`, Begründung im Commit).
 
@@ -601,6 +639,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Zwei Apps auf einem Gerät verwirren unter Stress | Klare Namen, Icons, Farben; der Übergang per Link nennt, wohin es geht; Rückfallebene QR. Audit-Runde mit den THW-Reviewer-Rollen nach Phase 3. |
 | Oberflächen-Baustein wird zur Bremse (Pin-Updates in drei Repos) | Klein halten (ADR-004); Rückweg aus ADR-003: Kopie einfrieren, Herkunfts-Commit festhalten. |
 | PDF-Satz im Kern braucht pdfmake unter `node` im Test | Im Erfassungsbogen laufen die Satz-Tests unter `node`; im Kern zusätzlich unter `jsdom` zu prüfen, wenn `pdf-dokument` folgt (zweite Stufe, ADR-005 Nachtrag); sonst Satz in beiden Apps mit gemeinsamer Testfixture. |
+| Ein pdfmake-Update bricht den Satz still (Worker aus `blob:` gegen die CSP) | pdfmake auf 0.3.11 festgehalten (Kap. 8.6); jedes Update nur mit grünem Verhaltenstest „Sammel-PDF bündelt alle Bögen". Gilt für den Erfassungsbogen genauso. |
 | Ausgabe-Dateien hängen an App-Modulen | Zweite Stufe von `@bos/eeb-satz` erst nach Übernahme der App-Module (Phase 2/3); bis dahin bleibt die Ausgabe in den Apps. |
 | S1-Control versteht den Einsatz-Datei-Umschlag (Stände, Lage) noch nicht | Prüfen; `einsaetzeAusJson` kopiert unbekannte Felder, der Umschlag ist additiv. |
 | Übergang per Link zwischen PWAs auf iOS offline | Gerätetest; bis dahin QR. |
