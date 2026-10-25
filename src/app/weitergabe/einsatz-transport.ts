@@ -16,7 +16,7 @@ import { SCHEMA_VERSION, mitTransportVersion, type Erfassungsbogen } from "@bos/
 import { migriereBogen } from "../hilfen";
 import { bogenBefund } from "../bogen-pruefung";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
-import { entpackt, pdfStroeme } from "@bos/eeb-satz/pdf-stroeme";
+import { MAX_STROM_ENTPACKT, entpackt, pdfStroeme } from "@bos/eeb-satz/pdf-stroeme";
 import type { ExportStand, ExportZiel } from "./export-stand";
 import { lageAngabenPruefen, type LageAngaben } from "./lage-angaben";
 
@@ -216,15 +216,25 @@ function boegenAusText(text: string): Erfassungsbogen[] {
 }
 
 /**
+ * So viel darf eine PDF über alle Ströme zusammen entpackt liefern. Der Deckel
+ * je Strom (`MAX_STROM_ENTPACKT`) allein hielte eine PDF mit vielen großen
+ * Strömen nicht auf: Die Texte werden hier gesammelt.
+ */
+export const MAX_PDF_ENTPACKT = 2 * MAX_STROM_ENTPACKT;
+
+/**
  * Alle Datenströme einer PDF als Texte liefern — je Strom entpackt
  * (FlateDecode) und roh. Nicht dekodierbare Ströme fallen still raus;
- * die Aufrufer filtern ohnehin auf gültiges Bogen-/Einsatz-JSON.
+ * die Aufrufer filtern ohnehin auf gültiges Bogen-/Einsatz-JSON. Ist das
+ * Budget {@link MAX_PDF_ENTPACKT} aufgebraucht, wird nichts mehr entpackt.
  */
 function streamTexte(bytes: Uint8Array): string[] {
   const texte: string[] = [];
+  let rest = MAX_PDF_ENTPACKT;
   for (const strom of pdfStroeme(bytes)) {
     // 1) entpackt (FlateDecode)
-    const roh = entpackt(strom);
+    const roh = rest > 0 ? entpackt(strom, Math.min(rest, MAX_STROM_ENTPACKT)) : null;
+    if (roh) rest -= roh.length;
     if (roh) {
       try {
         texte.push(new TextDecoder().decode(roh));

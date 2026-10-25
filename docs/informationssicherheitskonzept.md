@@ -21,10 +21,10 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > wo Doku und Code sich widersprechen, gilt der Code.
 >
 > **Wächst mit dem Code.** Die Eingänge (Kamera-Scan, USB-Handscanner,
-> Bilderstapel, Datei/PDF, Link) kommen mit Phase 3, die Schnellerfassung mit
-> Phase 4, die Android-Hülle mit Phase 5 (Reihenfolge in
+> Bilderstapel, Datei/PDF, Link) sind seit Phase 3 live, die Schnellerfassung
+> kommt mit Phase 4, die Android-Hülle mit Phase 5 (Reihenfolge in
 > [uebernahme-aus-erfassungsbogen.md](uebernahme-aus-erfassungsbogen.md),
-> Abschnitt G). Sie sind hier als **geplant** beschrieben, mit dem Ort, an dem
+> Abschnitt G). Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem
 > sie im Code entstehen. Bei jeder dieser Phasen ist dieses Dokument
 > nachzuziehen (`CLAUDE.md`, Tabelle „Begleitdokumente").
 
@@ -124,7 +124,7 @@ der/dem IT-Sicherheitsbeauftragten der jeweiligen Organisation.
 | Geltungsbereich dieses Dokuments | Die Anwendung „Meldekopf" selbst (Client-Software) samt Lagemonitor-Fenster sowie ihre Build-, Auslieferungs- und Update-Kette. **Nicht enthalten:** die physische und organisatorische IT-Sicherheit der einsetzenden Organisation (Gebäude, Fahrzeuge, Netzwerk, sonstige Fachverfahren), die Erfassungsbogen-App (eigenes ISK) und S1-Control |
 | Version dieses Dokuments | 0.1 (Entwurf), Phase 2 |
 | Datum der Freigabe | `[Datum der Freigabe einfügen]` |
-| Nächste Überprüfung | `[Datum, spätestens mit Phase 3 (Eingänge), bei Versions-Update mit sicherheitsrelevanten Änderungen oder nach 12 Monaten]` |
+| Nächste Überprüfung | `[Datum, spätestens mit Phase 4 (Schnellerfassung), bei Versions-Update mit sicherheitsrelevanten Änderungen oder nach 12 Monaten]` |
 | Anlass | Ersteinführung der App bei `[Organisation]` / Regelmäßige Überprüfung |
 
 ## 3. Strukturanalyse
@@ -188,14 +188,14 @@ des Erfassungsbogens.
 | D2j | Kenntnis-Stand | Zeitpunkt der letzten Kenntnisnahme und Kennungen der Meldungen; je Gerät | `eeb.kenntnis-stand.v1` | D2j |
 | D2k | Haken einer Musterung | **Entfällt** (keine Vorlagen, keine Musterung in dieser App; ADR-006) | — | D2k |
 | D2l | Beiseitegelegter, unlesbarer Entwurf | Text eines unlesbaren Entwurfs mit Ursache; **kann Personendaten enthalten**, die die Datenschutzfrist nicht erreicht; fällt nach 90 Tagen selbst weg (`entwurf.ts`). Heute nur über eine eingespielte Sicherung erreichbar | `eeb.entwurf.beschaedigt.v1` | D2l |
-| D2m | Merker im Sitzungsspeicher | (a) **Live:** Eingaben des Papier-Abgleichs je Sammlung (Nummer, Zeiten, Status, Zug, Notiz) bis Tab-Ende, Übernehmen oder Verwerfen (`papier-abgleich-entwurf.ts`). (b) `eeb.abgleich.fortsetzen`: wird beim Start nur entfernt; der Fensterabgleich, der ihn setzt, ist noch nicht eingebunden. (c) **Geplant, Phase 3/4:** wartender Link einer eingegangenen Meldung (`eeb.wartet.fragment`, enthält den Bogen samt Personendaten) und Rückweg von „Vorbelegung entfernen" (`eeb.vorbelegung.rueckweg`); die Module `wartender-link.ts` und `vorbelegung-rueckweg.ts` sind noch nicht übernommen. Nicht in der Datensicherung; „Alle Daten löschen" leert alle `eeb.`-Einträge des Sitzungsspeichers | `sessionStorage` des Tabs (`eeb.papierabgleich.v1.<Einsatz>` u. a.) | D2m |
+| D2m | Merker im Sitzungsspeicher | (a) **Live:** Eingaben des Papier-Abgleichs je Sammlung (Nummer, Zeiten, Status, Zug, Notiz) bis Tab-Ende, Übernehmen oder Verwerfen (`papier-abgleich-entwurf.ts`). (b) `eeb.abgleich.fortsetzen`: wird beim Start nur entfernt; der Fensterabgleich, der ihn setzt, ist noch nicht eingebunden. (c) **Live seit Phase 3:** wartender Link einer eingegangenen Meldung (`eeb.wartet.fragment`, enthält den Bogen samt Personendaten, `eingang/wartender-link.ts`), bis die Rückfrage „Wohin damit?“ beantwortet ist. **Geplant, Phase 4:** Rückweg von „Vorbelegung entfernen" (`eeb.vorbelegung.rueckweg`, `vorbelegung-rueckweg.ts` noch nicht übernommen). Nicht in der Datensicherung; „Alle Daten löschen" leert alle `eeb.`-Einträge des Sitzungsspeichers | `sessionStorage` des Tabs (`eeb.papierabgleich.v1.<Einsatz>` u. a.) | D2m |
 | D2n | Einsatzbeginn, Funkrufname, Helligkeit für den Lagemonitor | Von Hand gesetzter Beginn je Einsatz, optionaler Funkrufname der eigenen Führungsstelle (Freitext bis 60 Zeichen), Helligkeitsstufe (`lagemonitor-beginn.ts`, `lagemonitor-ui.tsx`); reisen als `lage` im Umschlag von Sammel-PDF und Einsatz-Datei; keine Personennamen vorgesehen | `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1` | D2n |
 | D2o | Beiseitegelegter unlesbarer Bestand | Unlesbare Sammlungen, Meldungen, Gesamttexte (und aus einer Erfassungsbogen-Sicherung Vorlagen, Absenderkarte) unverändert; **kann Personendaten enthalten**; 90 Tage ab Beiseitelegen nach der geprüften Uhr, eigener Weg „Beiseitegelegtes entfernen…" (`eingang/unlesbar.ts`, `eingang/unlesbar-aufraeumen.ts`) | `eeb.unlesbar.v1` | D2o (Runde 7/8) |
 | D2p | Fremdbestand aus einer Erfassungsbogen-Sicherung | **Neu gegenüber der Vorlage.** Vorlagen („Meine Vorlagen" mit ganzer Mannschaft, Namen, Funktionen, Erreichbarkeiten), Übergabe-Stand des eigenen Bogens, ggf. Haken einer Musterung. Die App hat dafür keine Oberfläche; `vorlagen.ts` und `uebergabe-stand.ts` sind reine Datenmodule, damit eine eingespielte Sicherung nichts verliert. Vorlagen haben keine Datenschutzfrist (wie im Erfassungsbogen), nur die Papierkorbfrist von 30 Tagen. Genannt werden sie in den Rückfragen „Sicherung einspielen" und „Alle Daten löschen" | `eeb.vorlagen.v1`, `eeb.musterung.v1` (falls vorhanden), am Entwurf `uebergabe` | — |
 | D2q | Einstellungen | Anzeigemodus (`eeb.anzeigemodus.v1`, Altschlüssel `eeb.feldmodus.v1` nur lesend), Karten-/Tabellensicht (`eeb.einheiten-ansicht`), Widerspruch gegen die Reichweitenmessung (`skipgc`, **ohne** `eeb.`-Präfix: nicht in der Sicherung, überlebt „Alle Daten löschen" bewusst), kurzlebige Speicherprobe (`eeb.speicherprobe`); keine Personendaten | `localStorage` | — |
-| D3 | Absenderkarte | **Als Sender entfällt sie** (keine Oberfläche zum Anlegen). Empfangene Absenderkarten anderer Geräte stehen im Signaturnachweis der Meldungen (D2). Eine **eigene** Karte kann nur aus einer eingespielten Erfassungsbogen-Sicherung stammen — und wird dann beim Signieren mitgesendet (Prüfvermerk unten) | `eeb.absenderkarte.v1` | D3 (reduziert) |
+| D3 | Absenderkarte | **Als Sender entfällt sie** (keine Oberfläche zum Anlegen). Empfangene Absenderkarten anderer Geräte stehen im Signaturnachweis der Meldungen (D2). Eine **eigene** Karte kann nur aus einer eingespielten Erfassungsbogen-Sicherung stammen; beim Signieren wird sie seit 2026-10-25 nicht mehr verwendet (Prüfvermerk unten) | `eeb.absenderkarte.v1` | D3 (reduziert) |
 | D4 | Privater Geräteschlüssel | Ed25519-Schlüssel zum Signieren und Gegenzeichnen der QR-Codes in Einzel- und Sammel-PDF; wird beim ersten PDF erzeugt (`geraete-schluessel.ts`); **unverschlüsselt als Hex**; lässt er sich nicht speichern, nur im Arbeitsspeicher der Sitzung | `eeb.geraeteschluessel.v1` | D4 |
-| D5 | Transportdaten | **Ausgehend (live):** QR-Codes je Bogen in Einzel- und Sammel-PDF (signiert bzw. gegengezeichnet). **Eingehend (geplant, Phase 3):** QR-Payload aus Kamera, Handscanner, Bild, Link-Fragment, JSON-Datei, PDF; im Code entstehen sie unter `src/app/eingang/` (heute dort `qr-decoder.ts`, `qr-bild.ts`, `qr-stapel.ts`, `datei-fehler.ts` als Vorrat, noch ohne Bedienweg) | transient bzw. Datei | D5 |
+| D5 | Transportdaten | **Ausgehend (live):** QR-Codes je Bogen in Einzel- und Sammel-PDF (signiert bzw. gegengezeichnet). **Eingehend (live seit Phase 3):** QR-Payload aus Kamera, Handscanner, Bild, Link-Fragment, JSON-Datei, PDF, Einsatz-Datei (`src/app/eingang/`, Weiche in `eingang/aufnahme.tsx`) | transient bzw. Datei | D5 |
 | D6 | Ausgaben | Sammel-PDF (mit eingebettetem Bogen-JSON und eingebetteter Sammlung samt Export-Ständen und Lage-Angaben), Lageblatt (A4 quer, Aushang), Blanko-Vordruck (ohne Gerätedaten), Übersichts-CSV, CSV mit allen Daten, Excel-Liste „Oldenburg", Einsatz-Datei (JSON-Umschlag) | außerhalb der App (Papier, Dateisystem, Empfänger) | D6 |
 | D7 | Datensicherungsdatei | **Neu als eigenes Zielobjekt.** Alle `eeb.*`-Einträge des Geräts als eine JSON-Datei (`eeb-sicherung-JJJJ-MM-TT.json`): alle Sammlungen samt Papierkorb, D2p, D3 und **der private Geräteschlüssel D4** (`sicherung.ts`, `sicherung-datei.ts`, `daten-gruppe.tsx`). Die Oberfläche weist darauf hin („enthält den privaten Signaturschlüssel und ggf. Personendaten") | Datei, Ablage durch den Nutzer | (in der Vorlage nur in DSFA 5.7) |
 
@@ -234,7 +234,7 @@ des Erfassungsbogens.
 > `sicherung.ts` und `uhr-folgen.ts` gelesen und teils geschrieben (D1, D2p,
 > D3). (5) `eeb.einheiten-ansicht` und `eeb.speicherprobe` fehlen dort. (6)
 > `eeb.wartet.fragment` steht dort als `sessionStorage`-Schlüssel, das Modul
-> `wartender-link.ts` ist noch nicht übernommen (Phase 3). Für dieses
+> `wartender-link.ts` war noch nicht übernommen (seit Phase 3 live). Für dieses
 > Dokument gilt der Code (Tabelle oben).
 >
 > *Erledigt 2026-10-25:* Kap. 8.2 der Architektur nach (1), (2), (5) und (6)
@@ -245,11 +245,11 @@ des Erfassungsbogens.
 
 | # | Zielobjekt | Ziel | Zweck | Absicherung | Stand |
 | --- | --- | --- | --- | --- | --- |
-| K1 | Geräte-zu-Geräte-Übergabe | Kein Netzwerk — ausgehend: Sammel-PDF, Einsatz-Datei, CSV, Excel, Ausdruck; eingehend: Datensicherung; geplant (Phase 3): Kamera-Scan, USB-Handscanner, Bilderstapel, Datei/PDF, Link (AirDrop, Quick Share, Messenger), Einsatz-Import vom zweiten Meldekopf-Gerät | Aufnahme von Bögen, Weitergabe der Lage an Stab, Ablösung und S1-Control | Physisch/lokal begrenzter Kanal; Ed25519-Signatur und Gegenzeichnung der QR-Codes | ausgehend live, eingehend geplant |
+| K1 | Geräte-zu-Geräte-Übergabe | Kein Netzwerk — ausgehend: Sammel-PDF, Einsatz-Datei, CSV, Excel, Ausdruck; eingehend: Datensicherung, Kamera-Scan, USB-Handscanner, Bilderstapel, Datei/PDF, Link (AirDrop, Quick Share, Messenger), Einsatz-Import vom zweiten Meldekopf-Gerät | Aufnahme von Bögen, Weitergabe der Lage an Stab, Ablösung und S1-Control | Physisch/lokal begrenzter Kanal; Ed25519-Signatur und Gegenzeichnung der QR-Codes | live (eingehend seit Phase 3) |
 | K2 | GoatCounter-Reichweitenmessung | `https://meldekopf.goatcounter.com/count` (eigene Site dieser App, Host in `src/app/adressen.ts`) | Anonyme Nutzungsstatistik, ein Treffer je Start | Cookielos, kein Fremdcode (kein `count.js` von `gc.zgo.at`), nur Pfad (Nutzungskanal), Titel und im Browser Referrer; nie `location.search` oder Fragment (`statistik.ts`); Widerspruch per Kästchen im Datenschutzdialog (`skipgc`) | live |
 | K3 | GitHub-Releases-Abfrage | GitHub-Release-Assets dieses Repositorys | Prüfung auf neue Version (nur Electron, `electron-updater`) | HTTPS; Pakete unsigniert (siehe 6.4) | live (Desktop) |
 | K4 | Lagemonitor-Fenster | Zweites Fenster derselben Herkunft am selben Gerät | Anzeige der Lage auf einem zweiten Bildschirm | Kein Netz; `window.open` bzw. in Electron eigenes Fenster mit denselben Härtungen; Datenweg `localStorage` + `storage`-Ereignis | live |
-| K5 | Link zum Erfassungsbogen | `https://erfassungsbogen.app/#<Payload>&rueck=meldekopf` und zurück | „Vollständig erfassen" (Bogen im Erfassungsbogen weiterführen) | Payload im Fragment, verlässt das Gerät nicht über das Netz; Seitenabruf des Erfassungsbogens wie dort beschrieben | **geplant, Phase 4** (ADR-006) |
+| K5 | Link zum Erfassungsbogen | `https://erfassungsbogen.app/#<Payload>&rueck=meldekopf` und zurück | „Im Erfassungsbogen öffnen“ in der Rückfrage zu einem empfangenen Bogen (ohne `rueck=`); „Vollständig erfassen" (Bogen im Erfassungsbogen weiterführen und zurückgeben) | Payload im Fragment, verlässt das Gerät nicht über das Netz; nach Ablauf der Datenschutzfrist ohne Personendaten; Seitenabruf des Erfassungsbogens wie dort beschrieben | „Im Erfassungsbogen öffnen“ live seit Phase 3; Rückweg **geplant, Phase 4** (ADR-006) |
 
 Es existieren keine weiteren Netzwerkverbindungen der eigentlichen
 Sammlungs-Funktion — durch die Content-Security-Policy technisch erzwungen
@@ -314,9 +314,9 @@ Einstufung obliegt der einsetzenden Organisation.
 | --- | --- | --- | --- | --- |
 | D2 Einsatz-Sammlungen (mit D2c) | **Hoch** (neu bewertet; Vorlage: Normal) | Hoch | Hoch | Einzelne Datensätze haben normalen Schutzbedarf (keine Art.-9-Daten). Der Meldekopf bündelt aber die Personal- und Kontaktdaten aller eintreffenden Einheiten eines Einsatzes, oft mehrere Organisationen, über Tage, dazu Freitexte der Führungsstelle (**Kumulationseffekt**). Falsche Stärke- oder Bedarfszahlen führen zu Fehlentscheidungen der Einsatzleitung; die Sammlung ist am Meldekopf die einzige aktuelle Lage. |
 | D1, D2l, D2o, D2p Fremd- und Restbestand | Hoch | Normal | Normal | Kann vollständige Mannschaftslisten (Vorlagen) und unlesbare Personendaten enthalten, ist aber in der App nicht sichtbar — Risiko des Vergessens (R11). |
-| D2m Sitzungsspeicher | Normal | Normal | Normal | Kurzlebig, an den Tab gebunden; heute nur der Papier-Abgleich. Ab Phase 3 mit dem wartenden Link (ganzer Bogen) neu zu bewerten. |
+| D2m Sitzungsspeicher | Normal | Normal | Normal | Kurzlebig, an den Tab gebunden: Papier-Abgleich und seit Phase 3 der wartende Link (ein ganzer Bogen bis zur Antwort auf die Rückfrage). Neu bewertet: bleibt Normal, weil derselbe Bogen ohnehin im Link-Verlauf des Browsers bzw. in der Nachricht steht, aus der er kam, und der Eintrag mit dem Tab endet. |
 | D2n, D2q, übrige Stände (D2a, D2b, D2d–D2j) | Normal | Hoch (D2a, D2b) / Normal | Normal | Keine Personendaten; der Uhrstand (D2a) steuert alle Löschungen, der Export-Stand (D2b) entscheidet, was der Stab bekommt. |
-| D3 Absenderkarte | Normal | Normal | Normal | Nur aus eingespielter Sicherung; aber: wird ungefragt mitgesendet (R11). |
+| D3 Absenderkarte | Normal | Normal | Normal | Nur aus eingespielter Sicherung; wird seit 2026-10-25 nicht mehr mitgesendet, liegt aber unsichtbar weiter (R11). |
 | D4 Privater Geräteschlüssel | Hoch | Hoch | Normal | Kompromittierung erlaubt Signieren und Gegenzeichnen im Namen dieses Meldekopf-Geräts — beim Meldekopf wiegt das schwerer als bei einer Einheit, weil seine Gegenzeichnung die Weitergabe aller Bögen bezeugt. |
 | D5 Transportdaten | Normal | Hoch | Normal | Transportformat; Integrität ist der Zweck der Signatur. |
 | D6 Ausgaben | **Hoch** (Sammel-PDF, Einsatz-Datei, CSV alle Daten, Excel) / Normal (Lageblatt, Übersichts-CSV) | Hoch | Normal | Eine Sammel-PDF oder Einsatz-Datei ist eine **Vollkopie der Sammlung** mit allen Personendaten aller Einheiten; einmal erzeugt, außerhalb der Kontrolle der App. Das Lageblatt hängt als Aushang an der Wand (Funkrufname, Rückrufnummer mit Initial und Nachname). |
@@ -344,7 +344,7 @@ Der Electron-Hauptprozess (`electron/main.js`, aus dem Erfassungsbogen
   Renderer hat keinen Zugriff auf Node.js- oder Electron-APIs; es gibt kein
   Preload-Skript.
 - **Minimale Rechtevergabe:** Der Permission-Handler erlaubt ausschließlich
-  `media` (Kamera, ab Phase 3 für den QR-Scan) und Zwischenablage
+  `media` (Kamera, seit Phase 3 für den QR-Scan) und Zwischenablage
   (`clipboard-read`, `clipboard-sanitized-write`); alles andere wird
   abgelehnt.
 - **Kontrollierte externe Links:** `setWindowOpenHandler` und `will-navigate`
@@ -379,11 +379,12 @@ Der Meldekopf ist in dieser Kette die **mittlere Stufe**:
   gegengezeichnet: Die Original-Signatur der Einheit bleibt prüfbar, der
   Meldekopf bezeugt nur die Weitergabe. Sonst signiert der Meldekopf selbst.
   Der Geräteschlüssel wird dabei bei Bedarf erzeugt.
-- **Prüfen eingehender Signaturen (geplant, Phase 3):** Die Prüfung beim
-  Empfang und das Siegel-Etikett an der Karte (`einsaetze-ui.tsx` zeigt
-  „✓ signiert" für bereits im Bestand vorhandene Nachweise) kommen mit den
-  Eingängen unter `src/app/eingang/`. Der PDF-Weg der Vorlage (QR der PDF
-  statt eingebettetem JSON übernehmen, R2-W6) entsteht dort mit `pdf-qr.ts`.
+- **Prüfen eingehender Signaturen (live seit Phase 3):** Jeder Eingang prüft
+  die Signatur beim Empfang (`signaturVonPayload`/`signaturVonText` in
+  `eingang/aufnahme.tsx`) und legt den Nachweis an der Meldung ab; die Karte
+  zeigt das Siegel-Etikett (`einsaetze-ui.tsx`). Der PDF-Weg der Vorlage (QR
+  der PDF statt eingebettetem JSON übernehmen, R2-W6) liegt in
+  `eingang/pdf-qr.ts`.
 - Nach Ablauf der Datenschutzfrist entfernt der Kern mit den Personendaten
   auch `herkunft` und `signatur` einer Meldung (`eintragNachFrist`); ab dann
   ist der Bogen nicht mehr gegenzeichenbar, sondern wird selbst signiert.
@@ -410,8 +411,7 @@ connect-src 'self' file: https://meldekopf.goatcounter.com
   werden beim Bauen gehasht und einzeln freigegeben; findet das Plugin keinen
   Block, bricht der Build ab, statt ohne wirksame Policy auszuliefern.
 - `'wasm-unsafe-eval'` erlaubt nur das Kompilieren von WebAssembly aus der
-  eigenen Herkunft; nötig für den QR-Decoder ZXing, der mit Phase 3 eingebunden
-  wird (die Datei liegt schon im Bundle).
+  eigenen Herkunft; nötig für den QR-Decoder ZXing (seit Phase 3 im Kamera-Scan).
 - `frame-src blob:` für die PDF-Vorschau im eingebetteten Rahmen.
 - `style-src 'unsafe-inline'` bleibt bewusst (React setzt `style`-Attribute;
   Design-Token und Schrift liegen inline).
@@ -584,7 +584,7 @@ dieses Dokuments.
 | --- | --- | --- |
 | Content-Security-Policy | Erfüllt (Skript) / bewusster Rest (Style) | 5.3 |
 | Eingabevalidierung / Schutz vor Injection | Erfüllt (Ausgabewege) | CSV-Formel-Abwehr, XLSX-Escaping (5.4) |
-| Robustheit gegenüber fehlerhaften/böswilligen Eingabedaten | Erfüllt (Sicherungsdatei, gespeicherter Bestand) / **geplant** (Eingänge) | `inflateRawBegrenzt` mit `MAX_ENTPACKT = 4 MiB` liegt in `src/app/hilfen.ts` und greift mit den Eingängen (Phase 3); `sicherungParsen` prüft Format und Version; `einsaetze-lesen.ts`, `bogen-pruefung.ts`, `eingang/unlesbar.ts` prüfen beim Lesen und legen Unlesbares beiseite |
+| Robustheit gegenüber fehlerhaften/böswilligen Eingabedaten | Erfüllt | QR-Payload über `inflateRawBegrenzt` (`MAX_ENTPACKT = 4 MiB`, `src/app/hilfen.ts`, als `browserKompressor` in allen Eingängen); PDF-Ströme mit Deckel 32 MiB je Strom und 64 MiB je PDF, Bilder höchstens 2000 × 2000 Punkte (`@bos/eeb-satz` `pdf-stroeme`, `pdf-bilder`, seit `42ddbea`/`c937411`; im Erfassungsbogen ohne diesen Deckel); `sicherungParsen` prüft Format und Version; `einsaetze-lesen.ts`, `bogen-pruefung.ts`, `eingang/unlesbar.ts` prüfen beim Lesen und legen Unlesbares beiseite |
 | Fangnetz bei Abstürzen der Ansicht | Erfüllt | Fehlerfänger aus `@bos/oberflaeche` mit Sichern und Löschen |
 | Kontextisolation bei hybriden Apps | Erfüllt | `contextIsolation`, `sandbox`, kein Preload; Lagemonitor-Fenster gleich gehärtet |
 
@@ -613,16 +613,16 @@ dieses Dokuments.
 | # | Gefährdung | Betroffenes Zielobjekt | Eintrittswahrscheinlichkeit | Schadenshöhe | Gesamt |
 | --- | --- | --- | --- | --- | --- |
 | R1 | Verlust/Diebstahl eines Meldekopf-Geräts mit ungesperrtem Zugriff | D2 und alle lokalen Daten | Mittel (Tablet am Eingang, auf der Motorhaube, im ELW) | **Sehr hoch** (neu bewertet; Vorlage: Hoch): Personendaten aller Einheiten eines Einsatzes, Freitexte, Schlüssel | **Hoch** |
-| R2 | ~~Dekomprimierungs-Angriff über präparierte Importdatei~~ — **behoben** in der Vorlage, Deckel `inflateRawBegrenzt` liegt bereit; Eingänge erst ab Phase 3 | A1–A2 | Niedrig | Mittel | Sehr niedrig |
+| R2 | ~~Dekomprimierungs-Angriff über präparierte Importdatei~~ — **behoben**: QR-Payload über `inflateRawBegrenzt`, PDF-Ströme und -Bilder mit eigenem Deckel (Phase 3, siehe 6.2) | A1–A2 | Niedrig | Mittel | Sehr niedrig |
 | R3 | Diebstahl/Auslesen des privaten Signaturschlüssels — vom Gerät **oder aus einer Datensicherungsdatei** | D4, D7, K1 | Niedrig-Mittel (neu: jede Sicherungsdatei trägt ihn) | Mittel (Gegenzeichnen im Namen des Meldekopfs) | Mittel |
 | R4 | Cross-Site-Scripting trotz CSP; Restrisiko über `style-src 'unsafe-inline'` | A1 | Niedrig | Hoch (Zugriff auf den gesamten `localStorage` des Tabs = alle Sammlungen) | Niedrig |
 | R5 | Kompromittierte oder manipulierte Build-/Update-Kette, auch über eines der sechs Submodule | B1–B5, A2 | Niedrig | Hoch | Mittel-Hoch |
-| R6 | Fehlende Signaturprüfung durch den Meldekopf beim Empfang | K1, D2 | Mittel | Mittel | Mittel — **geplant**, Prüfung entsteht mit Phase 3; bis dahin kommt Bestand nur über die Sicherung |
+| R6 | Fehlende Signaturprüfung durch den Meldekopf beim Empfang | K1, D2 | Mittel | Mittel | Niedrig-Mittel — Prüfung beim Empfang live seit Phase 3; Restrisiko: ein unsignierter oder fremd signierter Bogen wird trotzdem aufgenommen, nur gekennzeichnet (M6) |
 | R7 | Ausfall der Anwendung oder des Geräts im Einsatz (Defekt, Akku, Absturz, geräumter Browser-Speicher) | A1–A2, D2 | Mittel | **Sehr hoch** (die laufende Lage hängt an einem Gerät) | **Hoch** (begrenzt durch Lageblatt, Sammel-PDF und Papier-Abgleich als Rückfallebene) |
 | R8 | ~~Fehlende SCA~~ — **erledigt** (Dependabot, `npm audit`, SBOM) | B3 | Mittel | Mittel | Niedrig |
 | R9 | **Neu:** Einsicht Unbefugter in die Lage über den Lagemonitor (Fernseher im Raum, am Fahrzeug, Foto davon) | A1a, Zweiter Bildschirm | Hoch (bestimmungsgemäß sichtbar) | Niedrig-Mittel (keine Personennamen; Einsatzstärke und Kräfte erkennbar) | Mittel |
 | R10 | **Neu:** Sicherungsdatei, Sammel-PDF oder Einsatz-Datei gelangt an einen falschen Ort (Messenger, Cloud, offener USB-Stick) | D6, D7 | Mittel | Hoch (Vollkopie aller Personendaten; bei D7 mit Schlüssel) | **Hoch** |
-| R11 | **Neu:** Unsichtbarer Fremdbestand aus einer eingespielten Erfassungsbogen-Sicherung (Vorlagen, Entwurf, Absenderkarte) bleibt unbemerkt liegen; die Absenderkarte reist ungefragt in jedem neu erzeugten QR-Code mit | D1, D2p, D3, D5 | Mittel (ADR-007 empfiehlt die Sicherung als Übernahmeweg) | Mittel | Mittel |
+| R11 | **Neu:** Unsichtbarer Fremdbestand aus einer eingespielten Erfassungsbogen-Sicherung (Vorlagen, Entwurf, Absenderkarte) bleibt unbemerkt liegen; die Absenderkarte reiste bis 2026-10-25 ungefragt in jedem neu erzeugten QR-Code mit (behoben) | D1, D2p, D3, D5 | Mittel (ADR-007 empfiehlt die Sicherung als Übernahmeweg) | Mittel | Mittel |
 | R12 | **Neu:** Bestand des Erfassungsbogens bleibt nach der Übernahme auf dem alten Gerät/der alten Herkunft liegen (zwei Kopien) | D2 | Mittel (Übergangszeit, ADR-007) | Mittel | Mittel |
 
 **Höchste Einzelrisiken:** R1 (Geräteverlust), R7 (Ausfall) und R10
@@ -635,16 +635,16 @@ mindern.
 | # | Bezug | Maßnahme | Art | Verantwortlich | Priorität |
 | --- | --- | --- | --- | --- | --- |
 | M1 | R1 | Verbindliche Bildschirmsperre (PIN/Biometrie) am Meldekopf-Gerät; Geräteverschlüsselung (BitLocker/FileVault/Android); Meldekopf-Gerät nicht unbeaufsichtigt entsperrt lassen; nach dem Einsatz Sammlungen exportieren und auf dem Gerät löschen | Organisatorisch/technisch | `[Organisation/IT-Verantwortliche/r]` | Hoch |
-| M2 | R2 | Erledigt in der Vorlage; mit Phase 3 prüfen, dass alle Eingänge über `inflateRawBegrenzt` laufen | Technisch | `[Projektbetreiber/Maintainer]` | Mit Phase 3 |
+| M2 | R2 | Erledigt (Phase 3 geprüft): QR-Eingänge über `inflateRawBegrenzt`; die PDF-Ströme liefen ungedeckelt über `pako.inflate` und haben seitdem einen eigenen Deckel in `@bos/eeb-satz`. Bei jedem neuen Eingang erneut prüfen | Technisch | `[Projektbetreiber/Maintainer]` | Erledigt |
 | M3 | R3 | Bis zu einer verschlüsselten Ablage: Geräteabsicherung (M1); Sicherungsdateien wie Schlüssel behandeln (M10); bei Verdacht „Geräteschlüssel neu erzeugen…" und neue Kurzform an Stab und Ablösung geben; Zuständigkeit festlegen | Organisatorisch (technische Grundlage vorhanden) | `[Organisation]` | Mittel |
 | M4 | R4 | `style-src 'unsafe-inline'` bewusst belassen; `pdfmake`-Updates gegen die CSP prüfen (5.3) | Technisch | `[Projektbetreiber/Maintainer]` | Niedrig |
 | M5 | R5 | Nur Pakete aus dem offiziellen GitHub-Release dieses Repositorys einsetzen, Prüfsummen dokumentieren; bevorzugt die PWA von meldekopf.erfassungsbogen.app; Signierung der Windows-Pakete als Projektziel | Organisatorisch/technisch | `[Organisation]` / `[Projektbetreiber]` | Hoch |
-| M6 | R6 | Ab Phase 3: Dienstanweisung, Siegel an der Karte zu beachten, besonders bei mehrstufiger Weitergabe | Organisatorisch | `[Organisation/Meldekopf-Verantwortliche/r]` | Mittel (ab Phase 3) |
+| M6 | R6 | Dienstanweisung, Siegel an der Karte zu beachten, besonders bei mehrstufiger Weitergabe | Organisatorisch | `[Organisation/Meldekopf-Verantwortliche/r]` | Mittel |
 | M7 | R7 | Papier als Rückfallebene: Lageblatt in festen Abständen drucken, Blanko-Vordrucke vorhalten; Ladezustand, Netzteil, Zusatzakku; regelmäßig Datensicherung oder Sammel-PDF auf zweitem Medium; Web-App: dauerhaften Speicher bestätigen oder als PWA installieren | Organisatorisch | `[Organisation/Einsatzleitung]` | Hoch |
 | M8 | R8 | Erledigt beim Projekt; für die Organisation: neue Versionen mind. halbjährlich auf sicherheitsrelevante Änderungen prüfen | Organisatorisch | `[Organisation]` | Mittel |
 | M9 | Alle | Sensibilisierung des Meldekopf-Personals: Gerätesperre, Lageblatt als Aushang (Rückrufnummern), Umgang mit Sammel-PDF/Einsatz-Datei/Sicherungsdatei, Meldung bei Geräteverlust | Organisatorisch/personell | `[Organisation/Ausbildungsverantwortliche/r]` | Hoch |
 | M10 | R3, R10 | Ablageorte für Sammel-PDF, Einsatz-Datei, CSV/Excel und **Datensicherungsdateien** festlegen (keine privaten Messenger, keine ungeregelte Cloud); Sicherungsdateien nach dem Einsatz löschen | Organisatorisch | `[Organisation/Datenschutzbeauftragte/r]` | Hoch |
-| M11 | R11 | Für die Übernahme aus dem Erfassungsbogen bevorzugt die **Einsatz-Datei** statt der Datensicherung nutzen (ab Phase 3); wird eine Sicherung eingespielt, die Rückfrage lesen (Vorlagen, Entwurf, Absenderkarte) und ein reines Erfassungsbogen-Gerät nicht als Quelle nehmen. **Technisch (Projekt):** Absenderkarte beim Signieren im Meldekopf nicht verwenden oder anzeigen und einzeln löschbar machen; Vorlagen beim Einspielen wahlweise weglassen | Organisatorisch / technisch (Weiterentwicklung) | `[Organisation]` / `[Projektbetreiber]` | Mittel |
+| M11 | R11 | Für die Übernahme aus dem Erfassungsbogen bevorzugt die **Einsatz-Datei** statt der Datensicherung nutzen („Einsatz importieren…“, seit Phase 3); wird eine Sicherung eingespielt, die Rückfrage lesen (Vorlagen, Entwurf, Absenderkarte) und ein reines Erfassungsbogen-Gerät nicht als Quelle nehmen. **Technisch (Projekt):** Absenderkarte beim Signieren nicht verwenden — erledigt 2026-10-25; offen: Vorlagen beim Einspielen wahlweise weglassen | Organisatorisch / technisch (Weiterentwicklung) | `[Organisation]` / `[Projektbetreiber]` | Mittel |
 | M12 | R9 | Aufstellung des Lagemonitors festlegen: nicht zur Straße/zum Publikum, im ELW Tür beachten; abschalten oder „gedimmt" bei Publikumsverkehr; Fotografierverbot im Bereich, wo üblich; Einheitsnamen ohne Personennamen erfassen | Organisatorisch | `[Organisation/Einsatzleitung]` | Mittel |
 | M13 | 6.4 | `SECURITY.md` mit Meldeweg für dieses Repository und die Submodule `bos-eeb-satz`, `bos-oberflaeche` anlegen | Technisch/organisatorisch | `[Projektbetreiber/Maintainer]` | Mittel |
 | M14 | R12 | Nach erfolgreicher Übernahme in den Meldekopf die Sammlung im Erfassungsbogen und die verwendete Sicherungsdatei löschen | Organisatorisch | `[Organisation]` | Mittel |
@@ -672,7 +672,7 @@ Diese Einschätzung ersetzt keine rechtliche oder technische Prüfung.
 Dieses Konzept ist zu überprüfen und fortzuschreiben:
 
 - mit jeder Übernahme-Phase: Phase 3 (Eingänge: Signaturprüfung, wartender
-  Link, Dekompressionsdeckel, Kamera), Phase 4 (Schnellerfassung, Entwurf,
+  Link, Dekompressionsdeckel, Kamera; fortgeschrieben 2026-10-25), Phase 4 (Schnellerfassung, Entwurf,
   Link zum Erfassungsbogen), Phase 5 (Android, Release-Signierung),
 - bei jeder App-Version mit sicherheitsrelevanten Änderungen (CSP,
   Schlüsselverwaltung, Update-Mechanismus, neue Speicherorte, neue Hosts),

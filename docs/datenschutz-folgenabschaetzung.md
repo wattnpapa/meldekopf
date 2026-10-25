@@ -27,8 +27,8 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > dieser Teil der Risiken von dort hierher (ADR-001).
 >
 > **Wächst mit dem Code.** Die Eingänge (Scan, Datei, Bilderstapel, Link)
-> kommen mit Phase 3, die Schnellerfassung mit Phase 4, Android mit Phase 5.
-> Sie sind hier als **geplant** beschrieben, mit dem Ort, an dem sie im Code
+> sind seit Phase 3 live, die Schnellerfassung kommt mit Phase 4, Android mit
+> Phase 5. Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem sie im Code
 > entstehen; mit jeder Phase ist dieses Dokument nachzuziehen.
 
 ## Hinweis zu diesem Dokument
@@ -105,7 +105,7 @@ Personennamen.
 | Herkunft der Vorlage | `docs/datenschutz-folgenabschaetzung.md` des Erfassungsbogens, Commit `441811c` |
 | Version dieses Dokuments | 0.1 (Entwurf), Phase 2 |
 | Datum | `[Datum der Freigabe einfügen]` |
-| Nächste Überprüfung | `[Datum, spätestens mit Phase 3 (Eingänge) und bei wesentlicher Änderung der Software oder des Einsatzzwecks]` |
+| Nächste Überprüfung | `[Datum, spätestens mit Phase 4 (Schnellerfassung) und bei wesentlicher Änderung der Software oder des Einsatzzwecks]` |
 | Anlass der DSFA | Ersteinführung der App bei `[Organisation]` / Übernahme der Einsatz-Sammlung aus dem Erfassungsbogen / Regelmäßige Überprüfung |
 
 ## 3. Systembeschreibung (Kurzfassung)
@@ -121,13 +121,12 @@ die für die DSFA relevante Kurzfassung:
 - **Keine Server-Infrastruktur.** Jede Verarbeitung läuft auf dem Gerät.
   Keine zentrale Datenbank, keine Nutzerkonten, keine Anmeldung, keine
   Kopplung mehrerer Meldekopf-Geräte (ADR-008).
-- **Eingang** (geplant, Phase 3; im Code unter `src/app/eingang/`): QR-Code
-  per Kamera oder USB-Handscanner, Fotos aus Messenger und Mail
-  (Bilderstapel), JSON-Datei, PDF mit QR oder eingebettetem Bogen, Link mit
-  Payload im Fragment, Einsatz-Datei einer Ablösung. **Schnellerfassung**
-  einer Einheit ohne Bogen (geplant, Phase 4; `src/app/schnellerfassung/`).
-  **Heute** kommen Sammlungen nur über eine eingespielte Datensicherung
-  (auch die des Erfassungsbogens) auf das Gerät; die Einsatzansicht sagt das.
+- **Eingang** (live seit Phase 3; `src/app/eingang/`): QR-Code per Kamera
+  oder USB-Handscanner, Fotos aus Messenger und Mail (Bilderstapel),
+  JSON-Datei, PDF mit QR oder eingebettetem Bogen, Link mit Payload im
+  Fragment, Einsatz-Datei einer Ablösung, dazu die Datensicherung (auch die
+  des Erfassungsbogens). **Schnellerfassung** einer Einheit ohne Bogen
+  (geplant, Phase 4; `src/app/schnellerfassung/`).
 - **Ausgang** (live): Sammel-PDF mit eingebetteter Sammlung, Lageblatt,
   Blanko-Vordruck, Übersichts-CSV, CSV mit allen Daten, Excel-Liste
   „Oldenburg", Einsatz-Datei, Datensicherung.
@@ -185,7 +184,7 @@ Datenschutzbeauftragte/n zu bestätigen.
 ### 5.1 Zwecke der Verarbeitung
 
 - Aufnahme eintreffender Einheiten an Meldekopf, Bereitstellungsraum oder
-  kleiner Führungsstelle (Bogen per QR/Datei/Link ab Phase 3; Schnellerfassung
+  kleiner Führungsstelle (Bogen per QR/Datei/Link; Schnellerfassung
   ohne Bogen ab Phase 4).
 - Laufende Zusammenzählung von Stärke (F/UF/M//Ges), Sofortbedarf
   (Verpflegung, Unterbringung M/W/D, Kraftstoff, Ruhezeit) und Fahrzeugen
@@ -270,12 +269,16 @@ versehentlich in Freitexten, M7), biometrische Daten, strafrechtliche Daten.
 
 ### 5.5 Verarbeitungsvorgänge / Datenfluss
 
-- **Eingang (geplant, Phase 3/4):** Dekodierung des QR-Payloads (Base41,
-  DeflateRaw mit Größendeckel 4 MiB, `inflateRawBegrenzt`), Prüfung der
-  Signatur (reiner Anzeigestatus), Schema-Migration, Aufnahme über
-  `meldungAufnehmen` (Fingerabdruck je Einheit, Dedupe, Folgemeldung als neue
-  Fassung, Diff). Rückfrage „Wohin damit?" bei mehreren Sammlungen; der Link
-  wartet bis zur Antwort im Sitzungsspeicher. Schnellerfassung als
+- **Eingang (live seit Phase 3):** Dekodierung des QR-Payloads (Base41,
+  DeflateRaw mit Größendeckel 4 MiB, `inflateRawBegrenzt`; PDF-Ströme mit
+  eigenem Deckel), Prüfung der Signatur (reiner Anzeigestatus),
+  Schema-Migration, Aufnahme über `meldungAufnehmen` (Fingerabdruck je
+  Einheit, Dedupe, Folgemeldung als neue Fassung, Diff). Ein Bogen-Link fragt
+  „Wohin damit?“ (laufende Sammlung, neue Sammlung, Erfassungsbogen) und
+  wartet bis zur Antwort im Sitzungsspeicher. „Im Erfassungsbogen öffnen“
+  öffnet `erfassungsbogen.app` in einem neuen Tab mit dem Bogen im Fragment;
+  das Fragment geht nicht an den Server, nach Ablauf der Datenschutzfrist
+  ohne Personendaten. **Geplant, Phase 4:** Schnellerfassung als
   Nur-Stärke-Bogen, „Vollständig erfassen" per Link im Erfassungsbogen
   (Payload im Fragment, kein Netzversand).
 - **Eingang heute:** „Sicherung einspielen" ersetzt nach Rückfrage den ganzen
@@ -357,8 +360,8 @@ fällig macht, schon.
 | `eeb.uhr.v1`, `eeb.sicherung.zuletzt.v1`, `eeb.anzeigemodus.v1`, `eeb.einheiten-ansicht` | Uhrstand, letzte Sicherung, Anzeige | Nein | „Alle Daten löschen" |
 | `skipgc` | Widerspruch gegen die Reichweitenmessung | Nein | Bleibt bei „Alle Daten löschen" bewusst stehen; Löschen der Websitedaten |
 | `sessionStorage`: `eeb.papierabgleich.v1.<Einsatz>` | Eingaben des Papier-Abgleichs (Nummer, Zeiten, Status, Zug, Notiz) | Möglich (Notiz) | Tab-Ende, Übernehmen, Verwerfen, „Alle Daten löschen"; nicht in der Sicherung |
-| `sessionStorage`: `eeb.wartet.fragment`, `eeb.vorbelegung.rueckweg` | **Geplant, Phase 3/4:** wartender Link (ganzer Bogen), Rückweg „Vorbelegung entfernen" | Ja bzw. nein | bis zur Antwort bzw. 15 Minuten; Tab-Ende; „Alle Daten löschen" leert schon heute alle `eeb.`-Einträge des Sitzungsspeichers |
-| Arbeitsspeicher | Rückweg nach „Entfernen" einer Meldung; ab Phase 3 Teile mehrteiliger Bögen beim Bilderstapel (höchstens eine Stunde) | Ja | Neuladen, Schließen der Quittung; bewusst kein dauerhafter Papierkorb für einzelne fremde Meldungen |
+| `sessionStorage`: `eeb.wartet.fragment`, `eeb.vorbelegung.rueckweg` | Wartender Link (ganzer Bogen; live seit Phase 3), Rückweg „Vorbelegung entfernen" (geplant, Phase 4) | Ja bzw. nein | bis zur Antwort bzw. 15 Minuten; Tab-Ende; „Alle Daten löschen" leert alle `eeb.`-Einträge des Sitzungsspeichers |
+| Arbeitsspeicher | Rückweg nach „Entfernen" einer Meldung; Teile mehrteiliger Bögen beim Bilderstapel (höchstens eine Stunde) | Ja | Neuladen, Schließen der Quittung; bewusst kein dauerhafter Papierkorb für einzelne fremde Meldungen |
 
 Ergänzend:
 
@@ -565,7 +568,7 @@ Intervenierbarkeit (Iv), Nichtverkettung (N).
 | R2 | Verlust/Fehlleitung einer Vollkopie: Sammel-PDF, Einsatz-Datei, CSV mit allen Daten, Excel, **Datensicherungsdatei** | V | Mittel | **Hoch** (neu bewertet; Vorlage: Mittel): Vollkopie mit allen Personen; bei der Sicherung samt Schlüssel | **Hoch** |
 | R3 | Kein technisch erzwungener Löschzeitpunkt für Teile des Bestands: Zusätze der Führungsstelle bis zur Aufräumfrist; Übungsbögen, Vorlagen, eigene Absenderkarte unbefristet | Vf/T | Niedrig-Mittel | Niedrig-Mittel | Niedrig-Mittel |
 | R4 | Auslesen des privaten Signaturschlüssels (Gerät oder Sicherungsdatei) → Gegenzeichnen im Namen des Meldekopfs | I | Niedrig | Niedrig (TOFU; austauschbar über „Geräteschlüssel neu erzeugen…") | Niedrig |
-| R5 | ~~Speicher-Überlastung durch präparierte Import-Datei~~ — Deckel `inflateRawBegrenzt` (4 MiB) liegt bereit; Eingänge erst ab Phase 3, dann nachzuprüfen | Vf | Niedrig | Niedrig | Sehr niedrig |
+| R5 | ~~Speicher-Überlastung durch präparierte Import-Datei~~ — QR-Payload über `inflateRawBegrenzt` (4 MiB), PDF-Ströme und -Bilder mit eigenem Deckel in `@bos/eeb-satz` (Phase 3 geprüft) | Vf | Niedrig | Niedrig | Sehr niedrig |
 | R6 | Verkettbarkeit: Funkrufnamen, Kennzeichen, Namen und Qualifikationen in Sammel-Exporten machen Personen über mehrere Einsätze wiedererkennbar; beim Meldekopf über viele Organisationen | N | Mittel (neu bewertet; Vorlage: Niedrig-Mittel) | Niedrig | Niedrig-Mittel |
 | R7 | Fehlende eigene Zugriffssperre der App (verlässt sich auf Gerätesperre) | V | Mittel | Mittel (Meldekopf-Gerät wird am Eingang oft entsperrt liegen gelassen) | Mittel |
 | R8 | Strukturelle Grenze der Betroffenenrechte; Betroffene wissen nicht, dass der Meldekopf ihre Daten hält (Art. 14) | Iv/T | Hoch (systembedingt) | Niedrig-Mittel | **Mittel** (neu bewertet; Vorlage: Niedrig-Mittel) |
@@ -573,7 +576,7 @@ Intervenierbarkeit (Iv), Nichtverkettung (N).
 | R10 | Unumkehrbarer Verlust der Personendaten im laufenden Einsatz durch falsche Geräteuhr oder eine Lage, deren Bögen länger als 90 Tage nicht fortgeschrieben werden | Vf | Niedrig (Uhrsprünge ab 60 Tagen nie ohne Bestätigung; Ankündigung der Aufräumfrist ab Tag 60) | Niedrig-Mittel (Stärke und Summen bleiben) | Niedrig |
 | R11 | Übungsbögen sind von der Frist ausgenommen — mit echten Personaldaten liegen sie unbefristet in der Sammlung, bis Aufräumfrist oder Löschung | V | Mittel | Niedrig-Mittel | Niedrig-Mittel |
 | R12 | **Neu:** Offenlegung der Lage gegenüber Umstehenden über den Lagemonitor (Fernseher im Raum, am Fahrzeug, fotografiert); Einheitsnamen als Freitext können im Einzelfall Personennamen tragen | V | Hoch (bestimmungsgemäß sichtbar) | Niedrig (keine Personennamen vorgesehen) | Niedrig-Mittel |
-| R13 | **Neu:** Unsichtbarer Fremdbestand aus einer eingespielten Erfassungsbogen-Sicherung: Vorlagen ganzer Mannschaften ohne Frist, Entwurf, eigene Absenderkarte — ohne Anzeige; die Absenderkarte reist ungefragt in jedem QR-Code der Sammel-PDF | V/T/Iv | Mittel (ADR-007 nennt die Sicherung als Übernahmeweg; bis Phase 3 der einzige Eingang) | Mittel | **Mittel** |
+| R13 | **Neu:** Unsichtbarer Fremdbestand aus einer eingespielten Erfassungsbogen-Sicherung: Vorlagen ganzer Mannschaften ohne Frist, Entwurf, eigene Absenderkarte — ohne Anzeige; die Absenderkarte reiste bis 2026-10-25 ungefragt in jedem QR-Code der Sammel-PDF mit (behoben) | V/T/Iv | Mittel (ADR-007 nennt die Sicherung als Übernahmeweg; seit Phase 3 gibt es die Einsatz-Datei als Alternative) | Mittel | **Mittel** |
 | R14 | **Neu:** Anwesenheitsprotokoll — Eintreff-/Abrückzeiten, Status und Vermerke je Einheit mit Personalliste lassen nachträglich erkennen, wer wann im Einsatz war; Zweckänderung (z. B. Leistungs- oder Verhaltenskontrolle) | N/Iv | Niedrig | Mittel | Niedrig-Mittel |
 | R15 | **Neu:** Doppelbestand während der Übernahme — Sammlung bleibt im Erfassungsbogen (andere Herkunft) und in Sicherungsdateien liegen, nachdem sie im Meldekopf läuft | V/Iv | Mittel (Übergangszeit) | Niedrig-Mittel | Niedrig-Mittel |
 
@@ -591,12 +594,12 @@ organisatorisch, R13 technisch zu mindern.
 | M3 | R2 | Dienstanweisung: Sammel-PDF, Lageblatt, Einsatz-Datei, CSV/Excel und **Datensicherungsdateien** wie das bisherige Papier behandeln (Aufbewahrung, Zugriffsschutz, dokumentierte Vernichtung); zulässige Ablageorte und Übergabewege festlegen, keine privaten Messenger | Organisatorisch | `[Organisation]` | Mittel |
 | M4 | R3 | Datenschutzfrist, Aufräumfrist und Papierkorb sind technisch umgesetzt. Für die Organisation: nach Einsatzende Übergabe dokumentieren und die Sammlung aktiv löschen; Frist für Papierausdrucke und Exporte festlegen | Technisch (umgesetzt) / Organisatorisch | `[Organisation/Datenschutzbeauftragte/r]` | Niedrig |
 | M5 | R8 | Verfahrensanweisung für Auskunfts- und Löschanfragen, die Ablösung, Stab und weitergegebene Ausgaben einschließt | Organisatorisch | `[Organisation/Datenschutzbeauftragte/r]` | Niedrig-Mittel |
-| M6 | R5 | Mit Phase 3 prüfen, dass jeder Eingang über `inflateRawBegrenzt` läuft | Technisch | `[Projektbetreiber/Maintainer]` | Sehr niedrig |
+| M6 | R5 | Erledigt (Phase 3): QR-Eingänge über `inflateRawBegrenzt`; die PDF-Ströme liefen ungedeckelt und haben seitdem einen eigenen Deckel. Bei jedem neuen Eingang erneut prüfen | Technisch | `[Projektbetreiber/Maintainer]` | Sehr niedrig |
 | M7 | R6, 4.1 (b) | Freitexte (Notiz/Auftrag) knapp und sachlich, keine Gesundheitsangaben; CSV mit allen Daten nur auf Anforderung; in organisationsübergreifenden Exporten prüfen, ob Kennzeichen und Personenlisten nötig sind | Organisatorisch | `[Meldekopf-Verantwortliche/r]` | Niedrig |
 | M8 | R7 | App-eigene Sperre ist nicht vorgesehen — über M1 sicherstellen | Organisatorisch | `[Organisation]` | Niedrig-Mittel |
 | M9 | R9, 5.8; Lageblatt | Verantwortlichkeit für die GoatCounter-Messung klären; alternativ „Nicht mitzählen" auf allen Meldekopf-Geräten setzen. Aushangort des Lageblatts (Rückrufnummern) festlegen | Organisatorisch/rechtlich | `[Organisation/Datenschutzbeauftragte/r]` | Sehr niedrig |
 | M10 | R8, 6.4 | Datenschutzinformation nach Art. 13/14 für die Betroffenen: die eigene Organisation nennt den Meldeweg (Meldekopf, Stab) in ihrer Information für Helfende; der Meldekopf-Betreiber hält eine Kurzinformation vor (Aushang am Meldekopf). **Projekt:** Datenschutzdialog und `datenschutz.html` um Sammlungen, Fristen und „Alle Daten löschen" ergänzen (Prüfvermerk 6.4) | Organisatorisch / technisch | `[Organisation]` / `[Projektbetreiber]` | Niedrig-Mittel |
-| M11 | R11, R13 | Übungen: nur Daten eintragen, deren unbefristete Speicherung vertretbar ist; nach der Übung löschen. Fremdbestand: für die Übernahme aus dem Erfassungsbogen die Einsatz-Datei bevorzugen (ab Phase 3); bei einer Sicherung die Rückfrage lesen und kein Gerät mit eigenen Vorlagen als Quelle nehmen. **Projekt:** Absenderkarte im Meldekopf nicht mitsignieren oder sichtbar und einzeln löschbar machen; Vorlagen beim Einspielen wahlweise weglassen | Organisatorisch / technisch (Weiterentwicklung) | `[Organisation]` / `[Projektbetreiber]` | Niedrig |
+| M11 | R11, R13 | Übungen: nur Daten eintragen, deren unbefristete Speicherung vertretbar ist; nach der Übung löschen. Fremdbestand: für die Übernahme aus dem Erfassungsbogen die Einsatz-Datei bevorzugen („Einsatz importieren…“); bei einer Sicherung die Rückfrage lesen und kein Gerät mit eigenen Vorlagen als Quelle nehmen. **Projekt:** Absenderkarte nicht mitsignieren — erledigt 2026-10-25; offen: Vorlagen beim Einspielen wahlweise weglassen | Organisatorisch / technisch (Weiterentwicklung) | `[Organisation]` / `[Projektbetreiber]` | Niedrig |
 | M12 | R10 | Bei Lagen über 90 Tage Bögen fortschreiben oder rechtzeitig als Sammel-PDF sichern; die App kündigt die Aufräumung ab Tag 60 an | Organisatorisch | `[Meldekopf]` | Niedrig |
 | M13 | R12 | Lagemonitor nicht zum Publikum aufstellen, bei Publikumsverkehr dimmen oder abschalten; Einheitsnamen ohne Personennamen erfassen | Organisatorisch | `[Organisation/Einsatzleitung]` | Niedrig |
 | M14 | R14 | Zweckbindung festschreiben: Anwesenheitsdaten der Sammlung nur für Lageführung, Versorgung und Einsatzdokumentation, nicht zur Leistungs- oder Verhaltenskontrolle; Personalvertretung einbinden (9) | Organisatorisch | `[Organisation/Personalvertretung]` | Niedrig |
@@ -638,7 +641,7 @@ Gegenüber der DSFA des Erfassungsbogens:
   R10) — sie sind aus dem Erfassungsbogen übernommen und hier die wichtigste
   technische Entlastung.
 - **Mit den Phasen fortzuschreiben:** Eingänge, wartender Link und
-  Signaturprüfung (Phase 3), Schnellerfassung und Link zum Erfassungsbogen
+  Signaturprüfung (Phase 3, fortgeschrieben 2026-10-25), Schnellerfassung und Link zum Erfassungsbogen
   (Phase 4), Android-Hülle (Phase 5).
 
 Diese Einschätzung ersetzt keine rechtliche Prüfung.

@@ -138,6 +138,7 @@ flowchart LR
 | GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart (das Lagemonitor-Fenster zählt nicht mit, `main.tsx`); einziger Fremd-Host in der CSP. Bewusst ohne das offizielle `count.js` von `gc.zgo.at` (wie im Erfassungsbogen): `statistik.ts` baut den Treffer selbst gegen dieselbe Zähl-URL `/count`, sonst wäre `gc.zgo.at` ein zweiter Fremd-Host und das Skript scheiterte unter `file://` und `capacitor://`. | HTTPS `sendBeacon` / Bild |
 | GitHub Releases | ein-/ausgehend | Installer, APK, `latest*.yml` für electron-updater | HTTPS |
 | Capacitor-Plugins | intern | Barcode-Scanner, Dateisystem, Teilen, App-Links | Bridge |
+| Erfassungsbogen (`erfassungsbogen.app`) | ausgehend, nur auf Knopfdruck | „Im Erfassungsbogen öffnen“ in der Rückfrage zu einem empfangenen Bogen (`eingang/aufnahme.tsx`, seit Phase 3): ein neuer Tab bzw. der Systembrowser lädt den Erfassungsbogen. Der Bogen steht nur im Fragment (`#…`), das der Browser nicht an den Server schickt; nach Ablauf der Datenschutzfrist ohne Personendaten. Keine Verbindung aus der App selbst, die CSP bleibt unverändert. | HTTPS, Navigation |
 | Zweiter Bildschirm | intern | Lagemonitor als zweites Fenster derselben Herkunft, liest denselben `localStorage` | `window.open`, `storage`-Ereignis |
 
 Es gibt **kein Backend, keine Datenbank, keine Nutzerkonten.** Jede neue
@@ -452,6 +453,14 @@ einer Sicherung aus dem Erfassungsbogen kam und hier nirgends angezeigt
 wird. Beim Gegenzeichnen bleibt die Karte des ursprünglichen Absenders in
 seiner Stufe erhalten; die eigene Stufe trägt keine.
 
+Eingänge (seit Phase 3): Jeder QR-Payload wird mit Deckel entpackt
+(`inflateRawBegrenzt`, 4 MiB), PDF-Ströme mit 32 MiB je Strom und 64 MiB je
+Datei, PDF-Bilder bis 2000 × 2000 Punkte (`@bos/eeb-satz`). Die Signatur wird
+beim Empfang geprüft und als Nachweis an der Meldung abgelegt; ein
+unsignierter Bogen wird aufgenommen, behauptet aber keine Herkunft. Ein
+Bogen-Link wartet bis zur Antwort auf die Rückfrage im Sitzungsspeicher
+(`eeb.wartet.fragment`).
+
 ### 8.4 Kompatibilität
 
 Schema-Evolution des Formats (ab Version 2 lesbar, additive Änderungen),
@@ -477,8 +486,12 @@ die Pakete kommen mit den Phasen, die sie brauchen (Phase 0: React,
 den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
 `bos-taktische-zeichen` `cb9c227`. Seit Phase 1 dazu `bos-eeb-satz`
-`c9ae5b2` und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
-`441811c`). Beide brauchen zum Prüfen die Kern-Bausteine als gebaute
+und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
+`441811c`); `bos-eeb-satz` steht seit Phase 3 auf `c937411` (vorher
+`c9ae5b2`): `pdf-stroeme` liest die Stromlänge aus `/Length`, statt ein
+abschließendes 0x0D-Datenbyte als Zeilenende abzuschneiden (`395f01b`), und
+entpackt mit Deckel (`42ddbea`); `pdf-bilder` begrenzt Bildgröße und
+Gesamtmenge (`c937411`). Beide brauchen zum Prüfen die Kern-Bausteine als gebaute
 Nachbarordner; ihre CI checkt sie gepinnt daneben aus. Aliasse wie beim Kern
 (`vite.config.ts`, `vitest.config.ts`, `tsconfig.json`), für die Oberfläche
 ohne feste Endung (`.tsx`, `.css`); `resolve.dedupe` hält React einfach,

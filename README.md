@@ -3,13 +3,14 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** 2026-10-25, Phase 2 (Sammlung lesen und zeigen) steht:
+> **Stand:** 2026-10-25, Phase 3 (Eingänge) steht:
 > Einsatz-Sammlungen anlegen und führen, Summen, Einheitenliste und -tabelle,
 > Zug, Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
 > Lagemonitor, Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
-> (auch die des Erfassungsbogens). Bögen aufnehmen (Scan, Datei, Link,
-> Schnellerfassung) kommt mit Phase 3 und 4; bis dahin kommen Sammlungen über
-> die Datensicherung herein. Dialoge, Anzeigemodi, Kopfnavigation und
+> (auch die des Erfassungsbogens). Bögen kommen per Kamera, USB-Handscanner,
+> Foto, Datei, PDF mit QR-Code, Einsatz-Datei oder geteiltem Link herein; ein
+> Link fragt, in welche Sammlung der Bogen gehört, oder reicht ihn an den
+> Erfassungsbogen weiter. Die Schnellerfassung ohne Bogen kommt mit Phase 4. Dialoge, Anzeigemodi, Kopfnavigation und
 > Design-Token liefert `@bos/oberflaeche`, die Ausgabe ohne Oberfläche wächst
 > in `@bos/eeb-satz`. Die Doku unter `docs/` beschreibt, was gebaut wird und
 > wie; der Funktionsumfang wird aus der Einsatz-Sammlung des
