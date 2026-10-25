@@ -95,7 +95,10 @@ function zaehlfeld(welt: EebWelt, name: string): Locator {
 
 /** Eingabefeld gleich welcher Bauart — normales Feld oder Stepper-Zählfeld. */
 async function eingabe(welt: EebWelt, name: string): Promise<Locator> {
+  // Erst warten, bis eines von beiden da ist: Die Schnellerfassung lädt nach,
+  // und ein sofortiges Zählen griffe vorher ins Leere.
   const gewoehnlich = feld(welt, name);
+  await gewoehnlich.or(zaehlfeld(welt, name)).first().waitFor({ state: "attached" });
   return (await gewoehnlich.count()) > 0 ? gewoehnlich : zaehlfeld(welt, name);
 }
 

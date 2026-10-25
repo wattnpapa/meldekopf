@@ -12,14 +12,13 @@
  * Weiche trägt (Übernahme-Doku, Abschnitt E).
  *
  * Die Eingänge (Scan, Datei, Bilderstapel, Link) kommen aus
- * eingang/aufnahme.tsx (Phase 3); die Schnellerfassung folgt mit Phase 4 —
- * bis dahin sagt ihr Knopf, wie eine Einheit ohne Bogen heute hierher kommt.
+ * eingang/aufnahme.tsx (Phase 3); „Einheit manuell erfassen…" öffnet die
+ * Schnellerfassung (schnellerfassung/, Phase 4), die app.tsx einhängt.
  */
 
 import { useEffect, useRef, useState } from "react";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { arbeiten } from "@bos/oberflaeche/arbeitet";
-import { zeigeHinweis } from "@bos/oberflaeche/dialoge";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
 import { EinleseQuittung } from "@bos/oberflaeche/einlese-quittung";
 import { EinsatzDetail } from "./einsaetze-ui";
@@ -48,19 +47,6 @@ import {
 } from "./weitergabe/export-stand";
 import { lageAngabenLaden } from "./weitergabe/lage-angaben";
 
-/**
- * Was „Einheit manuell erfassen…" bis zur Schnellerfassung (Phase 4) sagt:
- * ehrlich statt still, mit dem Weg, den es heute schon gibt.
- */
-function schnellerfassungFolgt(): Promise<void> {
-  return zeigeHinweis({
-    titel: "Einheit ohne Bogen: kommt als Nächstes",
-    text:
-      "Die Schnellerfassung (nur Stärke, Führungskraft, Fahrzeuge) übernimmt diese App im nächsten Ausbauschritt. " +
-      "Bis dahin: die Einheit im Erfassungsbogen erfassen und ihren QR-Code hier mit „Bogen scannen…“ einlesen.",
-  });
-}
-
 export function EinsatzAnsicht({
   einsatz,
   einsaetze,
@@ -70,6 +56,9 @@ export function EinsatzAnsicht({
   onZurueck,
   onGeaendert,
   onGeloescht,
+  onManuell,
+  exportUmfang,
+  setExportUmfang,
 }: {
   einsatz: Einsatzsammlung;
   /** Die Eingänge (eingang/aufnahme.tsx). */
@@ -82,22 +71,26 @@ export function EinsatzAnsicht({
   onZurueck: () => void;
   onGeaendert: () => void;
   onGeloescht: () => void;
+  /** „Einheit manuell erfassen…": die Schnellerfassung für diesen Einsatz (app.tsx). */
+  onManuell: () => void;
+  /**
+   * Alle Bögen oder nur die neuen. Liegt in app.tsx, weil die Ansicht während
+   * der Schnellerfassung nicht eingehängt ist und die Wahl sonst verlöre
+   * (im Erfassungsbogen hielt sie app.tsx ebenso).
+   */
+  exportUmfang: ExportUmfang;
+  setExportUmfang: (u: ExportUmfang) => void;
 }) {
   const [fehler, setFehler] = useState("");
   const [ausgabeQuittung, setAusgabeQuittung] = useState<string | null>(null);
   // Was beim letzten Export dieses Einsatzes schon in der Sammlung stand
   // (export-stand.ts) — die Ansicht zählt daran ab, was seitdem neu ist.
   const [exportStaende, setExportStaende] = useState<Partial<Record<ExportZiel, ExportStand>>>(() => exportStaendeLaden(einsatz.id));
-  // Alle Bögen oder nur die neuen. Vorgabe bleibt der Gesamtexport, und ein
-  // anderer Einsatz beginnt wieder damit: dem Stab darf nicht versehentlich
-  // etwas fehlen.
-  const [exportUmfang, setExportUmfang] = useState<ExportUmfang>("alle");
   const letzterEinsatz = useRef(einsatz.id);
   useEffect(() => {
     if (letzterEinsatz.current === einsatz.id) return;
     letzterEinsatz.current = einsatz.id;
     setExportStaende(exportStaendeLaden(einsatz.id));
-    setExportUmfang("alle");
   }, [einsatz.id]);
 
   async function dateiAnbieten(dateiname: string, text: string, mime: string): Promise<boolean> {
@@ -255,7 +248,7 @@ export function EinsatzAnsicht({
         onZurueck={onZurueck}
         onGeaendert={onGeaendert}
         onScannen={() => aufnahme.scanneInEinsatz(einsatz.id)}
-        onManuell={() => void schnellerfassungFolgt()}
+        onManuell={onManuell}
         onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
         onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}
         onEinlesen={(daten, bilder) => void aufnahme.importiereStapel(einsatz.id, daten, bilder)}

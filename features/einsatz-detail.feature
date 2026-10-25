@@ -1,10 +1,12 @@
 # language: de
 # Herkunft: Erfassungsbogen `features/einsatz-detail.feature` (Commit 441811c).
-# Die Grundlage legt die Sammlung direkt auf das Gerät (support/sammlung.ts),
-# weil Bogen-Link und Assistent erst mit Phase 3 und 4 kommen; Szenarien, die
-# einen Eingang brauchen (Folgemeldung, manuell erfassen, Nachtrag nach neuem
-# Bogen, Einsatz importieren), folgen mit diesen Phasen. Neu: die
-# Datensicherung als Weg der Sammlung auf ein leeres Gerät (ADR-007).
+# Die Grundlage legt die Sammlung direkt auf das Gerät (support/sammlung.ts).
+# Die manuelle Erfassung läuft über die Schnellerfassung (eine Seite statt des
+# Assistenten, Phase 4). Nicht übernommen: Folgemeldung und getrennt
+# weitergeführte Einheit, die den Bogen im Assistenten des Erfassungsbogens
+# ändern, und die Rückfrage vor dem Ersetzen des eigenen Bogens (den gibt es
+# hier nicht). Neu: die Datensicherung als Weg der Sammlung auf ein leeres
+# Gerät (ADR-007).
 Funktionalität: Einsatz-Sammlung führen (Meldekopf)
   Als Meldekopf sammle ich fremde Bögen unter einem Einsatz, sehe die Summen
   über alle anwesenden Einheiten, ordne Züge zu, verfolge Folgemeldungen in der
@@ -164,3 +166,71 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Und ich im Dialog auf "Neu laden" klicke
     Dann sehe ich die Überschrift "Hochwasser Weser"
     Und sehe ich den Hinweis "1 Einheit(en) anwesend"
+
+  Szenario: Einheit manuell in den Einsatz erfassen
+    Wenn ich auf "Einheit manuell erfassen…" klicke
+    Dann sehe ich die Überschrift "Einheit erfassen"
+    Wenn ich das Feld "Organisation" auf "Feuerwehr" stelle
+    Und ich das Feld "Ort der Einheit (Pflicht)" mit "Wardenburg" fülle
+    Und ich auf "In Einsatz übernehmen" klicke
+    Dann sehe ich den Dialog "Stärke fehlt"
+    Wenn ich im Dialog auf "Trotzdem mit Stärke 0 übernehmen" klicke
+    Dann sehe ich die Überschrift "Hochwasser Weser"
+    Und sehe ich die Überschrift "Einheiten (2 gemeldet"
+    Und sehe ich den Text "Stärke fehlt"
+
+  # R3-N1: Eine Einheit ohne Stärke lag früher ohne Rückfrage als „0 / 0 / 0"
+  # in der Lage. „Stärke eintragen" führt zu den Zählern statt abzulegen.
+  Szenario: Ohne Stärke führt die Rückfrage zu den Zählern
+    Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich das Feld "Organisation" auf "Feuerwehr" stelle
+    Und ich das Feld "Ort der Einheit (Pflicht)" mit "Wardenburg" fülle
+    Und ich auf "In Einsatz übernehmen" klicke
+    Dann sehe ich den Dialog "Stärke fehlt"
+    Wenn ich im Dialog auf "Stärke eintragen" klicke
+    Dann ist kein Dialog offen
+    Und sehe ich die Überschrift "Stärke"
+    Und sehe ich die Schaltfläche "In Einsatz übernehmen"
+
+  Szenario: Eine gezählte Einheit geht ohne Rückfrage in die Lage
+    Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich das Feld "Organisation" auf "DLRG" stelle
+    Und ich das Feld "Ort der Einheit (Pflicht)" mit "Wardenburg" fülle
+    Und ich auf "Mannschaft: erhöhen" klicke
+    Und ich auf "Mannschaft: erhöhen" klicke
+    Und ich auf "In Einsatz übernehmen" klicke
+    Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
+    Und sehe ich den Hinweis "die Nummer auf dem Zettel eintragen"
+
+  Szenario: Eine angefangene Erfassung überlebt das Neuladen
+    Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich das Feld "Ort der Einheit (Pflicht)" mit "Ganderkesee" fülle
+    Und ich die Seite neu lade
+    Dann sehe ich die Überschrift "Einheit erfassen"
+    Und steht im Feld "Ort der Einheit (Pflicht)" der Wert "Ganderkesee"
+
+  Szenario: Ohne Namen lässt sich keine Einheit übernehmen
+    Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich auf "In Einsatz übernehmen" klicke
+    Dann sehe ich den Dialog "Name der Einheit fehlt"
+
+  Szenario: Nach dem Export lassen sich nur die seitdem neuen Bögen weitergeben
+    Dann sehe ich den Hinweis "Noch kein Export aus diesem Einsatz"
+    Wenn ich auf "Übersicht als CSV" klicke und eine Datei erhalte
+    Dann sehe ich den Hinweis "seitdem keine neuen Bögen"
+    Wenn ich "Nur neue Bögen seit dem letzten Export" ankreuze
+    Dann ist die Schaltfläche "Übersicht als CSV" gesperrt
+    Und ist die Schaltfläche "Sammel-PDF (erste Lieferung: alle Bögen)" bedienbar
+    Und ist die Schaltfläche "Excel-Liste (Format „Oldenburg“)" bedienbar
+    Wenn ich die Einheit "DLRG" "Wardenburg" manuell in den Einsatz aufnehme
+    Dann sehe ich den Hinweis "seitdem 1 neuer Bogen"
+    Und ist die Schaltfläche "Übersicht als CSV" bedienbar
+    Wenn ich auf "Übersicht als CSV" klicke und eine Datei erhalte
+    Dann sehe ich den Hinweis "seitdem keine neuen Bögen"
+    Und ist die Schaltfläche "Übersicht als CSV" gesperrt
+    Und ist die Schaltfläche "Excel-Liste (Format „Oldenburg“)" bedienbar
+
+  Szenario: Mit der zweiten Meldung erscheint die Filterleiste
+    Wenn ich die Einheit "DLRG" "Wardenburg" manuell in den Einsatz aufnehme
+    Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
+    Und sehe ich den Text "Suche"

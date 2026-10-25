@@ -2313,6 +2313,255 @@
     }
 
     /* ---------------------------------------------------------------
+       Schnellerfassung: Einheit, Stärke, Fahrzeuge, feste Leiste mit
+       „In Einsatz übernehmen". Herkunft: Erfassungsbogen index.html
+       (Commit 441811c), die Regeln, deren Klassen die übernommenen
+       Abschnitte (schritte/einheit.tsx, schritte/fahrzeuge.tsx, der
+       Nur-Stärke-Teil von schritte/personal.tsx) und der Rahmen des
+       Assistenten benutzen; die Begründungen (Audit-Kürzel) stehen wie
+       dort an den Regeln.
+       --------------------------------------------------------------- */
+    /* Zwischen zwei Einträgen muss mehr Luft stehen als zwischen zwei Gruppen
+       innerhalb eines Eintrags — sonst verschwimmt die Liste zur Fläche. */
+    .karte.eintrag { margin-bottom: var(--r-5); }
+    .karte.eintrag:last-of-type { margin-bottom: var(--r-4); }
+    /* z-index über der Vorschlagsliste (ul.vorschlaege, 20): Die offene
+       Liste unter dem Namensfeld lag über der Leiste, und der Tipp auf „In
+       Einsatz übernehmen" wählte den Ortsverband darunter (Audit Runde 3,
+       R3-S4). So trifft der Tipp den Knopf; das Feld verliert den Fokus und
+       schließt die Liste. */
+    footer.nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 25; background: var(--flaeche);
+      border-top: var(--strich-stark) solid var(--linie);
+      display: flex; justify-content: space-between;
+      /* Die Leiste wächst nicht mit der Systemschrift (Audit Runde 2, R2-M1):
+         bei 200 % war sie 179 px hoch — 28 % des Bildes — und „Weiter →"
+         ragte 79 px über den rechten Rand. Abstände, Polster und Schrift der
+         Leiste sind deshalb nach oben gedeckelt; die Deckel liegen auf dem
+         Maß des Feld-Modus (112 %), bei normaler Schrift ändert sich nichts.
+         Nur der Abstand gibt auf 320 px zusätzlich nach, damit „Zur
+         Übersicht →" neben „← Zurück" in eine Zeile passt. */
+      gap: min(1rem, 18px, 3vw);
+      /* Die Safe-Area gehört in die Web-Schicht, nicht nur in .platform-ios:
+         diese Klasse setzt allein die Capacitor-App. Als Startbildschirm-App
+         (PWA, standalone) läuft dieselbe Seite ohne sie — und dort lag „Weiter"
+         auf einem Telefon mit Home-Indikator unter dem Balken. max() statt
+         Addition, damit der Knopf am Rechner nicht grundlos abrückt. */
+      padding: min(0.7rem, 12.5px) min(1rem, 18px);
+      padding-bottom: max(min(0.7rem, 12.5px), env(safe-area-inset-bottom));
+      /* R5-M7: Der Inhalt der Leiste steht auf der Spalte von main (60rem, mit
+         dessen Innenabstand), nicht am Fensterrand: Auf dem Tablet quer (1 180 px)
+         lag „Weiter →" 110 px neben der Spalte. Auf dem Telefon ist der
+         Randabstand der größere Wert, es ändert sich nichts. */
+      padding-left: max(min(1rem, 18px), env(safe-area-inset-left), calc((100% - 60rem) / 2 + min(var(--r-4), 18px)));
+      padding-right: max(min(1rem, 18px), env(safe-area-inset-right), calc((100% - 60rem) / 2 + min(var(--r-4), 18px)));
+    }
+    /* R4-G3: Bei offener Bildschirmtastatur (Fokus in einer Texteingabe UND
+       deutlich kleinere sichtbare Höhe, src/app/tastatur.ts) weicht die feste
+       Leiste. Sie lag über der Vorschlagsliste, ein Tipp auf den ersten
+       Vorschlag traf „In Einsatz übernehmen". */
+    html.tastatur-offen footer.nav { display: none !important; }
+    footer.nav .platzhalter { flex: 1; }
+    /* Deckel wie an der Leiste (R2-M1): Die Schrift folgt der Systemschrift
+       bis zur kürzeren Fensterkante — 5vmin sind 18 px auf 360 × 640 —,
+       das Tippziel bleibt beim Handschuhmaß stehen. nowrap hält jeden Knopf
+       einzeilig; reicht die Breite selbst dann nicht, kürzt die Ellipse den
+       Text, statt den Knopf aus dem Bild zu schieben. Einzige Wirkung bei
+       normaler Schrift: auf 320 px steht „Zur Übersicht →" jetzt in einer
+       Zeile statt in zwei, und im Feld-Modus sinkt die Leistenschrift dort
+       von 17,9 auf 16 px — sonst würde gekürzt. */
+    footer.nav button {
+      min-height: min(calc(2.6rem + var(--ziel)), calc(47px + var(--ziel)));
+      padding: min(0.55rem, 10px) min(1.1rem, 20px);
+      font-size: min(var(--t-m), max(16px, 5vmin));
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+      /* Zurück und Weiter geben nicht nach — nachgeben soll der mittlere
+         Knopf „In Einsatz übernehmen": der bricht in sich um (siehe oben). */
+      flex-shrink: 0;
+    }
+    /* R4-M2: Maß und Schrift sind gedeckelt wie bei „Weiter". Der Knopf wuchs
+       mit der Systemschrift auf 88 × 76 px (200 %) und verdrängte „Weiter →"
+       über den Rand. Ein Tippziel bleibt er (44 px + Feld-Zuschlag), mehr
+       bekommt er nie. */
+    footer.nav .anzeige-leiste-knopf {
+      min-width: min(calc(var(--ziel-basis) + var(--ziel)), calc(44px + var(--ziel))); padding-inline: 0;
+      font-size: min(var(--t-l), 20px);
+    }
+    /* R5-N4: Mit dem Wort „Ansicht“ neben dem Zeichen braucht der Knopf etwas Rand. */
+    footer.nav .anzeige-leiste-knopf:has(.anzeige-leiste-text) { padding-inline: 0.6rem; gap: 0.35rem; }
+    /* Modus-Marke neben dem Titel (Meldekopf-Schnellerfassung). Bauart wie die
+    Ansprechpartner-Marke im Eintrag, aber auf der Kennfarbe: eigene Linie
+    und Schriftfarbe, sonst verschwände sie im Balken. */
+    .seiten-kopf .modus-marke {
+      align-self: center; padding: 0.15rem 0.5rem;
+      border: var(--strich) solid var(--kopf-linie); border-radius: var(--radius);
+      color: var(--kopf-auf); font-size: var(--t-xs); font-weight: 600;
+      /* Kein nowrap (Audit Runde 2, R2-M1): „Aufnahme für: <Sammlung>" trägt
+         den frei vergebenen Namen der Sammlung. Ein langer Name („Übung
+         Hochwasser Donau 2026 — Bereitstellungsraum Ulm-Nord") machte die
+         Einsatz-Erfassung schon bei normaler Schrift 513 px breit, und mit ihr
+         wanderte „Weiter →" aus dem Bild. */
+      max-width: 100%;
+    }
+    /* Zwischenmaß für Auswahlfelder, deren Optionstext länger ist als „schmal"
+    (7rem) trägt — „OV – Ortsverband" wurde dort mitten im Wort abgeschnitten. */
+    .zeile > label.feld.mittel { flex: 0 1 12rem; }
+    /* Wiederholte Zeilen mit optionalem ✕: fehlt der Knopf in der ersten Zeile,
+    verschieben sich darunter alle Spalten um seine Breite und die Liste
+    liest sich nicht mehr als Spalten. Der leere Platz hält sie in der Flucht. */
+    .zeile > .zeilen-knopf { flex: 0 0 2.75rem; padding-inline: 0; }
+    /* Nur solange die Zeile eine Zeile ist: sobald sie umbricht, wäre der
+    reservierte Platz eine leere Zeile ohne Zweck. */
+    .zeile > .zeilen-knopf-leer { display: none; }
+    /* Wiederholte Einträge (Person, Fahrzeug) bekommen einen Kopf: links steht,
+    wer oder was der Eintrag ist, rechts die Aktion, die ihn entfernt. Ohne
+    ihn liegt in einer Neun-Personen-Liste alles gleich schwer, und die
+    lauteste Marke je Eintrag ist neunmal ein rot gerahmter Löschknopf.
+    Der Knopf steht im Kopf statt im Float — so bleibt er auch beim Umbruch
+    HINTER der Kennung, statt auf dem Telefon über den Namen zu rutschen. */
+    .eintrag-kopf { padding-bottom: var(--r-3); border-bottom: var(--strich) solid var(--linie-fein); }
+    .eintrag-kopf > .entfernen { float: none; margin-left: auto; }
+    .eintrag-kopf + * { margin-top: var(--r-2); }
+    /* Hinweis nach der StAN-Vorbelegung auf Schritt 1: sagt, was der
+    Einheitstyp gerade angelegt hat, und trägt den Weg zurück (Audit
+    „Fehler", E1). Knopf in eigener Zeile, damit er nicht am Satz klebt. */
+    .vorbelegung-hinweis { display: flex; flex-wrap: wrap; align-items: center; gap: var(--r-2) var(--r-3); }
+    .eintrag-kopf > .sortieren { margin-left: auto; }
+    .eintrag-kopf > .sortieren + .entfernen { margin-left: max(var(--r-3), 12px); }
+    /* Erklärung zu „eigener Standort" als eigene Zeile (R3-N6). */
+    .zeile > .funkruf-standort { flex-basis: 100%; margin: 0; }
+    /* Laufende Nummer über dem Eintrag: „Person 3 von 12". Kein Titel, nur
+    eine Ordnungszahl — sie steht darum klein und zurückgenommen über der
+    Kopfzeile und nimmt ihr nicht das Gewicht. Nötig, weil frische Karten
+    ohne Namen (Person) oder ohne Typ (Fahrzeug) optisch identisch sind:
+    gesucht wird die Stelle, die die Sortierknöpfe daneben verschieben. */
+    .eintrag-nr {
+      margin: 0; color: var(--text-2);
+      font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.04em;
+    }
+    /* Abschluss der Einsatz-Erfassung auf jedem Schritt, zwischen Zurück und
+    Weiter — am Meldekopf reichen oft Schritt 1 und 3 (Audit „Neuer
+    Nutzer", F2). Schmal gesetzt, damit drei Knöpfe auf 360 px passen. */
+    footer.nav .uebernehmen { flex: 0 1 auto; padding-inline: 0.6rem; font-size: min(var(--t-s), max(12px, 4vmin)); white-space: normal; line-height: 1.15; }
+    /* R4-M2, R4-M3, R4-G2: Die Leiste des Assistenten ist ein Raster mit
+    festen Plätzen: „← Zurück" links, „◐" daneben, der Primärknopf rechts
+    außen — in jedem Schritt derselbe Platz, auch wenn „Zur Übersicht →"
+    breiter ist als „Weiter →". Das Raster bricht nie um (vorher: flex-wrap,
+    und „◐" rutschte an die Stelle von „Weiter →").
+    Wann „← Zurück" auf den Pfeil schrumpft, entscheidet eine Container-
+    Abfrage auf die Breite der Leiste selbst. Die Media Query davor rechnete
+    22,4rem mit der Browser-Grundschrift (16 px), nicht mit der Schrift der
+    Seite: im Feld-Modus (112 %) und bei 200 % griff sie nicht, und
+    „Zur Übersicht →" ragte 42 px über den Rand. rem in einer Container-
+    Abfrage folgt der Seitenschrift: 25rem sind 400 px bei 100 %, 448 px im
+    Feld-Modus, und ab 125 % reicht jede Telefonbreite. Der Name bleibt
+    „← Zurück" (aria-label). */
+    footer.nav.assistent-nav {
+      container: assistent-nav / inline-size;
+      display: grid; align-items: center; justify-content: stretch;
+      /* R6-G1: Die Spalte des Primärknopfs schrumpft nicht mehr unter dessen
+         Breite (vorher minmax(0, auto): der Knopf lief über „◐ Ansicht"); was
+         fehlt, trägt „◐ Ansicht" — sein Wort fällt weg, bevor etwas überlappt. */
+      grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
+      grid-template-areas: "zurueck modus mitte weiter";
+      /* mindestens 12 px zwischen den Knöpfen (R4-G4), auch auf 320 px */
+      column-gap: max(12px, min(1rem, 18px, 3vw));
+    }
+    footer.nav.assistent-nav > .anzeige-leiste { grid-area: modus; min-width: 0; max-width: 100%; flex: 0 1 auto; }
+    footer.nav.assistent-nav .anzeige-leiste-knopf { min-width: 0; max-width: 100%; overflow: hidden; }
+    footer.nav.assistent-nav .anzeige-leiste-text { white-space: nowrap; }
+    footer.nav.assistent-nav > .uebernehmen { grid-area: mitte; justify-self: center; }
+    footer.nav.assistent-nav > .primaer { grid-area: weiter; justify-self: end; }
+    /* Browser-Zoom statt Systemschrift (200 % auf 360 px = 180 px Layoutbreite):
+    Die Knöpfe haben px-Maße und passen dann nicht mehr nebeneinander (der
+    Primärknopf lag über „Zurück" und „◐"). Unter 260 px (Inhaltsbreite der Leiste) bekommt der
+    Primärknopf eine eigene, volle Zeile am unteren Rand. */
+    footer.nav.assistent-nav { row-gap: max(12px, min(0.9rem, 14px)); }
+    /* Mit drei Knöpfen wird es auf dem Telefon eng (R2-M1): Zurück und
+    Weiter rücken dann ihr Polster ein, der mittlere Knopf bricht in sich
+    um und — nur wenn „übernehmen" allein nicht mehr passt — im Wort,
+    statt abgeschnitten zu werden. Die Zweiknopf-Leiste bleibt, wie sie ist. */
+    footer.nav .uebernehmen { flex-shrink: 1; overflow: visible; overflow-wrap: anywhere; }
+    footer.nav:has(.uebernehmen) button:not(.uebernehmen):not(.anzeige-leiste-knopf) { padding-inline: min(1.1rem, 20px, 3.5vw); }
+    /* R3-S4: Ansage unter dem Namensfeld, über die ganze Zeile. */
+    .zeile > .ov-ergaenzt { flex-basis: 100%; margin: 0; }
+    img.fahrzeug-symbol { height: 2.4rem; width: auto; float: left; margin: 0.1rem 0.8rem 0.2rem 0; }
+    /* In der Kopfzeile ist das Zeichen ein Glied der Zeile, kein Float: es
+    führt den Eintrag an und die Kopflinie läuft darunter durch. */
+    .eintrag-kopf > img.fahrzeug-symbol { float: none; flex: 0 0 auto; margin: 0 0 0.35rem; }
+    .legende { color: var(--text-2); }
+    /* Touch-Zähler (− / Zahl / +) für die Meldekopf-Schnellerfassung: große
+    Tippziele, damit am Tablet ohne Tastatur gezählt werden kann. */
+    .stepper-zeile { display: flex; flex-wrap: wrap; gap: 0.8rem 1.4rem; align-items: flex-end; margin-top: 0.4rem; }
+    .stepper-rest { align-self: center; }
+    @media (max-width: 29.999rem) {
+      /* Mit Modus-Marke („Schnellerfassung", „Aufnahme für: …") bekommt die
+      Titelzeile eine eigene Zeile unter dem Rücksprung: die Marke sagt,
+      WAS hier erfasst wird, und darf nicht in die Rücksprungzeile drängen. */
+      .seiten-kopf.assistent-kopf .titelzeile:has(.modus-marke) { order: 1; flex: 1 1 100%; flex-wrap: nowrap; min-width: 0; padding-bottom: var(--r-2); }
+      /* R4-M7: Die Marke „Aufnahme für: <Sammlung>" bricht um (bis zu drei
+      Zeilen) statt auf „Aufnahme fü…" zu enden — gerade die Angabe, FÜR WELCHE
+      Sammlung erfasst wird, war nicht zu lesen. Kurze Marken daneben
+      („Schnellerfassung") bleiben einzeilig. */
+      .seiten-kopf.assistent-kopf .titelzeile .modus-marke { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .seiten-kopf.assistent-kopf .titelzeile .modus-marke:last-child:not(:only-child) {
+        white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3; line-clamp: 3;
+      }
+      .seiten-kopf.assistent-kopf .titelzeile .modus-marke:not(:last-child) { flex-shrink: 0; }
+    }
+    @media (max-width: 47.999rem) {
+      .ebenen-zeile + .ebenen-zeile {
+        margin-top: var(--r-3); padding-top: var(--r-3);
+        border-top: var(--strich) solid var(--linie-fein);
+      }
+    }
+    @media (min-width: 48rem) {
+      .zeile > .zeilen-knopf-leer { display: block; flex: 0 0 2.75rem; }
+    }
+    @media (orientation: landscape) and (max-height: 31.25rem) {
+      .seiten-kopf .modus-marke { font-size: min(var(--t-xs), 14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%; }
+    }
+    @media (max-height: 44rem) {
+      html.schrift-gross .seiten-kopf .modus-marke { font-size: min(var(--t-xs), 14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%; }
+    }
+    @media (max-width: 35.99rem) {
+      footer.nav.assistent-nav.mit-uebernehmen {
+        grid-template-areas: "mitte mitte mitte mitte" "zurueck modus leer weiter";
+        /* R5-G3: mindestens 12 px zwischen „In Einsatz übernehmen" und „Weiter →" (gemessen: 10 px). */
+        row-gap: max(12px, min(0.9rem, 14px));
+      }
+      footer.nav.mit-uebernehmen .uebernehmen {
+        justify-self: stretch; min-height: min(calc(var(--ziel-basis) + var(--ziel)), calc(44px + var(--ziel)));
+        font-size: min(var(--t-m), max(16px, 5vmin)); white-space: nowrap; overflow-wrap: normal;
+        font-weight: 600; border-width: var(--strich-stark);
+      }
+      footer.nav.mit-uebernehmen button:not(.uebernehmen):not(.anzeige-leiste-knopf) { padding-inline: min(1.1rem, 20px); }
+      main.mit-uebernehmen { padding-bottom: calc(min(10rem, 160px) + env(safe-area-inset-bottom)); }
+      html:has(main.mit-uebernehmen) { scroll-padding-bottom: calc(min(10rem, 160px) + env(safe-area-inset-bottom)); }
+    }
+    @media (max-width: 30rem) {
+      img.fahrzeug-symbol { float: none; display: block; margin: 0 0 var(--r-1); }
+    }
+    @media (max-width: 16rem) {
+      footer.nav.assistent-nav {
+        grid-template-areas: none; grid-template-columns: auto auto minmax(0, 1fr); column-gap: 8px; row-gap: 8px;
+        padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
+      }
+      footer.nav.assistent-nav .anzeige-leiste-knopf { min-width: calc(44px + var(--ziel)); }
+      /* Fußleiste (R9-M8, R9-G5): 5 px Polster statt 11 und das Zielmaß 44 statt 47 px: 62 statt 70 px (19 % statt 22 % der Höhe). */
+      footer.nav.assistent-nav { padding-top: 5px; padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+      footer.nav.assistent-nav .anzeige-leiste-knopf { min-height: calc(44px + var(--ziel)); }
+    }
+    @media (max-width: 12rem) {
+      footer.nav.assistent-nav { column-gap: 4px; padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right)); }
+    }
+    @media (max-width: 9rem) {
+      footer.nav.assistent-nav:not(.mit-uebernehmen) > .primaer { grid-row: 1; grid-column: 1 / -1; }
+      footer.nav.assistent-nav.mit-uebernehmen > .primaer { grid-row: 2; grid-column: 1 / -1; }
+    }
+
+    /* ---------------------------------------------------------------
        Kennfarbe in den Anzeigemodi. Die Token der Modi selbst kommen aus
        @bos/oberflaeche (oben); hier steht nur, was die Kennfarbe dieser App
        betrifft. Der Nacht-Modus nimmt das gemeinsame Bernstein.
@@ -2378,8 +2627,8 @@
       <!-- Dieselbe Karte wie StandKarte in app.tsx. -->
       <section class="karte start-stand" aria-labelledby="stand-titel">
         <h2 id="stand-titel">Im Aufbau</h2>
-        <p>Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute: Bögen aufnehmen (Scan, Handscanner, Fotos, Dateien, Link), Sammlungen führen, Summen und Lage lesen, ausgeben als PDF, CSV und Excel, Datensicherung einspielen.</p>
-        <p>Die Schnellerfassung einer Einheit ohne Bogen folgt als Nächstes. Bis dahin erfasst du sie im <a href="https://erfassungsbogen.app/">Erfassungsbogen</a> und scannst ihren QR-Code hier ein.</p>
+        <p>Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute: Bögen aufnehmen (Scan, Handscanner, Fotos, Dateien, Link), Einheiten ohne Bogen schnell erfassen (Stärke, Führungskraft, Fahrzeuge), Sammlungen führen, Summen und Lage lesen, ausgeben als PDF, CSV und Excel, Datensicherung einspielen.</p>
+        <p>Den vollständigen Bogen mit allen Namen erfasst die Einheit im <a href="https://erfassungsbogen.app/">Erfassungsbogen</a>; hier wird ihr QR-Code eingelesen.</p>
       </section>
       <!-- Derselbe Text, den die React-Startseite unten zeigt — erzeugt aus
            src/app/start-inhalt.ts, damit beide Pfade nicht auseinanderlaufen

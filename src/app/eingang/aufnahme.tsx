@@ -1778,6 +1778,10 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     scanneInEinsatz,
     importiereStapel,
     importiereEinsatzDatei,
+    // Für die Schnellerfassung: dieselbe Ablage mit denselben Rückfragen, und
+    // warum sie zuletzt scheiterte (voller Speicher, R6-E2).
+    bogenInSammlung,
+    ablageFehlerText: () => ablageFehler.current,
   };
 }
 

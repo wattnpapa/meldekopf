@@ -6,12 +6,12 @@
  * Startseite mit der Weiche „Bögen sammeln" (laufende Sammlungen öffnen, neue
  * anlegen), der Einsatzliste und der zuletzt offenen Sammlung (W5); die
  * offene Sammlung zeigt einsatz-ansicht.tsx. Die Eingänge (Scan, Dateien,
- * Einsatz importieren, Link-Empfang) liefert eingang/aufnahme.tsx; die
- * Schnellerfassung kommt mit Phase 4; die Weiche der
+ * Einsatz importieren, Link-Empfang) liefert eingang/aufnahme.tsx, die
+ * Schnellerfassung schnellerfassung/schnellerfassung.tsx; die Weiche der
  * Startseite bleibt die eine Stelle für Aktionen (Begründung in kopfnav.ts).
  */
 
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, Suspense, lazy, useState, type ReactNode } from "react";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { einsatzErfragen } from "./einsatz-erfragen";
 import { ERFASSUNGSBOGEN_URL } from "./adressen";
@@ -28,6 +28,9 @@ import { EinsatzListe, letzteMeldungText } from "./einsaetze-ui";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 import { EinsatzAnsicht } from "./einsatz-ansicht";
 import { useAufnahme } from "./eingang/aufnahme";
+import { entwurfPlatzFrei, erfassungFuer } from "./schnellerfassung/angefangen";
+import type { ExportUmfang } from "./weitergabe/export-stand";
+import { entwurfLaden } from "./entwurf";
 import { QrScannerWeb } from "./eingang/qr-scanner-web";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
 import { SpeicherWarnung } from "./speicher-warnung";
@@ -92,23 +95,33 @@ export function StandKarte() {
       <h2 id="stand-titel">Im Aufbau</h2>
       <p>
         Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute: Bögen
-        aufnehmen (Scan, Handscanner, Fotos, Dateien, Link), Sammlungen führen, Summen und Lage lesen, ausgeben
-        als PDF, CSV und Excel, Datensicherung einspielen.
+        aufnehmen (Scan, Handscanner, Fotos, Dateien, Link), Einheiten ohne Bogen schnell erfassen (Stärke,
+        Führungskraft, Fahrzeuge), Sammlungen führen, Summen und Lage lesen, ausgeben als PDF, CSV und Excel,
+        Datensicherung einspielen.
       </p>
       <p>
-        Die Schnellerfassung einer Einheit ohne Bogen folgt als Nächstes. Bis dahin erfasst du sie im{" "}
-        <a href={ERFASSUNGSBOGEN_URL}>Erfassungsbogen</a> und scannst ihren QR-Code hier ein.
+        Den vollständigen Bogen mit allen Namen erfasst die Einheit im{" "}
+        <a href={ERFASSUNGSBOGEN_URL}>Erfassungsbogen</a>; hier wird ihr QR-Code eingelesen.
       </p>
     </section>
   );
 }
+
+// Erst auf Knopfdruck: Die Schnellerfassung bringt Vokabulare, StAN-Tabellen
+// und Formularbausteine mit, die beim Start niemand braucht (Startbündel).
+const Schnellerfassung = lazy(() => import("./schnellerfassung/schnellerfassung").then((m) => ({ default: m.Schnellerfassung })));
 
 export function App() {
   const web = imWebBrowser();
   const [einsaetze, setEinsaetze] = useState<Einsatzsammlung[]>(() => einsaetzeLaden());
   // Beim Kaltstart die zuletzt offene Sammlung wieder öffnen (W5).
   const [offenerEinsatzId, setOffenerEinsatzIdRoh] = useState<string | null>(() => letztenEinsatzLaden());
+  // Alle Bögen oder nur die neuen. Vorgabe bleibt der Gesamtexport, und ein
+  // anderer Einsatz beginnt wieder damit: dem Stab darf nicht versehentlich
+  // etwas fehlen.
+  const [exportUmfang, setExportUmfang] = useState<ExportUmfang>("alle");
   const setOffenerEinsatzId = (id: string | null) => {
+    if (id !== offenerEinsatzId) setExportUmfang("alle");
     setOffenerEinsatzIdRoh(id);
     letztenEinsatzMerken(id);
   };
@@ -118,6 +131,19 @@ export function App() {
   const [fehler, setFehler] = useState("");
   const aufnahme = useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNeuLaden, setMeldung, setFehler });
   const offenerEinsatz = offenerEinsatzId ? einsaetze.find((s) => s.id === offenerEinsatzId) : undefined;
+  // Schnellerfassung für den offenen Einsatz. Beim Kaltstart geht es zurück in
+  // eine angefangene Erfassung, außer sie wurde über „‹ Einsatz" verlassen (R5-N3).
+  const [erfassungOffen, setErfassungOffen] = useState(() => {
+    const e = offenerEinsatzId ? erfassungFuer(offenerEinsatzId, entwurfLaden()) : null;
+    return !!e && !e.fremd?.startseite;
+  });
+
+  async function manuellErfassen(einsatzId: string) {
+    if (!(await entwurfPlatzFrei(einsatzId))) return;
+    setMeldung("");
+    setFehler("");
+    setErfassungOffen(true);
+  }
 
   async function neuerEinsatz() {
     const s = await einsatzErfragen();
@@ -141,6 +167,27 @@ export function App() {
     />
   );
 
+  if (offenerEinsatz && erfassungOffen) {
+    return (
+      <>
+        <Aktualisierungshinweise />
+        <Suspense fallback={<main id="inhalt" className="schnellerfassung"><p className="hinweis" role="status">Schnellerfassung lädt …</p></main>}>
+        <Schnellerfassung
+          key={offenerEinsatz.id}
+          einsatz={offenerEinsatz}
+          aufnahme={aufnahme}
+          setMeldung={setMeldung}
+          onEnde={() => {
+            setErfassungOffen(false);
+            einsaetzeNeuLaden();
+          }}
+        />
+        </Suspense>
+        <Dialogschicht />
+      </>
+    );
+  }
+
   if (offenerEinsatz) {
     return (
       <>
@@ -159,6 +206,9 @@ export function App() {
             aufnahme.setStapelBericht([]);
           }}
           onGeaendert={einsaetzeNeuLaden}
+          onManuell={() => void manuellErfassen(offenerEinsatz.id)}
+          exportUmfang={exportUmfang}
+          setExportUmfang={setExportUmfang}
           onGeloescht={() => {
             // Quittung mit Rückweg: die Startseite (R2-D6, zuletztGeloeschterEinsatz in einsaetze-ui).
             setOffenerEinsatzId(null);
