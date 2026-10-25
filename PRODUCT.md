@@ -60,7 +60,7 @@ sobald der Meldekopf sie vollständig trägt.
   und Mail, Datei, PDF, AirDrop/Quick Share, Link.
 - Ausgänge ohne Netz: Sammel-PDF (Papier bleibt der Vertrag), CSV, Excel-Liste
   „Oldenburg", Einsatz-Datei.
-- Läuft im Browser (PWA, meldekopf.app), als Desktop-App (Electron) und als
+- Läuft im Browser (PWA, meldekopf.erfassungsbogen.app), als Desktop-App (Electron) und als
   Android-App (Capacitor). iOS folgt dem Stand des Erfassungsbogens.
 
 ## Capabilities and Constraints
@@ -87,7 +87,7 @@ sobald der Meldekopf sie vollständig trägt.
 
 ## Brand Commitments
 
-Name „Meldekopf" / meldekopf.app. Dieselbe Designsprache wie der
+Name „Meldekopf" / meldekopf.erfassungsbogen.app. Dieselbe Designsprache wie der
 Erfassungsbogen („Amtlich"-Optik über eigene CSS-Design-Token, Oberflächen-
 schrift Archivo im Bundle, eingebackene taktische Zeichen, Dunkelmodus nur per
 Schalter). Die beiden Apps sollen als Geschwister erkennbar sein, aber mit

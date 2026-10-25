@@ -56,7 +56,7 @@ Die vollständige Liste steht in [docs/funktionsumfang.md](docs/funktionsumfang.
 
 ## Plattformen (geplant)
 
-Web-App (PWA) unter meldekopf.app über GitHub Pages, Desktop-App (Electron:
+Web-App (PWA) unter meldekopf.erfassungsbogen.app über GitHub Pages, Desktop-App (Electron:
 Windows x64/arm64, macOS, Linux), Android-App (Capacitor). Derselbe Aufbau wie
 beim Erfassungsbogen, damit Build, Release und Härtung übernommen werden können.
 

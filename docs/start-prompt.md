@@ -45,9 +45,9 @@ Heute ist Phase 0 (Gerüst) dran:
 - Eigenes Icon und eigene Grundfarbe: Vorschlag machen, nicht die Farbe des
   Erfassungsbogens nehmen. Begründung in `docs/architektur.md` Kapitel 8.1.
 - `scripts/bundle-budget.json` nach dem ersten Build setzen.
-- GitHub-Pages-Deploy im `release.yml` mit `CNAME` meldekopf.app. Ob die Domain
-  registriert ist, kläre ich; baue es so, dass ein anderer Domainname ein
-  Einzeiler ist.
+- GitHub-Pages-Deploy im `release.yml` mit `CNAME` meldekopf.erfassungsbogen.app
+  (Subdomain; den DNS-Eintrag lege ich an). Baue es so, dass ein anderer
+  Domainname ein Einzeiler ist.
 
 Regeln für diese und alle weiteren Sessions:
 
@@ -72,11 +72,11 @@ Code; vermerke den Widerspruch in der Doku und sag es mir.
 
 ## Hinweise für spätere Phasen
 
-Phase 1 beginnt mit zwei neuen Repos (`bos-eeb-satz`, `bos-oberflaeche`,
-Arbeitstitel); die Vorlage für Struktur, README mit Aufnahmeregeln, `ci.yml`,
-`tsconfig` und ESLint-Regeln ist `vendor/bos-meldekopf`. Für
-`bos-oberflaeche` sind die Regeln aus ADR-004 statt der Kern-Regel 2 zu
-verwenden (React und DOM erlaubt).
+Phase 1 füllt die zwei Repos `bos-eeb-satz` und `bos-oberflaeche`, die seit
+2026-10-25 mit Gerüst (package.json, tsconfig, ESLint-Regeln, vitest, ci.yml,
+README mit Regeln, leerer `src/index.ts`) bestehen. Vorlage war
+`vendor/bos-meldekopf`; `bos-oberflaeche` trägt die Regeln aus ADR-004 statt
+der Kern-Regel 2 (React und DOM erlaubt, nur jsdom im Test).
 
 Phase 2 ist die erste, in der die App Nutzdaten hält: dann ISK und DSFA aus
 den Vorlagen des Erfassungsbogens (`docs/informationssicherheitskonzept.md`,

@@ -68,7 +68,7 @@ in [funktionsumfang.md](funktionsumfang.md), der Weg der Übernahme in
   (Kapitel 9).
 - **Kein Backend.** `localStorage` als einzige Ablage, hineingereicht in den
   Kern (`speicherhuelleSetzen`).
-- **GitHub Pages** liefert die PWA unter meldekopf.app; **GitHub Releases**
+- **GitHub Pages** liefert die PWA unter meldekopf.erfassungsbogen.app; **GitHub Releases**
   tragen Installer, APK und Update-Metadaten. Beides ist je Repository, daher
   ein eigenes Repository (ADR-002).
 - **Content-Security-Policy** als `<meta>` im Build wie im Erfassungsbogen:
@@ -120,7 +120,7 @@ flowchart LR
 
 | Partner | Schnittstelle | Beschreibung |
 | --- | --- | --- |
-| Einheit mit Erfassungsbogen | QR (`EEB2`/`EEB2C`, Base41, segmentiert), Link `https://meldekopf.app/#<Payload>`, JSON-Datei, PDF mit QR | Eingang in die Sammlung; Signatur wird geprüft und gegengezeichnet. |
+| Einheit mit Erfassungsbogen | QR (`EEB2`/`EEB2C`, Base41, segmentiert), Link `https://meldekopf.erfassungsbogen.app/#<Payload>`, JSON-Datei, PDF mit QR | Eingang in die Sammlung; Signatur wird geprüft und gegengezeichnet. |
 | Einheit ohne Bogen | Bedienoberfläche (Schnellerfassung) | Nur Stärke, Führungskraft, Fahrzeuge; für mehr wird der Erfassungsbogen per Link geöffnet (ADR-006). |
 | Erfassungsbogen-App | Link in beide Richtungen | Gleicher Payload wie der QR; von dort kommt „An Meldekopf geben", von hier „Vollständig erfassen". |
 | S1-Control | Einsatz-Datei (JSON-Umschlag), CSV | Leser `einsaetzeAusJson` liegt im Kern; der Umschlag trägt Export-Stände und Lage-Angaben. |
@@ -133,7 +133,7 @@ flowchart LR
 
 | System | Richtung | Zweck | Protokoll |
 | --- | --- | --- | --- |
-| GitHub Pages (meldekopf.app) | eingehend, einmalig | Auslieferung der PWA; danach offline | HTTPS, statische Dateien |
+| GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig | Auslieferung der PWA; danach offline | HTTPS, statische Dateien |
 | GoatCounter | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart; einziger Fremd-Host in der CSP | HTTPS `sendBeacon` / Bild |
 | GitHub Releases | ein-/ausgehend | Installer, APK, `latest*.yml` für electron-updater | HTTPS |
 | Capacitor-Plugins | intern | Barcode-Scanner, Dateisystem, Teilen, App-Links | Bridge |
@@ -206,8 +206,8 @@ flowchart LR
 | `@bos/eeb-format` | Datenmodell (`SCHEMA_VERSION` 9), Codec, Signatur, Datenschutzfrist. | vorhanden |
 | `@bos/meldekopf` | Einsatz-Sammlung als reine Logik: Revisionen, Dedupe, Fristen, Aufteilen, Zusammenführen, Diff, Papierkorb, Text-Darstellung. | vorhanden (3.167 Zeilen) |
 | `@bos/vokabulare`, `@bos/taktische-zeichen` | Nachschlagetabellen, Zeichenauflösung. | vorhanden |
-| `@bos/eeb-satz` (Arbeitstitel) | Was beide Apps ausgeben und keine Oberfläche ist: pdfmake-Dokumentdefinition (Einzel- und Sammel-PDF, Lageblatt), CSV-Schreiber, XLSX-Schreiber, Oldenburg-Spalten, QR-Gruppierung mehrteiliger Bögen, PDF-Bild-Leser. | neu, aus `pdf-dokument.ts` (2.258), `bogen-csv.ts` (423), `einsatz-csv.ts` (290), `oldenburg-xlsx.ts` (615), `xlsx.ts` (319), `csv.ts` (51), `qr-boegen.ts` (48), `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts` |
-| `@bos/oberflaeche` (Arbeitstitel) | Was beide Apps zeigen: Design-Token (CSS), Dialogschicht, Modal-Overlay, Kopfnavigation, Anzeigemodi, Organisationsfarben, Tipp-Schutz, Schriftstufen, Tastatur-Erkennung, Quittungen, Feld-Bausteine. **Darf React und DOM**, aber keine Fachlogik und keine Persistenz außer den eigenen Anzeige-Schlüsseln. | neu, aus `dialoge.tsx` (487), `modal-overlay.ts` (259), `kopfnav.ts`/`kopfnav-ui.tsx` (338), `anzeige-modus.ts`/`anzeige-schalter.tsx` (383), `org-farben.ts` (358), `tipp-schutz.ts` (288), `schrift-stufe.ts`, `tastatur.ts`, `daumen-quittung.tsx`, `schritte/bausteine.tsx` (742, Auswahl) |
+| `@bos/eeb-satz` (<https://github.com/wattnpapa/bos-eeb-satz>) | Was beide Apps ausgeben und keine Oberfläche ist: pdfmake-Dokumentdefinition (Einzel- und Sammel-PDF, Lageblatt), CSV-Schreiber, XLSX-Schreiber, Oldenburg-Spalten, QR-Gruppierung mehrteiliger Bögen, PDF-Bild-Leser. | neu, aus `pdf-dokument.ts` (2.258), `bogen-csv.ts` (423), `einsatz-csv.ts` (290), `oldenburg-xlsx.ts` (615), `xlsx.ts` (319), `csv.ts` (51), `qr-boegen.ts` (48), `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts` |
+| `@bos/oberflaeche` (<https://github.com/wattnpapa/bos-oberflaeche>) | Was beide Apps zeigen: Design-Token (CSS), Dialogschicht, Modal-Overlay, Kopfnavigation, Anzeigemodi, Organisationsfarben, Tipp-Schutz, Schriftstufen, Tastatur-Erkennung, Quittungen, Feld-Bausteine. **Darf React und DOM**, aber keine Fachlogik und keine Persistenz außer den eigenen Anzeige-Schlüsseln. | neu, aus `dialoge.tsx` (487), `modal-overlay.ts` (259), `kopfnav.ts`/`kopfnav-ui.tsx` (338), `anzeige-modus.ts`/`anzeige-schalter.tsx` (383), `org-farben.ts` (358), `tipp-schutz.ts` (288), `schrift-stufe.ts`, `tastatur.ts`, `daumen-quittung.tsx`, `schritte/bausteine.tsx` (742, Auswahl) |
 | Electron-Hülle | Fenster, Auto-Update, Berechtigungen, Lagemonitor-Fenster. | `electron/main.js` |
 | Capacitor-Hülle | Android-Projekt; iOS folgt. | `android/`, `capacitor.config.json` |
 | Statische Seiten | Anleitung, Datenschutz, Impressum; weniger als beim Erfassungsbogen (keine Organisations-Landingpages). | `public/` (Auswahl) |
@@ -265,7 +265,7 @@ sequenceDiagram
   M->>M: Nur-Stärke-Bogen als Payload kodieren,<br/>Rücksprung-Kennung (Einsatz-ID) anhängen
   M->>E: Link https://erfassungsbogen.app/#<Payload>&rueck=meldekopf
   E->>E: Assistent mit vorbelegtem Bogen
-  E->>M: „An Meldekopf geben" → https://meldekopf.app/#<Payload>
+  E->>M: „An Meldekopf geben" → https://meldekopf.erfassungsbogen.app/#<Payload>
   M->>M: meldungAufnehmen → Fassung ersetzt die Schnellerfassung (fassung-vorrang)
 ```
 
@@ -299,11 +299,11 @@ gegen die Releases dieses Repos.
 
 | Ziel | Weg | Anmerkung |
 | --- | --- | --- |
-| Web/PWA | GitHub Pages, Domain meldekopf.app, `release.yml` Job `pages` | Eigene Domain je Repo ist der Grund für das eigene Repo (ADR-002). |
+| Web/PWA | GitHub Pages, Domain meldekopf.erfassungsbogen.app (Subdomain, CNAME im DNS von erfassungsbogen.app), `release.yml` Job `pages` | Eigene Site je Repo ist der Grund für das eigene Repo (ADR-002). meldekopf.app war vergeben. |
 | Windows x64/arm64 | NSIS-Installer aus `electron-builder`, GitHub Releases | `appId` `de.meldekopf.app`, `productName` „Meldekopf", `publish.url` auf dieses Repo. |
 | macOS | dmg/zip; Job zunächst still wie beim Erfassungsbogen | Signierung erst mit hinterlegten Secrets. |
 | Linux | deb, pacman | |
-| Android | Capacitor, APK im Release; Play Store später | Paket `de.meldekopf.app`, App-Links `meldekopf.app` mit `assetlinks.json`. |
+| Android | Capacitor, APK im Release; Play Store später | Paket `de.meldekopf.app`, App-Links `meldekopf.erfassungsbogen.app` mit `assetlinks.json`. |
 | iOS | folgt dem Stand des Erfassungsbogens | AASA mit Team-ID, Associated Domains. |
 
 Pipeline wie `release.yml` des Erfassungsbogens: `prepare` (Datums-Version,
@@ -474,7 +474,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 ### ADR-007: Gleiche Speicherschlüssel, Übernahme der Bestandsdaten per Datei
 
 - **Kontext:** Einsatz-Sammlungen liegen heute im `localStorage` von
-  erfassungsbogen.app; eine andere Herkunft (meldekopf.app) sieht sie nicht.
+  erfassungsbogen.app; eine andere Herkunft (meldekopf.erfassungsbogen.app) sieht sie nicht.
 - **Entscheidung:** Dieselben Schlüssel und Datenformen. Übernahme über die
   Datensicherungsdatei oder die Einsatz-Datei des Erfassungsbogens; der
   Erfassungsbogen zeigt seine Sammlung in einer Übergangszeit weiter, bietet
@@ -517,7 +517,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Übergang per Link zwischen PWAs auf iOS offline | Gerätetest; bis dahin QR. |
 | Bestandsdaten bleiben im Erfassungsbogen liegen | Übergangszeit mit Hinweis dort; Datensicherung als Weg (ADR-007). |
 | Doppelte Pflege, bis der Erfassungsbogen abbaut | Übergangszeit bewusst kurz halten; Abbau ist der erste Schritt nach Fertigstellung. |
-| Domain meldekopf.app nicht verfügbar | Vor Phase 0 prüfen; Ersatz meldekopf-app.de. |
+| Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 
 ## 12. Glossar
 

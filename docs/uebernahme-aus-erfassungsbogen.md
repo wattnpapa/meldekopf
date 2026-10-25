@@ -20,8 +20,8 @@ Kopfkommentar festhalten).
 
 ## B. Geht neu in den Kern (`@bos/eeb-satz`, ADR-005)
 
-Reine Ausgabe, ohne DOM und React. Entsteht als eigenes Repo
-`wattnpapa/bos-eeb-satz` (Arbeitstitel), Submodul in beiden Apps.
+Reine Ausgabe, ohne DOM und React. Repo <https://github.com/wattnpapa/bos-eeb-satz> (angelegt 2026-10-25, mit
+Gerüst), Submodul in beiden Apps.
 
 | Datei im Erfassungsbogen | Zeilen | Anmerkung | Stand |
 | --- | --- | --- | --- |
@@ -39,8 +39,8 @@ plattformabhängig).
 
 ## C. Geht neu in den Oberflächen-Baustein (`@bos/oberflaeche`, ADR-004)
 
-Darf React und DOM, keine Fachlogik. Entsteht als eigenes Repo
-`wattnpapa/bos-oberflaeche` (Arbeitstitel), Submodul in beiden Apps.
+Darf React und DOM, keine Fachlogik. Repo <https://github.com/wattnpapa/bos-oberflaeche> (angelegt 2026-10-25, mit
+Gerüst), Submodul in beiden Apps.
 
 | Datei im Erfassungsbogen | Zeilen | Anmerkung | Stand |
 | --- | --- | --- | --- |
@@ -112,8 +112,8 @@ beginnt der Abbau im Erfassungsbogen.
 
 | Phase | Inhalt | Fertig, wenn |
 | --- | --- | --- |
-| 0 Gerüst | Repo mit Submodulen (vier Pins aus A), Vite/TS/Vitest/Cucumber-Konfiguration, CSP, PWA, CI (`ci.yml`), leere App mit Startseite und Anzeigemodus; Pages-Deploy auf meldekopf.app; Bundle-Budget erstmals gemessen. | `npm run build`, `npm test`, Pages live. |
-| 1 Geteilte Bausteine | `@bos/eeb-satz` und `@bos/oberflaeche` als Repos anlegen, Dateien aus B und C mit Tests hineinbewegen, ADR-003-Regeln und CI je Repo, hier als Submodule pinnen. Der Erfassungsbogen bleibt unverändert (nutzt weiter seine Kopien). | Beide Submodule bauen; `kern-kopien` grün. |
+| 0 Gerüst | Repo mit Submodulen (vier Pins aus A), Vite/TS/Vitest/Cucumber-Konfiguration, CSP, PWA, CI (`ci.yml`), leere App mit Startseite und Anzeigemodus; Pages-Deploy auf meldekopf.erfassungsbogen.app; Bundle-Budget erstmals gemessen. | `npm run build`, `npm test`, Pages live. |
+| 1 Geteilte Bausteine | `@bos/eeb-satz` und `@bos/oberflaeche` (Repos mit Gerüst vorhanden), Dateien aus B und C mit Tests hineinbewegen, ADR-003-Regeln und CI je Repo, hier als Submodule pinnen. Der Erfassungsbogen bleibt unverändert (nutzt weiter seine Kopien). | Beide Submodule bauen; `kern-kopien` grün. |
 | 2 Sammlung lesen und zeigen | D: Persistenz-Anbindung, `einsaetze-ui`, Auswertung, Liste, Tabelle, Zug, Status, Aufteilen/Zusammenführen, Fristen, Uhr, Datensicherung. Eine Datensicherung aus dem Erfassungsbogen lädt und zeigt die Sammlung. **ISK und DSFA anlegen.** | Szenarien `einsatz-detail`, `einheiten-liste` grün. |
 | 3 Eingänge | Scanner, Handscanner, Bilderstapel, Datei/PDF, Link, Rückfragen, Fassungs-Vorrang, Quittungen. | `einsatz-sammlung`, `qr-scannen` grün. |
 | 4 Schnellerfassung | Nur-Stärke-Formular, Namen, Eintreffzeit, StAN-Vorbelegung, Entwurf; „Vollständig erfassen" per Link (Gegenstück im Erfassungsbogen: Rücksprung annehmen, ist dort eine kleine Ergänzung und darf schon jetzt gebaut werden). | Szenario „Einheit manuell in den Einsatz erfassen" grün. |
