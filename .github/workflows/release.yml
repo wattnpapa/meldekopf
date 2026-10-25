@@ -2,8 +2,9 @@
 # GitHub-Pages-Deployment unter der Domain aus src/app/adressen.ts (die
 # CNAME-Datei schreibt der Build nach dist/, siehe vite.config.ts).
 # macOS (dmg/zip) ist vorerst stillgelegt, siehe Job build-mac; Android
-# (signierte APK via Capacitor/Gradle) kommt mit der nativen Hülle in Phase 5
-# der Übernahme, siehe Job build-android.
+# (signierte APK via Capacitor/Gradle) seit Phase 5, sobald die Secrets
+# ANDROID_KEYSTORE_BASE64 und ANDROID_KEYSTORE_PASSWORD gesetzt sind (siehe
+# Job build-android).
 # Herkunft: Erfassungsbogen `.github/workflows/release.yml` (Commit f2b77f1);
 # Vorbild dort: S1-Control (build-main.yml) — Datums-Version, Git-Tag, GitHub Release.
 name: Build & Release
@@ -280,17 +281,16 @@ jobs:
             release/latest*.yml
 
   build-android:
-    # Stillgelegt, bis die Capacitor-Hülle (android/) übernommen ist (Phase 5 der
-    # Übernahme, docs/uebernahme-aus-erfassungsbogen.md). Zum Einschalten: diese
-    # Zeile entfernen und build-android wieder in die needs-Liste von release
-    # aufnehmen — ein übersprungener Job in needs ließe release sonst ausfallen.
-    if: false
+    # Ohne Keystore-Secret baut der Job nur eine Debug-APK als Prüfung und hängt
+    # nichts ans Release: Eine APK mit Wegwerf-Schlüssel ließe sich später nicht
+    # durch eine signierte ersetzen (Android verlangt denselben Schlüssel).
     runs-on: ubuntu-latest
     needs: [prepare, check]
     env:
       BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
       # Footer-Anzeige = Release-/Tag-Version.
       APP_BUILD_VERSION: ${{ needs.prepare.outputs.build_version }}
+      HAT_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -309,11 +309,19 @@ jobs:
         run: |
           npm run build
           npx cap sync android
+      - name: Ohne Keystore nur prüfen
+        if: env.HAT_KEYSTORE != 'true'
+        working-directory: android
+        run: |
+          echo "::notice::Kein ANDROID_KEYSTORE_BASE64 gesetzt — Debug-APK als Prüfung, kein Android-Release."
+          ./gradlew assembleDebug
       - name: Keystore aus Secret entpacken
+        if: env.HAT_KEYSTORE == 'true'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
       - name: Signierte APK bauen
+        if: env.HAT_KEYSTORE == 'true'
         working-directory: android
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
@@ -326,6 +334,7 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk \
             "app/build/outputs/apk/release/Meldekopf-$BUILD_VERSION-android.apk"
       - uses: actions/upload-artifact@v7
+        if: env.HAT_KEYSTORE == 'true'
         with:
           name: meldekopf-android-${{ env.BUILD_VERSION }}
           path: android/app/build/outputs/apk/release/Meldekopf-*.apk
@@ -334,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     # `check` steht mit in der Liste, weil dort die SBOM entsteht, die unten
     # mit heruntergeladen und ans Release gehängt wird.
-    needs: [prepare, check, build-win, build-linux]
+    needs: [prepare, check, build-win, build-linux, build-android]
     steps:
       - name: Artefakte herunterladen
         uses: actions/download-artifact@v8

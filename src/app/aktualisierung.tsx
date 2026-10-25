@@ -2,10 +2,12 @@
 /**
  * Update-Hinweise der Web-App.
  *
- * Herkunft: Erfassungsbogen `src/app/aktualisierung.tsx` (Commit f2b77f1), in
- * Phase 0 auf den Web-Teil gekürzt. Das Android-Selbst-Update (Sideload-APK
- * über das Capacitor-Plugin AppUpdate) kommt unverändert mit der nativen Hülle
- * (Phase 5); `Aktualisierungshinweise` bleibt die eine Einhängestelle.
+ * Herkunft: Erfassungsbogen `src/app/aktualisierung.tsx` (Commit f2b77f1), auf
+ * den Web-Teil gekürzt. Das Android-Selbst-Update des Erfassungsbogens
+ * (Capacitor-Plugin AppUpdate) entfällt: Es fragte beim Start api.github.com
+ * ab, und außer der Reichweitenmessung hat diese App keine Fremdverbindung
+ * (architektur.md Kap. 3.2). Der Desktop aktualisiert sich über
+ * electron-updater im Hauptprozess (electron/main.js).
  */
 
 import { useEffect, useState } from "react";

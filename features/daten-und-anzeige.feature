@@ -48,7 +48,7 @@ Funktionalität: Darstellung, Offline-Start und Auskunft
     Und ich die Seite neu lade
     Dann sehe ich die Überschrift "Meldekopf"
     Und sehe ich die Überschrift "Im Aufbau"
-    Und sehe ich den Hinweis "Nach dem ersten Laden funktioniert die App auch ohne Netz"
+    Und sehe ich den Hinweis "Funktioniert komplett offline"
 
   Szenario: Pflichtangaben sind aus der Fußzeile erreichbar
     Angenommen ich öffne die App

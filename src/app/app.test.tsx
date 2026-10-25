@@ -13,7 +13,8 @@ describe("Startseite", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Meldekopf" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Im Aufbau" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Die Produktfamilie" })).toBeTruthy();
-    expect(screen.getByText(/Nach dem ersten Laden funktioniert die App auch ohne Netz/)).toBeTruthy();
+    // Die Offline-Zeile nennt den echten Stand (offline-bereit.ts); jsdom hat keinen Service Worker.
+    expect(screen.getByText(/Offline-Vorrat ist in diesem Browser nicht möglich.*Alle Daten bleiben auf diesem Gerät/)).toBeTruthy();
   });
 
   it("die Kopfnavigation führt zum Erfassungsbogen und zu den Pflichtangaben", () => {

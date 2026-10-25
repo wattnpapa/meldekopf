@@ -28,6 +28,7 @@ import { EinsatzListe, letzteMeldungText } from "./einsaetze-ui";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 import { EinsatzAnsicht } from "./einsatz-ansicht";
 import { useAufnahme } from "./eingang/aufnahme";
+import { offlineText, useOfflineStand } from "./offline-bereit";
 import { entwurfPlatzFrei, erfassungFuer } from "./schnellerfassung/angefangen";
 import type { ExportUmfang } from "./weitergabe/export-stand";
 import { entwurfLaden } from "./entwurf";
@@ -126,6 +127,8 @@ export function App() {
     letztenEinsatzMerken(id);
   };
   const einsaetzeNeuLaden = () => setEinsaetze(einsaetzeLaden());
+  // Offline-Vorrat mit Fortschritt (R2-O1, R3-O3): Die Zusage steht erst, wenn er im Gerät liegt.
+  const offline = useOfflineStand();
   // Rückmeldung der letzten Aufnahme oder Handlung, auf Startseite und in der Einsatzansicht.
   const [meldung, setMeldung] = useState("");
   const [fehler, setFehler] = useState("");
@@ -236,7 +239,17 @@ export function App() {
       </SeitenKopf>
       <main id="inhalt" tabIndex={-1} className="start">
         <p className="start-intro">{START_INTRO}</p>
-        <p className="offline-badge">{OFFLINE_ZUSAGE}</p>
+        {/* Das Gerüst der index.html sagt OFFLINE_ZUSAGE; hier steht der echte Stand. */}
+        <p className={`offline-badge${offline.stand === "bereit" ? "" : " offline-laedt"}`} role="status">
+          {offlineText(offline)}
+          {/* Abgebrochenes Erstladen: Der Ausweg steht neben der Meldung (R4-O1). */}
+          {offline.abgebrochen && offline.online && (
+            <>
+              {" "}
+              <button type="button" onClick={() => window.location.reload()}>Jetzt neu laden</button>
+            </>
+          )}
+        </p>
         <SpeicherWarnung stand={einsaetze} />
         <UhrWarnung />
         <div className="weiche">
