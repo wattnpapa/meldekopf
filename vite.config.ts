@@ -1,0 +1,379 @@
+/**
+ * Vite-Konfiguration der Meldekopf-App.
+ *
+ * Herkunft: Erfassungsbogen `vite.config.ts` (Commit f2b77f1). Übernommen sind
+ * Kern-Aliasse (ADR-003), Baustempel, Sitemap, Inline-CSS-Minifizierung,
+ * Font-Inlining, Content-Security-Policy mit Hash-Freigabe und die
+ * PWA-Einstellungen samt zweistufigem Offline-Vorrat. Neu ist das Plugin
+ * `adressen()`: Domain und Reichweitenmessungs-Host kommen aus
+ * src/app/adressen.ts — ein anderer Domainname ist dort eine Zeile.
+ */
+
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig, type Plugin } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
+import { transform } from "esbuild";
+import { sitemapErzeugen } from "./scripts/sitemap";
+import { ZUSATZ_DATEI, vorratAufteilen } from "./scripts/precache-aufteilung";
+import { DOMAIN, STATISTIK_HOST } from "./src/app/adressen";
+
+const { version } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+
+// Footer-Version = Build-Version des Releases (Datums-Tag, z. B. 2026.1025.1430),
+// im CI über APP_BUILD_VERSION gesetzt. Lokal Fallback auf package.json-Version.
+const appVersion = process.env.APP_BUILD_VERSION || version;
+
+/**
+ * Setzt Version und Build-Datum in die strukturierten Daten der index.html ein
+ * (%APP_VERSION% / %BUILD_DATE%). Suchmaschinen werten `dateModified` als
+ * Frische-Signal — von Hand gepflegt wäre es nach dem nächsten Release falsch,
+ * und ein falsches Datum ist schlechter als keines.
+ */
+function bauStempel(): Plugin {
+  return {
+    name: "eeb-baustempel",
+    transformIndexHtml(html: string) {
+      return html
+        .replaceAll("%APP_VERSION%", appVersion)
+        .replaceAll("%BUILD_DATE%", new Date().toISOString().slice(0, 10));
+    },
+  };
+}
+
+/**
+ * Der Domainname an genau einer Stelle (src/app/adressen.ts). Dieses Plugin
+ * trägt ihn überallhin, wo er als Text stehen muss:
+ *  - `%DOMAIN%` in index.html (Canonical, Open Graph) — auch im Dev-Server,
+ *    damit die Seite dort nicht mit Platzhaltern läuft;
+ *  - `%DOMAIN%` in den statischen Seiten und Textdateien unter public/
+ *    (Canonical, robots.txt) — die kopiert Vite unverändert, also nach dem
+ *    Bauen über dist/ nachgezogen;
+ *  - `dist/CNAME` für GitHub Pages: Ohne die Datei im Artefakt setzt Pages
+ *    die eigene Domain beim nächsten Deploy zurück.
+ */
+function adressen(): Plugin {
+  let ausgabe = "dist";
+  return {
+    name: "eeb-adressen",
+    configResolved(config) {
+      ausgabe = join(config.root, config.build.outDir);
+    },
+    transformIndexHtml(html: string) {
+      return html.replaceAll("%DOMAIN%", DOMAIN);
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "CNAME", source: `${DOMAIN}\n` });
+    },
+    closeBundle() {
+      if (!existsSync(ausgabe)) return;
+      for (const name of readdirSync(ausgabe)) {
+        if (!/\.(?:html|txt|webmanifest)$/.test(name)) continue;
+        const pfad = join(ausgabe, name);
+        const inhalt = readFileSync(pfad, "utf8");
+        if (inhalt.includes("%DOMAIN%")) writeFileSync(pfad, inhalt.replaceAll("%DOMAIN%", DOMAIN));
+      }
+    },
+  };
+}
+
+/**
+ * Legt die sitemap.xml ins Bundle (siehe scripts/sitemap.ts). Sie entsteht im
+ * Build statt als Datei in public/ zu liegen, weil ihr <lastmod> aus der
+ * Git-Historie kommt — von Hand gepflegt wäre es nach dem nächsten Release
+ * falsch, und ein falsches Datum ist schlechter als keines.
+ *
+ * Nur im Build: der Dev-Server liefert public/ unverändert aus, und für die
+ * Sitemap gibt es dort niemanden, der sie lesen wollte.
+ */
+function sitemap(): Plugin {
+  // Die Wurzel liefert Vite; dort liegen public/ und die Git-Historie, aus der
+  // das Skript die lastmod-Daten liest.
+  let wurzel = process.cwd();
+  return {
+    name: "eeb-sitemap",
+    apply: "build",
+    configResolved(config) {
+      wurzel = config.root;
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemapErzeugen(wurzel) });
+    },
+  };
+}
+
+/**
+ * Setzt im Build eine Content-Security-Policy als <meta> in den Kopf der
+ * index.html. Bewusst NUR im Build: der Vite-Dev-Server braucht den
+ * HMR-WebSocket und Inline-Eval, die eine strenge Policy blockieren würde.
+ *
+ * Die App lädt außer dem GoatCounter-Zählpixel (src/app/statistik.ts) keine
+ * Fremd-Herkunft, daher sind connect-/img-src auf 'self' + genau diesen Host
+ * begrenzt — Ausleitung woandershin ist damit unterbunden. Das `file:`-Schema
+ * deckt den Electron-Build ab (dist über file:// geladen); im Web ist es
+ * wirkungslos, weil eine https-Seite keine file://-Ressourcen laden darf.
+ * Capacitor (iOS/Android) läuft unter capacitor://localhost bzw.
+ * https://localhost und fällt unter 'self'.
+ *
+ * script-src kommt OHNE 'unsafe-inline' aus: die Inline-Blöcke der index.html
+ * (Boot-Skelett, JSON-LD-Datenblöcke) werden hier beim Bauen gehasht und
+ * einzeln freigegeben. Mit 'unsafe-inline' wäre die Policy gegen XSS
+ * wirkungslos gewesen — ein eingeschleustes <script> hätte gleichberechtigt
+ * neben den eigenen gestanden. Ein Hash gilt nur für genau diesen einen Text;
+ * alles Fremde bleibt draußen, auch wenn irgendwann versehentlich Fremdeingabe
+ * in den DOM gerät. Kosten: die Blöcke dürfen nach diesem Plugin nicht mehr
+ * angefasst werden, sonst passt der Hash nicht — deshalb läuft es als letztes
+ * (`enforce: "post"`, hinter fontCssInline) auf dem fertigen HTML.
+ *
+ * style-src behält 'unsafe-inline': React setzt style-Attribute an Elementen,
+ * und die deckt ein Hash nicht ab (dafür bräuchte es 'unsafe-hashes' samt
+ * Hash je Attributwert). Der Design-Token-Block und die eingebettete Woff2-
+ * Schrift liegen ohnehin inline, daher zusätzlich font-src data:.
+ *
+ * Der weitere Härtungsgewinn: default-src 'self', object-src 'none',
+ * base-uri 'none' und die auf einen Host begrenzte Netz-Ausleitung.
+ */
+function contentSecurityPolicy(): Plugin {
+  /** Inline-<script>-Blöcke (ohne src) — genau die brauchen einen Hash. */
+  const INLINE_SKRIPT = /<script(?![^>]*\ssrc[\s=])[^>]*>([\s\S]*?)<\/script>/g;
+
+  function policyMit(hashes: string[]): string {
+    return [
+      "default-src 'self' file:",
+      "base-uri 'none'",
+      "object-src 'none'",
+      "form-action 'none'",
+      // 'wasm-unsafe-eval' erlaubt NUR das Kompilieren von WebAssembly (kein
+      // eval, kein Inline-Skript): der QR-Decoder ZXing (ab Phase 3, Eingänge)
+      // liegt als .wasm im Bundle und fiel im Erfassungsbogen ohne diese
+      // Freigabe im Build still auf jsQR zurück.
+      `script-src 'self' file: 'wasm-unsafe-eval'${hashes.map((h) => ` '${h}'`).join("")}`,
+      "style-src 'self' file: 'unsafe-inline'",
+      `img-src 'self' file: data: blob: https://${STATISTIK_HOST}`,
+      "font-src 'self' file: data:",
+      // Die PDF-Vorschau (ab Phase 5, Weitergabe) rahmt eine im Browser erzeugte
+      // Blob-URL ein; ohne frame-src greift default-src und der Rahmen bliebe leer.
+      "frame-src 'self' file: blob:",
+      `connect-src 'self' file: https://${STATISTIK_HOST}`,
+    ].join("; ");
+  }
+
+  return {
+    name: "eeb-csp",
+    apply: "build",
+    enforce: "post",
+    generateBundle(_optionen, bundle) {
+      const html = bundle["index.html"];
+      if (!html || html.type !== "asset") return;
+      const quelle = String(html.source);
+
+      // Der Browser hasht den Textinhalt des Elements, unverändert und ohne
+      // die Tags — also genau die Gruppe aus dem Treffer.
+      const hashes = [...new Set([...quelle.matchAll(INLINE_SKRIPT)].map((t) => `sha256-${createHash("sha256").update(t[1]!, "utf8").digest("base64")}`))];
+      if (!hashes.length) {
+        // Kein Treffer heißt: das Muster passt nicht mehr zum HTML. Eine
+        // Policy ohne Hashes würde das Boot-Skript blockieren und die Seite
+        // im Dunkelmodus-Flackern hängen lassen — lieber hier abbrechen.
+        this.error("eeb-csp: keine Inline-Skripte in index.html gefunden — Muster prüfen, sonst geht der Build ohne funktionierende CSP raus.");
+      }
+
+      const meta = `<meta http-equiv="Content-Security-Policy" content="${policyMit(hashes)}" />`;
+      // Möglichst früh im <head>, damit die Policy alle folgenden Ressourcen deckt.
+      html.source = quelle.replace("<head>", `<head>\n${meta}`);
+    },
+  };
+}
+
+/**
+ * Minifiziert den Inline-<style>-Block der index.html im Build. Das Design-Token-
+ * CSS liegt bewusst inline (kein zweiter Request vor dem ersten Rendern), aber
+ * Vite fasst Inline-CSS nicht an — unminifiziert gingen Kommentare und
+ * Einrückung mit jedem Seitenaufruf über die Leitung.
+ */
+function inlineCssMinify(): Plugin {
+  return {
+    name: "eeb-inline-css-minify",
+    apply: "build",
+    async transformIndexHtml(html: string) {
+      const teile = html.split(/(<style>[\s\S]*?<\/style>)/);
+      for (let i = 0; i < teile.length; i++) {
+        const css = teile[i]!.match(/^<style>([\s\S]*)<\/style>$/);
+        if (!css) continue;
+        const { code } = await transform(css[1]!, { loader: "css", minify: true });
+        teile[i] = `<style>${code.trim()}</style>`;
+      }
+      return teile.join("");
+    },
+  };
+}
+
+/**
+ * Zieht das gebaute Stylesheet (nur die @font-face-Regeln von Archivo, ~1 KB)
+ * in die index.html hinein und bettet die Woff2 dabei als Base64 mit ein.
+ * Als externe Dateien wären das zwei Requests vor der fertigen Schrift — und
+ * der font-display:swap-Repaint des Intro-Absatzes zählt als neuer
+ * LCP-Kandidat: auf langsamen Leitungen hing das LCP an der Schriftdatei,
+ * weil sie sich die Bandbreite mit dem Haupt-Bundle teilt. Eingebettet ist
+ * die Schrift beim ersten Malen da (kein Umspringen mehr); die ~42 KB
+ * zahlt nur der Kaltbesuch, App-Nutzer haben die index.html im SW-Precache.
+ */
+function fontCssInline(): Plugin {
+  return {
+    name: "eeb-font-css-inline",
+    apply: "build",
+    enforce: "post",
+    generateBundle(_optionen, bundle) {
+      const html = bundle["index.html"];
+      const cssName = Object.keys(bundle).find((n) => n.endsWith(".css"));
+      if (!html || html.type !== "asset" || !cssName) return;
+      const css = bundle[cssName];
+      if (!css || css.type !== "asset") return;
+      let regeln = String(css.source).trim();
+      // Nur das Latin-Subset einbetten — es deckt Deutsch ab, alles andere
+      // (latin-ext, vietnamese) lädt der Browser dank unicode-range ohnehin
+      // nur bei Bedarf und darf extern bleiben. Die eingebettete Datei aus
+      // dem Bundle nehmen (sonst läge sie ungenutzt im Precache).
+      regeln = regeln.replace(/url\(\.\/(archivo-latin-wght-[^)]+\.woff2)\)/g, (treffer, datei) => {
+        const name = Object.keys(bundle).find((n) => n.endsWith(`/${datei}`) || n === datei);
+        const asset = name && bundle[name];
+        if (!asset || asset.type !== "asset") return treffer.replace("url(./", "url(./assets/");
+        const base64 = Buffer.from(asset.source).toString("base64");
+        delete bundle[name];
+        return `url(data:font/woff2;base64,${base64})`;
+      });
+      // Übrige Pfade sind relativ zum assets/-Ordner; im HTML an der
+      // Seitenwurzel muss der Ordner mit in den Pfad.
+      regeln = regeln.replaceAll("url(./", "url(./assets/");
+      const link = new RegExp(`<link rel="stylesheet"[^>]*href="[^"]*${cssName.split("/").pop()}"[^>]*>`);
+      if (!link.test(String(html.source))) return;
+      html.source = String(html.source).replace(link, `<style>${regeln}</style>`);
+      delete bundle[cssName];
+    },
+  };
+}
+
+/** Pfad relativ zur Projektwurzel, absolut aufgelöst. */
+function pfad(teil: string): string {
+  return fileURLToPath(new URL(teil, import.meta.url));
+}
+
+// base "./": relative Pfade, damit der Build direkt auf GitHub Pages
+// (auch unter einem Unterpfad) funktioniert.
+export default defineConfig({
+  base: "./",
+  // Die vier Kern-Bausteine hängen als git-Submodul unter vendor/ und sind über
+  // `file:`-Abhängigkeiten in node_modules verlinkt (ADR-003). Gebündelt wird
+  // ihre QUELLE, nicht ihr dist/: Vite übersetzt TypeScript ohnehin, die
+  // Bausteine müssen dafür nicht vorgebaut werden, das Tree-Shaking arbeitet
+  // auf dem Original, und die Bundle-Messung sieht, was wirklich hineingeht.
+  resolve: {
+    // Modulgenau, nicht über den Sammel-Einstieg: `@bos/vokabulare` insgesamt
+    // zöge die großen Tabellen (Berufe, Ortsverbände) in jedes Bündel, das
+    // irgendein Vokabular anfasst — und damit ins Startbündel. Der Sammel-
+    // Einstieg bleibt für Konsumenten ohne Bündler bestehen.
+    alias: [
+      { find: /^@bos\/eeb-format\/(.*)$/, replacement: pfad("vendor/eeb-format/src/$1.ts") },
+      { find: /^@bos\/eeb-format$/, replacement: pfad("vendor/eeb-format/src/index.ts") },
+      { find: /^@bos\/meldekopf\/(.*)$/, replacement: pfad("vendor/bos-meldekopf/src/$1.ts") },
+      { find: /^@bos\/meldekopf$/, replacement: pfad("vendor/bos-meldekopf/src/index.ts") },
+      { find: /^@bos\/vokabulare\/(.*)$/, replacement: pfad("vendor/bos-vokabulare/src/$1.ts") },
+      { find: /^@bos\/vokabulare$/, replacement: pfad("vendor/bos-vokabulare/src/index.ts") },
+      { find: /^@bos\/taktische-zeichen\/(.*)$/, replacement: pfad("vendor/bos-taktische-zeichen/src/$1.ts") },
+      { find: /^@bos\/taktische-zeichen$/, replacement: pfad("vendor/bos-taktische-zeichen/src/index.ts") },
+    ],
+  },
+  plugins: [
+    react(),
+    bauStempel(),
+    adressen(),
+    sitemap(),
+    inlineCssMinify(),
+    fontCssInline(),
+    // Zuletzt: hasht die Inline-Skripte des FERTIGEN HTML (siehe dort).
+    contentSecurityPolicy(),
+    // Service Worker nur für die im Browser aufgerufene Web-App: cached die
+    // App-Shell (HTML/JS/CSS, Icons, manifest), damit die Seite auch offline
+    // startet. In der Capacitor-/Electron-App wird der SW bewusst NICHT
+    // registriert (siehe src/app/aktualisierung.tsx); die Datei liegt dort nur
+    // ungenutzt.
+    VitePWA({
+      // "prompt": neue Version im Hintergrund laden, aber erst nach Nutzer-Klick
+      // aktivieren. Kein Auto-Reload — eine Sammlung wird evtl. gerade geführt.
+      registerType: "prompt",
+      // Wir registrieren selbst und nur im Web (native Guard), kein Auto-Inject.
+      injectRegister: false,
+      // Eigenes public/manifest.webmanifest behalten, nicht überschreiben.
+      manifest: false,
+      workbox: {
+        // App-Shell + statische Assets precachen (Dateien mit Hash im Namen).
+        // woff2 gehört zwingend dazu: die Oberflächenschrift liegt im Bundle
+        // (kein CDN), fehlte sie im Precache, fiele die App offline auf die
+        // Systemschrift zurück. wasm ebenso (QR-Decoder ab Phase 3).
+        globPatterns: ["**/*.{js,css,html,svg,png,webmanifest,woff2,wasm,json}"],
+        // Manifest-Screenshots (PNG) braucht nur der Installationsdialog des
+        // Browsers, nicht die laufende App — sie gehören nicht in den Vorrat.
+        globIgnores: ["screenshots/**/*.png"],
+        // Zwei Stufen (Erfassungsbogen, Audit Runde 3, R3-O3): Begleitseiten
+        // bleiben aus dem Precache, damit der Service Worker nach dem Kern
+        // aktiv wird. Liste und Umfang des Kerns stehen in offline-zusatz.json
+        // (scripts/precache-aufteilung.ts); die zweite Stufe lädt die
+        // Startseite nach, sobald offline-vorrat.ts übernommen ist (Phase 2).
+        manifestTransforms: [
+          async (eintraege) => {
+            const { kern, umfang } = vorratAufteilen(eintraege);
+            writeFileSync(fileURLToPath(new URL(`./dist/${ZUSATZ_DATEI}`, import.meta.url)), JSON.stringify(umfang));
+            return { manifest: kern, warnings: [] };
+          },
+        ],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/assets\/[^/]+\.json$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: { cacheName: "eeb-zusatz", expiration: { maxEntries: 1500 } },
+          },
+          {
+            // Begleitseiten im Vorrat kommen sofort aus dem Gerät und werden im
+            // Hintergrund aufgefrischt (R7-O6).
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\.html$/.test(url.pathname),
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "eeb-zusatz" },
+          },
+          {
+            // Die Liste des Vorrats selbst bleibt netzzuerst: Sie sagt, was nachzuladen ist.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.endsWith("/offline-zusatz.json"),
+            handler: "NetworkFirst",
+            options: { cacheName: "eeb-zusatz", networkTimeoutSeconds: 1 },
+          },
+        ],
+        // Das Haupt-Bundle wächst mit den Phasen (pdfmake, Vokabulare) über
+        // Workbox' 2-MiB-Standard. Es IST die App-Shell und muss für den
+        // Offline-Start precacht werden – Limit entsprechend anheben.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // SPA nutzt Hash-Routing; index.html als Fallback für Navigationen.
+        navigateFallback: "index.html",
+        // .well-known (App-Links), statische Extra-Seiten wie datenschutz.html
+        // und Datei-Downloads NICHT auf die App-Shell umbiegen — Klicks auf
+        // <a download> sind Navigations-Requests, ohne Ausnahme würde der SW
+        // statt der Datei die index.html ausliefern.
+        navigateFallbackDenylist: [/^\/\.well-known\//, /\/[^/]+\.(?:html|json|txt|xml|pdf)$/],
+        // Alte Precaches beim Versionswechsel entsorgen (kein Aggressiv-Cache).
+        cleanupOutdatedCaches: true,
+        // Der frisch installierte SW übernimmt sofort die Seite, aus der heraus
+        // er installiert wurde. Ohne das bleibt der erste Besuch unkontrolliert:
+        // Die App-Shell liegt zwar schon im Precache, aber nachgeladene
+        // Bausteine holt die laufende Seite weiter aus dem Netz — bricht die
+        // Verbindung vorher weg, scheitert der erste Klick darauf. Genau der
+        // Fall im Einsatz: einmal aufrufen, dann ins Funkloch. Kein Widerspruch
+        // zu registerType "prompt" — claim greift beim Aktivieren, und eine
+        // NEUE Version aktiviert weiterhin erst auf Klick im Update-Banner.
+        clientsClaim: true,
+      },
+    }),
+  ],
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
+  // PORT kommt vom Claude-Code-Preview (autoPort); Fallback ist Vite-Standard 5173.
+  server: { port: Number(process.env.PORT) || 5173 },
+});

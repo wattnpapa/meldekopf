@@ -1,0 +1,119 @@
+{
+  "name": "meldekopf",
+  "version": "1.0.0",
+  "description": "Meldekopf-App: eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe, Bereitstellungsräume und kleine Führungsstellen; offline, ohne Server.",
+  "main": "electron/main.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "cross-env NODE_OPTIONS=\"--import tsx\" cucumber-js",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"npm:dev\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "icons": "node scripts/render-icons.mjs",
+    "start-inhalt": "node --import tsx scripts/start-inhalt.mts",
+    "kopfnav": "node --import tsx scripts/kopfnav.mts",
+    "sitemap": "node --import tsx scripts/sitemap.ts",
+    "bundle-budget": "node --import tsx scripts/bundle-budget.ts",
+    "kern-kopien": "node --import tsx scripts/kern-kopien-pruefen.ts",
+    "sbom": "node --import tsx scripts/sbom.ts"
+  },
+  "keywords": [],
+  "author": {
+    "name": "Johannes Rudolph",
+    "email": "johannes.rudolph@thw-oldenburg.de"
+  },
+  "license": "EUPL-1.2",
+  "build": {
+    "appId": "de.meldekopf.app",
+    "productName": "Meldekopf",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Meldekopf",
+      "menuCategory": "Sonstige"
+    },
+    "linux": {
+      "target": [
+        "deb",
+        "pacman"
+      ],
+      "category": "Utility",
+      "desktop": {
+        "entry": {
+          "Name": "Meldekopf",
+          "Categories": "Utility;"
+        }
+      }
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/wattnpapa/meldekopf/releases/latest/download"
+      }
+    ],
+    "generateUpdatesFilesForAllChannels": true
+  },
+  "dependencies": {
+    "@bos/eeb-format": "file:vendor/eeb-format",
+    "@bos/meldekopf": "file:vendor/bos-meldekopf",
+    "@bos/taktische-zeichen": "file:vendor/bos-taktische-zeichen",
+    "@bos/vokabulare": "file:vendor/bos-vokabulare",
+    "@capacitor/core": "^8.5.2",
+    "@fontsource-variable/archivo": "^5.3.0",
+    "electron-updater": "^6.8.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^13.2.1",
+    "@resvg/resvg-js": "^2.6.2",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "^4.1.12",
+    "concurrently": "^10.0.6",
+    "cross-env": "^7.0.3",
+    "electron": "^44.9.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.1.1",
+    "playwright": "^1.63.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.12",
+    "wait-on": "^8.0.2",
+    "workbox-window": "^7.4.1"
+  },
+  "type": "module",
+  "private": true
+}

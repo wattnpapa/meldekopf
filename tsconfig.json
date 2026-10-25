@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2021",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@bos/eeb-format": ["./vendor/eeb-format/src/index.ts"],
+      "@bos/eeb-format/*": ["./vendor/eeb-format/src/*.ts"],
+      "@bos/meldekopf": ["./vendor/bos-meldekopf/src/index.ts"],
+      "@bos/meldekopf/*": ["./vendor/bos-meldekopf/src/*.ts"],
+      "@bos/vokabulare": ["./vendor/bos-vokabulare/src/index.ts"],
+      "@bos/vokabulare/*": ["./vendor/bos-vokabulare/src/*.ts"],
+      "@bos/taktische-zeichen": ["./vendor/bos-taktische-zeichen/src/index.ts"],
+      "@bos/taktische-zeichen/*": ["./vendor/bos-taktische-zeichen/src/*.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.ts",
+    "features/**/*.ts"
+  ]
+}

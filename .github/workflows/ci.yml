@@ -1,0 +1,80 @@
+# Prüflauf für Zweige und Pull Requests. Die Release-CI (release.yml) prüft
+# dasselbe noch einmal vor der Veröffentlichung; hier geht es darum, dass ein
+# Verstoß auffällt, solange er noch billig zu beheben ist.
+#
+# Zwei Schritte kommen aus ADR-003 und sind der eigentliche Grund für diese
+# Datei: das Bundle-Budget (Aufnahmeregel 5 — der geteilte Kern darf die PWA
+# nicht schwerer machen) und die Diamant-Prüfung (genau eine Kopie jedes
+# Kern-Bausteins im Baum). Beide messen still vor sich hin; ohne festen
+# CI-Schritt merkt einen Verstoß später niemand.
+
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Ein laufender Prüflauf desselben Zweigs wird abgebrochen, wenn nachgeschoben
+# wird — der ältere Stand interessiert dann niemanden mehr.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Der Prüflauf liest nur den Baum; er schreibt weder Kommentare noch Pakete.
+# Ohne diesen Block bekäme das Token die weiten Voreinstellungen des Repos.
+permissions:
+  contents: read
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Der geteilte Kern hängt als Submodul unter vendor/ — ohne ihn
+          # scheitert schon die Typprüfung.
+          submodules: recursive
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Genau eine Kopie je Kern-Baustein (ADR-003)
+        run: npm run kern-kopien
+
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - name: Bundle-Budget (ADR-003, Aufnahmeregel 5)
+        run: npm run bundle-budget
+
+      # Stückliste aller fremden Bausteine (Hauptrepo + die vier Submodule).
+      # Hier nur als Prüfung, dass sie sich erzeugen lässt und am Artefakt
+      # hängt — veröffentlicht wird sie mit dem Release (release.yml).
+      - name: SBOM erzeugen
+        run: npm run sbom
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: sbom.cdx.json
+
+      # Bekannte Schwachstellen. Zwei Läufe mit verschiedenem Anspruch:
+      # Was in der ausgelieferten App landet, lässt den Lauf ab „hoch"
+      # scheitern — dort sitzt jeder Treffer auf einem Einsatzgerät.
+      - name: Schwachstellen in den Laufzeit-Abhängigkeiten
+        run: npm audit --omit=dev --audit-level=high
+
+      # Das Bau- und Testwerkzeug (rund 1000 Pakete) meldet ständig
+      # irgendetwas, ohne dass die App davon betroffen wäre. Das gehört ins
+      # Protokoll, soll aber keinen Pull Request blockieren.
+      - name: Schwachstellen im Bau-/Testwerkzeug (nur Hinweis)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Playwright-Browser installieren (für die Cucumber-E2E-Tests)
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
