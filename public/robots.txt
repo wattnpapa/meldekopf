@@ -1,0 +1,7 @@
+# Meldekopf — alles öffentlich, nichts zu verbergen: Die Sammlung selbst wird
+# ausschließlich im Gerät verarbeitet, hier liegen nur die App und ihre Texte.
+# Crawler dürfen daher alles lesen. %DOMAIN% setzt der Build ein (vite.config.ts).
+User-agent: *
+Allow: /
+
+Sitemap: https://%DOMAIN%/sitemap.xml

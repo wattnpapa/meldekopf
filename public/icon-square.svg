@@ -1,0 +1,22 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Meldekopf (Vollflächen-Master für iOS/Android-Icons)">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#126d78"/>
+      <stop offset="1" stop-color="#0f4c5c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- Zwei Bögen hinten (die Sammlung), ein Bogen vorn mit der Stärkezeile. -->
+  <path d="M176 92 a24 24 0 0 1 24-24 H340 L392 120 V300 a24 24 0 0 1 -24 24 H200 a24 24 0 0 1 -24-24 Z" fill="#9fd6dc" opacity="0.55"/>
+  <path d="M152 124 a24 24 0 0 1 24-24 H316 L368 152 V332 a24 24 0 0 1 -24 24 H176 a24 24 0 0 1 -24-24 Z" fill="#cfeef1" opacity="0.8"/>
+  <path d="M120 164 a28 28 0 0 1 28-28 H300 L360 196 V412 a28 28 0 0 1 -28 28 H148 a28 28 0 0 1 -28-28 Z" fill="#ffffff"/>
+  <path d="M300 136 L360 196 H316 a16 16 0 0 1 -16-16 Z" fill="#b8dde1"/>
+  <rect x="156" y="222" width="120" height="20" rx="10" fill="#126d78"/>
+  <rect x="156" y="262" width="164" height="18" rx="9" fill="#b8dde1"/>
+  <rect x="156" y="300" width="164" height="18" rx="9" fill="#b8dde1"/>
+  <!-- Stärkezeile x / y / z // g: vier Felder, das Gesamtfeld gefüllt. -->
+  <rect x="156" y="346" width="36" height="40" rx="6" fill="none" stroke="#0f4c5c" stroke-width="8"/>
+  <rect x="200" y="346" width="36" height="40" rx="6" fill="none" stroke="#0f4c5c" stroke-width="8"/>
+  <rect x="244" y="346" width="36" height="40" rx="6" fill="none" stroke="#0f4c5c" stroke-width="8"/>
+  <rect x="294" y="346" width="40" height="40" rx="6" fill="#0f4c5c"/>
+</svg>
