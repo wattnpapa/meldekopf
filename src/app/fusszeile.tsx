@@ -13,7 +13,7 @@
 
 import { Fragment, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from "react";
 import { ERFASSUNGSBOGEN_URL, REPO_URL } from "./adressen";
-import { AnzeigeSchalter } from "./anzeige-schalter";
+import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
 import { nutzungsKanal, statistikAbgewaehlt, statistikAbwaehlen } from "./statistik";
 import { WERKZEUGE, WERKZEUGE_TITEL } from "./werkzeuge";
 

@@ -13,12 +13,13 @@
 import { Fragment, type ReactNode } from "react";
 import { ERFASSUNGSBOGEN_URL } from "./adressen";
 import { Aktualisierungshinweise } from "./aktualisierung";
-import { AnzeigeSchalter } from "./anzeige-schalter";
-import { Dialogschicht } from "./dialoge";
+import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
+import { Dialogschicht } from "@bos/oberflaeche/dialoge";
 import { Fusszeile } from "./fusszeile";
-import { Kopfnav } from "./kopfnav-ui";
+import { Kopfnav } from "@bos/oberflaeche/kopfnav-ui";
+import { KOPFNAV } from "./kopfnav";
 import { imWebBrowser } from "./nativ";
-import { SeitenKopf } from "./seiten-kopf";
+import { SeitenKopf } from "@bos/oberflaeche/seiten-kopf";
 import { START_ABSCHNITTE, type Teil } from "./start-inhalt";
 
 /** Untertitel der Startseite — derselbe Satz wie im statischen Gerüst der index.html. */
@@ -95,7 +96,7 @@ export function App() {
   return (
     <>
       <Aktualisierungshinweise />
-      <SeitenKopf variante="start-kopf" vorspann={web ? <Kopfnav /> : undefined}>
+      <SeitenKopf variante="start-kopf" vorspann={web ? <Kopfnav quelle={KOPFNAV} /> : undefined}>
         <div className="titelzeile">
           <h1>Meldekopf</h1>
           <AnzeigeSchalter klappbar />

@@ -4,7 +4,9 @@
  *
  * Herkunft: Erfassungsbogen `src/app/werkzeuge.ts` (Commit f2b77f1). Geändert:
  * der Meldekopf steht selbst in der Reihe (seine Adresse kommt aus
- * adressen.ts); der Erfassungsbogen zieht die Zeile in Phase 7 nach.
+ * adressen.ts); der Erfassungsbogen zieht die Zeile in Phase 7 nach. Seit
+ * Phase 1 liegt das Markup in `@bos/oberflaeche/werkzeuge`; hier bleibt die
+ * Liste dieser App.
  *
  * Zwei Fassungen entstehen daraus:
  *   - die React-Fassung in der App-Fußzeile (`Werkzeugzeile` in fusszeile.tsx),
@@ -20,12 +22,10 @@
  * vorgelesen.
  */
 
+import { type Werkzeug, WERKZEUGE_TITEL, werkzeugeHtml as werkzeugeHtmlAus } from "@bos/oberflaeche/werkzeuge";
 import { BASIS_URL, DOMAIN, ERFASSUNGSBOGEN_URL } from "./adressen";
 
-export interface Werkzeug {
-  href: string;
-  label: string;
-}
+export { WERKZEUGE_TITEL, type Werkzeug };
 
 export const WERKZEUGE: readonly Werkzeug[] = [
   { href: ERFASSUNGSBOGEN_URL, label: "erfassungsbogen.app" },
@@ -35,16 +35,7 @@ export const WERKZEUGE: readonly Werkzeug[] = [
   { href: "https://sprechfunk-uebung.de/", label: "sprechfunk-uebung.de" },
 ];
 
-export const WERKZEUGE_TITEL = "Weitere Werkzeuge";
-
 /** Statisches Markup für die Seiten unter public/ (ohne Laufzeit-Skript). */
 export function werkzeugeHtml(): string {
-  const eintraege = WERKZEUGE.map((w) => `<a href="${w.href}">${w.label}</a>`).join(
-    '\n        <span class="werkzeuge-trenner" aria-hidden="true">·</span>\n        ',
-  );
-  return `<!-- WERKZEUGE:START -->
-      <nav class="werkzeuge" aria-label="${WERKZEUGE_TITEL}">
-        ${eintraege}
-      </nav>
-      <!-- WERKZEUGE:END -->`;
+  return werkzeugeHtmlAus(WERKZEUGE);
 }

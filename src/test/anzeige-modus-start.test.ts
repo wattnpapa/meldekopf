@@ -1,5 +1,7 @@
 /**
  * Herkunft: Erfassungsbogen `src/app/anzeige-modus.test.ts` (Commit f2b77f1).
+ * Seit Phase 1 liegt das Modul in `@bos/oberflaeche`; hier bleibt der Teil,
+ * der an der index.html dieser App hängt (Boot-Skript, Token-Marke).
  * Die Prüfung der Plattformpaletten (`.nacht-modus.platform-android` …) kommt
  * mit den Capacitor-Hüllen (Phase 5) zurück; bis dahin gibt es hier keine
  * Plattform-Layer, die ein Modus neu belegen müsste.
@@ -15,7 +17,7 @@
 
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { anzeigeModus } from "./anzeige-modus";
+import { anzeigeModus } from "@bos/oberflaeche/anzeige-modus";
 
 const css = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 
@@ -69,9 +71,13 @@ describe("Anzeigemodus — Vorgabe aus der Systemeinstellung", () => {
     expect(css).toMatch(/prefers-color-scheme: dark[^;]*\)\.matches\)\s*\n?\s*eebModus = "dunkel"/);
   });
 
-  it("belegt jeden Modus im Stylesheet der index.html", () => {
+  it("setzt die Token der Modi aus @bos/oberflaeche in die index.html ein", () => {
+    // Die Token-Belegung der Modi liegt seit Phase 1 im Baustein; das Plugin
+    // `oberflaeche-token` setzt sie an dieser Marke ein (vite.config.ts).
+    expect(css).toContain("/* oberflaeche:token */");
+    const token = readFileSync(new URL("../../vendor/bos-oberflaeche/src/stil/token.css", import.meta.url), "utf8");
     for (const modus of ["dunkel", "feld", "nacht"]) {
-      expect(css, `.${modus}-modus fehlt in index.html`).toContain(`.${modus}-modus {`);
+      expect(token, `.${modus}-modus fehlt in stil/token.css`).toContain(`.${modus}-modus {`);
     }
   });
 });

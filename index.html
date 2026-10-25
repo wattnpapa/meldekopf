@@ -98,138 +98,33 @@
   </script>
   <style>
     /* ===============================================================
-       Design-Token — die eine Quelle für Farbe, Schrift, Maß und Form der
-       Web-Oberfläche. Die Anzeigemodi (.feld-modus/.dunkel-modus/.nacht-modus)
-       belegen dieselben Token neu, statt jede Komponente einzeln zu
-       überschreiben. Herkunft: Erfassungsbogen index.html; die Kennfarbe ist
-       die des Meldekopfs.
+       Kennfarbe des Meldekopfs (src/app/kennfarbe.ts). Steht VOR den
+       Design-Token aus @bos/oberflaeche: gleich spezifisch wie deren
+       `.nacht-modus`, muss sie dort dem Bernstein weichen.
+
+       Petrol (#0f4c5c, Weiß darauf 9,5:1). Anders als im Erfassungsbogen
+       trägt der Kopfbalken hier immer dieselbe Farbe — die Sammlung führt
+       viele Organisationen, keine „gehört" dem Balken; die Kennfarben der
+       Organisationen erscheinen an den taktischen Zeichen und Marken der
+       Einheiten (docs/architektur.md Kap. 8.1).
        =============================================================== */
     :root {
-      color-scheme: light;
-
-      /* Neutrale: leicht ins Blaue gekippt, damit sie zur Kennfarbe passen. */
-      --n-0:   #ffffff;
-      --n-50:  #f3f5f9;
-      --n-100: #e8ebf2;
-      --n-200: #d7dce7;
-      --n-300: #bcc3d3;
-      /* R3-L7: von #8b94a9 (2,79:1 auf dem Seitengrund) eine Stufe dunkler —
-         Knopfrahmen der Nebenknöpfe stehen auf --grund und brauchen 3:1. */
-      --n-400: #838ca1;
-      /* Eigener Schritt für den Dritttext: --n-400 trägt als Linie genug,
-         als Schrift auf Weiß nur 3,04:1 und verfehlt damit AA. */
-      --n-450: #6b7488;
-      --n-500: #5c6478;
-      --n-900: #11141b;
-
-      /* Rollen statt Rohwerte — nur diese werden in Komponenten benutzt. */
-      --grund:       var(--n-50);
-      --flaeche:     var(--n-0);
-      --flaeche-2:   var(--n-100);
-      --text:        var(--n-900);
-      --text-2:      var(--n-500);
-      --text-3:      var(--n-450);
-      --linie-fein:  var(--n-200);
-      --linie:       var(--n-300);
-      --linie-stark: var(--n-400);
-
+      --akzent:      #0f4c5c;
+      --akzent-hell: #126d78;
+      --auf-akzent:  #ffffff;
       /* Schrift AUF der Kennfarbe, zweite Stufe: Links und Fehler im
          Aktualisierungsband. Weiß trägt dort die Aussage, diese beiden
          ordnen sich unter. Auf Petrol gerechnet (≥ 4,5:1). */
       --auf-akzent-2:     #cfe6ea;
       --alarm-auf-akzent: #ffb4ab;
-
-      /* Kennfarbe des Meldekopfs: Petrol (#0f4c5c, Weiß darauf 9,5:1). Anders
-         als im Erfassungsbogen trägt der Kopfbalken hier immer dieselbe Farbe —
-         die Sammlung führt viele Organisationen, keine „gehört" dem Balken; die
-         Kennfarben der Organisationen erscheinen an den taktischen Zeichen und
-         Marken der Einheiten (docs/architektur.md Kap. 8.1). */
-      --akzent:      #0f4c5c;
-      --akzent-hell: #126d78;
-      --auf-akzent:  #ffffff;
-
-      /* Signalfarben — bewusst getrennt von der Kennfarbe, damit „erledigt"
-         und „Achtung" in jeder Organisation gleich aussehen. Alle drei Signale
-         tragen dieselbe Dreier-Rolle (Text, Fond, Linie). */
-      --gut:         #146b3a;
-      --gut-fond:    #e8f4ed;
-      --gut-linie:   #a9d3bc;
-      --warn-text:   #6d4700;
-      --warn-fond:   #fdf4dd;
-      --warn-linie:  #ddbe79;
-      --alarm:       #a4231c;
-      --alarm-fond:  #fdecea;
-      --alarm-linie: #eaa79d;
-      /* Fond der Eingangs-Quittung (.eingegangen): eine Stufe entschiedener
-         als --gut-fond, gegen --text-2 auf mindestens 4,5:1 gerechnet. */
-      --eingang-fond: #d3e9dc;
-
-      /* Form: rechteckig und kantenbetont — Behördenformular, nicht App-Kachel. */
-      --radius:       0px;
-      --strich:       1px;
-      --strich-stark: 1px;
-      --fokus:        3px;
-      /* Grundmaß jedes Tippziels: 44 px (Apple), der Feld-Modus hebt auf 48. */
-      --ziel-basis:   2.75rem;
-      --ziel:         0rem; /* Zuschlag auf alle Tippziele; der Feld-Modus erhöht ihn */
-
-      /* Bewegung: erklärt Zustand und quittiert Aktionen — nie Dekoration.
-         Drei Dauern, eine Kurve; „Bewegung reduzieren" schaltet unten alles ab. */
-      --dauer-1: 120ms; /* unmittelbare Rückmeldung (Hover, Fokusfarbe) */
-      --dauer-2: 200ms; /* Zustandswechsel (Overlay, Einblendung, Stempel) */
-      --dauer-3: 450ms; /* ausklingende Quittung (geänderte Summenzahl) */
-      --kurve: cubic-bezier(0.16, 1, 0.3, 1); /* entschieden abbremsend, kein Nachfedern */
-
-      /* Schrift: Archivo (DIN-Linie) fürs Lesen, dicktengleich für Daten. */
-      --schrift: "Archivo Variable", Archivo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      --schrift-daten: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-
-      /* Sechs Grade, jeder mit genau einer Aufgabe. */
-      --t-xs:  0.8125rem; /* gesperrte Versalzeile, Fußzeile, Etiketten */
-      --t-s:   0.875rem;  /* Nebentext, Tabellen, Kartenfußnoten */
-      --t-m:   1rem;      /* Fließtext, Eingaben, h4 */
-      --t-l:   1.125rem;  /* Einleitung, Eintragstitel, h3 */
-      --t-xl:  1.375rem;  /* h2, Zählwerte im Stepper */
-      --t-2xl: 1.75rem;   /* h1 */
-      /* Die Zählwert-Figur: die Stärke — die eine Zahl, wegen der die Lage
-         gelesen wird. */
-      --t-zahl: 2rem;
-
-      --r-1: 0.25rem;
-      --r-2: 0.5rem;
-      --r-3: 0.75rem;
-      --r-4: 1rem;
-      --r-5: 1.5rem;
-      --r-6: 2rem;
-
-      /* Seitenkopf. Eigene Token, damit die Plattform-Layer ihn ohne
-         Spezifitäts-Wettrennen zurücksetzen können und der Nacht-Modus ihn
-         abdunkeln kann. */
-      --kopf-fond:  var(--akzent);
-      --kopf-auf:   var(--auf-akzent);
       /* Zweitschrift im Balken als fester Ton, nicht als halbdurchsichtiges
          Weiß: Deckkraft nimmt der Feld-Modus nicht zurück. Auf Petrol gerechnet. */
       --kopf-auf-2: #cfe6ea;
-      --kopf-linie: rgba(255, 255, 255, 0.3);
-      --kopf-strich: 3px;
-      --kopf-innen: var(--r-3) var(--r-4);
-      /* Harte Unterkante: der Kopf endet an einer Linie, statt in den Inhalt
-         auszulaufen. Auf der Kennfarbe liegt sie als dunklerer Schatten. */
-      --kopf-kante:       4px;
-      --kopf-kante-farbe: rgba(0, 0, 0, 0.35);
-
-      /* Rückwärtskompatible Aliasse der übernommenen Regeln. */
-      --blau: var(--akzent);
-      --blau-hell: var(--akzent-hell);
-      --rand: var(--linie);
-      --grau: var(--grund);
-      --fehler: var(--alarm);
-      --erledigt: var(--gut);
     }
-    /* Ein Grad, ein Schritt: auf dem Telefon rückt die Zählwert-Figur eine Stufe zurück. */
-    @media (max-width: 30rem) {
-      :root { --t-zahl: 1.625rem; }
-    }
+    /* @bos/oberflaeche/stil/token.css — beim Bauen hier eingesetzt (Plugin
+       `oberflaeche-token` in vite.config.ts): Design-Token und die
+       Token-Belegung der Anzeigemodi. */
+    /* oberflaeche:token */
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -777,13 +672,6 @@
       .zahl-geaendert { animation-duration: var(--dauer-3) !important; }
       .eingegangen { animation-duration: var(--dauer-3) !important; }
     }
-    /* Der Wechsel des Anzeigemodus springt (anzeige-modus.ts setzt die Klasse
-       für einen Frame um die Umschaltung). */
-    .modus-wechsel, .modus-wechsel *, .modus-wechsel *::before,
-    .modus-wechsel *::after, .modus-wechsel ::backdrop {
-      transition-duration: 0ms !important;
-    }
-
     /* Safe-Area (Notch, Statusleiste, Home-Indicator). env() ist auf Geräten
        ohne Aussparung 0; setzt viewport-fit=cover im viewport-Meta voraus. */
     #app {
@@ -793,135 +681,24 @@
     }
 
     /* ---------------------------------------------------------------
-       Feld-Modus: große Tippziele + maximaler Kontrast für den Einsatz
-       draußen (Handschuhe, pralle Sonne). anzeige-modus.ts setzt die Klasse
-       auf <html>. Bewusst als später Block: gewinnt die Kaskade.
+       Kennfarbe in den Anzeigemodi. Die Token der Modi selbst kommen aus
+       @bos/oberflaeche (oben); hier steht nur, was die Kennfarbe dieser App
+       betrifft. Der Nacht-Modus nimmt das gemeinsame Bernstein.
        --------------------------------------------------------------- */
-    .feld-modus {
-      color-scheme: light;
-      font-size: 112%;
-      --grund:       #e8eaef;
-      --flaeche:     #ffffff;
-      --flaeche-2:   #dfe3ea;
-      --text:        #000000;
-      --text-2:      #262b36;
-      --text-3:      #262b36;
-      /* R3-L7: Markenrahmen auf Weiß 4,02:1 statt 1,79:1. */
-      --warn-linie:  #9c7a24;
-      --linie-fein:  #111318;
-      --linie:       #111318;
-      --linie-stark: #111318;
-      --strich:       2px;
-      --strich-stark: 2px;
-      --fokus:        4px;
-      --ziel:         0.25rem; /* zieht alle Tippziele von 44 auf 48 px */
-      /* Die 112 % heben die ganze Leiter; die beiden kleinsten Grade bekommen
-         zusätzlich je einen Schritt, weil sie draußen zuerst wegbrechen. */
-      --t-xs: 0.875rem;
-      --t-s:  0.9375rem;
-      /* Draußen tritt nichts zurück — auch die Quittung nicht. */
-      --eingang-fond: #a9d3bc;
-    }
     /* R5-L3: Der Kopfbalken des Feld-Modus trägt Weiß mit mindestens 7:1.
        Petrol (#0f4c5c) erreicht 9,5:1 — der Balken bleibt, wie er ist. */
-    .feld-modus label.feld { color: var(--text); font-weight: 700; }
-    .feld-modus input[type="checkbox"], .feld-modus input[type="radio"] { width: 1.7rem; height: 1.7rem; }
-
-    /* ---------------------------------------------------------------
-       Dunkel-Modus: neutrale dunkle Darstellung — dieselbe Oberfläche, nur
-       invertierte Flächen- und Textwerte. Anders als der Nacht-Modus bleibt
-       sie farbneutral und behält die Kennfarbe im Kopfbalken; sie ist die
-       Wahl fürs abgedunkelte Büro oder den Dienstabend, nicht für die
-       Dunkeladaption. Die Systemeinstellung „dunkel" ist nur die Vorgabe
-       beim ersten Start (Boot-Skript oben); eine getroffene Wahl geht vor.
-       --------------------------------------------------------------- */
     .dunkel-modus {
-      color-scheme: dark;
-      --grund:       #0f1116;
-      --flaeche:     #171a21;
-      --flaeche-2:   #21252e;
-      --text:        #e7eaf1;
-      --text-2:      #aab2c2;
-      --text-3:      #848da0;
-      --linie-fein:  #272c36;
-      --linie:       #3a414f;
-      /* R2-L3: Feldrahmen 3,45:1 auf --flaeche, 3,04:1 auf --flaeche-2. */
-      --linie-stark: #676f80;
       /* Auf dunklem Grund trägt nicht der Grundton der Kennfarbe, sondern ihr
          aufgehellter Ton (10:1 auf --flaeche); die Schrift darauf ist der tiefe Ton. */
       --akzent:      #8fd0d8;
       --akzent-hell: #a9dde3;
       --auf-akzent:  #0a2a2f;
-      --gut:         #6cd18a;
-      --gut-fond:    #16261d;
-      --gut-linie:   #2f5340;
-      --eingang-fond: #223f2d;
-      --alarm:       #ff9d94;
-      --alarm-fond:  #2a1715;
-      --alarm-linie: #5c2a24;
-      --warn-text:   #f0cf88;
-      --warn-fond:   #2a2416;
-      --warn-linie:  #6b5a2c;
       /* Der Kopfbalken behält die Kennfarbe: Petrol ist dunkel genug (R4-L2
          betraf die hellen Rottöne), die App bleibt auf den ersten Blick erkennbar. */
       --kopf-fond:   #0f4c5c;
       --kopf-auf:    #ffffff;
-      --kopf-kante-farbe: rgba(0, 0, 0, 0.5);
     }
     .dunkel-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
-    /* Helle Schrift auf dunklem Grund läuft optisch zu: eine Spur Sperrung und
-       ein Hauch mehr Durchschuss. Gilt für beide dunklen Modi. */
-    .dunkel-modus body, .nacht-modus body { letter-spacing: 0.006em; line-height: 1.55; }
-
-    /* ---------------------------------------------------------------
-       Nacht-Modus: gedimmte, warme Darstellung für Nachteinsätze (Zelt,
-       Fahrzeugkabine) — wenig Blaulichtanteil, keine grellen Flächen,
-       schont die Dunkeladaption. Bewusst als letzter Block.
-       --------------------------------------------------------------- */
-    .nacht-modus {
-      color-scheme: dark;
-      --grund:       #0d0c08;
-      --flaeche:     #17150f;
-      --flaeche-2:   #221f16;
-      --text:        #d9cdb6;
-      --text-2:      #a2977e;
-      /* R3-L7: 4,44:1 auf dem Feldgrund (Platzhalter). */
-      --text-3:      #8c816b;
-      --linie-fein:  #2b271d;
-      --linie:       #423c2d;
-      /* Feldrahmen nachts ≥ 3:1 (R2-L3). */
-      --linie-stark: #746a51;
-      /* Auch die Kennfarbe weicht nachts einem warmen Ton: ein sattes Petrol
-         wäre genau das Licht, das die Dunkeladaption zerstört. */
-      --akzent:      #a8791a;
-      --akzent-hell: #c9932c;
-      --auf-akzent:  #100d07;
-      --gut:         #8fae63;
-      --gut-fond:    #1d241a;
-      --gut-linie:   #40523a;
-      --eingang-fond: #28321e;
-      --alarm:       #e08a7e;
-      --alarm-fond:  #291410;
-      --alarm-linie: #5e2f26;
-      --warn-text:   #d9b96a;
-      --warn-fond:   #2a2415;
-      --warn-linie:  #6b501c;
-      /* Der Kopfbalken bleibt nachts dunkel: eine vollflächig eingefärbte
-         Fläche wäre die hellste Stelle im Bild und würde blenden. */
-      --kopf-fond:  #221f16;
-      --kopf-auf:   #d9cdb6;
-      --kopf-auf-2: #a2977e;
-      --kopf-linie: #423c2d;
-      /* Auf dunklem Grund trennt eine hellere Kante, keine schwarze. */
-      --kopf-kante-farbe: #5c5440;
-    }
-    /* R4-L4: Native Bedienelemente stehen nachts nicht reinweiß im warmen Bild. */
-    .nacht-modus input[type="radio"], .nacht-modus input[type="checkbox"],
-    .nacht-modus input::-webkit-calendar-picker-indicator, .nacht-modus input::-webkit-inner-spin-button {
-      filter: sepia(1) saturate(0.6) brightness(0.78);
-    }
-    /* R8-L7: Der Haken im gewählten Kästchen 5,3:1 gegen die Füllung. */
-    .nacht-modus input[type="checkbox"] { accent-color: #6b4d0e; }
     .nacht-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
 
     /* Große Systemschrift (schrift-stufe.ts setzt die Klasse): Startkopf quer gedeckelt (R7-H8, R7-S4). */

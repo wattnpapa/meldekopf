@@ -12,7 +12,7 @@
 
 import { afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
-import { dialogeZuruecksetzen, prellschutzSetzen } from "../app/dialoge";
+import { dialogeZuruecksetzen, prellschutzSetzen } from "@bos/oberflaeche/dialoge";
 // Testing Library klickt schneller als jeder Finger: der Prellschutz der
 // Rückfragen (dialoge.tsx, R2-G1) ist hier aus; sein eigener Test schaltet ihn ein.
 prellschutzSetzen(0);

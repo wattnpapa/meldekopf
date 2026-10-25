@@ -2,7 +2,8 @@
  * Browser-Einstieg: Anzeige-Modus setzen, Start zählen, die Anwendung
  * (siehe app.tsx) in den Wurzelknoten hängen.
  *
- * Herkunft: Erfassungsbogen `src/app/main.tsx` (Commit f2b77f1). In Phase 0
+ * Herkunft: Erfassungsbogen `src/app/main.tsx` (Commit f2b77f1). Die
+ * Oberflächen-Mechanik kommt seit Phase 1 aus `@bos/oberflaeche`. In Phase 0
  * ohne die Teile, deren Module noch nicht übernommen sind: Speicher-Verdrahtung
  * der Sammlung und geprüfte Uhr (Phase 2), Fehlerfänger (mit sicherung.ts,
  * Phase 2), Lagemonitor-Fenster (Phase 5), Plattform-Klassen und Debug-Leiste
@@ -17,15 +18,20 @@ import "@fontsource-variable/archivo";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app";
-import { wendeAnzeigeModusAn } from "./anzeige-modus";
-import { tastaturWaechterStarten } from "./tastatur";
-import { schriftStufeStarten } from "./schrift-stufe";
+import { standardThemeFarbeSetzen, wendeAnzeigeModusAn } from "@bos/oberflaeche/anzeige-modus";
+import { KENNFARBE } from "./kennfarbe";
+import { tastaturWaechterStarten } from "@bos/oberflaeche/tastatur";
+import { schriftStufeStarten } from "@bos/oberflaeche/schrift-stufe";
 import { statistikStarten } from "./statistik";
-import { dialogVerlaufVerdrahten } from "./modal-overlay";
+import { dialogVerlaufVerdrahten } from "@bos/oberflaeche/modal-overlay";
 
 // Zurück schließt jedes Fenster der Startseite, statt die App zu verlassen (R6-S3).
 dialogVerlaufVerdrahten();
 
+// Browserleiste ohne Modus in der Kennfarbe dieser App, nicht der des
+// Erfassungsbogens. Vor dem ersten Abgleich: Das Boot-Skript hat den Meta-Tag
+// nachts schon umgefärbt.
+standardThemeFarbeSetzen(KENNFARBE);
 wendeAnzeigeModusAn();
 // Feste Leiste weicht der Bildschirmtastatur (R4-G3).
 tastaturWaechterStarten();
