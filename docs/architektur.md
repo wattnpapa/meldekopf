@@ -431,7 +431,7 @@ den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-taktische-zeichen` `cb9c227`.
 
 **Erste Messung (Phase 0, `scripts/bundle-budget.json`):** JavaScript gesamt
-289.350 Byte, Startbündel 257.389 Byte, `dist/` 499.894 Byte; SBOM 1.025
+289.927 Byte, Startbündel 257.389 Byte, `dist/` 558.518 Byte; SBOM 1.025
 Komponenten, davon 27 mit Laufzeit-Rolle. Zum Vergleich der Erfassungsbogen
 am selben Tag: 5.500.797 / 1.198.089 Byte. Das Budget wird je Phase bewusst
 angehoben (`npm run bundle-budget -- --setze`, Begründung im Commit).
