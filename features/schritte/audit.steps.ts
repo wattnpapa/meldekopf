@@ -98,3 +98,34 @@ Then("steht die Tabellenspalte {string} ohne Wischen im Bild", async function (t
     throw new Error(`Die Spalte „${titel}" liegt außerhalb des Bildes (rechts bei ${rahmen ? Math.round(rahmen.x + rahmen.width) : "?"} px, Bild ${breite} px).`);
   }
 });
+
+// Nachts trägt die Form den Unterschied zwischen Warnung und Hinweis, nicht nur die Farbe (Audit Meldekopf R1, Nacht 2).
+function marke(welt: EebWelt, text: string) {
+  return welt.page.locator(".einheit-zeile :is(.alt-badge, .neu-badge, .uebung-badge, .bedarf-marke)").filter({ hasText: text }).first();
+}
+
+Then("trägt die Marke {string} ein Warnzeichen", async function (this: EebWelt, text: string) {
+  const m = marke(this, text);
+  await m.waitFor({ state: "visible" });
+  const vorne = await m.evaluate((el) => getComputedStyle(el, "::before").content);
+  if (!vorne.includes("⚠")) throw new Error(`„${text}" trägt kein Warnzeichen (::before ${vorne}).`);
+});
+
+Then("ist die Marke {string} nicht farbig gefüllt", async function (this: EebWelt, text: string) {
+  const m = marke(this, text);
+  await m.waitFor({ state: "visible" });
+  const fond = await m.evaluate((el) => getComputedStyle(el).backgroundColor);
+  if (!/rgba\(0, 0, 0, 0\)|transparent/.test(fond)) throw new Error(`„${text}" ist gefüllt (${fond}).`);
+});
+
+// Nachts lag der Dialog auf gleicher Fläche wie die Seite, die Abdunklung war unsichtbar (Audit Meldekopf R1, Nacht 3).
+Then("dunkelt das offene Fenster die Seite deutlich ab", async function (this: EebWelt) {
+  const werte = await this.page.locator("dialog[open]").last().evaluate((d) => ({
+    abdunklung: getComputedStyle(d, "::backdrop").backgroundColor,
+    fenster: getComputedStyle(d).backgroundColor,
+    seite: getComputedStyle(document.body).backgroundColor,
+  }));
+  const deckkraft = Number(/rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(werte.abdunklung)?.[1] ?? "0");
+  if (deckkraft < 0.6) throw new Error(`Abdunklung zu schwach: ${werte.abdunklung}`);
+  if (werte.fenster === werte.seite) throw new Error(`Fenster und Seite haben dieselbe Fläche: ${werte.fenster}`);
+});

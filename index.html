@@ -3101,6 +3101,33 @@
     }
     .dunkel-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
     .nacht-modus .offline-badge { color: var(--gut); border-color: var(--gut); }
+    /* Audit Meldekopf R1 (Nacht und Sicht, Befund 2): Nachts standen Hinweis („kürzlich eingetroffen",
+       „ANONYMISIERT"), Warnung („älter als 24 h", „Verpflegung 20 (Stärke 3)") und Aktion (Primärknopf) in
+       derselben Bernsteinfarbe; eine echte Unstimmigkeit las sich wie „ist halt gelb". Jetzt trägt die Form den
+       Unterschied, auch in Graustufen: Hinweise ohne Füllung mit gestrichelter Kante in der Textfarbe, Warnungen
+       mit Warnzeichen und Fettschrift in Bernstein, Primärknöpfe dunkel mit heller Kante statt Bernstein-Fläche. */
+    .nacht-modus .neu-badge, .nacht-modus .uebung-badge {
+      background: transparent; color: var(--text-2);
+      border: 1px dashed var(--linie-stark); font-weight: 600;
+    }
+    .nacht-modus .alt-badge, .nacht-modus .bedarf-marke.dringend { font-weight: 700; border-width: 2px; }
+    .nacht-modus .alt-badge::before, .nacht-modus .bedarf-marke.dringend::before { content: "\26A0\FE0E\00A0"; }
+    .nacht-modus button.primaer, .nacht-modus .datei-knopf.primaer {
+      background: var(--flaeche-2); color: var(--text); border: 2px solid var(--text); font-weight: 700;
+    }
+    @media (hover: hover) {
+      .nacht-modus button.primaer:hover { background: var(--linie); color: var(--text); border-color: var(--text); }
+    }
+    /* Audit Meldekopf R1 (Nacht und Sicht, Befund 3): Auf dem fast schwarzen Grund dunkelte die Abdunklung
+       nichts sichtbar ab, und die Dialogfläche glich der Seite. In Dunkel und Nacht dunkelt sie stärker ab,
+       der Dialog liegt eine Stufe heller und hat eine helle Kante. Scanner und QR-Vollbild bleiben Vollbild. */
+    :is(.dunkel-modus, .nacht-modus) dialog:not(.scanner):not(.qr-vollbild) {
+      border-color: var(--text-2);
+      box-shadow: 0 0 0 1px var(--grund), 0 8px 32px rgba(0, 0, 0, 0.8);
+    }
+    .dunkel-modus dialog:not(.scanner):not(.qr-vollbild) { --flaeche: #21252e; --flaeche-2: #2b303b; }
+    .nacht-modus dialog:not(.scanner):not(.qr-vollbild) { --flaeche: #221f16; --flaeche-2: #2c281d; }
+    :is(.dunkel-modus, .nacht-modus) dialog:not(.scanner):not(.qr-vollbild)::backdrop { background: rgba(0, 0, 0, 0.75); }
     /* Rollen-Marken in Dunkel und Nacht (Erfassungsbogen, 441811c). */
     .dunkel-modus {
       --rolle-f-fond: #2b2748; --rolle-f-text: #c9c0ee;
