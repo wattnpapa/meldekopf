@@ -77,16 +77,58 @@ gefunden; hinter den neun P0 steht eine einzige Ursache.
    Vorrat lädt oder abgebrochen ist, steht dieselbe Zeile als feste Warnung
    auch in der Einsatzansicht, mit „Jetzt neu laden".
 
-## P2 und P3: offen
+## P2 und P3: gemeinsame Runde (Stand 26.10.2026)
 
-Die meisten offenen Befunde betreffen Verhalten, das der Erfassungsbogen
-genauso hat, und gehören in eine gemeinsame Runde beider Apps:
-Lagemonitor ohne Zug und Bedarf und mit „vor 2 Min" für nachgetragene
-Einheiten, Weitergabe unter der ganzen Einheitenliste, Tabellenansicht am
-Telefon mit 22 Spalten, „Stärke ändern" per Tastatur statt Zählern,
-Browser-Zurück verlässt die App, „Einsatz-Datei" ist eine PDF und „sichern"
-ist doppelt belegt, Papier-Abgleich ohne Zeitprüfung, Dialoge ohne
-Abdunklung im Nachtmodus, alle Zustände nachts in derselben Bernsteinfarbe.
+Die Befunde, die der Erfassungsbogen genauso hat, sind im Meldekopf behoben,
+nach Nutzen im Einsatz geordnet. Jede Korrektur hat ein Szenario, das ohne sie
+scheitert (gegengeprüft gegen den Stand davor). Alle Korrekturen liegen in der
+App selbst; der geteilte Kern ist unverändert.
 
-Nur den Meldekopf betrifft: Sicherung und Sammel-PDF landen auf dem Gerät
-selbst (Analog, A5); ein zweites Medium bleibt organisatorisch (ISK, M7).
+10. **Lagemonitor ohne Zug und Bedarf, Nachträge als „vor 2 Min" (P2,
+    Führung F3, F4).** Die Tabelle hat Zug und Gesamt je Einheit und ist nach
+    Eintreffzeit geordnet; darüber stehen eine Bedarfszeile (Verpflegung,
+    Ruhezeit, Unterbringung, abweichende Verpflegung mit Warnzeichen) und die
+    Stärke je Zug. Eine nachgetragene Einheit steht in den Bewegungen als
+    „nachgetragen, da seit 19:55". Szenarien in `lagemonitor.feature`.
+11. **Papier-Abgleich ohne Zeitprüfung (P2, Fehler F3).** „Abgleich
+    übernehmen" fragt bei Zeiten in der Zukunft wie die Einzelkorrektur an der
+    Karte, gesammelt für alle Zeilen. Szenario in `papier-abgleich.feature`.
+12. **Browser-Zurück verlässt die App (P2, Fehler F6).** Startseite, Einsatz
+    und Erfassung stehen im Verlauf (`history.state`; das Fragment trägt die
+    Bogen-Links und bleibt dafür frei). Zurück schließt erst ein offenes
+    Fenster, dann geht es Erfassung → Einsatz → Startseite. Szenarien in
+    `verlauf.feature`.
+13. **„Stärke ändern" per Tastatur (P2, Feld, Handschuh).** Das Fenster hat
+    die Zähler der Schnellerfassung, der Fokus liegt auf „Mannschaft:
+    erhöhen". Szenario „Stärke ändern geht mit den Zählern".
+14. **Tabelle am Telefon mit 22 Spalten (P2, Führung, mobile UI).** Unter
+    700 px elf Spalten mit Gesamt neben dem Namen, „Alle 22 Spalten zeigen"
+    für den Rest. Szenario „Am Telefon steht die Gesamtstärke neben dem
+    Namen".
+15. **Weitergabe unter der ganzen Liste (P2 Führung F6, P3 Arbeitsablauf).**
+    Unter der Stärke-Summe steht, ob das Lageblatt noch aktuell und der
+    Einsatz übergeben ist, mit Sprung zur Ausgabe. Szenario „Neben der Summe
+    steht, ob das Lageblatt noch aktuell ist".
+16. **„Einsatz-Datei" ist eine PDF, „sichern" doppelt belegt (P2,
+    Arbeitsablauf P2-1).** Der Knopf heißt „Einsatz übergeben (PDF mit
+    Daten)"; die Quittung sagt, dass die PDF auf dem neuen Gerät über
+    „Einsatz importieren…" eingelesen wird und keine Datensicherung des Geräts
+    ist. Szenario „Die Übergabe-PDF sagt, wie die Ablösung sie einliest".
+17. **Alle Zustände nachts in Bernstein (P2, Nacht 2).** Warnungen tragen
+    nachts ein Warnzeichen und Fettschrift, Hinweise stehen ohne Füllung mit
+    gestrichelter Kante, Primärknöpfe dunkel mit heller Kante. Szenario in
+    `nachtmodus.feature`.
+18. **Dialoge ohne Abdunklung im Nachtmodus (P2, Nacht 3).** In Dunkel und
+    Nacht dunkelt ein Dialog die Seite zu 75 % ab und liegt eine Stufe heller
+    mit heller Kante. Der Scanner war seit Korrektur 1 schon Vollbild.
+    Szenario in `nachtmodus.feature`.
+
+Offen im Erfassungsbogen: dieselben Korrekturen. Sie liegen dort in Dateien,
+die die Sammlung betreffen und mit Phase 7 zurückgebaut werden; ob sie vorher
+noch nachgezogen werden, entscheidet der Plan für Phase 7.
+
+Weiter offen im Meldekopf: die übrigen P3 der Berichte (Lagemonitor-Knopf
+„Dunkler" mit 2,94:1, DTG und Absender im Kopf des Lageblatts, eine Stelle
+für die Ansichtswahl am Telefon, Einsatzdaten des Lagemonitors bei 1280×720)
+und ein Ort für Sicherung und Sammel-PDF außerhalb des Geräts (Analog, A5);
+ein zweites Medium bleibt organisatorisch (ISK, M7).

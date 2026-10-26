@@ -43,7 +43,8 @@ Tage oder Aufträge braucht, ist S1-Control.
   12 → 9, Fahrzeug abgemeldet").
 - Abrücken, Zug zuordnen, Bogen aufteilen und zusammenführen, Papier-Abgleich.
 - Lagemonitor für den Fernseher am Gerät: Funkrufname, Einsatzname, DTG,
-  Einsatzdauer, Stärke, Einheitentabelle ohne Personennamen.
+  Einsatzdauer, Stärke, Bedarf, Stärke je Zug, Einheitentabelle mit Zug und
+  Gesamt, ohne Personennamen.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
   Daten, Excel-Liste im Format „Oldenburg", Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.

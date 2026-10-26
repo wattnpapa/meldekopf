@@ -259,6 +259,13 @@ Erfassungsbogens, nach den benutzten Klassen ausgewählt, mit ihren
 Audit-Kommentaren) stehen in der `index.html` zwischen den Token und der
 Kennfarbe.
 
+**Verlauf der Ansichten (Audit Runde 1):** Startseite, Einsatzansicht und
+Schnellerfassung stehen als Einträge im Browserverlauf, damit Zurück in der
+App bleibt (`ansicht-verlauf.ts`). Die Ansicht steht in `history.state`
+(`eebAnsicht`), nicht im Fragment: Das Fragment trägt die Bogen-Links und wird
+nach dem Lesen aus der Adresse genommen. Nichts davon landet im
+`localStorage`; nach einem Neuladen gilt wie bisher `eeb.letzterEinsatz.v1`.
+
 Ist-Stand Phase 1, weiter gültig: `src/app/` enthält `main.tsx`, `app.tsx`
 (nur Startseite), `start-inhalt.ts`, `adressen.ts` (Domain und Zähl-Host an
 einer Stelle), `kennfarbe.ts` (Petrol, wird dem Anzeigemodus hineingereicht),
@@ -518,6 +525,11 @@ ohne `blob:`) verbietet, und der Satz wartet dann ohne Ende. Ein Update von
 pdfmake braucht deshalb den Verhaltenstest „Sammel-PDF bündelt alle Bögen". Zum Vergleich der Erfassungsbogen
 am selben Tag: 5.500.797 / 1.198.089 Byte. Das Budget wird je Phase bewusst
 angehoben (`npm run bundle-budget -- --setze`, Begründung im Commit).
+**Audit Runde 1, offene P2 (2026-10-26):** 4.107.298 / 535.773 Byte, das
+Startbündel +8 KB: Lagemonitor mit Zug, Gesamt und Bedarf, Verlauf der
+Ansichten (`ansicht-verlauf.ts`), Zähler-Fenster für „Stärke ändern“
+(`staerke-dialog.tsx`) und die Spaltenwahl der Tabelle am Telefon laufen alle
+im Startbündel.
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab
