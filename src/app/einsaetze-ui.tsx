@@ -68,6 +68,7 @@ import { RolleMarke } from "./rolle-marke";
 import { useArbeitet } from "@bos/oberflaeche/arbeitet";
 import { LagemonitorBlock } from "./lagemonitor-ui";
 import { AufteilenPanel } from "./aufteilen-ui";
+import { frageStaerke, type StaerkeWerte } from "./staerke-dialog";
 import { ZusammenfuehrenPanel } from "./zusammenfuehren-ui";
 import type { AufteilungsWahl } from "@bos/meldekopf/aufteilen";
 import { aggregiere, aggregiereNachZug, mwdText, uebungenAusserhalbDerLage, type EinsatzSummen } from "./auswertung";
@@ -104,7 +105,7 @@ import {
   zusammenfuehrungZurueck,
   type ZusammenfuehrungVorher,
 } from "./eintrag-zeiten";
-import { frageFelder, frageJaNein, frageWahl, zeigeHinweis } from "@bos/oberflaeche/dialoge";
+import { frageJaNein, frageWahl, zeigeHinweis } from "@bos/oberflaeche/dialoge";
 import { nurStaerkeUebernehmen } from "./schnellerfassung/nur-staerke";
 import { PapierAbgleich, PapierMarke } from "./papier-abgleich-ui";
 import { TabellenScroll } from "@bos/oberflaeche/tabellen-scroll";
@@ -3108,49 +3109,29 @@ function EinheitKarte(props: {
    */
   async function staerkeAendern() {
     const alt = staerke(kopf.bogen);
-    const feld = (name: string, label: string, wert: string) => ({ name, label, vorgabe: wert, zahl: true });
-    const zahl = (t: string | undefined) => (/^\s*\d{1,3}\s*$/.test(t ?? "") ? Number(t) : null);
-    let eingabe = { fuehrer: String(alt.fuehrer), unterfuehrer: String(alt.unterfuehrer), mannschaft: String(alt.mannschaft) };
-    let fehler: string | null = null;
+    let eingabe: StaerkeWerte = { fuehrer: alt.fuehrer, unterfuehrer: alt.unterfuehrer, mannschaft: alt.mannschaft };
     let f = 0;
     let u = 0;
     let m = 0;
-    // Dialog, bis die Zahlen lesbar und plausibel sind: Ein Tippfehler nahm
-    // vorher alle Eingaben mit und nannte das Feld nicht, ein Zahlendreher
-    // ging ohne Warnung durch (Audit Runde 4, R4-E4).
+    // Fenster, bis die Zahlen plausibel sind; ein Zahlendreher geht nicht ohne Warnung durch (Audit Runde 4, R4-E4).
+    // Zähler statt Textfelder wie in der Schnellerfassung (Audit Meldekopf R1, Feld und Handschuh, P2).
     for (;;) {
-      const w = await frageFelder({
+      const w = await frageStaerke({
         titel: "Stärke ändern",
         hinweis: (
-          <>
-            {fehler && <p className="fehler" role="alert">{fehler}</p>}
-            <p>
-              „{einheitAnzeigename(kopf.bogen.einheit)}", bisher {alt.fuehrer} / {alt.unterfuehrer} / {alt.mannschaft} / {alt.gesamt}.
-              Fahrzeuge, Bedarf, Namen, Zug und Auftrag bleiben; die bisherige Meldung wandert in die Historie.
-            </p>
-          </>
+          <p>
+            „{einheitAnzeigename(kopf.bogen.einheit)}", bisher {alt.fuehrer} / {alt.unterfuehrer} / {alt.mannschaft} / {alt.gesamt}.
+            Fahrzeuge, Bedarf, Namen, Zug und Auftrag bleiben; die bisherige Meldung wandert in die Historie.
+          </p>
         ),
-        felder: [
-          feld("fuehrer", "Führer", eingabe.fuehrer),
-          feld("unterfuehrer", "Unterführer", eingabe.unterfuehrer),
-          feld("mannschaft", "Mannschaft", eingabe.mannschaft),
-        ],
+        vorgabe: eingabe,
         ok: "Stärke übernehmen",
       });
       if (!w) return;
-      eingabe = { fuehrer: w.fuehrer ?? "", unterfuehrer: w.unterfuehrer ?? "", mannschaft: w.mannschaft ?? "" };
-      const nichtLesbar = (
-        [["Führer", eingabe.fuehrer], ["Unterführer", eingabe.unterfuehrer], ["Mannschaft", eingabe.mannschaft]] as const
-      )
-        .filter(([, t]) => zahl(t) == null)
-        .map(([name, t]) => `${name} („${t.trim() || "leer"}")`);
-      if (nichtLesbar.length > 0) {
-        fehler = `Bitte in jedes Feld eine ganze Zahl von 0 bis 999 eintragen — nicht lesbar: ${nichtLesbar.join(", ")}.`;
-        continue;
-      }
-      f = zahl(eingabe.fuehrer)!;
-      u = zahl(eingabe.unterfuehrer)!;
-      m = zahl(eingabe.mannschaft)!;
+      eingabe = w;
+      f = w.fuehrer;
+      u = w.unterfuehrer;
+      m = w.mannschaft;
       if (f === alt.fuehrer && u === alt.unterfuehrer && m === alt.mannschaft) return;
       // Dieselbe Warnung wie im Assistenten, dazu die neue Summe neben der alten.
       const gesamt = f + u + m;
@@ -3180,7 +3161,6 @@ function EinheitKarte(props: {
         fokus: "abbruch", // Enter ersetzt sonst die Zahlen (R9-D4)
       });
       if (ja) break;
-      fehler = null;
     }
     const neu = nurStaerkeUebernehmen(kopf.bogen, { fuehrer: f, unterfuehrer: u, mannschaft: m, gesamt: f + u + m }, stempelZeitpunkt());
     const neueFassung: { fassung: MeldeEintrag | null } = { fassung: null };

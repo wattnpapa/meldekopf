@@ -274,3 +274,14 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Wenn ich im zweiten Fenster auf "In Einsatz übernehmen" klicke
     Dann sehe ich im zweiten Fenster den Dialog "Erst die Fassung klären"
     Und sehe ich die Überschrift "Einheiten (2 gemeldet"
+
+  # Audit Meldekopf Runde 1 (Feld, Handschuh, P2): „Stärke ändern" bot drei
+  # Textfelder, am Telefon kam die Tastatur. Jetzt dieselben Zähler wie in der
+  # Schnellerfassung.
+  Szenario: Stärke ändern geht mit den Zählern
+    Wenn ich auf "Mehr…" klicke
+    Und ich auf "Stärke ändern…" klicke
+    Dann sehe ich den Dialog "Stärke ändern"
+    Wenn ich im Dialog auf "Mannschaft: erhöhen" klicke
+    Und ich im Dialog auf "Stärke übernehmen" klicke
+    Dann sehe ich den Hinweis "Stärke 3 → 4 geändert"

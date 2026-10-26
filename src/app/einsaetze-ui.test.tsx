@@ -1782,6 +1782,10 @@ describe("Stärke ändern mit Prüfung und Rückweg (R4-E4)", () => {
   beforeEach(() => {
     localStorage.clear();
   });
+  // Das Fenster hängt in einer eigenen Wurzel (staerke-dialog.tsx); ein Test, der es offen lässt, räumt hier ab.
+  afterEach(() => {
+    for (const d of document.querySelectorAll("dialog.staerke-fenster")) d.parentElement?.remove();
+  });
 
   function einsatzMitDreiPersonen() {
     const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
@@ -1861,19 +1865,20 @@ describe("Stärke ändern mit Prüfung und Rückweg (R4-E4)", () => {
     expect(einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege).toHaveLength(1);
   });
 
-  it("nennt bei „6o“ das falsche Feld und behält die übrigen Eingaben", async () => {
+  // Audit Meldekopf Runde 1 (Feld, Handschuh): Zähler wie in der Schnellerfassung statt Tastatur.
+  it("ändert die Stärke mit den Zählern, ohne ein Zahlenfeld zu fokussieren", async () => {
     const nutzer = userEvent.setup();
-    const { einsatzId } = einsatzMitDreiPersonen();
+    const { einsatzId, neuLaden } = einsatzMitDreiPersonen();
     const dialog = await dialogOeffnen(nutzer);
-    await eintragen(nutzer, dialog, "Führer", "1");
-    await eintragen(nutzer, dialog, "Mannschaft", "6o");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Mannschaft: erhöhen");
+    await nutzer.click(within(dialog).getByRole("button", { name: "Mannschaft: verringern" }));
+    expect(within(dialog).getByRole("status").textContent).toMatch(/Neu: 0 \/ 0 \/ 2 \/\/ 2/);
+    await nutzer.click(within(dialog).getByRole("button", { name: "Führer: erhöhen" }));
     await nutzer.click(within(dialog).getByRole("button", { name: "Stärke übernehmen" }));
-
-    const wieder = document.querySelector<HTMLDialogElement>("dialog[aria-label='Stärke ändern']")!;
-    expect(within(wieder).getByRole("alert").textContent).toMatch(/nicht lesbar: Mannschaft \(„6o"\)/);
-    expect((within(wieder).getByLabelText("Führer") as HTMLInputElement).value).toBe("1");
-    expect((within(wieder).getByLabelText("Mannschaft") as HTMLInputElement).value).toBe("6o");
-    expect(einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege).toHaveLength(1);
+    neuLaden();
+    const e = einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege;
+    expect(e).toHaveLength(2);
+    expect(document.querySelector(".quittung-daumen")!.textContent).toMatch(/3 → 3/);
   });
 
   it("nimmt eine falsch aufgenommene Folgemeldung über „Rückgängig“ an der Quittung zurück", async () => {
