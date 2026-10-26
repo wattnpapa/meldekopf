@@ -64,3 +64,26 @@ When(
     await this.page.locator("main").getByLabel(name).first().fill(wert);
   },
 );
+
+// Browser- bzw. Geräte-Zurück (Audit Meldekopf R1, Fehler F6). Über die Seite statt page.goBack():
+// Ein Sprung innerhalb des Dokuments lädt nichts, auf das Playwright warten könnte.
+When("ich im Browser zurückgehe", async function (this: EebWelt) {
+  await this.page.evaluate("history.back()");
+});
+
+When("ich im Browser vorgehe", async function (this: EebWelt) {
+  await this.page.evaluate("history.forward()");
+});
+
+Then("ist die App noch offen", async function (this: EebWelt) {
+  // Kurz warten: Ein Verlassen der Seite meldet sich nicht sofort.
+  await this.page.waitForTimeout(300);
+  const adresse = this.page.url();
+  if (!adresse.startsWith(this.basisUrl)) throw new Error(`Die App ist verlassen: ${adresse}`);
+  await this.page.locator("#app main").first().waitFor({ state: "visible" });
+});
+
+// Der Knopf trägt unter dem Namen das Alter der letzten Meldung („vor 3 Min"); gesucht wird nach dem Anfang.
+When("ich die Sammlung {string} auf der Startseite öffne", async function (this: EebWelt, name: string) {
+  await this.page.locator("button.sammlung-oeffnen").filter({ hasText: `„${name}" öffnen` }).first().click();
+});

@@ -34,7 +34,8 @@ import { nachAbgleichFortsetzen, useFensterAbgleich } from "./fenster-abgleich";
 import { FesteWarnung } from "@bos/oberflaeche/feste-warnung";
 import { entwurfPlatzFrei, erfassungFuer } from "./schnellerfassung/angefangen";
 import type { ExportUmfang } from "./weitergabe/export-stand";
-import { entwurfLaden, entwurfVerwerfen } from "./entwurf";
+import { entwurfLaden, entwurfSpeichern, entwurfVerwerfen } from "./entwurf";
+import { useAnsichtVerlauf, type Ansicht } from "./ansicht-verlauf";
 import { QrScannerWeb } from "./eingang/qr-scanner-web";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
 import { SpeicherWarnung } from "./speicher-warnung";
@@ -111,6 +112,17 @@ export function StandKarte() {
   );
 }
 
+/**
+ * Zurück aus der Schnellerfassung wirkt wie „‹ Einsatz": Die Erfassung bleibt
+ * als Entwurf liegen, ein Neuladen öffnet den Einsatz statt des halbfertigen
+ * Formulars (R5-N3, schnellerfassung.tsx).
+ */
+function erfassungZuruecklegen(einsatzId: string): void {
+  const e = entwurfLaden();
+  if (e?.fremd?.einsatzId !== einsatzId || e.fremd.startseite) return;
+  entwurfSpeichern(e.bogen, { fremd: { ...e.fremd, startseite: true }, ...(e.vorlageId ? { vorlageId: e.vorlageId } : {}) });
+}
+
 // Erst auf Knopfdruck: Die Schnellerfassung bringt Vokabulare, StAN-Tabellen
 // und Formularbausteine mit, die beim Start niemand braucht (Startbündel).
 const Schnellerfassung = lazy(() => import("./schnellerfassung/schnellerfassung").then((m) => ({ default: m.Schnellerfassung })));
@@ -148,6 +160,30 @@ export function App() {
   // einlesen, wenn das andere Fenster sie ändert (R2-O4). Den Entwurf der
   // Schnellerfassung gleicht schnellerfassung.tsx selbst ab.
   useFensterAbgleich(erfassungOffen, einsaetzeNeuLaden, { rueckholplatz: false });
+
+  const zurStartseite = () => {
+    setOffenerEinsatzId(null);
+    setMeldung("");
+    setFehler("");
+    aufnahme.setEinlese(null);
+    aufnahme.setStapelBericht([]);
+  };
+  // Browser- und Geräte-Zurück bleiben in der App (Audit Meldekopf R1, Fehler F6).
+  const ansicht: Ansicht = offenerEinsatz
+    ? { art: erfassungOffen ? "erfassung" : "einsatz", id: offenerEinsatz.id }
+    : { art: "start" };
+  useAnsichtVerlauf(ansicht, (ziel) => {
+    if (ziel.art === "start") {
+      if (erfassungOffen && offenerEinsatzId) erfassungZuruecklegen(offenerEinsatzId);
+      setErfassungOffen(false);
+      zurStartseite();
+      return;
+    }
+    if (ziel.art === "einsatz" && erfassungOffen && offenerEinsatzId) erfassungZuruecklegen(offenerEinsatzId);
+    setOffenerEinsatzId(ziel.id);
+    setErfassungOffen(ziel.art === "erfassung");
+    einsaetzeNeuLaden();
+  });
 
   async function manuellErfassen(einsatzId: string) {
     if (!(await entwurfPlatzFrei(einsatzId))) return;
@@ -225,13 +261,7 @@ export function App() {
           aufnahme={aufnahme}
           meldung={meldung}
           fehler={fehler}
-          onZurueck={() => {
-            setOffenerEinsatzId(null);
-            setMeldung("");
-            setFehler("");
-            aufnahme.setEinlese(null);
-            aufnahme.setStapelBericht([]);
-          }}
+          onZurueck={zurStartseite}
           onGeaendert={einsaetzeNeuLaden}
           onManuell={() => void manuellErfassen(offenerEinsatz.id)}
           exportUmfang={exportUmfang}
