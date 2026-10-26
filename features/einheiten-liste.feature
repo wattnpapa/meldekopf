@@ -117,3 +117,11 @@ Funktionalität: Einheitenliste durchsuchen, filtern und sortieren
     Dann führt die Einheitentabelle "DLRG Wardenburg" an Stelle 1
     Wenn ich die Tabelle nach "Einheit" sortiere
     Dann führt die Einheitentabelle "THW" an Stelle 1
+
+  # Audit Meldekopf Runde 1 (Führung, mobile UI, P2): Am Telefon hatte die
+  # Tabelle 22 Spalten, die Gesamtstärke lag erst nach seitlichem Wischen im Bild.
+  Szenario: Am Telefon steht die Gesamtstärke neben dem Namen
+    Angenommen das Fenster 390 × 844 Pixel groß ist
+    Wenn ich auf "Tabelle" klicke
+    Dann steht die Tabellenspalte "Stärke gesamt" ohne Wischen im Bild
+    Und sehe ich die Schaltfläche "Alle 22 Spalten zeigen"

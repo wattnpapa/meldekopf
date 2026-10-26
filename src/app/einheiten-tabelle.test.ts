@@ -24,6 +24,7 @@ import {
 import { EinsatzArt, MeldeStatus, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import {
   TABELLEN_SPALTEN,
+  tabellenSpalten,
   bedarfKurztext,
   bedarfMarken,
   folgeAenderung,
@@ -576,5 +577,19 @@ describe("Nummern und Sollstärke (Audit Runde 8)", () => {
     const gilt = eintrag("u1", neuerStand, { einheitSchluessel: "ulm", empfangenAm: 1000 });
     const historie = eintrag("u2", aelter, { einheitSchluessel: "ulm", empfangenAm: 2000, ersetztDurch: "u1" });
     expect(folgeAenderung(gilt, [gilt, historie])).toBeNull();
+  });
+});
+
+// Audit Meldekopf Runde 1 (Führung, mobile UI): am Telefon Gesamt neben dem Namen, der Rest auf Wunsch.
+describe("tabellenSpalten", () => {
+  it("stellt am Telefon Gesamt direkt hinter die Einheit und lässt die Aufschlüsselung weg", () => {
+    const telefon = tabellenSpalten(true, false).map((s) => s.schluessel);
+    expect(telefon.slice(0, 3)).toEqual(["einheit", "gesamt", "zugEtikett"]);
+    expect(telefon).not.toContain("unterbringungM");
+    expect(telefon.length).toBeLessThan(TABELLEN_SPALTEN.length);
+  });
+  it("zeigt am Laptop und auf Wunsch alle Spalten in der gewohnten Folge", () => {
+    expect(tabellenSpalten(false, false)).toBe(TABELLEN_SPALTEN);
+    expect(tabellenSpalten(true, true)).toBe(TABELLEN_SPALTEN);
   });
 });

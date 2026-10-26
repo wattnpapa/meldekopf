@@ -130,12 +130,14 @@ import {
   merkeAnsicht,
   standIstAlt,
   summenBeschriftung,
+  tabellenSpalten,
   tabellenSumme,
   tabellenZaehlung,
   tabellenZeilen,
   zeilenSortieren,
   type EinheitenAnsicht,
   type Sortierrichtung,
+  type SpaltenDefinition,
   type TabellenSpalte,
   type TabellenZeile,
 } from "./einheiten-tabelle";
@@ -1915,7 +1917,7 @@ export function EinsatzDetail(props: {
           <p className="hinweis staerke-legende">Stärke auf den Karten: Führer / Unterführer / Mannschaft / Gesamt.</p>
         )}
         {ansicht === "tabelle" && kopf.length > 0 && (
-          <EinheitenTabelle meldungen={kopf} art={einsatz.art} eingang={eingang} nummern={nummern} neueFassungen={neueFassungen} />
+          <EinheitenTabelle meldungen={kopf} art={einsatz.art} eingang={eingang} nummern={nummern} neueFassungen={neueFassungen} schmal={kompakt} />
         )}
         {/* Eine Liste: das Vorleseprogramm nennt die Zahl der Einheiten und
             erlaubt den Sprung von Eintrag zu Eintrag (R2-M4). */}
@@ -2266,7 +2268,10 @@ export function EinsatzDetail(props: {
  * Einheit meldet den größten Verpflegungsbedarf?"). Zahlen starten dabei
  * absteigend — gefragt ist der größte Wert, nicht die Null.
  */
-function EinheitenTabelle({ meldungen, art, eingang, nummern, neueFassungen }: { meldungen: MeldeEintrag[]; art: EinsatzArt; eingang?: Eingang | null; nummern?: Map<string, number>; neueFassungen?: Set<string> }) {
+function EinheitenTabelle({ meldungen, art, eingang, nummern, neueFassungen, schmal = false }: { meldungen: MeldeEintrag[]; art: EinsatzArt; eingang?: Eingang | null; nummern?: Map<string, number>; neueFassungen?: Set<string>; schmal?: boolean }) {
+  // Am Telefon die kurze Spaltenfolge; „Alle Spalten zeigen" holt den Rest (Audit Meldekopf R1).
+  const [alleSpalten, setAlleSpalten] = useState(false);
+  const spalten = tabellenSpalten(schmal, alleSpalten);
   // null = Reihenfolge der Liste (Sortierauswahl der Leiste) unverändert
   // übernehmen. Erst ein Klick auf einen Spaltenkopf ordnet hier um.
   const [spalte, setSpalte] = useState<TabellenSpalte | null>(null);
@@ -2320,7 +2325,7 @@ function EinheitenTabelle({ meldungen, art, eingang, nummern, neueFassungen }: {
           </caption>
           <thead>
             <tr>
-              {TABELLEN_SPALTEN.map((s) => (
+              {spalten.map((s) => (
                 <th
                   key={s.schluessel}
                   scope="col"
@@ -2359,6 +2364,7 @@ function EinheitenTabelle({ meldungen, art, eingang, nummern, neueFassungen }: {
                 eingang={eingang}
                 nummer={nummern?.get(z.eintrag.einheitSchluessel)}
                 neueFassung={neueFassungen?.has(z.eintrag.einheitSchluessel)}
+                spalten={spalten}
               />
             ))}
           </tbody>
@@ -2367,7 +2373,7 @@ function EinheitenTabelle({ meldungen, art, eingang, nummern, neueFassungen }: {
               Stärkeleiste oben. */}
           <tfoot>
             <tr>
-              {TABELLEN_SPALTEN.map((s) => (
+              {spalten.map((s) => (
                 <td key={s.schluessel} className={s.zahl ? "zahl" : undefined}>
                   {summenWert[s.schluessel]}
                 </td>
@@ -2376,6 +2382,14 @@ function EinheitenTabelle({ meldungen, art, eingang, nummern, neueFassungen }: {
           </tfoot>
         </table>
       </TabellenScroll>
+      {schmal && (
+        <p className="tabelle-spaltenwahl">
+          <button type="button" aria-pressed={alleSpalten} onClick={() => setAlleSpalten((a) => !a)}>
+            {alleSpalten ? "Nur die wichtigsten Spalten" : `Alle ${TABELLEN_SPALTEN.length} Spalten zeigen`}
+          </button>{" "}
+          {!alleSpalten && <span className="hinweis">Verpflegung, Unterbringung und Kraftstoff je Einheit stehen dort.</span>}
+        </p>
+      )}
       <p className="hinweis">
         Spaltenkopf anklicken sortiert die Tabelle. Details, Historie und Aktionen einer Einheit
         stehen in der Kartenansicht.
@@ -2408,7 +2422,7 @@ function AltBadge() {
 }
 
 /** Eine Datenzeile — abgerückte Meldungen bleiben sichtbar, aber durchgestrichen. */
-function TabellenZeileZelle({ zeile: z, eingang, nummer, neueFassung }: { zeile: TabellenZeile; eingang?: Eingang | null; nummer?: number; neueFassung?: boolean }) {
+function TabellenZeileZelle({ zeile: z, eingang, nummer, neueFassung, spalten }: { zeile: TabellenZeile; eingang?: Eingang | null; nummer?: number; neueFassung?: boolean; spalten: readonly SpaltenDefinition[] }) {
   const zeile = useEingangsquittung<HTMLTableRowElement>(marke(eingang, z.eintrag.einheitSchluessel), { rollen: false });
   return (
     <tr ref={zeile} data-einheit={z.eintrag.einheitSchluessel} className={z.anwesend ? undefined : "gestrichen"}>
@@ -2429,9 +2443,9 @@ function TabellenZeileZelle({ zeile: z, eingang, nummer, neueFassung }: { zeile:
           </span>
         )}
       </th>
-      {/* Die Zellen folgen TABELLEN_SPALTEN, damit Kopf, Zeile und Summe nie
+      {/* Die Zellen folgen den Spalten des Kopfs (TABELLEN_SPALTEN, am Telefon die kurze Folge), damit Kopf, Zeile und Summe nie
           auseinanderlaufen, wenn die Spaltenfolge sich ändert (R2-K5). */}
-      {TABELLEN_SPALTEN.filter((s) => s.schluessel !== "einheit").map((s) => (
+      {spalten.filter((s) => s.schluessel !== "einheit").map((s) => (
         <TabellenZelle key={s.schluessel} spalte={s.schluessel} zeile={z} />
       ))}
     </tr>

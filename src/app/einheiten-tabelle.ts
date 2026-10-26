@@ -734,6 +734,33 @@ export const TABELLEN_SPALTEN: SpaltenDefinition[] = [
   { schluessel: "stand", kopf: "Stand", titel: "Stand der Meldung (Absender)", zahl: false },
 ];
 
+/**
+ * Spaltenfolge am Telefon: Gesamt gleich neben dem Namen, danach, wonach die
+ * Führung fragt; Aufschlüsselung von Verpflegung, Unterbringung, Kraftstoff,
+ * Organisation und Stand erst auf Wunsch. Vorher 22 Spalten, 1 615 px breit
+ * in 356 px; „Ges." lag am rechten Rand (Audit Meldekopf R1, Führung und
+ * mobile UI, P2).
+ */
+export const TELEFON_SPALTEN: readonly TabellenSpalte[] = [
+  "einheit",
+  "gesamt",
+  "zugEtikett",
+  "bedarf",
+  "eingetroffen",
+  "auftrag",
+  "fuehrer",
+  "unterfuehrer",
+  "mannschaft",
+  "fahrzeuge",
+  "abgerueckt",
+];
+
+/** Die Spalten der Tabelle: alle in der Folge oben, am Telefon ohne „alle“ die kurze Folge. */
+export function tabellenSpalten(schmal: boolean, alle: boolean): SpaltenDefinition[] {
+  if (!schmal || alle) return TABELLEN_SPALTEN;
+  return TELEFON_SPALTEN.map((k) => TABELLEN_SPALTEN.find((s) => s.schluessel === k)!);
+}
+
 /** Fahrzeug-Kurzbezeichnungen einer Einheit, z. B. „GKW / MzKW" (wie im CSV). */
 function fahrzeugTypen(e: MeldeEintrag): string {
   const tabelle = vokabularFuer(e.bogen.einheit.organisation, "fahrzeug");

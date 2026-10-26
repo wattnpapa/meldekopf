@@ -87,3 +87,14 @@ Then("ist die App noch offen", async function (this: EebWelt) {
 When("ich die Sammlung {string} auf der Startseite öffne", async function (this: EebWelt, name: string) {
   await this.page.locator("button.sammlung-oeffnen").filter({ hasText: `„${name}" öffnen` }).first().click();
 });
+
+// Am Telefon soll eine Spalte ohne seitliches Wischen im Bild stehen (Audit Meldekopf R1, Tabelle mit 22 Spalten).
+Then("steht die Tabellenspalte {string} ohne Wischen im Bild", async function (this: EebWelt, titel: string) {
+  const kopf = this.page.locator("table.einheiten-tabelle thead th").filter({ hasText: titel }).first();
+  await kopf.waitFor({ state: "visible" });
+  const rahmen = await kopf.boundingBox();
+  const breite = this.page.viewportSize()?.width ?? 0;
+  if (!rahmen || rahmen.x + rahmen.width > breite) {
+    throw new Error(`Die Spalte „${titel}" liegt außerhalb des Bildes (rechts bei ${rahmen ? Math.round(rahmen.x + rahmen.width) : "?"} px, Bild ${breite} px).`);
+  }
+});
