@@ -52,7 +52,7 @@ export const EXPORT_ZIELE: readonly ExportZiel[] = ["pdf", "csv", "csv-detail", 
 
 /** Wie das Format in der Zeile unter dem Kästchen heißt. */
 export const EXPORT_ZIEL_NAME: Record<ExportZiel, string> = {
-  // „Sammel-PDF" meint auch die Datei von „Einsatz weitergeben / sichern" (an die
+  // „Sammel-PDF" meint auch die Datei von „Einsatz übergeben (PDF mit Daten)" (an die
   // Ablösung); die Zeile hier betrifft die Lieferung an den Stab (R5-W5).
   pdf: "Sammel-PDF an den Stab",
   csv: "Übersicht als CSV",
@@ -275,7 +275,7 @@ export function lageblattVermerken(einsatz: Einsatzsammlung, behalten?: Iterable
 }
 
 /**
- * Wann die ganze Sammlung zuletzt über „Einsatz weitergeben / sichern"
+ * Wann die ganze Sammlung zuletzt über „Einsatz übergeben (PDF mit Daten)"
  * herausging, und was da in ihr stand. Nach einer Schichtübergabe arbeitete
  * das alte Gerät weiter wie zuvor, ohne Hinweis, dass die Lage jetzt auf
  * einem anderen Gerät geführt wird — ein Nachzügler landete dort und fehlte

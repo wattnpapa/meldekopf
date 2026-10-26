@@ -1394,7 +1394,7 @@ export function einsatzPdfDokument(
     boegenMitQr,
     erstellt,
     (nachtrag
-      ? `NACHTRAG ${nachtrag}: nur die neuen oder geänderten Einheiten — nicht die ganze Lage. Die ganze Lage steht in „Einsatz weitergeben / sichern“. `
+      ? `NACHTRAG ${nachtrag}: nur die neuen oder geänderten Einheiten — nicht die ganze Lage. Die ganze Lage steht in „Einsatz übergeben (PDF mit Daten)“. `
       : "") +
       "Die Änderungsspalte vergleicht jede Meldung mit der vorherigen Meldung derselben Einheit. Die vollständigen Bögen folgen.",
     undefined,

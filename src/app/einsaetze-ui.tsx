@@ -846,7 +846,7 @@ export function EinsatzDetail(props: {
   /** Sammel-PDF (Übersicht, Bögen, eingebettete Sammlung) im gewählten Umfang. */
   onSammelPdf: (umfang: ExportUmfang) => void;
   /**
-   * Einsatz weitergeben / sichern — immer die ganze Sammlung (Meldungen,
+   * Einsatz übergeben (PDF mit Daten) — immer die ganze Sammlung (Meldungen,
    * Zeiten, Historie, Züge), die das nächste Gerät über „Einsatz
    * importieren…" liest; unabhängig vom Kästchen „nur neue Bögen".
    * Optional, solange die App den Weg noch nicht verdrahtet hat.
@@ -1407,6 +1407,41 @@ export function EinsatzDetail(props: {
         <div><Zaehlwert wert={sum.staerke.mannschaft} /><span>Mannsch.</span></div>
         <div className="gesamt"><Zaehlwert wert={sum.staerke.gesamt} /><span>Gesamt</span></div>
       </section>
+      {/* Stand der Ausgabe neben der Summe (Audit Meldekopf R1, Führung F6, Arbeitsablauf P3-4): Die Knöpfe stehen
+          unter der Liste (R4-K5), am Telefon bei vier Einheiten 1 600 px tief. Ob das Lageblatt an der Wand noch
+          stimmt, sieht die Führung jetzt bei der Gesamtzahl, und ein Tipp führt hin. */}
+      {(onWeitergeben || onLageblatt) && (
+        <p className={`hinweis ausgabe-stand${lageblattVeraltet || weitergabeOffen ? " seitdem-neu" : ""}`}>
+          {onLageblatt && (
+            <span className="ausgabe-stand-teil">
+              {lageblattStand
+                ? `Lageblatt ${exportZeitKurz(lageblattStand.zeitpunkt)}${lageblattVeraltet ? " – nicht mehr aktuell" : " – aktuell"}`
+                : "Noch kein Lageblatt"}
+            </span>
+          )}
+          {onLageblatt && onWeitergeben && <span aria-hidden="true">·</span>}
+          {onWeitergeben && (
+            <span className="ausgabe-stand-teil">
+              {weitergabeStand
+                ? `übergeben ${exportZeitKurz(weitergabeStand.zeitpunkt)}${weitergabeOffen ? " – seitdem Neues" : ""}`
+                : "noch nicht übergeben"}
+            </span>
+          )}
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              try {
+                ausgabeBlock.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+              } catch {
+                /* Testumgebung ohne Layout */
+              }
+            }}
+          >
+            Übergeben, Lageblatt, Export ↓
+          </button>
+        </p>
+      )}
       {/* Eine nicht gezählte Sollstärke steckt in der Summe: Die Summe sagt, wie viel davon (R8-A1). */}
       {sollAnteil.einheiten > 0 && (
         <p className="hinweis soll-anteil" role="status">
@@ -1765,24 +1800,6 @@ export function EinsatzDetail(props: {
           Zur Einheitenliste ↓
         </button>
       </p>
-      {(onWeitergeben || onLageblatt) && (
-        <p className="hinweis ausgabe-sprung">
-          <button
-            type="button"
-            className="link"
-            onClick={() => {
-              try {
-                ausgabeBlock.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
-              } catch {
-                /* Testumgebung ohne Layout */
-              }
-            }}
-          >
-            Weitergeben, Lageblatt, Export ↓
-          </button>{" "}
-          — unter der Liste der Einheiten.
-        </p>
-      )}
       </div>
 
       <section className="karte einsatz-liste">
@@ -1975,7 +1992,7 @@ export function EinsatzDetail(props: {
               onClick={onWeitergeben}
               title="Die ganze Sammlung als Datei — auf dem nächsten Gerät über „Einsatz importieren…“ einlesbar."
             >
-              {arbeitet === "weitergeben" ? "Einsatz wird erzeugt…" : "Einsatz weitergeben / sichern"}
+              {arbeitet === "weitergeben" ? "Einsatz wird erzeugt…" : "Einsatz übergeben (PDF mit Daten)"}
             </button>
           )}{" "}
           {onLageblatt && (
@@ -2039,7 +2056,7 @@ export function EinsatzDetail(props: {
           {/* Ein Knopf für die ganze Sammel-PDF: „Sammel-PDF (alle Bögen)"
               darunter erzeugte dieselbe Datei — zwei gleichwertige Knöpfe, und
               welcher „für Papier" ist, stand nur hier (Audit Runde 2, R2-A3). */}
-          „Einsatz weitergeben / sichern" erzeugt die Sammel-PDF mit allen Bögen (zum Drucken) und allen Meldungen,
+          „Einsatz übergeben (PDF mit Daten)" erzeugt die Sammel-PDF mit allen Bögen (zum Drucken) und allen Meldungen,
           Zeiten, Historie und Zügen — auf dem nächsten Gerät über „Einsatz importieren…" einlesbar, auch wenn alle
           abgerückt sind. Ein Nachtrag für den Stab (PDF, CSV, Excel): weiter unten „Nur neue Bögen seit dem letzten Export“
           ankreuzen — erst dann erscheinen dort die Nachtrag-Knöpfe, je Format mit eigenem Bezugspunkt.
@@ -2105,7 +2122,7 @@ export function EinsatzDetail(props: {
         })}
       </div>
       <div className="vorlage-aktionen einsatz-ausgaben">
-        {/* Die ganze Sammel-PDF liegt auf „Einsatz weitergeben / sichern";
+        {/* Die ganze Sammel-PDF liegt auf „Einsatz übergeben (PDF mit Daten)";
             hier nur noch der Nachtrag „nur neue Bögen" (R2-A3). Ohne
             Weitergabe-Knopf bleibt der Gesamtweg hier. */}
         {(nurNeue || !onWeitergeben) && (

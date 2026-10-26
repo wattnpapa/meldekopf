@@ -1649,7 +1649,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
           text:
             `Die Datei ist ein Nachtrag zu „${s.name}" seit ${zeitLang(nachtragSeit)} und enthält nur ${n} Einheit${n === 1 ? "" : "en"}. ` +
             "Die Sammlung gibt es auf diesem Gerät noch nicht: Es entstünde eine Lage mit nur diesen Einheiten. " +
-            "Die ganze Lage kommt vom Gerät, das sie führt, über „Einsatz weitergeben / sichern“.",
+            "Die ganze Lage kommt vom Gerät, das sie führt, über „Einsatz übergeben (PDF mit Daten)“.",
           ok: "Trotzdem anlegen",
           abbruch: "Abbrechen",
         });

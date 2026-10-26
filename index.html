@@ -2670,6 +2670,15 @@
       background: var(--warn-fond); color: var(--warn-text);
       border: 1px solid var(--warn-linie); border-radius: var(--radius);
     }
+    /* Audit Meldekopf R1 (Führung F6): Stand von Lageblatt und Übergabe neben der Summe, mit Sprung zur
+       Ausgabe unter der Liste. Ist etwas nicht mehr aktuell, steht die Zeile wie der Übergabevermerk als
+       Warnkasten da. */
+    .ausgabe-stand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.5rem; }
+    .ausgabe-stand.seitdem-neu {
+      padding: 0.15rem 0.5rem;
+      background: var(--warn-fond); color: var(--warn-text);
+      border: 1px solid var(--warn-linie); border-radius: var(--radius);
+    }
     .muster-sub.bemerkung-neu { color: var(--warn-text); font-weight: 600;}
     /* Teil-Quittung: Kästchenzeile des mehrteiligen QR-Transports (siehe
       teil-quittung.tsx). Ein gefülltes Kästchen sagt auf einem amtlichen Bogen

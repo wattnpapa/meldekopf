@@ -104,8 +104,27 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Und sehe ich den Hinweis "Noch keine Meldung."
 
   Szenario: Sammel-PDF bündelt alle Bögen in einer Datei
-    Wenn ich auf "Einsatz weitergeben / sichern" klicke und eine Datei erhalte
+    Wenn ich auf "Einsatz übergeben (PDF mit Daten)" klicke und eine Datei erhalte
     Dann heißt die heruntergeladene Datei wie "eeb-einsatz-*.pdf"
+
+  # Audit Meldekopf Runde 1 (Arbeitsablauf P2-1): Der Knopf hieß „Einsatz
+  # weitergeben / sichern", die Datensicherung in der Fußzeile auch „sichern".
+  # Die Quittung sagt jetzt, wie die Übergabe-PDF eingelesen wird und dass sie
+  # keine Datensicherung des Geräts ist.
+  Szenario: Die Übergabe-PDF sagt, wie die Ablösung sie einliest
+    Wenn ich auf "Einsatz übergeben (PDF mit Daten)" klicke und eine Datei erhalte
+    Dann sehe ich den Hinweis "auf dem neuen Gerät über „Einsatz importieren…“"
+    Und sehe ich den Hinweis "die Datensicherung des ganzen Geräts ist ein anderer Weg"
+
+  # Audit Meldekopf Runde 1 (Führung F6): Ob das Lageblatt an der Wand noch
+  # stimmt, stand nur unter der ganzen Einheitenliste.
+  Szenario: Neben der Summe steht, ob das Lageblatt noch aktuell ist
+    Dann sehe ich den Hinweis "Noch kein Lageblatt"
+    Wenn ich auf "Lageblatt (A4 quer)" klicke und eine Datei erhalte
+    Dann sehe ich den Hinweis "– aktuell"
+    Wenn ich die Einheit "DLRG" "Wardenburg" manuell in den Einsatz aufnehme
+    Dann sehe ich den Hinweis "– nicht mehr aktuell"
+    Und sehe ich die Schaltfläche "Übergeben, Lageblatt, Export ↓"
 
   Szenario: CSV-Übersicht für die Lagekarte
     Wenn ich auf "Übersicht als CSV" klicke und eine Datei erhalte

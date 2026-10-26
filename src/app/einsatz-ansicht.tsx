@@ -199,7 +199,7 @@ export function EinsatzAnsicht({
         const stand = umfang === "neue" ? exportStaende.pdf : undefined;
         const ok = await einsatzPdfErzeugen(teil, undefined, s.eintraege, stand?.zeitpunkt, weitergabe ? "" : nachtragMarke(umfang, "pdf"));
         if (!ok) return; // Share-Sheet abgebrochen — nichts übergeben
-        // „Einsatz weitergeben / sichern" geht an die Ablösung oder ins Archiv,
+        // „Einsatz übergeben (PDF mit Daten)" geht an die Ablösung oder ins Archiv,
         // nicht an den Stab: Es hat seinen eigenen Stand (pdf.ts) und verbraucht
         // den Nachtrag-Bezugspunkt nicht (R4-W2).
         if (!weitergabe) exportVerbuchen(s, "pdf");
@@ -207,10 +207,14 @@ export function EinsatzAnsicht({
         setAusgabeQuittung(
           umfang === "neue"
             ? `✓ Neue Bögen aus „${s.name}" als PDF erzeugt — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt. Übergeben ist sie erst, wenn sie gedruckt oder verschickt ist.`
-            : `✓ Einsatz „${s.name}" als PDF erzeugt (mit allen Meldungen, Zeiten und Historie) — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt. Weitergegeben ist sie erst, wenn sie bei der Ablösung oder im Archiv angekommen ist.`,
+            : // Die Übergabe-PDF ist Druckstück und Datenträger zugleich; „sichern" meinte daneben auch die
+              // Datensicherung des Geräts (Audit Meldekopf R1, Arbeitsablauf P2-1). Die Quittung sagt beides.
+              `✓ Übergabe-PDF „${s.name}" erzeugt: zum Drucken und mit allen Meldungen, Zeiten und Historie zum Einlesen — auf dem neuen Gerät über „Einsatz importieren…“. ` +
+              "Sie ersetzt dort nichts, sie fügt diese Sammlung hinzu; die Datensicherung des ganzen Geräts ist ein anderer Weg (Fußzeile). " +
+              "Liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt; übergeben ist sie erst, wenn sie bei der Ablösung oder im Archiv angekommen ist.",
         );
       } catch (e) {
-        setFehler(`Einsatz weitergeben: ${fehlerText(e)}`);
+        setFehler(`Einsatz übergeben: ${fehlerText(e)}`);
       }
     });
   }

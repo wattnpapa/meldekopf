@@ -964,7 +964,7 @@ describe("Ausgabewege der Einsatzansicht", () => {
     const sammelPdf = vi.fn();
     buehne(["Wardenburg"], { onWeitergeben: weitergeben, onLageblatt: lageblatt, onSammelPdf: sammelPdf });
 
-    await nutzer.click(screen.getByRole("button", { name: "Einsatz weitergeben / sichern" }));
+    await nutzer.click(screen.getByRole("button", { name: "Einsatz übergeben (PDF mit Daten)" }));
     await nutzer.click(screen.getByRole("button", { name: "Lageblatt (A4 quer)" }));
     expect(weitergeben).toHaveBeenCalledTimes(1);
     expect(lageblatt).toHaveBeenCalledTimes(1);
@@ -1544,8 +1544,12 @@ describe("Quittung nennt die zuletzt aufgenommenen Einheiten (R2-S4)", () => {
     const liste = document.getElementById("einheiten-liste")!;
     const ausgabe = document.getElementById("ausgabe-block")!;
     expect(liste.compareDocumentPosition(ausgabe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(ausgabe).getByRole("button", { name: "Einsatz weitergeben / sichern" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Weitergeben, Lageblatt, Export/ })).toBeTruthy();
+    expect(within(ausgabe).getByRole("button", { name: "Einsatz übergeben (PDF mit Daten)" })).toBeTruthy();
+    // Der Sprung steht neben der Summe und nennt den Stand (Audit Meldekopf R1, Führung F6).
+    const stand = document.querySelector<HTMLElement>(".ausgabe-stand")!;
+    expect(stand.textContent).toMatch(/Noch kein Lageblatt.*noch nicht übergeben/);
+    expect(liste.compareDocumentPosition(stand) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(within(stand).getByRole("button", { name: /Übergeben, Lageblatt, Export/ })).toBeTruthy();
   });
 
   it("zeigt an Karte und Quittung, dass ein Bogen für eine andere Lage ausgefüllt scheint, ohne ihn auszunehmen (R4-K6)", () => {
@@ -2013,7 +2017,7 @@ describe("Zusammenführen mit Quittung und Rückweg (R4-D5)", () => {
  * Nach der Schichtübergabe arbeitete das alte Gerät weiter wie zuvor, ohne
  * Hinweis, dass die Lage weitergegeben wurde (Audit Runde 2, R2-W5).
  */
-describe("Übergabevermerk nach „Einsatz weitergeben / sichern“ (R2-W5)", () => {
+describe("Übergabevermerk nach „Einsatz übergeben (PDF mit Daten)“ (R2-W5)", () => {
   beforeEach(() => {
     localStorage.clear();
   });
