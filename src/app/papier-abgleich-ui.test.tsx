@@ -183,3 +183,41 @@ describe("Nummern beim Abgleich (R8-W1)", () => {
     expect(hinweis.textContent).toMatch(/Nummern? änder/);
   });
 });
+
+// Audit Meldekopf Runde 1, Fehler F3: Eine Eintreffzeit in der Zukunft ging beim Abgleich ohne Rückfrage durch.
+describe("Zeiten beim Abgleich (Meldekopf R1, F3)", () => {
+  function zuLokal(ms: number): string {
+    const d = new Date(ms);
+    const z = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+  }
+
+  it("fragt bei einer Eintreffzeit in der Zukunft, bevor etwas gespeichert wird", async () => {
+    const nutzer = userEvent.setup({ delay: null });
+    const s = einsatzAnlegen("Hochwasser", EinsatzArt.EINSATZ);
+    const id = meldungAufnehmen(s.id, bogen("Ulm"), { quelle: "scan" })!.eintrag.id;
+    vomPapierMarkieren(s.id, [id], 999);
+    const eintraege = einsaetzeLaden().find((x) => x.id === s.id)!.eintraege;
+    render(
+      <>
+        <PapierAbgleich einsatzId={s.id} eintraege={eintraege} zuege={[]} onGeaendert={() => {}} />
+        <Dialogschicht />
+      </>,
+    );
+    await nutzer.click(screen.getByRole("button", { name: "Lage vom Papier abgleichen…" }));
+    const feld = screen.getByLabelText(/Eingetroffen am/) as HTMLInputElement;
+    const morgen = Date.now() + 24 * 60 * 60_000;
+    // datetime-local nimmt in jsdom keine Tastatureingabe an, der Wert wird gesetzt.
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.change(feld, { target: { value: zuLokal(morgen) } });
+    await nutzer.click(screen.getByRole("button", { name: "Abgleich übernehmen" }));
+    const frage = await screen.findByRole("dialog", { name: "Stimmt die Zeit?" });
+    expect(frage.textContent).toMatch(/Ulm.*liegt in der Zukunft/);
+    await nutzer.click(within(frage).getByRole("button", { name: "Zeiten korrigieren" }));
+    // Nichts übernommen: Die Einheit ist weiter „vom Papier", das Formular steht offen.
+    const danach = einsaetzeLaden().find((x) => x.id === s.id)!.eintraege.find((e) => e.id === id)!;
+    expect(danach.eingetroffenAm).not.toBe(Math.floor(morgen / 60_000) * 60_000);
+    expect(danach.vomPapier).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /Lage vom Papier abgleichen \(1\)/ })).toBeTruthy();
+  });
+});

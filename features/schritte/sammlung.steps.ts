@@ -18,10 +18,10 @@ import { alterBogen, sammlungSpeicher, weitereEinheit } from "../support/sammlun
  * Die Sammlung liegt vor dem Laden im Gerätespeicher und war zuletzt offen —
  * die App öffnet sie wie nach einem Neuladen am Meldekopf-Tablet (W5).
  */
-async function sammlungAufDemGeraet(welt: EebWelt, name: string, mitWeiteren: boolean): Promise<void> {
+async function sammlungAufDemGeraet(welt: EebWelt, name: string, mitWeiteren: boolean, vomPapier = false): Promise<void> {
   const boegen = [alterBogen()];
   if (mitWeiteren) boegen.push(weitereEinheit(OrganisationsTyp.DLRG, "Wardenburg"), weitereEinheit(OrganisationsTyp.FEUERWEHR, "Aschhausen"));
-  const { einsaetze, einsatzId } = sammlungSpeicher(name, boegen);
+  const { einsaetze, einsatzId } = sammlungSpeicher(name, boegen, { vomPapier });
   await welt.page.addInitScript(
     ([e, id]) => {
       // Nur beim ersten Laden: ein Neuladen im Szenario soll den Stand nicht zurücksetzen.
@@ -37,6 +37,11 @@ async function sammlungAufDemGeraet(welt: EebWelt, name: string, mitWeiteren: bo
 
 Given("auf dem Gerät liegt die Sammlung {string} mit dem alten Bogen", async function (this: EebWelt, name: string) {
   await sammlungAufDemGeraet(this, name, false);
+});
+
+// Wie nach „Bögen einlesen…" vom Ausdruck: Die Karte trägt „vom Papier, Zeiten prüfen", der Papier-Abgleich steht an.
+Given("auf dem Gerät liegt die Sammlung {string} mit dem alten Bogen, vom Papier eingelesen", async function (this: EebWelt, name: string) {
+  await sammlungAufDemGeraet(this, name, false, true);
 });
 
 Given(

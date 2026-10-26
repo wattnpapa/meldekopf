@@ -17,7 +17,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { MeldeStatus, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { geltendeJeEinheit } from "./fassung-vorrang";
 import { einheitAnzeigename } from "./hilfen";
-import { eintreffzeit, papierAbgleichUebernehmen, SpeicherVollFehler, zeitKurz } from "./eintrag-zeiten";
+import { eintreffzeit, papierAbgleichUebernehmen, SpeicherVollFehler, zeitKurz, zeitUnstimmigkeit } from "./eintrag-zeiten";
 import { frageJaNein, zeigeHinweis } from "@bos/oberflaeche/dialoge";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 import { meldungsNummern, nummernWechsel, nummernWechselListe } from "./einheiten-tabelle";
@@ -177,6 +177,28 @@ export function PapierAbgleich(props: {
     if (fehler.length > 0) {
       await zeigeHinweis({ titel: "Abgleich unvollständig", text: `${fehler.join("; ")}. Nichts übernommen.` });
       return;
+    }
+    // Zeiten in der Zukunft: dieselbe Rückfrage wie bei der Einzelkorrektur an der Karte (R3-E5), gesammelt für alle
+    // auffälligen Zeilen. Vorher ging ein Tagesdreher vom Blatt still durch (Audit Meldekopf R1, Fehler F3).
+    // Abrücken vor Eintreffen hält schon die Prüfung oben auf.
+    const unstimmig: string[] = [];
+    for (const d of daten) {
+      const e = eintraege.find((x) => x.id === d.eintragId);
+      if (!e || (!("eingetroffenAm" in d) && d.abgerueckAm == null)) continue;
+      const ein = "eingetroffenAm" in d && d.eingetroffenAm != null ? d.eingetroffenAm : eintreffzeit(e);
+      const text = zeitUnstimmigkeit({ eintreffen: ein, abgerueckt: d.abgerueckAm ?? null });
+      if (text) unstimmig.push(`${zeilen.find((z) => z.eintragId === d.eintragId)!.name}: ${text}`);
+    }
+    if (
+      unstimmig.length > 0 &&
+      !(await frageJaNein({
+        titel: "Stimmt die Zeit?",
+        text: `${unstimmig.join(" ")} Noch ist nichts übernommen.`,
+        ok: "Ja, so übernehmen",
+        abbruch: "Zeiten korrigieren",
+      }))
+    ) {
+      return; // Der Abgleich bleibt offen, die Werte stehen zum Korrigieren drin.
     }
     // Eine Nummer vom Blatt, die schon eine nicht beteiligte Einheit trägt, verschiebt deren
     // Nummer (R8-W1): vorher nennen, nicht erst hinterher.

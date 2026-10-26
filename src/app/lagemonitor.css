@@ -181,3 +181,12 @@ main.lm h1, main.lm h2, main.lm th, main.lm summary, main.lm dt { color: var(--l
   .lm-einheiten .lm-zahl { width: 1%; white-space: nowrap; }
   .lm-weitere { padding: 0.15em 0.3em; }
 }
+
+/* Zug und Gesamt je Einheit, Zug- und Bedarfszeile (Audit Meldekopf R1, Führung F3/F4). */
+.lm-einheiten .lm-zug { white-space: nowrap; width: 1%; }
+.lm-einheiten td.lm-gesamt { font-weight: 700; }
+.lm-zuege, .lm-bedarf { font-variant-numeric: tabular-nums; }
+.lm-zug-teil { white-space: nowrap; }
+/* Dringender Bedarf: Warnfarbe, Fettschrift und Zeichen — nicht nur Farbe (R9-K6). */
+.lm-dringend { color: var(--lm-warn); font-weight: 700; }
+.lm-dringend::before { content: "\26A0\FE0E\00A0"; }

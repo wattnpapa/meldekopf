@@ -25,7 +25,7 @@ import {
   einsatzbeginnSetzen,
 } from "./lagemonitor-beginn";
 import { sammlungenBeiseitegelegt } from "./eingang/unlesbar";
-import { alterText, ausEingabeWert, dauerText, dtgTeile, lagebild, zuEingabeWert, type EinheitZeile } from "./lagemonitor";
+import { alterText, ausEingabeWert, dauerText, dtgTeile, lagebild, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile, type ZugZeile } from "./lagemonitor";
 
 const URL_PARAMETER = "lagemonitor";
 /** Gemerkte Helligkeitsstufe des Monitors („dunkel" oder „gedimmt"; „hell" wird nie gemerkt, R7-L3). */
@@ -151,9 +151,11 @@ function vollbild() {
  * ändern sich mit den ausgeblendeten Zeilen), und die größte Zahl genommen, bei
  * der Zeilen samt Hinweiszeile in den Behälter passen (R8-L1, R8-N2). Wo es keine
  * Messung gibt (kein Layout) oder der Behälter mitwächst (Telefon), stehen alle
- * Zeilen da. Die Zeilen sind nach „zuletzt gemeldet zuerst" geordnet (R8-K5).
+ * Zeilen da. Die Zeilen sind nach „zuletzt eingetroffen zuerst" geordnet (R8-K5).
+ * Die Zug-Spalte steht nur da, wenn mindestens eine Einheit einen Zug hat.
  */
 function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] }) {
+  const mitZug = einheiten.some((e) => e.zug !== "");
   const behaelter = useRef<HTMLDivElement>(null);
   const hinweisEl = useRef<HTMLDivElement>(null);
   const tabelleEl = useRef<HTMLTableElement>(null);
@@ -222,9 +224,11 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
         <thead>
           <tr>
             <th className="lm-orga">Orga</th><th>Ort</th><th><span className="lm-lang">Funkrufname</span><span className="lm-kurz">Funkruf / Ort</span></th><th className="lm-typ">Einheitentyp</th>
+            {mitZug && <th className="lm-zug">Zug</th>}
             <th className="lm-zahl" title="Führer">F</th>
             <th className="lm-zahl" title="Unterführer">U</th>
             <th className="lm-zahl" title="Mannschaft">M</th>
+            <th className="lm-zahl lm-gesamt" title="gesamt">Ges.</th>
           </tr>
         </thead>
         <tbody>
@@ -235,18 +239,54 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
               {/* Am Telefon entfällt die Ort-Spalte: Der Ort steht im Funkrufnamen oder, wenn nicht, als Zusatz darunter (R9-K5). */}
               <td data-ort={ortImFunkruf(e) ? undefined : e.ort}>{e.funkruf || "–"}</td>
               <td className="lm-typ">{e.typ || "–"}</td>
+              {mitZug && <td className="lm-zug">{e.zug || "–"}</td>}
               <td className="lm-zahl">{e.fuehrer}</td>
               <td className="lm-zahl">{e.unterfuehrer}</td>
               <td className="lm-zahl">{e.mannschaft}</td>
+              <td className="lm-zahl lm-gesamt">{e.gesamt}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <div className="lm-weitere" ref={hinweisEl} style={weitere === 0 ? { display: "none" } : undefined}>
-        + {Math.max(weitere, 1)} weitere {weitere <= 1 ? "Einheit" : "Einheiten"} · zuletzt gemeldet zuerst
+        + {Math.max(weitere, 1)} weitere {weitere <= 1 ? "Einheit" : "Einheiten"} · zuletzt eingetroffen zuerst
       </div>
     </div>
   );
+}
+
+/** „1. Zug 3 E. / 27 · 2. Zug 2 E. / 14 · ohne Zug 1 E. / 4" — die Frage „wie stark ist welcher Zug?" ohne Tablet (F4). */
+function ZugZeileAnzeige({ zuege }: { zuege: readonly ZugZeile[] }) {
+  return (
+    <div className="lm-zeile lm-r2 lm-zuege" aria-label="Stärke je Zug">
+      {zuege.map((z, i) => (
+        <span key={z.name ?? ""} className="lm-zug-teil">
+          {i > 0 ? " · " : ""}
+          {z.name ?? "ohne Zug"} <strong>{z.gesamt}</strong>
+          <span className="lm-label lm-inline"> ({z.einheiten} {z.einheiten === 1 ? "Einheit" : "Einheiten"})</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Bedarfszeile: Verpflegung als Zahl, dazu nur, was offen ist; das Dringende mit Warnzeichen (F4). */
+export function bedarfTeile(b: BedarfZeile): { text: string; dringend: boolean }[] {
+  const teile: { text: string; dringend: boolean }[] = [{ text: `Verpflegung ${b.verpflegung}`, dringend: false }];
+  if (b.ruhezeit > 0) teile.push({ text: `Ruhezeit ${b.ruhezeit}×`, dringend: true });
+  if (b.unterbringungEinheiten > 0) {
+    teile.push({
+      text: `Unterbringung ${b.unterbringungPersonen} ${b.unterbringungPersonen === 1 ? "Person" : "Personen"} (${b.unterbringungEinheiten} ${b.unterbringungEinheiten === 1 ? "Einheit" : "Einheiten"})`,
+      dringend: true,
+    });
+  }
+  if (b.verpflegungAbweichend > 0) {
+    teile.push({
+      text: `Verpflegung abweichend bei ${b.verpflegungAbweichend} ${b.verpflegungAbweichend === 1 ? "Einheit" : "Einheiten"}`,
+      dringend: true,
+    });
+  }
+  return teile;
 }
 
 export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
@@ -390,12 +430,27 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         {datenstand && <span className={`lm-label${veraltet ? " lm-veraltet" : ""}`}>{datenstand}</span>}
       </div>
       {dauerZeile && <div className="lm-zeile lm-r2 lm-dauer">{dauerZeile}</div>}
+      {bild.einheiten.length > 0 && (
+        <div className="lm-zeile lm-r2 lm-bedarf" aria-label="Bedarf">
+          <span className="lm-label lm-inline">Bedarf </span>
+          {bedarfTeile(bild.bedarf).map((t, i) => (
+            <span key={t.text} className={t.dringend ? "lm-dringend" : undefined}>
+              {i > 0 ? " · " : ""}
+              {t.text}
+            </span>
+          ))}
+        </div>
+      )}
+      {bild.zuege.length > 0 && <ZugZeileAnzeige zuege={bild.zuege} />}
       {sichtbareBewegungen.length > 0 && (
         <div className="lm-zeile lm-bewegungen">
           {sichtbareBewegungen.map((b) => (
             <div key={b.id} className="lm-bewegung">
               {b.art}: {b.name}
-              {b.detail ? ` – ${b.detail}` : ""} <span className="lm-label lm-inline">{alterText(b.zeit, jetzt)}</span>
+              {b.detail ? ` – ${b.detail}` : ""}{" "}
+              <span className="lm-label lm-inline">
+                {b.nachgetragen != null ? `nachgetragen, da seit ${uhrzeitText(b.nachgetragen, jetzt)}` : alterText(b.zeit, jetzt)}
+              </span>
             </div>
           ))}
           {weitereBewegungen > 0 && (

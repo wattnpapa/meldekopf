@@ -12,9 +12,9 @@
 import { staerke } from "@bos/eeb-format/model";
 import { einheitOrt } from "@bos/meldekopf/darstellung";
 import { EinsatzArt, MeldeStatus, revisionen, type Einsatzsammlung } from "@bos/meldekopf/einsaetze";
-import { aggregiere, aktuelleMeldungen, type EinsatzSummen } from "./auswertung";
+import { aggregiere, aggregiereNachZug, aktuelleMeldungen, type EinsatzSummen } from "./auswertung";
 import { eintreffzeit } from "./eintrag-zeiten";
-import { sollstaerkeAnteil } from "./einheiten-tabelle";
+import { bedarfMarken, sollstaerkeAnteil } from "./einheiten-tabelle";
 import { geltendeJeEinheit } from "./fassung-vorrang";
 import { einheitAnzeigename, funkrufText, natoZeitstempel, orgLabel, vokabText, vokabularFuer } from "./hilfen";
 
@@ -44,7 +44,7 @@ export function dauerText(beginn: number | null, jetzt: number): string | null {
   ].join(", ");
 }
 
-/** Eine Zeile der Einheitentabelle: Organisation, Ort, Funkrufname, Einheitentyp, Führer/Unterführer/Mannschaft. */
+/** Eine Zeile der Einheitentabelle: Organisation, Ort, Funkrufname, Einheitentyp, Zug, Führer/Unterführer/Mannschaft/gesamt. */
 export interface EinheitZeile {
   /** Schlüssel der Meldung — stabil, solange die Einheit gleich bleibt. */
   id: string;
@@ -56,6 +56,34 @@ export interface EinheitZeile {
   fuehrer: number;
   unterfuehrer: number;
   mannschaft: number;
+  /** Gesamtstärke der Einheit — am Fernseher die Zahl, nach der gefragt wird (Audit Meldekopf R1, Führung F4). */
+  gesamt: number;
+  /** Zug-Etikett; leer ohne Zuordnung. */
+  zug: string;
+  /** Eintreffzeit (vom Zettel, sonst Empfang) — danach ist die Tabelle geordnet. */
+  eingetroffen: number;
+}
+
+/** Zwischensumme eines Zugs für die Zugzeile des Monitors. */
+export interface ZugZeile {
+  /** Zug-Etikett; `null` für Einheiten ohne Zug. */
+  name: string | null;
+  einheiten: number;
+  gesamt: number;
+}
+
+/**
+ * Was am Fernseher als Bedarf stehen muss: nur das, was zu entscheiden ist
+ * (Ruhezeit, Unterbringung, abweichende Verpflegung), dazu die Verpflegung
+ * als Zahl. Kraftstoff bleibt in der Einsatzansicht (Audit Meldekopf R1, F4).
+ */
+export interface BedarfZeile {
+  verpflegung: number;
+  ruhezeit: number;
+  unterbringungEinheiten: number;
+  unterbringungPersonen: number;
+  /** Einheiten, deren gemeldete Verpflegung von ihrer Stärke abweicht. */
+  verpflegungAbweichend: number;
 }
 
 /** Was sich zuletzt in der Lage bewegt hat — der Fernseher soll nicht nur Zahlen ändern, sondern sagen, warum (Audit Runde 6, R6-K1). */
@@ -66,7 +94,16 @@ export interface Bewegung {
   zeit: number;
   /** Bei Folgemeldungen die Stärkeänderung: „Stärke 4 → 1 (−3)" (R7-K2). */
   detail?: string;
+  /**
+   * Nur bei „Eingetroffen": die Eintreffzeit, wenn die Einheit mehr als fünf
+   * Minuten vor ihrer Erfassung da war (Nachtrag vom Meldeblock). Der Monitor
+   * nennt dann diese Zeit statt „vor 2 Min" (Audit Meldekopf R1, Führung F3).
+   */
+  nachgetragen?: number;
 }
+
+/** Ab diesem Abstand zwischen Eintreffen und Erfassung gilt eine Einheit als nachgetragen. */
+export const NACHTRAG_AB_MS = 5 * 60_000;
 
 /** Eine Meldezeit, die weiter als das in der Zukunft liegt, deutet auf eine falsche Geräteuhr (R7-K3). */
 export const ZUKUNFT_TOLERANZ_MS = 5 * 60_000;
@@ -81,8 +118,11 @@ export interface Lagebild {
   /** Art der Sammlung als Wort („Einsatz", „Übung", „Veranstaltung"). */
   art: string;
   summen: EinsatzSummen;
-  /** Anwesende Einheiten, zuletzt gemeldete zuerst. */
+  /** Anwesende Einheiten, zuletzt eingetroffene zuerst. */
   einheiten: EinheitZeile[];
+  /** Zwischensummen je Zug; leer, solange keine Einheit einem Zug zugeordnet ist. */
+  zuege: ZugZeile[];
+  bedarf: BedarfZeile;
   /** Einheiten, die abgerückt sind (zählen nicht mehr mit). */
   abgerueckt: number;
   /** Wann zuletzt etwas in die Sammlung kam (Date.now()), sonst `null`. */
@@ -125,8 +165,16 @@ function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
           detail: alt != null && alt !== neu ? `Stärke ${alt} → ${neu}${diff}` : undefined,
         });
       } else if (k.status !== MeldeStatus.ABGERUECKT) {
-        // Neue Einheit: erklärt, warum Zahl und Tabelle springen (R7-W4).
-        aus.push({ id: `${k.id}-e`, name, art: "Eingetroffen", zeit: k.empfangenAm });
+        // Neue Einheit: erklärt, warum Zahl und Tabelle springen (R7-W4). Ein Nachtrag vom Meldeblock
+        // trägt seine Eintreffzeit mit, sonst hieße eine seit einer Stunde anwesende Einheit „vor 2 Min" (F3).
+        const da = eintreffzeit(k);
+        aus.push({
+          id: `${k.id}-e`,
+          name,
+          art: "Eingetroffen",
+          zeit: k.empfangenAm,
+          ...(k.empfangenAm - da > NACHTRAG_AB_MS ? { nachgetragen: da } : {}),
+        });
       }
     }
   }
@@ -135,9 +183,14 @@ function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
 
 export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): Lagebild {
   const geltend = geltendeJeEinheit(einsatz.eintraege);
-  const einheiten = [...aktuelleMeldungen(einsatz.eintraege, einsatz.art)]
-    .sort((a, b) => b.empfangenAm - a.empfangenAm) // zuletzt gemeldet zuerst (R8-K5); bei gleicher Zeit bleibt die Reihenfolge der Meldungen
-    .map((m): EinheitZeile => {
+  const aktuell = aktuelleMeldungen(einsatz.eintraege, einsatz.art);
+  // Zuletzt eingetroffen zuerst (R8-K5). Vorher nach Empfang: Ein Nachtrag vom Meldeblock und jede Folgemeldung
+  // sprangen an die Spitze, als wären sie gerade gekommen (Audit Meldekopf R1, F3). Bei gleicher Zeit bleibt die
+  // Reihenfolge der Meldungen.
+  const einheiten = aktuell
+    .map((m) => ({ m, da: eintreffzeit(m) }))
+    .sort((a, b) => b.da - a.da)
+    .map(({ m, da }): EinheitZeile => {
       const e = m.bogen.einheit;
       const st = staerke(m.bogen);
       return {
@@ -149,15 +202,32 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
         fuehrer: st.fuehrer,
         unterfuehrer: st.unterfuehrer,
         mannschaft: st.mannschaft,
+        gesamt: st.gesamt,
+        zug: m.zugEtikett?.trim() ?? "",
+        eingetroffen: da,
       };
     });
+  const summen = aggregiere(einsatz.eintraege, einsatz.art);
+  const gruppen = aggregiereNachZug(einsatz.eintraege, einsatz.art);
+  const zuege: ZugZeile[] = gruppen.some((g) => g.zugEtikett)
+    ? gruppen.map((g) => ({ name: g.zugEtikett ?? null, einheiten: g.summen.einheiten, gesamt: g.summen.staerke.gesamt }))
+    : [];
+  const bedarf: BedarfZeile = {
+    verpflegung: summen.verpflegung.gesamt,
+    ruhezeit: summen.ruhezeitErforderlich,
+    unterbringungEinheiten: summen.unterbringungBenoetigt,
+    unterbringungPersonen: summen.unterbringungAngefordert.personen,
+    verpflegungAbweichend: aktuell.filter((m) => bedarfMarken(m.bogen).some((b) => b.lang.startsWith("Verpflegung"))).length,
+  };
   return {
     name: einsatz.name,
     ort: einsatz.ort,
     uebung: einsatz.art === EinsatzArt.UEBUNG,
     art: lagebildArt(einsatz.art),
-    summen: aggregiere(einsatz.eintraege, einsatz.art),
+    summen,
     einheiten,
+    zuege,
+    bedarf,
     abgerueckt: geltend.filter((e) => e.status === MeldeStatus.ABGERUECKT).length,
     letzteMeldung: einsatz.eintraege.length > 0 ? Math.max(...einsatz.eintraege.map((e) => e.empfangenAm)) : null,
     ersteMeldung: geltend.length > 0 ? Math.min(...geltend.map(eintreffzeit)) : null,
@@ -179,6 +249,14 @@ export function ausEingabeWert(wert: string): number | null {
   if (!wert) return null;
   const ms = new Date(wert).getTime();
   return Number.isFinite(ms) ? ms : null;
+}
+
+/** Uhrzeit „19:55" für den Monitor; liegt sie nicht heute, mit Tag: „24.10. 19:55". */
+export function uhrzeitText(zeit: number, jetzt: number): string {
+  const d = new Date(zeit);
+  const j = new Date(jetzt);
+  const uhr = `${zwei(d.getHours())}:${zwei(d.getMinutes())}`;
+  return d.toDateString() === j.toDateString() ? uhr : `${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}. ${uhr}`;
 }
 
 /** „vor 4 Min" / „gerade eben" / „vor 2 Std 5 Min" — Alter einer Meldung für die Datenstand-Zeile. */

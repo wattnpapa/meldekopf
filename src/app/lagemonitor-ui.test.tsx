@@ -131,10 +131,10 @@ describe("Lagemonitor", () => {
     expect(jever[0]).toBe("THW");
     expect(jever[2]).toMatch(/Heros/);
     expect(jever[3]).toBe("Zugtrupp");
-    expect(jever.slice(4)).toEqual(["1", "2", "5"]);
+    expect(jever.slice(4)).toEqual(["1", "2", "5", "8"]);
     const aurich = alle.find((z) => z[1] === "Aurich")!;
     expect(aurich[2]).toBe("–"); // kein Fahrzeug mit Funkrufname
-    expect(aurich.slice(4)).toEqual(["0", "0", "3"]);
+    expect(aurich.slice(4)).toEqual(["0", "0", "3", "3"]);
   });
 
   it("sagt statt einer leeren Tabelle, dass noch keine Einheit gemeldet ist", () => {
@@ -282,7 +282,7 @@ describe("Lagemonitor, Runde 7", () => {
     expect(zelle.textContent).toBe("–");
   });
 
-  it("ordnet die Einheiten nach „zuletzt gemeldet zuerst“ (R8-K5)", () => {
+  it("ordnet die Einheiten nach „zuletzt eingetroffen zuerst“ (R8-K5, Meldekopf R1 F3)", () => {
     const e = einsatzAnlegen("Reihenfolge", EinsatzArt.EINSATZ);
     for (const name of ["OV Alt", "OV Neu"]) {
       const b = neuerBogen();
@@ -299,7 +299,87 @@ describe("Lagemonitor, Runde 7", () => {
     expect(zeilen).toHaveLength(2);
     expect(zeilen[0]).toContain("OV Neu");
     expect(zeilen[1]).toContain("OV Alt");
-    expect(document.querySelector(".lm-weitere")!.textContent).toMatch(/zuletzt gemeldet zuerst/);
+    expect(document.querySelector(".lm-weitere")!.textContent).toMatch(/zuletzt eingetroffen zuerst/);
+  });
+});
+
+// Audit Meldekopf Runde 1, Führungssicht F3/F4: Zug, Gesamt, Bedarf und Nachträge am Fernseher.
+describe("Lagemonitor, Meldekopf Runde 1", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(cleanup);
+
+  function mitEinheiten(einheiten: { name: string; zug?: string; gesamt: number; ruhezeit?: boolean; verpflegung?: number; eintreffenVorMin?: number }[]) {
+    const e = einsatzAnlegen("Lage", EinsatzArt.EINSATZ);
+    for (const x of einheiten) {
+      const b = neuerBogen();
+      b.einheit.hierarchie[0]!.name = x.name;
+      b.staerkeManuell = { fuehrer: 0, unterfuehrer: 0, mannschaft: x.gesamt, gesamt: x.gesamt };
+      if (x.ruhezeit || x.verpflegung != null) {
+        b.sofortbedarf = {
+          verpflegungPersonen: x.verpflegung ?? x.gesamt,
+          dieselLiter: 0,
+          benzinLiter: 0,
+          gemischLiter: 0,
+          unterbringung: false,
+          ruhezeitErforderlich: !!x.ruhezeit,
+        };
+      }
+      meldungHinzufuegen(e.id, b, x.zug ? { zugEtikett: x.zug } : undefined);
+    }
+    const liste = structuredClone(einsaetzeLaden());
+    const s = liste.find((l) => l.id === e.id)!;
+    einheiten.forEach((x, i) => {
+      if (x.eintreffenVorMin != null) s.eintraege[i]!.eingetroffenAm = Date.now() - x.eintreffenVorMin * 60_000;
+    });
+    einsaetzeSpeichern(liste);
+    return e;
+  }
+
+  it("zeigt Zug und Gesamt je Einheit und die Stärke je Zug", () => {
+    const e = mitEinheiten([
+      { name: "OV Eins", zug: "1. Zug", gesamt: 9 },
+      { name: "OV Zwei", zug: "2. Zug", gesamt: 4 },
+      { name: "OV Drei", zug: "1. Zug", gesamt: 3 },
+    ]);
+    render(<Lagemonitor einsatzId={e.id} />);
+    const kopf = Array.from(document.querySelectorAll(".lm-einheiten thead th")).map((t) => t.textContent);
+    expect(kopf).toContain("Zug");
+    expect(kopf).toContain("Ges.");
+    const zwei = Array.from(document.querySelectorAll(".lm-einheiten tbody tr")).find((r) => r.textContent!.includes("OV Zwei"))!;
+    expect(zwei.querySelector(".lm-zug")!.textContent).toBe("2. Zug");
+    expect(zwei.querySelector(".lm-gesamt")!.textContent).toBe("4");
+    const zuege = document.querySelector(".lm-zuege")!.textContent!;
+    expect(zuege).toMatch(/1\. Zug 12 \(2 Einheiten\)/);
+    expect(zuege).toMatch(/2\. Zug 4 \(1 Einheit\)/);
+  });
+
+  it("lässt Zug-Spalte und Zugzeile weg, solange niemand einem Zug zugeordnet ist", () => {
+    const e = mitEinheiten([{ name: "OV Eins", gesamt: 9 }]);
+    render(<Lagemonitor einsatzId={e.id} />);
+    expect(document.querySelector(".lm-einheiten .lm-zug")).toBeNull();
+    expect(document.querySelector(".lm-zuege")).toBeNull();
+  });
+
+  it("nennt Ruhezeit und abweichende Verpflegung in der Bedarfszeile, mit Warnzeichen", () => {
+    const e = mitEinheiten([
+      { name: "OV Müde", gesamt: 6, ruhezeit: true },
+      { name: "OV Hunger", gesamt: 3, verpflegung: 20 },
+    ]);
+    render(<Lagemonitor einsatzId={e.id} />);
+    const bedarf = document.querySelector(".lm-bedarf")!;
+    expect(bedarf.textContent).toMatch(/Ruhezeit 1×/);
+    expect(bedarf.textContent).toMatch(/Verpflegung abweichend bei 1 Einheit/);
+    const dringend = Array.from(bedarf.querySelectorAll(".lm-dringend")).map((d) => d.textContent);
+    expect(dringend.some((t) => /Ruhezeit/.test(t!))).toBe(true);
+  });
+
+  it("kennzeichnet eine nachgetragene Einheit mit ihrer Eintreffzeit statt „vor 0 Min“", () => {
+    const e = mitEinheiten([{ name: "OV Spät", gesamt: 5, eintreffenVorMin: 60 }]);
+    render(<Lagemonitor einsatzId={e.id} />);
+    const bewegung = document.querySelector(".lm-bewegung")!.textContent!;
+    expect(bewegung).toMatch(/Eingetroffen: .*OV Spät/);
+    expect(bewegung).toMatch(/nachgetragen, da seit \d\d:\d\d/);
+    expect(bewegung).not.toMatch(/gerade eben/);
   });
 });
 

@@ -48,7 +48,11 @@ export function weitereEinheit(organisation: OrganisationsTyp, ort: string): Erf
 }
 
 /** Inhalt von `eeb.einsaetze.v1` mit einer Sammlung aus den gegebenen Bögen. */
-export function sammlungSpeicher(name: string, boegen: Erfassungsbogen[]): { einsaetze: string; einsatzId: string } {
+export function sammlungSpeicher(
+  name: string,
+  boegen: Erfassungsbogen[],
+  opt: { vomPapier?: boolean } = {},
+): { einsaetze: string; einsatzId: string } {
   const ablage = new Map<string, string>();
   speicherhuelleSetzen({ getItem: (k) => ablage.get(k) ?? null, setItem: (k, v) => void ablage.set(k, v) });
   try {
@@ -56,9 +60,18 @@ export function sammlungSpeicher(name: string, boegen: Erfassungsbogen[]): { ein
     for (const b of boegen) meldungHinzufuegen(s.id, b, { quelle: "scan" });
     // In der Reihenfolge eingetroffen, eine Minute auseinander — sonst trügen
     // alle denselben Zeitpunkt, und „nach Eintreffzeit" sortierte zufällig.
-    const liste = JSON.parse(ablage.get("eeb.einsaetze.v1") ?? "[]") as { id: string; eintraege: { empfangenAm: number }[] }[];
+    const liste = JSON.parse(ablage.get("eeb.einsaetze.v1") ?? "[]") as {
+      id: string;
+      eintraege: { empfangenAm: number; vomPapier?: number }[];
+    }[];
     const beginn = Date.now() - boegen.length * 60_000;
-    for (const x of liste) x.eintraege.forEach((e, i) => (e.empfangenAm = beginn + i * 60_000));
+    for (const x of liste) {
+      x.eintraege.forEach((e, i) => {
+        e.empfangenAm = beginn + i * 60_000;
+        // Zeitpunkt des Einlesens vom Papier, wie ihn vomPapierMarkieren (eintrag-zeiten.ts) setzt.
+        if (opt.vomPapier) e.vomPapier = e.empfangenAm;
+      });
+    }
     return { einsaetze: JSON.stringify(liste), einsatzId: s.id };
   } finally {
     speicherhuelleSetzen(null);
