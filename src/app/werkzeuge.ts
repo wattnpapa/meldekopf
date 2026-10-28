@@ -28,6 +28,7 @@ import { BASIS_URL, DOMAIN, ERFASSUNGSBOGEN_URL } from "./adressen";
 export { WERKZEUGE_TITEL, type Werkzeug };
 
 export const WERKZEUGE: readonly Werkzeug[] = [
+  { href: "https://einsatzauftrag.de/", label: "einsatzauftrag.de" },
   { href: ERFASSUNGSBOGEN_URL, label: "erfassungsbogen.app" },
   { href: BASIS_URL, label: DOMAIN },
   { href: "https://fmbauplaner.app/", label: "fmbauplaner.app" },
