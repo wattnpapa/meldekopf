@@ -23,6 +23,9 @@ When("ich den Lagemonitor öffne", async function (this: EebWelt) {
     this.page.getByRole("button", { name: "Lagemonitor öffnen", exact: true }).click(),
   ]);
   await fenster.waitForLoadState("domcontentloaded");
+  // Ein Fernseher, kein Laptopfenster: Unter 800 px Höhe zeigt der Monitor nur eine Bewegungszeile
+  // (bewegungenMax, Erfassungsbogen R10).
+  await fenster.setViewportSize({ width: 1920, height: 1080 });
   await fenster.locator("main.lm").waitFor({ state: "visible" });
   MONITOR.set(this, fenster);
 });
@@ -85,7 +88,7 @@ Then("ist die App noch offen", async function (this: EebWelt) {
 
 // Der Knopf trägt unter dem Namen das Alter der letzten Meldung („vor 3 Min"); gesucht wird nach dem Anfang.
 When("ich die Sammlung {string} auf der Startseite öffne", async function (this: EebWelt, name: string) {
-  await this.page.locator("button.sammlung-oeffnen").filter({ hasText: `„${name}" öffnen` }).first().click();
+  await this.page.locator("button.sammlung-oeffnen").filter({ hasText: new RegExp(`„${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[“"] öffnen`) }).first().click();
 });
 
 // Am Telefon soll eine Spalte ohne seitliches Wischen im Bild stehen (Audit Meldekopf R1, Tabelle mit 22 Spalten).

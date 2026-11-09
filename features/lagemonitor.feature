@@ -13,6 +13,7 @@ Funktionalität: Lagemonitor für den Fernseher
   # F4: Die Tabelle hatte weder Zug noch Gesamt, Bedarf fehlte ganz.
   Szenario: Der Lagemonitor zeigt Zug, Gesamtstärke und Bedarf
     Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich "Angaben vom Zettel (optional)" aufklappe
     Und ich das Feld "Zug / Verband (laut Zettel)" mit "2.Zug" fülle
     Und ich das Feld "Ort der Einheit (Pflicht)" mit "Brake" fülle
     Und ich auf "Mannschaft: erhöhen" klicke
@@ -28,6 +29,7 @@ Funktionalität: Lagemonitor für den Fernseher
   # F3: Ein Nachtrag vom Meldeblock stand als „Eingetroffen … vor 2 Min" da.
   Szenario: Eine nachgetragene Einheit steht mit ihrer Eintreffzeit am Fernseher
     Wenn ich auf "Einheit manuell erfassen…" klicke
+    Und ich "Angaben vom Zettel (optional)" aufklappe
     Und ich in das Feld "Eingetroffen um (vom Meldeblock)" die Uhrzeit vor 60 Minuten eintrage
     Und ich das Feld "Ort der Einheit (Pflicht)" mit "Brake" fülle
     Und ich auf "Mannschaft: erhöhen" klicke

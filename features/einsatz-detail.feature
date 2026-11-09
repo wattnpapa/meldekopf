@@ -168,7 +168,7 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Wenn ich auf "‹ Startseite" klicke
     Dann sehe ich die Überschrift "Einsatz-Sammlung (Meldekopf)"
     Und sehe ich die Überschrift "Hochwasser Weser"
-    Und sehe ich den Hinweis "1 Einheit(en) anwesend"
+    Und sehe ich den Hinweis "1 Einheit anwesend"
 
   # Phase 2: Eine Sammlung kommt über die Datensicherung auf ein leeres Gerät —
   # derselbe Weg wie aus dem Erfassungsbogen (gleiche Schlüssel, ADR-007).
@@ -188,7 +188,7 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Wenn ich im Dialog auf "Einspielen und ersetzen" klicke
     Und ich im Dialog auf "Neu laden" klicke
     Dann sehe ich die Überschrift "Hochwasser Weser"
-    Und sehe ich den Hinweis "1 Einheit(en) anwesend"
+    Und sehe ich den Hinweis "1 Einheit anwesend"
 
   Szenario: Einheit manuell in den Einsatz erfassen
     Wenn ich auf "Einheit manuell erfassen…" klicke
