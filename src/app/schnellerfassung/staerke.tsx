@@ -3,26 +3,30 @@
  * Mannschaft, wahlweise die Aufteilung nach Geschlecht, die Verpflegung und
  * eine Führungskraft für Rückfragen.
  *
- * Herkunft: Erfassungsbogen `src/app/schritte/personal.tsx` (Commit 441811c),
+ * Herkunft: Erfassungsbogen `src/app/schritte/personal.tsx` (Commit 1d7ed5f),
  * der Teil „Nur Stärke (Meldekopf-Schnellerfassung)" mit den Befunden R3-N3
  * (Geschlecht ausgeschrieben) und R6-A8 (Sollstärke nicht dazuzählen). Neu
- * statt der Personenkarte: Die Führungskraft ist hier eine Zeile mit Name und
- * Telefon. Wer mehr Personen oder Funktionen erfassen will, nimmt „Im
+ * statt der Personenkarte: Die Führungskraft ist hier eine Zeile mit Name,
+ * Telefon (Telefonfeld mit Rückmeldung, R11-E3) und Funkrufname (Schema 12). Wer mehr Personen oder Funktionen erfassen will, nimmt „Im
  * Erfassungsbogen vollständig erfassen…".
  */
 import { KontaktArt, StaerkeRolle, verpflegung, type Person } from "@bos/eeb-format/model";
 import { Feld, FREMDE_DATEN, MWD_LEGENDE, Stepper, STAERKE_LEGENDE } from "@bos/oberflaeche/bausteine";
 import { useZahlQuittung } from "@bos/oberflaeche/quittung";
 import { neuePerson } from "../hilfen";
+import { TelefonFeld } from "./telefon-feld";
 import type { AbschnittProps } from "./abschnitt";
 
-/** Die erste Person des Bogens als Führungskraft — Name und Mobilnummer. */
-function fuehrungskraft(personal: Person[]): { nachname: string; vorname: string; telefon: string } {
+type Fuehrungskraft = { nachname: string; vorname: string; telefon: string; funk: string };
+
+/** Die erste Person des Bogens als Führungskraft — Name, Mobilnummer, Funkrufname. */
+function fuehrungskraft(personal: Person[]): Fuehrungskraft {
   const p = personal[0];
   return {
     nachname: p?.nachname ?? "",
     vorname: p?.vorname ?? "",
     telefon: p?.kontakte.find((k) => k.art === KontaktArt.MOBIL || k.art === KontaktArt.FESTNETZ)?.wert ?? "",
+    funk: p?.kontakte.find((k) => k.art === KontaktArt.FUNK)?.wert ?? "",
   };
 }
 
@@ -31,17 +35,22 @@ function fuehrungskraft(personal: Person[]): { nachname: string; vorname: string
  * leere Karte trüge sonst eine Person ohne Namen in den Bogen. Weitere
  * Personen (aus einem eingelesenen Bogen) bleiben stehen.
  */
-function mitFuehrungskraft(personal: Person[], f: { nachname: string; vorname: string; telefon: string }): Person[] {
+function mitFuehrungskraft(personal: Person[], f: Fuehrungskraft): Person[] {
   const rest = personal.slice(1);
-  const leer = !f.nachname.trim() && !f.vorname.trim() && !f.telefon.trim();
+  const leer = !f.nachname.trim() && !f.vorname.trim() && !f.telefon.trim() && !f.funk.trim();
   if (leer) return rest;
   const alt = personal[0] ?? { ...neuePerson(), staerkeRolle: StaerkeRolle.FUEHRER };
-  const andereKontakte = alt.kontakte.filter((k) => k.art !== KontaktArt.MOBIL && k.art !== KontaktArt.FESTNETZ);
+  const andereKontakte = alt.kontakte.filter((k) => k.art !== KontaktArt.MOBIL && k.art !== KontaktArt.FESTNETZ && k.art !== KontaktArt.FUNK);
   const person: Person = {
     ...alt,
     nachname: f.nachname,
     vorname: f.vorname,
-    kontakte: f.telefon ? [{ art: KontaktArt.MOBIL, dienstlich: true, wert: f.telefon }, ...andereKontakte] : andereKontakte,
+    kontakte: [
+      ...(f.telefon ? [{ art: KontaktArt.MOBIL, dienstlich: true, wert: f.telefon }] : []),
+      // Ein Funkrufname ist nie privat (Schema 12, KontaktArt.FUNK).
+      ...(f.funk.trim() ? [{ art: KontaktArt.FUNK, dienstlich: true, wert: f.funk }] : []),
+      ...andereKontakte,
+    ],
   };
   return [person, ...rest];
 }
@@ -121,14 +130,12 @@ export function AbschnittStaerke({ bogen, aendern }: AbschnittProps) {
           <input {...FREMDE_DATEN} value={fk.vorname} onChange={(e) => setFk({ vorname: e.target.value })} />
         </Feld>
         <Feld titel="Telefon">
-          {/* Ziffernblock zuerst; Fremddaten, damit der Browser nicht die eigene Nummer anbietet (R2-M6). */}
-          <input
-            type="tel"
-            inputMode="tel"
-            {...FREMDE_DATEN}
-            value={fk.telefon}
-            onChange={(e) => setFk({ telefon: e.target.value.replace(/\D/g, "") })}
-          />
+          {/* Ziffernblock zuerst; Fremddaten, damit der Browser nicht die eigene Nummer anbietet (R2-M6). Was beim
+              Tippen entfernt wird, sagt das Feld (R11-E3). */}
+          <TelefonFeld wert={fk.telefon} setzen={(telefon) => setFk({ telefon })} />
+        </Feld>
+        <Feld titel="Funkrufname (optional)">
+          <input {...FREMDE_DATEN} value={fk.funk} placeholder="z. B. Heros Oldenburg 18/13-1" onChange={(e) => setFk({ funk: e.target.value })} />
         </Feld>
       </div>
     </section>

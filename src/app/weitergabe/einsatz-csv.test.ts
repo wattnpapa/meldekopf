@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/einsatz-csv.test.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/einsatz-csv.test.ts` (Commit 1d7ed5f).
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -87,11 +87,11 @@ describe("einsatzCsvInhalt()", () => {
     expect(kopf!.split(";")).toEqual([
       "Nr.", "Einheit", "Teil", "Organisation", "Zug",
       "Stärke F", "Stärke U", "Stärke M", "Stärke gesamt",
-      "Verpflegung gesamt", "Verpflegung veg.", "Verpflegung vegan",
+      "Verpflegung gesamt", "Verpflegung angefordert", "Verpflegung veg.", "Verpflegung vegan",
       "Unterbringung angefordert M", "Unterbringung angefordert W", "Unterbringung angefordert D",
       "WC/Dusche M", "WC/Dusche W", "WC/Dusche D",
       "Diesel (l)", "Benzin (l)", "Gemisch (l)",
-      "Fahrzeuge (Anzahl)", "Fahrzeuge (Liste)", "Stand", "Eingetroffen", "Abgerückt", "Empfangen", "Quelle",
+      "Fahrzeuge (Anzahl)", "Fahrzeuge (Liste)", "Stand der Angaben", "Eingetroffen", "Abgerückt", "Aufnahme", "Quelle",
       "Status", "Zählt in Lage", "Übung", "Sofortbedarf", "Hinweise", "Signatur", "Absender", "Auftrag/Notiz",
       "Bemerkung (Einheit)",
     ]);
@@ -116,7 +116,7 @@ describe("einsatzCsvInhalt()", () => {
     expect(f[sp("Organisation")]).toBe("THW");
     expect(f[sp("Zug")]).toBe("1. Zug");
     expect(f.slice(sp("Stärke F"), sp("Stärke gesamt") + 1)).toEqual(["1", "0", "2", "3"]);
-    expect(f.slice(sp("Verpflegung gesamt"), sp("Verpflegung vegan") + 1)).toEqual(["3", "1", "1"]);
+    expect(f.slice(sp("Verpflegung gesamt"), sp("Verpflegung vegan") + 1)).toEqual(["3", "3", "1", "1"]);
     // Unterbringung angefordert (hier: ja) und WC/Dusche (alle Anwesenden) — beide M/W/D.
     expect(f.slice(sp("Unterbringung angefordert M"), sp("Unterbringung angefordert D") + 1)).toEqual(["2", "1", "0"]);
     expect(f.slice(sp("WC/Dusche M"), sp("WC/Dusche D") + 1)).toEqual(["2", "1", "0"]);
@@ -125,9 +125,10 @@ describe("einsatzCsvInhalt()", () => {
     expect(f[sp("Fahrzeuge (Anzahl)")]).toBe("1");
     expect(f[sp("Fahrzeuge (Liste)")]).not.toBe("");
     // Eine Zeitform je Datei: Stand, Eingetroffen und Empfangen gleich (R3-K7).
-    expect(f[sp("Stand")]).toMatch(/^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
-    expect(f[sp("Empfangen")]).toMatch(/^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
-    expect(f[sp("Eingetroffen")]).toMatch(/^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/); // = Empfangszeit, wenn nicht korrigiert
+    expect(f[sp("Stand der Angaben")]).toMatch(/^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
+    expect(f[sp("Aufnahme")]).toMatch(/^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
+    // = Empfangszeit, wenn nicht korrigiert; dann mit Stern wie auf dem Lageblatt (R16-A1)
+    expect(f[sp("Eingetroffen")]).toMatch(/^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2} \*$/);
     expect(f[sp("Abgerückt")]).toBe(""); // nicht abgerückt
     expect(f[sp("Quelle")]).toBe("Empfangen"); // gleicher Wortlaut wie auf der Karte (R2-K6)
     expect(f[sp("Status")]).toBe("anwesend");
@@ -162,7 +163,7 @@ describe("einsatzCsvInhalt()", () => {
     const csv = einsatzCsvInhalt(sammlung([meldung(bogen("A")), meldung(bogen("B"))]));
     const sp = spaltenIndex(csv);
     const reihen = zeilen(csv);
-    expect(reihen).toHaveLength(4); // Kopf + 2 Einheiten + Summe
+    expect(reihen).toHaveLength(6); // Kopf + 2 Einheiten + Summe + Kennzeile + Fußnote (R16-A1)
     const summe = reihen[3]!.split(";");
     expect(summe[1]).toBe("Summe (2 Einheiten)");
     expect(summe.slice(sp("Stärke F"), sp("Stärke gesamt") + 1)).toEqual(["2", "0", "4", "6"]); // Stärke gesamt 6
@@ -173,8 +174,8 @@ describe("einsatzCsvInhalt()", () => {
 
   /**
    * R4-W5: Die Summe unter „Unterbringung angefordert“ ist die Zahl, mit der
-   * der Stab Schlafplätze plant — dieselbe wie auf Lageblatt und in der
-   * Excel-Liste. „WC/Dusche“ zählt alle Anwesenden.
+   * der Stab Schlafplätze plant — dieselbe wie auf dem Lageblatt.
+   * „WC/Dusche“ zählt alle Anwesenden.
    */
   it("führt Unterbringung angefordert nur für Einheiten mit Anforderung, WC/Dusche für alle (R4-W5)", () => {
     const ohne = bogen("B", { sofortbedarf: { verpflegungPersonen: 3, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: false, ruhezeitErforderlich: false } });
@@ -209,7 +210,7 @@ describe("einsatzCsvInhalt()", () => {
     );
     const sp = spaltenIndex(csv);
     const reihen = zeilen(csv);
-    expect(reihen).toHaveLength(4); // Kopf + 2 Einheiten + Summe
+    expect(reihen).toHaveLength(6); // Kopf + 2 Einheiten + Summe + Kennzeile + Fußnote (R16-A1)
     const abgerueckt = reihen[2]!.split(";");
     expect(abgerueckt[sp("Status")]).toBe("abgerückt");
     expect(abgerueckt[sp("Zählt in Lage")]).toBe("nein");

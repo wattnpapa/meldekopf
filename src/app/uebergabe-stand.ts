@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/uebergabe-stand.ts` (Commit 441811c). Im Meldekopf nur
+ * Herkunft: Erfassungsbogen `src/app/uebergabe-stand.ts` (Commit 1d7ed5f). Im Meldekopf nur
  * als Datenmodul: Die Datensicherung zählt, prüft und erhält Vorlagen und
  * Übergabe-Stand eines eingespielten Erfassungsbogen-Bestands, damit nichts
  * verloren geht; eine Oberfläche dafür gibt es hier nicht (ADR-007).
@@ -43,7 +43,7 @@ export interface UebergabeStand {
 
 function staerkeText(b: Erfassungsbogen): string {
   const s = staerke(b);
-  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} / ${s.gesamt}`;
+  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} // ${s.gesamt}`;
 }
 
 /** Stand im Moment der Übergabe festhalten. */

@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/absenderkarte.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/absenderkarte.ts` (Commit 1d7ed5f).
  *
  * Absenderkarte: freiwillige Kontaktangaben (Name, E-Mail, Telefon), die mit
  * der Ed25519-Signatur mitgereicht werden.
@@ -16,6 +16,8 @@
  */
 
 import type { Absenderkarte } from "@bos/eeb-format/signatur";
+import { emailProblem } from "./email-pruefung";
+import { telefonBereinigen, telefonKurzHinweis } from "./telefon-eingabe";
 
 export type { Absenderkarte };
 
@@ -106,17 +108,29 @@ export function absenderkarteLoeschen(): void {
 }
 
 /**
+ * Prüfung der Telefonnummer wie im Assistenten (R14-E5): Buchstaben, eine zweite Nummer im Feld, zu wenige Ziffern.
+ * `text` ist der Satz für den Helfer, `wert` die bereinigte Nummer (Ziffern, ggf. führendes „+"), die an die Stelle des
+ * Eingegebenen träte. `null`, wenn nichts auffällt.
+ */
+export function telefonProblem(telefon: string | undefined): { text: string; wert: string } | null {
+  const roh = (telefon ?? "").trim();
+  if (!roh) return null;
+  const b = telefonBereinigen(roh);
+  const text = b.hinweis || (!/\d{3}/.test(roh) ? "Die Telefonnummer sieht unvollständig aus." : "") || telefonKurzHinweis(b.wert);
+  return text ? { text, wert: b.wert } : null;
+}
+
+/**
  * Grobe Plausibilitätsprüfung für die UI (blockiert nichts). Rückgabe: Hinweis
  * oder leerer String. Bewusst nachsichtig — im Einsatz zählt „irgendwie
  * erreichbar" mehr als RFC-Konformität.
  */
 export function absenderHinweis(karte: Absenderkarte): string {
-  if (karte.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(karte.email)) {
+  if (emailProblem(karte.email)) {
     return "Die E-Mail-Adresse sieht unvollständig aus.";
   }
-  if (karte.telefon && !/\d{3}/.test(karte.telefon)) {
-    return "Die Telefonnummer sieht unvollständig aus.";
-  }
+  const tel = telefonProblem(karte.telefon);
+  if (tel) return tel.text;
   if (!karte.name && absenderkarteGefuellt(karte)) {
     return "Ohne Namen ist die Angabe für die Gegenstelle schwer einzuordnen.";
   }

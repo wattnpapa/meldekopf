@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/qr-scanner-web.test.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/qr-scanner-web.test.tsx` (Commit 1d7ed5f).
  *
  * Der Weg, den eine Feldmeldung aufgedeckt hat: Auf manchen Android-Browsern
  * kommt gar keine Kamerafrage, weil die Freigabe schon blockiert ist — die App
@@ -179,6 +179,50 @@ describe("QR-Scanner im Browser", () => {
     for (const zeichen of "https:") fireEvent.keyDown(window, { key: zeichen });
 
     expect(screen.getByRole("status").textContent).toMatch(/Handscanner erkannt — 6 Zeichen/);
+  });
+
+  it("sagt bei laufender Kamera, dass der Handscanner mitarbeitet, und quittiert seine Zeichen", async () => {
+    // Probelauf: Die Notebooks hatten die Kamera freigegeben — der Handscanner-
+    // Weg erschien nie, und wer den Scanner auslöste, sah nur das Kamerabild.
+    mediaDevicesSetzen({ getUserMedia: vi.fn(async () => streamAttrappe()) });
+    const onErgebnis = vi.fn();
+
+    render(<QrScannerWeb onErgebnis={onErgebnis} onAbbruch={() => {}} />);
+    expect(await screen.findByText(/Mit USB-Handscanner: einfach auslösen/)).toBeTruthy();
+
+    for (const zeichen of "https:") fireEvent.keyDown(window, { key: zeichen });
+    expect(screen.getByText(/Handscanner erkannt — 6 Zeichen/)).toBeTruthy();
+    for (const zeichen of "//erfassungsbogen.app/#0ABC") fireEvent.keyDown(window, { key: zeichen });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onErgebnis).toHaveBeenCalledExactlyOnceWith("https://erfassungsbogen.app/#0ABC");
+  });
+
+  it("schaltet auf Wunsch auf den Handscanner um, lässt die Kamera aus und merkt sich den Weg", async () => {
+    const getUserMedia = vi.fn(async () => streamAttrappe());
+    mediaDevicesSetzen({ getUserMedia });
+    const nutzer = userEvent.setup();
+
+    const { unmount } = render(<QrScannerWeb onErgebnis={() => {}} onAbbruch={() => {}} />);
+    await screen.findByText(/Mit USB-Handscanner: einfach auslösen/);
+    expect(getUserMedia).toHaveBeenCalledOnce();
+
+    await nutzer.click(screen.getByRole("button", { name: "Handscanner statt Kamera" }));
+    expect(screen.getByText("Mit dem USB-Handscanner scannen")).toBeTruthy();
+    expect(screen.getByText(/warte auf den Handscanner/)).toBeTruthy();
+    expect(screen.queryByText(/Ohne Kamera:/)).toBeNull(); // kein Fehler, eine Wahl
+    expect(screen.queryByRole("button", { name: "Kamera erneut versuchen" })).toBeNull();
+
+    // Beim nächsten Öffnen gleich ohne Kamera — ohne Freigabefrage.
+    unmount();
+    render(<QrScannerWeb onErgebnis={() => {}} onAbbruch={() => {}} />);
+    expect(screen.getByText("Mit dem USB-Handscanner scannen")).toBeTruthy();
+    expect(getUserMedia).toHaveBeenCalledOnce();
+
+    // Und zurück zur Kamera.
+    await nutzer.click(screen.getByRole("button", { name: "Kamera verwenden" }));
+    expect(await screen.findByText(/Mit USB-Handscanner: einfach auslösen/)).toBeTruthy();
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem("eeb-scanweg")).toBeNull();
   });
 
   it("zeigt ohne Kamera auch den Sammelstand eines mehrteiligen Bogens", async () => {

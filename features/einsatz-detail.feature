@@ -17,10 +17,18 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Dann sehe ich die Überschrift "Hochwasser Weser"
     Und sehe ich die Überschrift "Einheiten (1 gemeldet"
 
+  # R21-O1: Die Einsatzansicht wird nachgeladen. Ihre Vorladeliste verwies auf eine Stilvorlage, die es nach dem
+  # Einbetten nicht mehr gab: ohne Netz kam nach dem Neuladen „Hier ist etwas schiefgelaufen".
+  Szenario: Die Einsatzansicht öffnet auch ohne Netz nach dem Neuladen
+    Wenn ich die App vom Netz trenne
+    Und ich die Seite neu lade
+    Dann sehe ich die Überschrift "Hochwasser Weser"
+    Und sehe ich die Überschrift "Einheiten (1 gemeldet"
+
   Szenario: Die Sammlung summiert Stärke und Bedarf über alle Einheiten
     Dann sehe ich die Überschrift "Bedarf (anwesende Einheiten)"
     Und sehe ich zu "Verpflegung" den Wert "vegetarisch"
-    Und sehe ich zu "Kraftstoff" den Wert "Diesel"
+    Und sehe ich zu "Kraftstoff" den Wert "keiner angefordert"
     Und sehe ich zu "Fahrzeuge" den Wert "1"
 
   Szenario: Die Vollansicht einer gemeldeten Einheit aufklappen
@@ -60,10 +68,10 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
     Und sehe ich den Hinweis "Fachberater"
     Und sehe ich den Hinweis "abgeteilt aus"
-    # Die Stärke verteilt sich, sie verschwindet nicht: aus 1 / 0 / 2 / 3 werden
+    # Die Stärke verteilt sich, sie verschwindet nicht: aus 1 / 0 / 2 // 3 werden
     # zwei Meldungen, die zusammen wieder 3 ergeben.
-    Und sehe ich den Hinweis "Stärke 1 / 0 / 0 / 1"
-    Und sehe ich den Hinweis "Stärke 0 / 0 / 2 / 2"
+    Und sehe ich den Hinweis "Stärke 1 / 0 / 0 // 1"
+    Und sehe ich den Hinweis "Stärke 0 / 0 / 2 // 2"
 
   Szenario: Aufgeteilte Teile wieder zusammenführen — der Zug sammelt sich
     Wenn ich auf "Mehr…" klicke
@@ -79,7 +87,7 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Und ich das Feld "Bezeichnung danach" mit "" fülle
     Und ich auf "Zusammenführen" klicke
     # Die Einheit steht wieder mit ihrer vollen Stärke da, nichts doppelt.
-    Dann sehe ich den Hinweis "Stärke 1 / 0 / 2 / 3"
+    Dann sehe ich den Hinweis "Stärke 1 / 0 / 2 // 3"
     Und sehe ich den Hinweis "zusammengeführt"
     Und sehe ich den Hinweis "aufgegangen in"
 
@@ -105,7 +113,7 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
 
   Szenario: Sammel-PDF bündelt alle Bögen in einer Datei
     Wenn ich auf "Einsatz übergeben (PDF mit Daten)" klicke und eine Datei erhalte
-    Dann heißt die heruntergeladene Datei wie "eeb-einsatz-*.pdf"
+    Dann heißt die heruntergeladene Datei wie "*_eeb-einsatz-sammel-pdf_*.pdf"
 
   # Audit Meldekopf Runde 1 (Arbeitsablauf P2-1): Der Knopf hieß „Einsatz
   # weitergeben / sichern", die Datensicherung in der Fußzeile auch „sichern".
@@ -128,15 +136,11 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
 
   Szenario: CSV-Übersicht für die Lagekarte
     Wenn ich auf "Übersicht als CSV" klicke und eine Datei erhalte
-    Dann heißt die heruntergeladene Datei wie "eeb-einsatz-*.csv"
+    Dann heißt die heruntergeladene Datei wie "*_eeb-einsatz-uebersicht_*.csv"
 
   Szenario: CSV mit allen Daten aller Bögen für die Auswertung
     Wenn ich auf "Alle Daten als CSV" klicke und eine Datei erhalte
-    Dann heißt die heruntergeladene Datei wie "eeb-einsatz-*-alle-daten.csv"
-
-  Szenario: Excel-Liste der Einheiten im Format „Oldenburg“
-    Wenn ich auf "Excel-Liste (Format „Oldenburg“)" klicke und eine Datei erhalte
-    Dann heißt die heruntergeladene Datei wie "eeb-einsatz-*-oldenburg.xlsx"
+    Dann heißt die heruntergeladene Datei wie "*_eeb-einsatz-alle-daten_*.csv"
 
   Szenario: Gelöschter Einsatz liegt im Papierkorb und kommt zurück
     Wenn ich auf "Einsatz löschen…" klicke
@@ -238,16 +242,17 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Wenn ich auf "Übersicht als CSV" klicke und eine Datei erhalte
     Dann sehe ich den Hinweis "seitdem keine neuen Bögen"
     Wenn ich "Nur neue Bögen seit dem letzten Export" ankreuze
-    Dann ist die Schaltfläche "Übersicht als CSV" gesperrt
+    # Im Nachtrag-Modus nennen die Knöpfe Nachtrag und Zahl, damit eine Teildatei nicht wie der Vollexport aussieht (R16-W2).
+    Dann ist die Schaltfläche "Übersicht als CSV — Nachtrag: nichts Neues" gesperrt
     Und ist die Schaltfläche "Sammel-PDF (erste Lieferung: alle Bögen)" bedienbar
-    Und ist die Schaltfläche "Excel-Liste (Format „Oldenburg“)" bedienbar
+    Und ist die Schaltfläche "Alle Daten als CSV — erste Lieferung: alle Bögen" bedienbar
     Wenn ich die Einheit "DLRG" "Wardenburg" manuell in den Einsatz aufnehme
     Dann sehe ich den Hinweis "seitdem 1 neuer Bogen"
-    Und ist die Schaltfläche "Übersicht als CSV" bedienbar
-    Wenn ich auf "Übersicht als CSV" klicke und eine Datei erhalte
+    Und ist die Schaltfläche "Übersicht als CSV — Nachtrag (1 Einheit)" bedienbar
+    Wenn ich auf "Übersicht als CSV — Nachtrag (1 Einheit)" klicke und eine Datei erhalte
     Dann sehe ich den Hinweis "seitdem keine neuen Bögen"
-    Und ist die Schaltfläche "Übersicht als CSV" gesperrt
-    Und ist die Schaltfläche "Excel-Liste (Format „Oldenburg“)" bedienbar
+    Und ist die Schaltfläche "Übersicht als CSV — Nachtrag: nichts Neues" gesperrt
+    Und ist die Schaltfläche "Alle Daten als CSV — erste Lieferung: alle Bögen" bedienbar
 
   Szenario: Mit der zweiten Meldung erscheint die Filterleiste
     Wenn ich die Einheit "DLRG" "Wardenburg" manuell in den Einsatz aufnehme

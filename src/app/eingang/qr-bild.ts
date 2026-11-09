@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/qr-bild.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/qr-bild.ts` (Commit 1d7ed5f).
  *
  * QR-Code aus einer Bilddatei dekodieren — für den Alltagsfall „jemand schickt
  * ein Foto des gedruckten Bogens per Messenger" oder einen Screenshot. Das
@@ -17,10 +17,22 @@ interface Bildquelle {
   freigeben: () => void;
 }
 
+/** Die Datei lässt sich nicht als Bild öffnen (kein Bild, defekt, unbekanntes Format wie HEIC) — anders als „Bild ohne Code" (R16-E5). */
+export class BildNichtLesbar extends Error {
+  constructor() {
+    super("Datei lässt sich nicht als Bild öffnen.");
+    this.name = "BildNichtLesbar";
+  }
+}
+
 async function bildLaden(datei: Blob): Promise<Bildquelle> {
   if (typeof createImageBitmap === "function") {
-    const b = await createImageBitmap(datei);
-    return { quelle: b, breite: b.width, hoehe: b.height, freigeben: () => b.close() };
+    try {
+      const b = await createImageBitmap(datei);
+      return { quelle: b, breite: b.width, hoehe: b.height, freigeben: () => b.close() };
+    } catch {
+      throw new BildNichtLesbar();
+    }
   }
   // Fallback für ältere Webviews: <img> über eine Objekt-URL.
   const url = URL.createObjectURL(datei);
@@ -28,7 +40,7 @@ async function bildLaden(datei: Blob): Promise<Bildquelle> {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const i = new Image();
       i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error("Bild konnte nicht gelesen werden."));
+      i.onerror = () => reject(new BildNichtLesbar());
       i.src = url;
     });
     return { quelle: img, breite: img.naturalWidth, hoehe: img.naturalHeight, freigeben: () => URL.revokeObjectURL(url) };

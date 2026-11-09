@@ -18,21 +18,25 @@ import {
   fahrzeugLeer,
   fahrzeugUnbenannt,
   neuesFahrzeug,
+  ortOhneZusatz,
   transportBilanz,
+  vokabText,
   vokabularFuer,
   vorbelegungGeladen,
 } from "../hilfen";
-import { fahrzeugSymbolSvg, svgDataUrl } from "@bos/eeb-satz/taktische-zeichen-bogen";
+import { FahrzeugZeichen } from "../zeichen-bild";
 import { frageJaNein } from "@bos/oberflaeche/dialoge";
+import { kennzeichenHinweis, kennzeichenSchreibweise } from "@bos/oberflaeche/schreibweise";
 import { einheitOrt, vokabSortiert } from "@bos/meldekopf/darstellung";
 import { mitAbgang, useEinzugsstempel } from "@bos/oberflaeche/eintrag-bewegung";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
-import { FAHRZEUG_WEG_SCHLUESSEL, rueckwegHolen, rueckwegMerken } from "./rueckweg-sitzung";
+import { FAHRZEUG_WEG_SCHLUESSEL, funkrufHolen, funkrufMerken, rueckwegHolen, rueckwegMerken } from "./rueckweg-sitzung";
 import {
   Auswahl,
   Feld,
   Hinweise,
   KENNUNG_EINGABE,
+  NAMEN_EINGABE,
   VokabAuswahl,
   useZahlEingabe,
 } from "@bos/oberflaeche/bausteine";
@@ -57,12 +61,18 @@ function FahrzeugKarte(props: {
   const { fahrzeug: f, org, standort, ovKennzahl, frisch, index, anzahl, aendern, entfernen } = props;
   const bezeichnung = fahrzeugBezeichnung(f, index, org);
   const richtwert = sitzplaetzeRichtwert(f, vokabularFuer(org, "fahrzeug"));
+  const typLang = f.typ.code != null ? vokabText(f.typ, vokabularFuer(org, "fahrzeug"), "name") : "";
   const karte = useRef<HTMLDivElement>(null);
+  // „Stimmt das?" zum THW-Kennzeichen erst nach dem Verlassen des Felds, nicht während des Tippens (R15-E5).
+  const [kennzeichenFertig, setKennzeichenFertig] = useState(false);
+  const kennzeichenFrage = kennzeichenFertig ? kennzeichenHinweis(f.kennzeichen ?? "") : null;
   // Sitzplätze: Komma gerundet, Minus abgelehnt, Obergrenze genannt — nie still eine andere Zahl (R9-E1).
   const sitz = useZahlEingabe(f.sitzplaetze, (n) => aendern({ ...f, sitzplaetze: n }), { min: 0, max: 99, leer: true, einheit: "Plätze" });
   const grenzeText = sitz.meldung;
   // Zuletzt ausgeschalteter Funkrufname dieser Karte (R9-D1).
+  // Zusätzlich im Sitzungsspeicher dieses Tabs: überlebt Schrittwechsel und Neuladen (R10-D2, R10-E2).
   const funkrufMerker = useRef<Fahrzeug["funkrufname"]>(undefined);
+  const merkerFp = JSON.stringify(f.typ);
   useEinzugsstempel(karte, frisch);
   const set = (patch: Partial<Fahrzeug>) => aendern({ ...f, ...patch });
   return (
@@ -76,9 +86,15 @@ function FahrzeugKarte(props: {
           setzte die Kopflinie erst rechts vom Zeichen an. Der Löschknopf steht
           am Ende der Zeile, beim Umbruch hinter dem Kennzeichen statt darüber. */}
       <div className="zeile eintrag-kopf">
-        <img className="fahrzeug-symbol" src={svgDataUrl(fahrzeugSymbolSvg(f, org))} alt="" aria-hidden="true" />
+        <FahrzeugZeichen fahrzeug={f} org={org} className="fahrzeug-symbol" aria-hidden="true" />
         <Feld titel="Fahrzeugtyp">
           <VokabAuswahl wert={f.typ} aendern={(v) => set({ typ: v })} tabelle={vokabSortiert(vokabularFuer(org, "fahrzeug"))} platzhalter="z. B. MzKW, LF 20" suchbar />
+          {/* R12-N3: Das Feld kürzt lange Typen am Ende („…Lastkraftwagen I“); die Langform steht darunter ungekürzt. */}
+          {typLang && (
+            <small className="hinweis typ-langform" data-testid="typ-langform">
+              {typLang}
+            </small>
+          )}
         </Feld>
         <Feld titel="Kennzeichen">
           <input
@@ -86,11 +102,24 @@ function FahrzeugKarte(props: {
             id={`feld-kennzeichen-${index}`}
             value={f.kennzeichen ?? ""}
             onChange={(e) => set({ kennzeichen: e.target.value })}
+            // R12-N7: Beim Verlassen Großschreibung und Trennstrich („thw 80101“ → „THW-80101“).
+            onFocus={() => setKennzeichenFertig(false)}
+            onBlur={(e) => {
+              const roh = e.target.value;
+              const schoen = kennzeichenSchreibweise(roh);
+              if (roh !== "" && schoen !== roh) set({ kennzeichen: schoen });
+              setKennzeichenFertig(true);
+            }}
             // Beispiel der eigenen Organisation, mit „z. B." — das feste
             // „OL-FW 2041 / THW-84397" sah wie ein eingetragener Wert aus und
             // wurde ausgelassen (Audit Runde 2, R2-N9).
             placeholder={org === OrganisationsTyp.THW ? "z. B. THW-84397" : "z. B. OL-FW 2041"}
           />
+          {kennzeichenFrage && (
+            <small className="hinweis warnung-text kennzeichen-frage" role="status">
+              {kennzeichenFrage}
+            </small>
+          )}
         </Feld>
         <Feld titel="Sitzplätze" schmal>
           {/* Leer = Richtwert des Typs. Der Richtwert steht als Platzhalter
@@ -102,7 +131,8 @@ function FahrzeugKarte(props: {
           <input
             {...sitz.eingabe}
             id={`feld-sitzplaetze-${index}`}
-            placeholder={richtwert != null ? `${richtwert} (Richtwert)` : "unbekannt"}
+            // „Richtw.“ statt „Richtwert“: im 112 px schmalen Feld stand sonst „3 (Richtwert,“ abgeschnitten (R12-N3).
+            placeholder={richtwert != null ? `${richtwert} (Richtw.)` : "unbekannt"}
             title="Sitzplätze inkl. Fahrer/in. Leer lassen = Richtwert des Fahrzeugtyps."
             aria-describedby={grenzeText ? `grenze-sitzplaetze-${index}` : undefined}
           />
@@ -156,11 +186,12 @@ function FahrzeugKarte(props: {
               // stehen Kennwort, Ort und Kennzahlen (71/25) wieder da — ein Doppeltipp verlor sie (R9-D1).
               if (!e.target.checked) {
                 funkrufMerker.current = f.funkrufname;
+                funkrufMerken(index, f.funkrufname ?? null, merkerFp);
                 set({ funkrufname: undefined });
                 return;
               }
               set({
-                funkrufname: funkrufMerker.current ?? {
+                funkrufname: funkrufMerker.current ?? funkrufHolen<NonNullable<Fahrzeug["funkrufname"]>>(index, merkerFp) ?? {
                   kennwort: org === OrganisationsTyp.THW ? { code: 1 } : {},
                   eigenerStandort: true,
                   teile: ovKennzahl != null ? [ovKennzahl] : [],
@@ -193,7 +224,7 @@ function FahrzeugKarte(props: {
                 eigene Zeile unter dem Kästchen: In der Beschriftung brach sie
                 „eigener / Standor / t" um (R3-N6). */}
             <p className="hinweis funkruf-standort">
-              Ort im Funkrufnamen = Standort der Einheit{standort ? ` (${standort})` : " aus Schritt 1"}
+              Ort im Funkrufnamen = Ort der Einheit{standort ? ` (${standort})` : " aus Schritt 1"}
             </p>
             {!f.funkrufname.eigenerStandort && (
               <Feld titel="Ort" schmal>
@@ -209,7 +240,7 @@ function FahrzeugKarte(props: {
           </>
         )}
         <Feld titel="Änderungen bzw. Sondergerät">
-          <input value={f.aenderungen ?? ""} onChange={(e) => set({ aenderungen: e.target.value || undefined })} />
+          <input value={f.aenderungen ?? ""} onChange={(e) => set({ aenderungen: e.target.value || undefined })} {...NAMEN_EINGABE} />
         </Feld>
       </div>
     </div>
@@ -241,6 +272,24 @@ function Transportbilanz({ bogen }: Pick<AbschnittProps, "bogen">) {
   );
 }
 
+/**
+ * Was die Fahrzeugliste an eigenen Eingaben trägt — das, was „StAN-Vorbelegung laden" überschreibt (R17-D1):
+ * Kennzeichen (mit Wortlaut), Funkrufnamen, Sitzplatzangaben, Sondergerät und Angaben zur StAN-Ausstattung. Leer, wenn nichts da ist.
+ */
+export function eigeneAngaben(liste: readonly Fahrzeug[]): string {
+  const kennzeichen = liste.map((f) => f.kennzeichen?.trim()).filter((k): k is string => !!k);
+  const zaehl = (n: number, einzahl: string, mehrzahl: string) => (n === 0 ? null : n === 1 ? `1 ${einzahl}` : `${n} ${mehrzahl}`);
+  return [
+    kennzeichen.length > 0 ? `Kennzeichen ${kennzeichen.join(", ")}` : null,
+    zaehl(liste.filter((f) => f.funkrufname != null).length, "Funkrufname", "Funkrufnamen"),
+    zaehl(liste.filter((f) => f.sitzplaetze != null).length, "Sitzplatzangabe", "Sitzplatzangaben"),
+    zaehl(liste.filter((f) => !!f.aenderungen?.trim()).length, "Sondergerät/Änderung", "Sondergeräte/Änderungen"),
+    zaehl(liste.filter((f) => f.stanKonform != null).length, "Angabe zur StAN-Ausstattung", "Angaben zur StAN-Ausstattung"),
+  ]
+    .filter((t): t is string => t != null)
+    .join("; ");
+}
+
 export function AbschnittFahrzeuge({ bogen, aendern }: AbschnittProps) {
   // Als Objektidentität, nicht als Index: ein Index rutscht beim Löschen einer
   // anderen Karte auf eine bestehende und stempelte sie grundlos ein zweites
@@ -258,7 +307,7 @@ export function AbschnittFahrzeuge({ bogen, aendern }: AbschnittProps) {
   //
   // Der Rückweg liegt zusätzlich im Sitzungsspeicher dieses Tabs und überlebt Schrittwechsel und
   // Neuladen (15 Minuten, solange die Fahrzeugliste so bleibt), wie bei Personen (R9-D3).
-  type Rueckweg = { eintraege: { fahrzeug: Fahrzeug; index: number }[]; text: string; name: string; nonce: number };
+  type Rueckweg = { eintraege: { fahrzeug: Fahrzeug; index: number }[]; text: string; name: string; nonce: number; /** Die ganze bisherige Liste nach „StAN-Vorbelegung laden" (R17-D1). */ ersetzt?: Fahrzeug[] };
   const [rueckweg, setRueckwegRoh] = useState<Rueckweg | null>(() =>
     rueckwegHolen<Rueckweg>(FAHRZEUG_WEG_SCHLUESSEL, JSON.stringify(bogen.fahrzeuge)),
   );
@@ -270,6 +319,14 @@ export function AbschnittFahrzeuge({ bogen, aendern }: AbschnittProps) {
   const [zurueckgeholt, setZurueckgeholt] = useState<{ text: string; nonce: number } | null>(null);
   const rueckgaengig = () => {
     if (!rueckweg) return;
+    if (rueckweg.ersetzt) {
+      const alt = rueckweg.ersetzt;
+      setRueckweg(null);
+      setFrisch(null);
+      setZurueckgeholt({ text: `Zurückgeholt: ${alt.length === 1 ? "das bisherige Fahrzeug" : `die ${alt.length} bisherigen Fahrzeuge`} samt Kennzeichen`, nonce: Date.now() });
+      aendern({ fahrzeuge: alt });
+      return;
+    }
     const liste = [...bogen.fahrzeuge];
     // Aufsteigend einsetzen: Jede Stelle bezieht sich auf die Liste vor dem
     // Entfernen, in der die früheren Einträge schon wieder stehen.
@@ -311,7 +368,7 @@ export function AbschnittFahrzeuge({ bogen, aendern }: AbschnittProps) {
           key={i}
           fahrzeug={f}
           org={bogen.einheit.organisation}
-          standort={einheitOrt(bogen.einheit)}
+          standort={ortOhneZusatz(einheitOrt(bogen.einheit))}
           ovKennzahl={ovKennzahl}
           frisch={f === frisch}
           index={i}
@@ -371,15 +428,22 @@ export function AbschnittFahrzeuge({ bogen, aendern }: AbschnittProps) {
                 : undefined
             }
             onClick={async () => {
+              const alt = bogen.fahrzeuge;
+              const eigene = eigeneAngaben(alt);
               if (
-                bogen.fahrzeuge.length === 0 ||
+                alt.length === 0 ||
                 (await frageJaNein({
                   titel: "StAN-Vorbelegung laden?",
-                  text: `Die aktuelle Fahrzeugliste (${bogen.fahrzeuge.length} Fahrzeuge) wird durch die ${vorlage.length} Fahrzeuge der StAN ersetzt.`,
+                  text: `Die aktuelle Fahrzeugliste (${alt.length} Fahrzeuge) wird durch die ${vorlage.length} Fahrzeuge der StAN ersetzt.${eigene ? ` Verloren gehen dabei deine Eingaben: ${eigene}.` : ""} „Rückgängig“ in der Leiste unten stellt die bisherige Liste wieder her.`,
                   ok: "Ersetzen",
                 }))
               ) {
                 aendern({ fahrzeuge: vorlage });
+                // Ersetzen mit Rückweg wie Entfernen (R17-D1): die ganze bisherige Liste, samt Kennzeichen.
+                if (!alt.every(fahrzeugLeer)) {
+                  setZurueckgeholt(null);
+                  setRueckweg({ eintraege: [], ersetzt: alt, text: "StAN-Vorbelegung geladen:", name: `${alt.length === 1 ? "1 bisheriges Fahrzeug" : `${alt.length} bisherige Fahrzeuge`} ersetzt`, nonce: Date.now() }, vorlage);
+                }
               }
             }}
           >

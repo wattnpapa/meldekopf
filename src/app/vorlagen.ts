@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/vorlagen.ts` (Commit 441811c). Im Meldekopf nur
+ * Herkunft: Erfassungsbogen `src/app/vorlagen.ts` (Commit 1d7ed5f). Im Meldekopf nur
  * als Datenmodul: Die Datensicherung zählt, prüft und erhält Vorlagen und
  * Übergabe-Stand eines eingespielten Erfassungsbogen-Bestands, damit nichts
  * verloren geht; eine Oberfläche dafür gibt es hier nicht (ADR-007).
@@ -21,6 +21,7 @@ import type { Erfassungsbogen } from "@bos/eeb-format/model";
 import { datumAusIso, mitTransportVersion, staerke } from "@bos/eeb-format/model";
 import { bogenPruefen, dateinameTeil, einheitAnzeigename, migriereBogen } from "./hilfen";
 import { bogenBefund } from "./bogen-pruefung";
+import { einsatzVorgabe } from "./zeitraum-eingabe";
 import { aktive, imPapierkorb, papierkorbBereinigt } from "@bos/meldekopf/papierkorb";
 import { geprueftesJetztMs, stempelZeitpunkt } from "./datenschutz-uhr";
 import { rettungGesperrtFehler, rettungWiederholenFaellig, schreibenErlaubt, unlesbarerGesamttext, unlesbareVorlagenteile, vorlagenRetten } from "./eingang/unlesbar";
@@ -56,7 +57,7 @@ export function bogenAlsVorlage(b: Erfassungsbogen): Erfassungsbogen {
   const kopie = structuredClone(b);
   const t = heute();
   kopie.stand = stempelZeitpunkt();
-  kopie.einsatz = { zeitraumVon: t, zeitraumBis: t, ortAuftrag: "" };
+  kopie.einsatz = einsatzVorgabe(t);
   return kopie;
 }
 
@@ -99,6 +100,13 @@ export function vorlageInstanziieren(
     b.sofortbedarf = { ...b.sofortbedarf, verpflegungPersonen: staerke(b).gesamt };
   }
   return b;
+}
+
+/** „4 Personen, 1 Fahrzeug" — was eine Vorlage bzw. ein Bogen an Mannschaft und Technik trägt (R12-D1). */
+export function vorlageZahlenText(b: Pick<Erfassungsbogen, "personal" | "fahrzeuge">): string {
+  const p = b.personal.length;
+  const f = b.fahrzeuge.length;
+  return `${p} ${p === 1 ? "Person" : "Personen"}, ${f} ${f === 1 ? "Fahrzeug" : "Fahrzeuge"}`;
 }
 
 // ------------------------------------------------- Serialisierung (rein)

@@ -120,7 +120,9 @@ export function EinsatzAnsicht({
   function exportVerbuchen(s: Einsatzsammlung, ziel: ExportZiel) {
     const vorhanden = [...einsaetzeLaden(), ...einsaetzePapierkorb()].map((x) => x.id);
     const stand = exportVermerken(s, ziel, vorhanden);
-    setExportStaende((alt) => ({ ...alt, [ziel]: stand }));
+    // R20-L3: Konnte der Vermerk nicht geschrieben werden (Speicher voll), zeigt auch die Zeile „zuletzt erzeugt“ ihn nicht;
+    // sie sagte sonst „erzeugt 07:50“, während die Übergabe-Liste „noch nicht“ zeigt. Die Quittung nennt den fehlenden Vermerk.
+    if (vermerkFehltZusatz() === "") setExportStaende((alt) => ({ ...alt, [ziel]: stand }));
   }
 
   async function exportiereEinsatz(s: Einsatzsammlung) {
@@ -138,24 +140,31 @@ export function EinsatzAnsicht({
   }
 
   async function exportiereEinsatzCsv(s: Einsatzsammlung, umfang: ExportUmfang) {
+    setAusgabeQuittung(null);
+    leererEinsatz(s);
     const teil = exportSammlung(s, umfang, exportStaende.csv ?? null);
     const marke = nachtragMarke(umfang, "csv");
-    const ok = await dateiAnbieten(
-      `eeb-einsatz-${marke}${einsatzDateiname(s)}.csv`,
-      einsatzCsvInhalt(teil, meldungsNummern(s.eintraege)),
-      "text/csv;charset=utf-8",
-    );
-    if (ok) exportVerbuchen(s, "csv");
+    // Erst beim Klick geladen: der CSV-Schreiber gehört nicht ins Startbündel.
+    const { einsatzCsvInhalt } = await import("./einsatz-csv");
+    const { entfernteNummernText } = await import("./meldungs-papierkorb"); // R19-A2: Lücke in den Nummern benennen
+    const name = ausgabeDateiname(artMitMarke("einsatz-uebersicht", marke), einsatzDateiname(s), "csv"); // R20-N8
+    const ok = await dateiAnbieten(name, einsatzCsvInhalt(teil, meldungsNummern(s.eintraege), undefined, s.eintraege, undefined, entfernteNummernText(s.id)), "text/csv;charset=utf-8");
+    if (ok) {
+      exportVerbuchen(s, "csv");
+      setAusgabeQuittung(dateiQuittungText(name, s));
+    }
   }
 
   async function exportiereEinsatzCsvDetail(s: Einsatzsammlung, umfang: ExportUmfang) {
+    setAusgabeQuittung(null);
+    leererEinsatz(s);
     const teil = exportSammlung(s, umfang, exportStaende["csv-detail"] ?? null);
-    const ok = await dateiAnbieten(
-      `eeb-einsatz-${nachtragMarke(umfang, "csv-detail")}${einsatzDateiname(s)}-alle-daten.csv`,
-      einsatzDetailCsvInhalt(teil, meldungsNummern(s.eintraege)),
-      "text/csv;charset=utf-8",
-    );
-    if (ok) exportVerbuchen(s, "csv-detail");
+    const name = ausgabeDateiname(artMitMarke("einsatz-alle-daten", nachtragMarke(umfang, "csv-detail")), einsatzDateiname(s), "csv");
+    const ok = await dateiAnbieten(name, einsatzDetailCsvInhalt(teil, meldungsNummern(s.eintraege), s.eintraege), "text/csv;charset=utf-8");
+    if (ok) {
+      exportVerbuchen(s, "csv-detail");
+      setAusgabeQuittung(dateiQuittungText(name, s));
+    }
   }
 
   /**
@@ -185,6 +194,8 @@ export function EinsatzAnsicht({
   async function sammelPdf(s: Einsatzsammlung, umfang: ExportUmfang, weitergabe = false) {
     setFehler("");
     setAusgabeQuittung(null);
+    vermerkNeuBeginnen();
+    if (leererEinsatz(s, true)) return;
     const teil = exportSammlung(s, umfang, exportStaende.pdf ?? null);
     if (teil.eintraege.length === 0) {
       setFehler("Seit dem letzten Sammel-PDF ist kein Bogen neu dazugekommen und nichts geändert.");
@@ -205,6 +216,7 @@ export function EinsatzAnsicht({
         if (!weitergabe) exportVerbuchen(s, "pdf");
         // Die Bestätigung steht direkt unter den Knöpfen (R5-L4), nicht am Seitenende.
         setAusgabeQuittung(
+<<<<<<< ours
           umfang === "neue"
             ? `✓ Neue Bögen aus „${s.name}" als PDF erzeugt — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt. Übergeben ist sie erst, wenn sie gedruckt oder verschickt ist.`
             : // Die Übergabe-PDF ist Druckstück und Datenträger zugleich; „sichern" meinte daneben auch die
@@ -212,6 +224,11 @@ export function EinsatzAnsicht({
               `✓ Übergabe-PDF „${s.name}" erzeugt: zum Drucken und mit allen Meldungen, Zeiten und Historie zum Einlesen — auf dem neuen Gerät über „Einsatz importieren…“. ` +
               "Sie ersetzt dort nichts, sie fügt diese Sammlung hinzu; die Datensicherung des ganzen Geräts ist ein anderer Weg (Fußzeile). " +
               "Liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt; übergeben ist sie erst, wenn sie bei der Ablösung oder im Archiv angekommen ist.",
+=======
+          (umfang === "neue"
+            ? `✓ Neue Bögen aus „${s.name}" als PDF gespeichert (Download-Ordner bzw. Teilen-Menü). Ob sie angekommen ist, weiß das Gerät nicht.`
+            : `✓ Einsatz „${s.name}" als PDF gespeichert (Download-Ordner bzw. Teilen-Menü). Ob sie angekommen ist, weiß das Gerät nicht.`) + vermerkFehltZusatz(),
+>>>>>>> theirs
         );
       } catch (e) {
         setFehler(`Einsatz übergeben: ${fehlerText(e)}`);
@@ -240,10 +257,21 @@ export function EinsatzAnsicht({
   async function lageblatt(s: Einsatzsammlung) {
     setFehler("");
     setAusgabeQuittung(null);
+    const leer = einsatzLeer(s);
+    vermerkNeuBeginnen();
     await arbeiten("lageblatt", async () => {
       try {
+<<<<<<< ours
         const { einsatzLageblattErzeugen } = await import("./weitergabe/pdf");
         if (await einsatzLageblattErzeugen(s)) setAusgabeQuittung("✓ Lageblatt erzeugt (A4 quer) — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt.");
+=======
+        const { einsatzLageblattErzeugen } = await import("./pdf");
+        if (await einsatzLageblattErzeugen(s)) {
+          setAusgabeQuittung(
+            `✓ Lageblatt erzeugt (A4 quer) — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt.${leer ? ` ${LEERE_DATEI_TEXT}` : ""}${vermerkFehltZusatz()}`,
+          );
+        }
+>>>>>>> theirs
       } catch (e) {
         setFehler(`Lageblatt: ${fehlerText(e)}`);
       }

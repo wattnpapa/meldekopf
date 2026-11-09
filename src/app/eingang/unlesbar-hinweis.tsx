@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/unlesbar-hinweis.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/unlesbar-hinweis.tsx` (Commit 1d7ed5f).
  *
  * Hinweis auf Einträge, die die App nicht anzeigen kann (R7-N3, R7-E2): Zahl,
  * Folge für die Lage und ein Weg zur Sicherung. Ohne ihn hielt der Helfer die
@@ -64,17 +64,22 @@ export function UnlesbarHinweis({ sammlungId }: { sammlungId?: string }) {
 
   if (offen.length > 0 && teile.length === 0) {
     const was = offen.map((a) => textKurz(a, rettungOffenText(a) ?? "")).join(" und ");
+    // Mehrzahl beugt Verb und Satzende mit („Die gespeicherten Einsatz-Sammlungen sind nicht lesbar …", R10-O1).
+    const mehrzahl = offen.length > 1 || /Sammlungen|Vorlagen|“, „/.test(was);
     return (
       <div className="warnung unlesbar-hinweis" role="alert">
         <details>
           <summary style={KOPF}>
-            <strong>Speicher voll – beschädigte Daten nicht gesichert:</strong> {was} {offen.length === 1 ? "ist" : "sind"} nicht lesbar und
-            konnte nicht beiseitegelegt werden. ›
+            <strong>Speicher voll – beschädigte Daten nicht gesichert:</strong> {was} {mehrzahl ? "sind" : "ist"} nicht lesbar und{" "}
+            {mehrzahl ? "konnten" : "konnte"} nicht beiseitegelegt werden. ›
           </summary>
           <p>
             Der Text liegt unverändert auf dem Gerät, die App überschreibt ihn nicht — Änderungen an {offen.includes("sammlungen") ? "Sammlungen" : "Vorlagen"} werden
-            bis dahin nicht gespeichert. Zuerst „Daten sichern…“ (die Datei enthält den Text), dann Platz schaffen: Papierkorb leeren oder
-            gesicherte Einsätze löschen, und die App neu laden. Auf Papier bleiben die letzte Sammel-PDF und das Lageblatt gültig.
+            bis dahin nicht gespeichert. Zuerst „Daten sichern…“ (die Datei enthält den Text), dann Platz schaffen:{" "}
+            {offen.includes("sammlungen")
+              ? "„Beschädigten Text verwerfen…“ (das schafft den Platz; es gibt keine lesbaren Einsätze, die sich löschen ließen), die App neu laden und die Bögen aus der letzten Sammel-PDF wieder einlesen."
+              : "Papierkorb leeren oder gesicherte Einsätze löschen, und die App neu laden."}{" "}
+            Auf Papier bleiben die letzte Sammel-PDF und das Lageblatt gültig.
           </p>
           <div className="aktionen">
             <button type="button" onClick={sichern}>Daten sichern…</button>
@@ -114,8 +119,8 @@ export function UnlesbarHinweis({ sammlungId }: { sammlungId?: string }) {
           Datei an (Downloads). Die App kann den Text nicht öffnen; die Datei kann, wer die App betreut.
         </p>
         <p>
-          <strong>Weg zurück auf Papier:</strong> die letzte Sammel-PDF und das Lageblatt gelten weiter. Die Bögen daraus mit „Bögen einlesen…“
-          bzw. „Einsatz importieren…“ neu einlesen.
+          <strong>Weg zurück auf Papier:</strong> die letzte Sammel-PDF gilt weiter — ihre Bögen mit „Bögen einlesen…“ bzw. „Einsatz importieren…“
+          neu einlesen. Das Lageblatt dient nur zum Aushängen und Abgleichen und lässt sich nicht einlesen.
         </p>
         {offen.length > 0 && (
           <p className="warnung-text">
@@ -132,7 +137,7 @@ export function UnlesbarHinweis({ sammlungId }: { sammlungId?: string }) {
               onClick={async () => {
                 const ja = await frageJaNein({
                   titel: "Beiseitegelegte Einträge entfernen?",
-                  text: "Die beiseitegelegten, unlesbaren Einträge werden endgültig gelöscht; auch der beschädigte Text am alten Ort wird durch den lesbaren Rest ersetzt. Wenn du sie noch prüfen willst, vorher „Daten sichern…“.",
+                  text: `Endgültig gelöscht wird, was beiseitegelegt liegt: ${teile.join("; ")}. Auch der beschädigte Text am alten Ort wird durch den lesbaren Rest ersetzt. Wenn du sie noch prüfen willst, vorher „Daten sichern…“.`,
                   ok: "Endgültig entfernen",
                   gefahr: true,
                 });

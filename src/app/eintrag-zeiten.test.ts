@@ -48,6 +48,8 @@ import {
   zeitKurz,
   zeitLang,
   zugSetzen,
+  nummerUndZugSetzen,
+  speicherText,
   HERKUNFT_TEXT,
   speicherVollMeldung,
   speicherGroessteSammlungen,
@@ -481,5 +483,27 @@ describe("eintreffzeitErben (Aufteilen, Audit Phase 6)", () => {
     expect(eintrag(einsatzId, eintragId).eingetroffenAm).toBe(zeit);
     expect(eintrag(einsatzId, zweite).eingetroffenAm).toBe(zeit);
     expect(eintrag(einsatzId, zweite).vermerke ?? []).toEqual([]);
+  });
+});
+
+describe("Zug aus der manuellen Aufnahme (R10-S1, R10-A1)", () => {
+  it("führt „2“, „Zug 2“ und „2.Zug“ auf „2. Zug“ und gleicht mit vorhandenen Zügen ab", () => {
+    const s = einsatzAnlegen("Hochwasser Zug", EinsatzArt.EINSATZ);
+    const a = meldungHinzufuegen(s.id, bogen("Emden"))!.eintrag;
+    const b = meldungHinzufuegen(s.id, bogen("Norden"))!.eintrag;
+    const c = meldungHinzufuegen(s.id, bogen("Aurich"))!.eintrag;
+    nummerUndZugSetzen(s.id, a.id, { zug: "2" });
+    nummerUndZugSetzen(s.id, b.id, { zug: "Zug 2" });
+    nummerUndZugSetzen(s.id, c.id, { zug: "2.Zug" });
+    expect([a, b, c].map((e) => eintrag(s.id, e.id).zugEtikett)).toEqual(["2. Zug", "2. Zug", "2. Zug"]);
+    expect(eintrag(s.id, b.id).vermerke?.some((v) => v.text === "Zug: 2. Zug")).toBe(true);
+  });
+});
+
+describe("Speicheranzeige (R10-O4)", () => {
+  it("nennt kleine Mengen in Tausend statt „0 von 5 Mio.“", () => {
+    expect(speicherText({ belegt: 35_000, grenze: 5_000_000 })).toBe("1 % (35 Tsd. von 5 Mio. Zeichen)");
+    expect(speicherText({ belegt: 400, grenze: 5_000_000 })).toBe("0 % (unter 1 Tsd. von 5 Mio. Zeichen)");
+    expect(speicherText({ belegt: 3_500_000, grenze: 5_000_000 })).toBe("70 % (3,5 von 5 Mio. Zeichen)");
   });
 });

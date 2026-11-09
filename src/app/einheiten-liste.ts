@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/einheiten-liste.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/einheiten-liste.ts` (Commit 1d7ed5f).
  *
  * Suchen, Filtern und Sortieren der Einheitenliste eines Einsatzes.
  *
@@ -29,20 +29,24 @@
 
 import { OrganisationsTyp, alleFahrerlaubnisse, type Person } from "@bos/eeb-format/model";
 import { MeldeStatus, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
-import { FE_EINGESCHLOSSEN, FE_TEXT, einheitAnzeigename, funkrufText, kennzeichenText, orgLabel, vokabularFuer } from "./hilfen";
+import { FE_EINGESCHLOSSEN, FE_TEXT, vokabText, einheitAnzeigename, funkrufText, kennzeichenText, orgLabel, vokabularFuer } from "./hilfen";
 import { eintreffzeit } from "./eintrag-zeiten";
+import { angabenZeit } from "./angaben-alter";
+import { falte } from "@bos/oberflaeche/schreibweise";
 
-export type EinheitenSortierung = "nummer" | "name" | "zuletzt" | "eintreffzeit" | "zug" | "organisation";
+export type EinheitenSortierung = "nummer" | "name" | "zuletzt" | "aelteste" | "eintreffzeit" | "zug" | "organisation";
 
 export const SORTIERUNGEN: { wert: EinheitenSortierung; label: string }[] = [
   // Die Nummer, die am Funk genannt wird und das Lageblatt ordnet (R7-K9).
   { wert: "nummer", label: "Nr. (wie auf dem Lageblatt)" },
   { wert: "name", label: "Name (A–Z)" },
-  // „Zuletzt gemeldet" ordnet nach dem Eingang der aktuellen Fassung, auch
+  // „Zuletzt gemeldet" ordnet nach dem Alter der Angaben der aktuellen Fassung (R15-K1), auch
   // einer Folgemeldung. Die Eintreffzeit vererbt sich auf die Folgemeldung
   // (R2-K1); eine frische Fassung mit drei Helfern weniger stand darin auf
   // dem letzten Platz (Audit Runde 3, R3-K1).
   { wert: "zuletzt", label: "Zuletzt gemeldet (neueste zuerst)" },
+  // Wem fehlt eine frische Meldung? Die ältesten Angaben oben, gerechnet wie die Marke „Stand vor …" (R12-K2, R15-K1).
+  { wert: "aelteste", label: "Älteste Angaben zuerst" },
   { wert: "eintreffzeit", label: "Eintreffzeit vor Ort (neueste zuerst)" },
   { wert: "zug", label: "Zug" },
   { wert: "organisation", label: "Organisation" },
@@ -50,7 +54,8 @@ export const SORTIERUNGEN: { wert: EinheitenSortierung; label: string }[] = [
 
 /** Klein, ohne Akzente, Whitespace kollabiert — „München" findet man als „munchen". */
 function normalisiere(text: string): string {
-  return text
+  // Zusätzlich ohne Umlaut-Unterschiede: „muenchen" und „Riss" finden „München" und „Riß" (R11-H3).
+  return falte(text)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -67,7 +72,9 @@ function suchtext(e: MeldeEintrag): string {
     einheit.organisationName ?? "",
     e.zugEtikett ?? "",
     e.teilEtikett ?? "",
-    ...einheit.hierarchie.flatMap((h) => [h.name, h.kurz ?? ""]),
+    ...einheit.hierarchie.flatMap((h) => [h.name, h.kurz ?? "", vokabText(h.bezeichnung, vokabularFuer(einheit.organisation, "ebene"))]),
+    // Das Kürzel des Typs, wie es am Funk fällt: „ZTr", „FGr O" (R11-H3).
+    vokabText(einheit.einheitsTyp, vokabularFuer(einheit.organisation, "einheitstyp"), "kurz"),
     ...e.bogen.fahrzeuge.flatMap((f) => [kennzeichenText(f), funkrufText(f, einheit)]),
     e.notiz ?? "",
     e.bogen.einsatz.ortAuftrag,
@@ -221,6 +228,18 @@ export function einheitenSortieren(
   /** Laufende Nummern je Einheitsschlüssel (meldungsNummern) — nur für „nummer". */
   nummern?: ReadonlyMap<string, number>,
 ): MeldeEintrag[] {
+  // Anwesende zuerst, Abgerückte (und Aufgegangene) am Ende, in jeder Sortierung (R17-E6, K4): Sie standen sonst zwischen den
+  // anwesenden und zerrissen die Zugruppen. Die Reihenfolge innerhalb beider Gruppen bleibt die gewählte.
+  const sortiert = innenSortieren(eintraege, sortierung, nummern);
+  const da = sortiert.filter((e) => e.status === MeldeStatus.ANWESEND);
+  return da.length === sortiert.length ? sortiert : [...da, ...sortiert.filter((e) => e.status !== MeldeStatus.ANWESEND)];
+}
+
+function innenSortieren(
+  eintraege: MeldeEintrag[],
+  sortierung: EinheitenSortierung,
+  nummern?: ReadonlyMap<string, number>,
+): MeldeEintrag[] {
   const liste = [...eintraege];
   switch (sortierung) {
     case "nummer":
@@ -232,7 +251,16 @@ export function einheitenSortieren(
       });
     case "zuletzt":
       // Eingang der aktuellen Fassung (Geräteuhr), nicht das Eintreffen.
-      return liste.sort((a, b) => b.empfangenAm - a.empfangenAm || nameVergleich(a, b));
+      // Wie die Altersmarken: früherer von Stand und Eingang (R15-K1).
+      return liste.sort((a, b) => angabenZeit(b) - angabenZeit(a) || nameVergleich(a, b));
+    case "aelteste":
+      // Anwesende vor Abgerückten: Für eine abgerückte Einheit ist „lange nichts gehört" kein Mangel (R12-K2).
+      return liste.sort(
+        (a, b) =>
+          Number(a.status !== MeldeStatus.ANWESEND) - Number(b.status !== MeldeStatus.ANWESEND) ||
+          angabenZeit(a) - angabenZeit(b) ||
+          nameVergleich(a, b),
+      );
     case "eintreffzeit":
       // Die korrigierte Eintreffzeit, nicht der Empfangsmoment: wer einen
       // Papierstapel nachträgt, hat alle Bögen in derselben Minute erfasst —
@@ -275,6 +303,22 @@ export function einheitenAnsicht(
     sortierung,
     nummern,
   );
+}
+
+/** Einschränkung nach Status: nur Anwesende oder nur Abgerückte (R11-K2). */
+export type StatusFilter = "anwesend" | "abgerueckt" | "veraltet";
+
+/** Ab diesem Alter gilt die Meldung einer anwesenden Einheit als veraltet (wie `VERALTET_ALTER_MIN` in lagemonitor.ts; hier
+ *  doppelt, weil lagemonitor.ts über einheiten-tabelle.ts diese Datei lädt). */
+const VERALTET_MS = 60 * 60_000;
+
+/**
+ * Anwesend heißt nicht abgerückt und nicht zusammengeführt: das ist, was in der Lage zählt. „veraltet": anwesend und die
+ * Meldung ist eine Stunde alt oder älter („von wem habe ich seit Stunden nichts gehört?", R12-K2).
+ */
+export function passtZuStatusfilter(e: MeldeEintrag, f: StatusFilter, jetzt: number = Date.now()): boolean {
+  if (f === "veraltet") return e.status === MeldeStatus.ANWESEND && jetzt - angabenZeit(e) >= VERALTET_MS;
+  return f === "anwesend" ? e.status === MeldeStatus.ANWESEND : e.status !== MeldeStatus.ANWESEND;
 }
 
 /** Einschränkung auf Einheiten, denen noch etwas fehlt (R7-K6). */

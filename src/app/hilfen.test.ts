@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/hilfen.test.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/hilfen.test.ts` (Commit 1d7ed5f).
  */
 import { entpackePayload } from "@bos/eeb-format/codec";
 import { absenderkarteLoeschen, absenderkarteSpeichern } from "./absenderkarte";
@@ -53,6 +53,7 @@ import {
   plausibilitaet,
   pruefpunkte,
   qrErzeugen,
+  qrTeilzahl,
   schrittStatus,
   staerkePlausibilitaet,
   transportBilanz,
@@ -109,7 +110,7 @@ describe("plausibilitaet()", () => {
   it("meldet keine Hinweise für einen stimmigen Bogen", () => {
     const basis = neuerBogen();
     const b = bogen({
-      einheit: { ...basis.einheit, hierarchie: [{ bezeichnung: { code: 1 }, name: "Oldenburg - Ni" }] },
+      einheit: { ...basis.einheit, einheitsTyp: { code: 1 }, hierarchie: [{ bezeichnung: { code: 1 }, name: "Oldenburg - Ni" }] },
       einsatz: { ...basis.einsatz, ortAuftrag: "Übung Kabelblitz" },
       personal: [
         person({
@@ -259,6 +260,17 @@ describe("plausibilitaet()", () => {
     const hinweise = plausibilitaet(b);
     expect(hinweise.some((h) => /telefonische Erreichbarkeit/.test(h))).toBe(true);
     expect(hinweise.some((h) => /Kennzeichen/.test(h) && /Fahrzeug/.test(h))).toBe(false);
+  });
+
+  it("zählt einen Funkrufname nicht als telefonische Erreichbarkeit und fragt nicht nach Ziffern darin (Schema 12)", () => {
+    const basis = neuerBogen();
+    const b = bogen({
+      einsatz: { ...basis.einsatz, ortAuftrag: "X" },
+      personal: [person({ kontakte: [{ art: KontaktArt.FUNK, dienstlich: true, wert: "Heros Oldenburg" }] })],
+    });
+    const hinweise = plausibilitaet(b);
+    expect(hinweise.some((h) => /telefonische Erreichbarkeit/.test(h))).toBe(true);
+    expect(hinweise.some((h) => /ohne Ziffer|ohne „@"/.test(h))).toBe(false);
   });
 
   it("weist auf eine Stärke von 0 hin", () => {
@@ -652,6 +664,19 @@ describe("qrErzeugen(): Herkunft eines fremden Bogens", () => {
     ]);
   });
 
+  it("nennt die Teilzahl beim Absender — die Gegenzeichnung kann einen Code mehr kosten (OV Chemnitz, 11/2026)", async () => {
+    const b = neuerBogen();
+    // Zufallsnaher Text, damit Deflate ihn nicht wegschrumpft und der Bogen in mehrere Codes geht.
+    b.einsatz.ortAuftrag = Array.from({ length: 120 }, (_, i) => `Abschnitt${(i * 7919) % 1009}`).join(" ");
+    const { payload } = await fremderPayload(b);
+    const qr = await qrErzeugen(decodePayload(payload, browserKompressor), payload);
+    expect(qr.weitergeleitet).toBe(true);
+    expect(qr.teileOhneGegenzeichnung).toBe(qrTeilzahl(payload));
+    expect(qrTeilzahl(ausQr(qr))).toBe(qr.teile.length);
+    expect(qr.segmentiert).toBe(true);
+    expect(qr.teile.length).toBeGreaterThanOrEqual(qr.teileOhneGegenzeichnung!);
+  });
+
   it("signiert nach einer Bearbeitung allein selbst (fremde Signatur deckt die Änderung nicht)", async () => {
     const b = neuerBogen();
     b.einsatz.ortAuftrag = "Übung Kabelblitz";
@@ -897,7 +922,7 @@ describe("plausibilitaet() — Zahlendreher und Zeitfehler", () => {
     const b = { ...neuerBogen(), personalErfassung: PersonalErfassung.NUR_STAERKE, staerkeManuell: { fuehrer: 99, unterfuehrer: 0, mannschaft: 1, gesamt: 100 } };
     const h = plausibilitaet(b);
     expect(h).toContain("Stärke: 99 Führer — stimmt das?");
-    expect(h).toContain("Stärke 99 / 0 / 1 / 100: mehr Führer als Mannschaft — stimmt das?");
+    expect(h).toContain("Stärke 99 / 0 / 1 // 100: mehr Führer als Mannschaft — stimmt das?");
   });
 
   it("lässt kleine Trupps und normale Gruppen in Ruhe", () => {

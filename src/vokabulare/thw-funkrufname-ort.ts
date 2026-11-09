@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/../vokabulare/thw-funkrufname-ort.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/../vokabulare/thw-funkrufname-ort.ts` (Commit 1d7ed5f).
  *
  * Großstadtregelung der THW-Funkrufnamen.
  *
@@ -133,5 +133,12 @@ export function fahrzeugeMitFunkrufOv(fahrzeuge: Fahrzeug[], e: Einheit): Fahrze
  * gleich „06/22/51".
  */
 export function fahrzeugVorbelegung(e: Einheit): Fahrzeug[] {
-  return fahrzeugeMitFunkrufOv(stanFahrzeugVorbelegung(e.organisation, e.einheitsTyp), e);
+  // Die Vorgabe des Bausteins setzt „Ausstattung nach StAN: ja". Das hat niemand geprüft: Die Vorbelegung bleibt auf
+  // „k. A.", „ja" setzt erst, wer es angibt (R15-N1).
+  const ohneAusstattung = stanFahrzeugVorbelegung(e.organisation, e.einheitsTyp).map((f) => {
+    const g = { ...f };
+    delete g.stanKonform;
+    return g;
+  });
+  return fahrzeugeMitFunkrufOv(ohneAusstattung, e);
 }

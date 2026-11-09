@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/sicherung.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/sicherung.ts` (Commit 1d7ed5f).
  *
  * Komplett-Sicherung aller lokalen App-Daten (Geräteumzug / Backup):
  * sämtliche `eeb.*`-Einträge des localStorage — Vorlagen, Einsätze, Entwurf,
@@ -31,6 +31,13 @@ const VERSION = 1;
 const PRAEFIX = "eeb.";
 /** Merkzettel der Geräteuhr (datenschutz-uhr.ts) — bleibt beim Einspielen beim Gerät. */
 const UHR_SCHLUESSEL = "eeb.uhr.v1";
+/**
+ * Vorratsstand der Beispielbögen und Themenseiten (offline-bereit.ts, `ZUSATZ_STAND_SCHLUESSEL`) — beschreibt, was auf
+ * DIESEM Gerät im Cache liegt, nicht auf dem Herkunftsgerät der Sicherung; bleibt beim Einspielen beim Gerät (R14-O2).
+ */
+export const ZUSATZ_STAND_SCHLUESSEL = "eeb.offline-zusatz.v1";
+/** Schlüssel, die zum Gerät gehören und beim Einspielen weder gelöscht noch aus der Datei übernommen werden. */
+const BEIM_GERAET: ReadonlySet<string> = new Set([UHR_SCHLUESSEL, ZUSATZ_STAND_SCHLUESSEL]);
 
 export interface Sicherung {
   format: typeof FORMAT;
@@ -364,16 +371,92 @@ export function sicherungFaellig(jetzt = Date.now()): { seit: number | null } | 
   return jetzt - bezug >= ERINNERUNG_TAGE * TAG_MS ? { seit } : null;
 }
 
+/**
+ * Datenstand der letzten Sicherung (R12-O4): wie viele Einsätze und Meldungen sie enthielt. Daraus rechnet die
+ * Anzeige „seit der Sicherung n neue Meldungen" — die Erinnerung allein rechnete nur in Tagen.
+ */
+const STAND_SCHLUESSEL = "eeb.sicherung.stand.v1";
+
+/**
+ * Zählt am rohen Speichertext statt über `einsaetzeLaden()`: Das Laden legt unlesbare Teile beiseite und schreibt
+ * dabei; mitten in einer Sicherung darf sie nichts am Bestand verändern.
+ */
+function meldungenGesamt(): { einsaetze: number; meldungen: number } {
+  try {
+    const roh = JSON.parse(speicher()?.getItem("eeb.einsaetze.v1") ?? "[]") as unknown;
+    if (!Array.isArray(roh)) return { einsaetze: 0, meldungen: 0 };
+    const aktiv = roh.filter((x): x is { eintraege?: unknown; geloeschtAm?: unknown } => !!x && typeof x === "object" && (x as { geloeschtAm?: unknown }).geloeschtAm == null);
+    return {
+      einsaetze: aktiv.length,
+      meldungen: aktiv.reduce((n, x) => n + (Array.isArray(x.eintraege) ? x.eintraege.length : 0), 0),
+    };
+  } catch {
+    return { einsaetze: 0, meldungen: 0 };
+  }
+}
+
+/** Was die letzte Sicherung enthielt; `null`, wenn unbekannt (ältere Sicherung ohne Vermerk). */
+export function sicherungStand(): { einsaetze: number; meldungen: number } | null {
+  try {
+    const roh = speicher()?.getItem(STAND_SCHLUESSEL);
+    if (!roh) return null;
+    const d = JSON.parse(roh) as { einsaetze?: unknown; meldungen?: unknown };
+    return typeof d.einsaetze === "number" && typeof d.meldungen === "number"
+      ? { einsaetze: d.einsaetze, meldungen: d.meldungen }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Satz zum Datenstand: „enthält 3 Einsätze, 54 Meldungen; seit der Sicherung 12 neue Meldungen"; leer ohne Vermerk. */
+export function sicherungStandText(): string {
+  const stand = sicherungStand();
+  if (!stand) return "";
+  const jetzt = meldungenGesamt();
+  const neu = Math.max(0, jetzt.meldungen - stand.meldungen);
+  const einsaetze = `${stand.einsaetze} ${stand.einsaetze === 1 ? "Einsatz" : "Einsätze"}`;
+  const meldungen = `${stand.meldungen} ${stand.meldungen === 1 ? "Meldung" : "Meldungen"}`;
+  return `Sie enthält ${einsaetze}, ${meldungen}; ${neu === 0 ? "seitdem ist nichts Neues dazugekommen" : `seit der Sicherung ${neu === 1 ? "1 neue Meldung" : `${neu} neue Meldungen`}`}.`;
+}
+
+/**
+ * Quittung nach „Sicherung erstellen…" (R12-O4): Dateiname, Ablage und der ehrliche Satz, dass die Kopie erst zählt,
+ * wenn sie woanders liegt. Ob der Browser die Datei wirklich ablegt, sieht die App nicht.
+ */
+export function sicherungQuittungText(dateiname: string, nativ: boolean, vermerkFehlt = false): string {
+  const ablage = nativ ? "wurde über das Teilen-Menü abgelegt" : "liegt im Download-Ordner";
+  // R20-O2: Bei vollem Speicher bleibt der Vermerk aus; dieselbe Auskunft wie bei den Exporten, damit die Übergabe-Liste nicht ohne Grund „noch nicht“ zeigt.
+  const vermerk = vermerkFehlt ? " Vermerk nicht gespeichert (Speicher voll) – die Übergabe-Liste zeigt „noch nicht“." : "";
+  return `Sicherung „${dateiname}" erzeugt — ${ablage}.${vermerk} Gesichert ist sie erst, wenn sie auf einem zweiten Gerät oder Datenträger liegt.`;
+}
+
+/** Ereignis, mit dem Ansichten, die den Sicherungsvermerk zeigen (Übergabe-Liste), neu zeichnen (R20-O2). */
+export const SICHERUNG_EREIGNIS = "eeb:sicherung";
+
+let vermerkFehlte = false;
+/** Konnte die letzte Sicherung ihren Vermerk („zuletzt gesichert“) nicht schreiben, weil der Speicher voll war? */
+export function sicherungVermerkFehlte(): boolean {
+  return vermerkFehlte;
+}
+
 /** Alle lokalen App-Daten als Sicherungsdatei-Inhalt. */
 export function sicherungErstellen(jetzt = new Date()): string {
   const s = speicher();
   const eintraege: Record<string, string> = {};
+  vermerkFehlte = false;
   if (s) {
     // Vor dem Einsammeln merken, damit die Datei ihren eigenen Zeitpunkt trägt.
     try {
       s.setItem(ZULETZT_SCHLUESSEL, String(jetzt.getTime()));
+      s.setItem(STAND_SCHLUESSEL, JSON.stringify(meldungenGesamt()));
     } catch {
-      /* Speicher voll — die Sicherung selbst ist wichtiger als der Vermerk */
+      vermerkFehlte = true; /* Speicher voll — die Sicherung selbst ist wichtiger als der Vermerk */
+    }
+    try {
+      globalThis.dispatchEvent?.(new Event(SICHERUNG_EREIGNIS));
+    } catch {
+      /* kein Fenster (Test ohne DOM) */
     }
     for (const k of alleEebSchluessel(s)) {
       const v = s.getItem(k);
@@ -391,17 +474,46 @@ export function sicherungEinspielen(text: string): number {
   const eintraege = sicherungParsen(text);
   const s = speicher();
   if (!s) throw new Error("Lokaler Speicher ist nicht verfügbar (Privatmodus?).");
-  for (const k of alleEebSchluessel(s)) if (k !== UHR_SCHLUESSEL) s.removeItem(k);
+  // R13-O1: Vorher merken, was auf dem Gerät liegt. Passt die Datei nicht in den Speicher, wird der alte Stand
+  // zurückgeschrieben, statt ein leeres Gerät und einen englischen Browser-Text zu hinterlassen.
+  const vorher: Record<string, string> = {};
+  for (const k of alleEebSchluessel(s)) {
+    if (BEIM_GERAET.has(k)) continue;
+    const v = s.getItem(k);
+    if (v != null) vorher[k] = v;
+  }
   let anzahl = 0;
-  for (const [k, v] of Object.entries(eintraege)) {
-    // Der Uhrstand gehört zu diesem Gerät, nicht zur Datei: Der Stand aus einer
-    // 100 Tage alten Sicherung löste beim nächsten Start „Geräteuhr prüfen"
-    // aus, obwohl die Uhr stimmte (Audit Runde 5, R5-D4).
-    if (k === UHR_SCHLUESSEL) continue;
-    s.setItem(k, v);
-    anzahl++;
+  try {
+    for (const k of Object.keys(vorher)) s.removeItem(k);
+    for (const [k, v] of Object.entries(eintraege)) {
+      // Der Uhrstand gehört zu diesem Gerät, nicht zur Datei: Der Stand aus einer
+      // 100 Tage alten Sicherung löste beim nächsten Start „Geräteuhr prüfen"
+      // aus, obwohl die Uhr stimmte (Audit Runde 5, R5-D4).
+      if (BEIM_GERAET.has(k)) continue;
+      s.setItem(k, v);
+      anzahl++;
+    }
+  } catch (err) {
+    // Rückfall: halb geschriebene Schlüssel der Datei entfernen, dann den alten Stand zurückschreiben.
+    let wiederhergestellt = true;
+    try {
+      for (const k of Object.keys(eintraege)) if (!BEIM_GERAET.has(k)) s.removeItem(k);
+      for (const [k, v] of Object.entries(vorher)) s.setItem(k, v);
+    } catch {
+      wiederhergestellt = false;
+    }
+    throw new Error(sicherungEinspielFehlerText(wiederhergestellt, err));
   }
   return anzahl;
+}
+
+/** Deutscher Satz, wenn das Einspielen scheitert (R13-O1): sagt, ob die bisherigen Daten noch da sind. */
+export function sicherungEinspielFehlerText(bestandUnveraendert: boolean, ursache?: unknown): string {
+  const voll = ursache instanceof Error && /quota|voll|full/i.test(`${ursache.name} ${ursache.message}`);
+  const grund = voll ? "Der Speicher dieses Geräts reicht für diese Sicherung nicht" : "Die Sicherung ließ sich nicht schreiben";
+  return bestandUnveraendert
+    ? `Nicht eingespielt: ${grund}. Deine bisherigen Daten auf diesem Gerät sind unverändert.`
+    : `Nicht eingespielt: ${grund}, und die bisherigen Daten ließen sich nicht vollständig zurückschreiben. Seite nicht schließen, Sicherung vorher erstellen.`;
 }
 
 // ------------------------------------------------- Restlos löschen

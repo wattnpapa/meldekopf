@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/zusammenfuehren-ui.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/zusammenfuehren-ui.tsx` (Commit 1d7ed5f).
  *
  * Auswahlfeld „Teile zusammenführen" in der Einheitenkarte — Gegenstück zu
  * aufteilen-ui.tsx. Angeboten wird es nur, wenn es überhaupt einen anderen
@@ -18,7 +18,7 @@ import { einheitAnzeigename, zeitpunktDeutsch } from "./hilfen";
 /** Kurzfassung „0 / 1 / 8 / 9 · 2 Fzg" für die Vorschau. */
 function bilanz(b: Erfassungsbogen): string {
   const s = staerke(b);
-  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} / ${s.gesamt} · ${b.fahrzeuge.length} Fzg`;
+  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} // ${s.gesamt} · ${b.fahrzeuge.length} Fzg`;
 }
 
 export function ZusammenfuehrenPanel(props: {

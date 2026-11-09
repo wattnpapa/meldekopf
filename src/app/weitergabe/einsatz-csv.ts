@@ -20,10 +20,11 @@ import type { EinsatzArt } from "@bos/meldekopf/einsaetze";
 import { geltendeJeEinheit } from "../fassung-vorrang";
 import { einheitAnzeigename, nurSollstaerke, orgLabel, vokabText, vokabularFuer, zeitpunktDeutsch } from "../hilfen";
 import { meldungsNummern, pruefpunkteEintrag } from "../einheiten-tabelle";
-import { aktuelleMeldungen, unterbringungLage, verpflegungLage, zaehltInLage } from "../auswertung";
-import { csvDatei, csvZeile } from "@bos/eeb-satz/csv";
-import { nachtragGrundText, ortHinweisText, ortHinweise } from "./export-stand";
-import { HERKUNFT_TEXT, eintreffzeit, zeitLang } from "../eintrag-zeiten";
+import { aktuelleMeldungen, unterbringungLage, verpflegungAngefordertLage, verpflegungLage, zaehltInLage } from "../auswertung";
+import { csvDatei, csvZeile, mitNachtragSpalte } from "@bos/eeb-satz/csv";
+import { exportKennzeile, nachtragGrundText, ortHinweisText, ortHinweise } from "./export-stand";
+import { handAenderungText } from "../angaben-alter";
+import { EINTREFF_HINWEIS, HERKUNFT_TEXT, eintreffzeit, eintreffzeitUnbestaetigt, zeitLang } from "../eintrag-zeiten";
 import { MeldeStatus, type Einsatzsammlung, type MeldeEintrag, type MeldeQuelle } from "@bos/meldekopf/einsaetze";
 
 const STATUS_LABEL: Record<MeldeStatus, string> = {
@@ -48,9 +49,11 @@ const SPALTEN = [
   "Stärke M",
   "Stärke gesamt",
   "Verpflegung gesamt",
+  // „gesamt" ist die Kopfstärke nach Bogen; angefordert ist nur, was Schritt 5 anhakt (R11-W1).
+  "Verpflegung angefordert",
   "Verpflegung veg.",
   "Verpflegung vegan",
-  // Zwei Zahlen, zwei Fragen — wie auf Lageblatt und in der Excel-Liste (R4-W5):
+  // Zwei Zahlen, zwei Fragen — wie auf dem Lageblatt (R4-W5):
   // Schlafplätze brauchen nur die Einheiten mit angeforderter Unterbringung,
   // WC und Duschen alle Anwesenden. Beide unter derselben Überschrift zu führen
   // ließ den Stab 50 statt 35 Plätze planen.
@@ -67,13 +70,14 @@ const SPALTEN = [
   // Liste (R4-K8).
   "Fahrzeuge (Anzahl)",
   "Fahrzeuge (Liste)",
-  "Stand",
+  // „Stand der Angaben" = Zeitpunkt, auf den sich die Angaben der Einheit beziehen (beim Absender); „Aufnahme" =
+  // Moment, in dem das Gerät die Meldung angenommen hat (R18-K1).
+  "Stand der Angaben",
   // Eintreff- und Abrückzeit der Führungsstelle — für Einsatztagebuch und
-  // Abrechnung (Führungssicht-Audit K2). „Empfangen" bleibt daneben der
-  // Moment, in dem das Gerät die Meldung angenommen hat.
+  // Abrechnung (Führungssicht-Audit K2).
   "Eingetroffen",
   "Abgerückt",
-  "Empfangen",
+  "Aufnahme",
   "Quelle",
   "Status",
   "Zählt in Lage",
@@ -85,7 +89,7 @@ const SPALTEN = [
   "Absender",
   "Auftrag/Notiz",
   // Was die Einheit selbst dazuschreibt („Nachschub nötig") — stand nur in
-  // „Alle Daten" und in der Excel-Liste (Audit Runde 3, R3-K3).
+  // „Alle Daten" (Audit Runde 3, R3-K3).
   "Bemerkung (Einheit)",
 ] as const;
 
@@ -136,7 +140,7 @@ function sollAnteilText(meldungen: MeldeEintrag[]): string {
   return `, davon ${personen} ${personen === 1 ? "Person" : "Personen"} Sollstärke, nicht gemeldet`;
 }
 
-function datenZeile(art: EinsatzArt, e: MeldeEintrag, nr: number | undefined, grund?: string, fremderOrt?: string): string {
+function datenZeile(art: EinsatzArt, e: MeldeEintrag, nr: number | undefined, grund?: string, fremderOrt?: string, eintreffUnbestaetigt = false, ersteQuelle?: MeldeQuelle): string {
   const b = e.bogen;
   const st = staerke(b);
   // Wie Tabelle und Summen: Schnellerfassung zählt die Stärke (R2-N5).
@@ -156,6 +160,7 @@ function datenZeile(art: EinsatzArt, e: MeldeEintrag, nr: number | undefined, gr
     st.mannschaft,
     st.gesamt,
     vp.gesamt,
+    verpflegungAngefordertLage(b),
     vp.vegetarisch,
     vp.vegan,
     ...(sb?.unterbringung ? [u.m, u.w, u.d] : [0, 0, 0]),
@@ -170,18 +175,20 @@ function datenZeile(art: EinsatzArt, e: MeldeEintrag, nr: number | undefined, gr
     // Eine Zeitform je Datei: „04.10.2026, 14:36" für Stand, Eingetroffen,
     // Abgerückt und Empfangen. Vorher standen „041436okt26",
     // „04.10.2026, 14:41" und „04.10.26, 14:41" in derselben Zeile (R3-K7).
-    zeitpunktDeutsch(b.stand),
-    zeitLang(eintreffzeit(e)),
+    zeitpunktDeutsch(e.standAbsender ?? b.stand),
+    // Stern wie auf Lageblatt und Sammel-PDF: Zeit des Einlesens, nicht bestätigt (R16-A1); Fußnote am Dateiende.
+    `${zeitLang(eintreffzeit(e))}${eintreffUnbestaetigt ? " *" : ""}`,
     e.abgerueckAm != null ? zeitLang(e.abgerueckAm) : "",
     zeitLang(e.empfangenAm),
-    QUELLE_LABEL[e.quelle],
+    // Eine am Meldekopf geänderte Fassung bleibt „Aus Datei, am Meldekopf geändert", nicht „Manuell erfasst" (R18-A3).
+    e.angaben ? `${QUELLE_LABEL[e.quelle === "manuell" && ersteQuelle ? ersteQuelle : e.quelle]}, am Meldekopf geändert` : QUELLE_LABEL[e.quelle],
     STATUS_LABEL[e.status],
     zaehlt(art, e) ? "ja" : "nein",
     b.uebung ? "ÜBUNG" : "",
     sofortbedarfText(b),
     // Auch „Anderer Einsatz?": die Warnung der Karte gehört zu den offenen Punkten (R5-K5).
     // Sollstärke zuerst: Die Zahl in „Stärke" hat niemand gezählt (R9-A2).
-    [...(nurSollstaerke(b) ? [SOLL_MARKE] : []), ...pruefpunkteEintrag(e).map((p) => p.text), ...(fremderOrt != null ? [ortHinweisText(fremderOrt)] : [])].join(" | "),
+    [...(handAenderungText(e) ? [handAenderungText(e)] : []), ...(nurSollstaerke(b) ? [SOLL_MARKE] : []), ...pruefpunkteEintrag(e).map((p) => p.text), ...(fremderOrt != null ? [ortHinweisText(fremderOrt)] : [])].join(" | "),
     signaturText(e),
     absenderText(e),
     e.notiz ?? "",
@@ -200,7 +207,7 @@ function zaehlt(art: EinsatzArt, e: MeldeEintrag): boolean {
 function summenZeile(meldungen: MeldeEintrag[], titel: string, mitGrund = false): string {
   const acc = {
     f: 0, u: 0, m: 0, gesamt: 0,
-    vGesamt: 0, veg: 0, vegan: 0,
+    vGesamt: 0, vAnf: 0, veg: 0, vegan: 0,
     anM: 0, anW: 0, anD: 0,
     uM: 0, uW: 0, uD: 0,
     diesel: 0, benzin: 0, gemisch: 0,
@@ -216,6 +223,7 @@ function summenZeile(meldungen: MeldeEintrag[], titel: string, mitGrund = false)
     acc.m += st.mannschaft;
     acc.gesamt += st.gesamt;
     acc.vGesamt += vp.gesamt;
+    acc.vAnf += verpflegungAngefordertLage(b);
     acc.veg += vp.vegetarisch;
     acc.vegan += vp.vegan;
     if (b.sofortbedarf?.unterbringung) {
@@ -238,7 +246,7 @@ function summenZeile(meldungen: MeldeEintrag[], titel: string, mitGrund = false)
     "",
     "",
     acc.f, acc.u, acc.m, acc.gesamt,
-    acc.vGesamt, acc.veg, acc.vegan,
+    acc.vGesamt, acc.vAnf, acc.veg, acc.vegan,
     acc.anM, acc.anW, acc.anD,
     acc.uM, acc.uW, acc.uD,
     acc.diesel, acc.benzin, acc.gemisch,
@@ -269,6 +277,11 @@ export function einsatzCsvInhalt(
   nummern: Map<string, number> = meldungsNummern(s.eintraege),
   /** Nachtrag auch ohne Gründe (ältere Aufrufer): die Summe heißt „Summe Nachtrag" (R4-W4). */
   nachtrag = s.nachtragGruende != null,
+  /** Ganze Sammlung für die Kennzeichnung der Eintreffzeit (beim Teilexport fehlt die erste Fassung sonst). */
+  historie: readonly MeldeEintrag[] = s.eintraege,
+  erstellt: number = Date.now(),
+  /** Zeile über entfernte Nummern („Nr. 2 entfernt 04:21 (Papierkorb) — nicht in der Summe."), R19-A2; leer ohne Lücke. */
+  luecken = "",
 ): string {
   // Alle gemeldeten Einheiten, nicht nur die zählenden: Eine abgerückte oder
   // als Übung geführte Einheit fiel bisher wortlos aus der Datei — die
@@ -285,20 +298,37 @@ export function einsatzCsvInhalt(
   const zaehlende = aktuelleMeldungen(s.eintraege, s.art);
   const kopf = csvZeile([...SPALTEN, ...(gruende ? ["Im Nachtrag wegen"] : [])]);
   const orte = ortHinweise(s);
-  const zeilen = alle.map((e) => datenZeile(s.art, e, nummern.get(e.einheitSchluessel), gruende ? nachtragGrundText(gruende[e.einheitSchluessel]) : undefined, orte[e.einheitSchluessel]));
+  const unbestaetigt = new Set(alle.filter((e) => eintreffzeitUnbestaetigt(e, historie)).map((e) => e.id));
+  // Herkunft der ersten Fassung je Einheit: Eine am Meldekopf geänderte Fassung trägt selbst „manuell" (R18-A3).
+  const ersteQuelleJe = (e: MeldeEintrag): MeldeQuelle | undefined =>
+    historie.filter((x) => x.einheitSchluessel === e.einheitSchluessel).sort((a, b) => a.empfangenAm - b.empfangenAm)[0]?.quelle;
+  const zeilen = alle.map((e) => datenZeile(s.art, e, nummern.get(e.einheitSchluessel), gruende ? nachtragGrundText(gruende[e.einheitSchluessel]) : undefined, orte[e.einheitSchluessel], unbestaetigt.has(e.id), e.angaben ? ersteQuelleJe(e) : undefined));
+  // Schlusszeilen: Lage und Erstellzeit, bei gekennzeichneter Eintreffzeit die Fußnote (R16-A1). Die Kopfzeile bleibt Zeile 1.
+  const fuss = [
+    csvZeile([exportKennzeile(s, erstellt)]),
+    ...(unbestaetigt.size > 0 ? [csvZeile([`* ${EINTREFF_HINWEIS}`])] : []),
+    ...(luecken ? [csvZeile([luecken])] : []),
+  ];
   if (!gruende) {
-    return csvDatei([kopf, ...zeilen, summenZeile(zaehlende, `${nachtrag ? "Summe Nachtrag" : "Summe"} (${zaehlende.length} Einheiten${sollAnteilText(zaehlende)})`)]);
+    return csvDatei([kopf, ...zeilen, summenZeile(zaehlende, `${nachtrag ? "Summe Nachtrag" : "Summe"} (${zaehlende.length} Einheiten${sollAnteilText(zaehlende)})`), ...fuss]);
   }
   const neu = zaehlende.filter((e) => gruende[e.einheitSchluessel]?.neu);
   const geaendert = zaehlende.filter((e) => gruende[e.einheitSchluessel] && !gruende[e.einheitSchluessel]!.neu);
   const seit = s.nachtragSeit != null ? ` seit ${zeitLang(s.nachtragSeit)}` : "";
-  return csvDatei([
-    kopf,
-    ...zeilen,
-    summenZeile(neu, `Summe Nachtrag — nur neue Einheiten (${neu.length}${sollAnteilText(neu)})`, true),
-    ...(geaendert.length > 0
-      ? [summenZeile(geaendert, `Geänderte Einheiten (${geaendert.length}) — ersetzen ihre Zeile der letzten Lieferung, NICHT zur Summe addieren`, true)]
-      : []),
-    csvZeile([`NACHTRAG${seit} — nicht die ganze Lage (${alle.length} ${alle.length === 1 ? "Einheit" : "Einheiten"} in dieser Datei)`]),
-  ]);
+  return csvDatei(
+    mitNachtragSpalte(
+      [
+        kopf,
+        ...zeilen,
+        summenZeile(neu, `Summe Nachtrag — nur neue Einheiten (${neu.length}${sollAnteilText(neu)}), kein Gesamtstand`, true),
+        ...(geaendert.length > 0
+          ? [summenZeile(geaendert, `Geänderte Einheiten (${geaendert.length}) — ersetzen ihre Zeile der letzten Lieferung, NICHT zur Summe addieren`, true)]
+          : []),
+        csvZeile([`NACHTRAG${seit} — nicht die ganze Lage (${alle.length} ${alle.length === 1 ? "Einheit" : "Einheiten"} in dieser Datei)`]),
+        ...fuss,
+      ],
+      `NACHTRAG${seit} — nicht die ganze Lage`,
+      zeilen.length,
+    ),
+  );
 }

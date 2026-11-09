@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/export-stand.test.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/export-stand.test.ts` (Commit 1d7ed5f).
  *
  * Export-Stand des Meldekopfs: Was beim letzten Export in der Sammlung stand,
  * zählt danach nicht mehr als neu — und zwar über die Kennung der Meldung,
@@ -17,6 +17,7 @@ import {
   type ExportStand,
   exportSammlung,
   exportStandLaden,
+  exportStaendeLaden,
   exportVermerken,
   exportStaendeUebernehmen,
   exportStandAusWeitergabe,
@@ -200,15 +201,15 @@ describe("Stände je Format (Audit Runde 4, R4-W2)", () => {
     const b = eintrag("m2", "Hatten", 2000);
     exportVermerken(sammlung("e1", [a]), "csv", undefined, 5000);
     expect(exportStandLaden("e1", "csv")).not.toBeNull();
-    expect(exportStandLaden("e1", "xlsx")).toBeNull();
+    expect(exportStandLaden("e1", "csv-detail")).toBeNull();
     expect(exportStandLaden("e1", "pdf")).toBeNull();
-    // Excel hat noch keinen Stand: für das Format ist alles neu.
-    expect(exportSammlung(sammlung("e1", [a, b]), "neue", exportStandLaden("e1", "xlsx")).eintraege.map((e) => e.id)).toEqual(["m1", "m2"]);
+    // Die Alle-Daten-CSV hat noch keinen Stand: für das Format ist alles neu.
+    expect(exportSammlung(sammlung("e1", [a, b]), "neue", exportStandLaden("e1", "csv-detail")).eintraege.map((e) => e.id)).toEqual(["m1", "m2"]);
     expect(exportSammlung(sammlung("e1", [a, b]), "neue", exportStandLaden("e1", "csv")).eintraege.map((e) => e.id)).toEqual(["m2"]);
-    // Danach Excel: die anderen Stände bleiben.
-    exportVermerken(sammlung("e1", [a, b]), "xlsx", undefined, 6000);
+    // Danach die Alle-Daten-CSV: die anderen Stände bleiben.
+    exportVermerken(sammlung("e1", [a, b]), "csv-detail", undefined, 6000);
     expect(exportStandLaden("e1", "csv")!.eintragIds).toEqual(["m1"]);
-    expect(exportStandLaden("e1", "xlsx")!.eintragIds).toEqual(["m1", "m2"]);
+    expect(exportStandLaden("e1", "csv-detail")!.eintragIds).toEqual(["m1", "m2"]);
   });
 
   it("lässt den Stand der Weitergabe und des Lageblatts unberührt (und umgekehrt)", () => {
@@ -364,8 +365,9 @@ describe("Nachtrag: Gründe, Namen, Stände vom anderen Gerät (Audit Runde 5, R
 
   it("benennt Lieferungen in allen Formaten gleich", () => {
     expect(lieferungsMarke("alle", null)).toBe("");
-    expect(lieferungsMarke("neue", null)).toBe("erste-lieferung-");
-    expect(lieferungsMarke("neue", { zeitpunkt: new Date(2026, 9, 6, 11, 47).getTime(), eintragIds: [] })).toBe("nachtrag-seit-20261006-1147-");
+    expect(lieferungsMarke("neue", null)).toBe("erste-lieferung");
+    // R18-W6: kein zweiter Zeitstempel im Namen; der Bezugspunkt steht in der Datei.
+    expect(lieferungsMarke("neue", { zeitpunkt: new Date(2026, 9, 6, 11, 47).getTime(), eintragIds: [] })).toBe("nachtrag");
   });
 
   it("übernimmt Stände aus der Datei und vereinigt sie mit den eigenen", () => {
@@ -377,9 +379,12 @@ describe("Nachtrag: Gründe, Namen, Stände vom anderen Gerät (Audit Runde 5, R
     exportStaendeUebernehmen("e1", { csv: dort });
     expect(exportStandLaden("e1", "csv")).toMatchObject({ zeitpunkt: 5000, eintragIds: ["m1"], herkunft: "geraet" });
     // Ein eigener, älterer Stand wird ergänzt, nicht verdrängt.
-    exportVermerken(sammlung("e1", [b]), "xlsx", undefined, 100);
-    exportStaendeUebernehmen("e1", { xlsx: { zeitpunkt: 200, eintragIds: ["m1"] } });
-    expect(exportStandLaden("e1", "xlsx")).toMatchObject({ zeitpunkt: 200, eintragIds: ["m2", "m1"] });
+    exportVermerken(sammlung("e1", [b]), "csv-detail", undefined, 100);
+    exportStaendeUebernehmen("e1", { "csv-detail": { zeitpunkt: 200, eintragIds: ["m1"] } });
+    expect(exportStandLaden("e1", "csv-detail")).toMatchObject({ zeitpunkt: 200, eintragIds: ["m2", "m1"] });
+    // Ein Stand aus einem Format, das es nicht mehr gibt (Excel-Liste bis 2026-11), wird übergangen.
+    exportStaendeUebernehmen("e1", { xlsx: { zeitpunkt: 300, eintragIds: ["m1"] } });
+    expect(exportStaendeLaden("e1")).not.toHaveProperty("xlsx");
     exportStaendeUebernehmen("e1", "kaputt");
   });
 

@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/meldungs-vergleich.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/meldungs-vergleich.ts` (Commit 1d7ed5f).
  *
  * Zwei Meldungen derselben (oder einer ähnlich benannten) Einheit
  * gegenüberstellen — für die Rückfrage „Einheit ist bereits gemeldet".
@@ -13,7 +13,8 @@
  */
 
 import { staerke, type Erfassungsbogen } from "@bos/eeb-format/model";
-import { bogenDiff, FELD_GESAMTSTAERKE, type BogenDiff } from "@bos/meldekopf/meldung-diff";
+import { FELD_GESAMTSTAERKE } from "@bos/meldekopf/meldung-diff";
+import { bogenDiff, istMwdFeld, type BogenDiff } from "./weitergabe/diff-lage";
 import { zeitpunktDeutsch } from "./hilfen";
 
 export interface MeldungsSteckbrief {
@@ -55,7 +56,7 @@ export function steckbrief(b: Erfassungsbogen): MeldungsSteckbrief {
   const s = staerke(b);
   const erste = b.personal.find((p) => personName(p));
   return {
-    staerke: `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} / ${s.gesamt}`,
+    staerke: `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} // ${s.gesamt}`,
     ansprechperson: erste ? personName(erste) : "",
     kennzeichen: b.fahrzeuge.map((f) => (f.kennzeichen ?? "").trim()).filter(Boolean),
     stand: zeitpunktDeutsch(b.stand),
@@ -91,7 +92,7 @@ export function aenderungsText(d: BogenDiff, hoechstens = 4): string {
   if (d.fahrzeugeAbgang.length > 0) fz.push(`${d.fahrzeugeAbgang.length} abgemeldet`);
   if (d.fahrzeugeGeaendert.length > 0) fz.push(`${d.fahrzeugeGeaendert.length} geändert`);
   if (fz.length > 0) teile.push(`Fahrzeuge: ${fz.join(", ")}`);
-  for (const a of d.bedarf) if (a.feld !== "Unterbringung M/W/D" || !gesamt) teile.push(`${a.feld} ${a.vorher} → ${a.nachher}`);
+  for (const a of d.bedarf) if (!istMwdFeld(a.feld) || !gesamt) teile.push(`${a.feld} ${a.vorher} → ${a.nachher}`);
   for (const a of d.sonstiges) {
     // Kurze Werte im Wortlaut (Einheit, Zeitraum), lange Freitexte nur mit Namen.
     const kurz = a.vorher.length <= 40 && a.nachher.length <= 40;

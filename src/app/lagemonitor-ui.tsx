@@ -23,15 +23,28 @@ import {
   einsatzFunkrufSetzen,
   einsatzbeginnLaden,
   einsatzbeginnSetzen,
+  beginnHinweis,
 } from "./lagemonitor-beginn";
+import { frageJaNein } from "@bos/oberflaeche/dialoge";
+import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
+import { ortOhneZusatz } from "./hilfen";
 import { sammlungenBeiseitegelegt } from "./eingang/unlesbar";
-import { alterText, ausEingabeWert, dauerText, dtgTeile, lagebild, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile, type ZugZeile } from "./lagemonitor";
+import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, bedarfText, dauerText, lagebild, uhrTeile, zuEingabeWert, type EinheitZeile } from "./lagemonitor";
 
-const URL_PARAMETER = "lagemonitor";
+import { URL_PARAMETER, lagemonitorKennung } from "./lagemonitor-kennung";
 /** Gemerkte Helligkeitsstufe des Monitors („dunkel" oder „gedimmt"; „hell" wird nie gemerkt, R7-L3). */
 export const STUFE_SCHLUESSEL = "eeb.lagestufe.v1";
 /** Mehr Bewegungszeilen als das gibt es nicht im Bild; der Rest steht als „+ n weitere" (R7-K2). */
 const BEWEGUNGEN_MAX = 3;
+/**
+ * Bewegungszeilen je nach Bild (R17-K3, K11): Die Einheitenliste ist der Kern der Lage, Bewegungen sind Beiwerk. Auf einem
+ * 720p-Fernseher füllten drei Zeilen plus „+ n weitere" das Bild, von sechs Einheiten standen zwei in der Tabelle; am Telefon
+ * brach jede Zeile in drei. Dort und bei niedrigem Bild eine Zeile, bis 1000 px Höhe zwei, darüber drei.
+ */
+export function bewegungenMax(breite: number, hoehe: number): number {
+  if (breite <= 640 || hoehe <= 800) return 1;
+  return hoehe <= 1000 ? 2 : BEWEGUNGEN_MAX;
+}
 /** Schriftfaktoren der Einheitentabelle, bevor Zeilen entfallen (R8-L1). */
 const SCHRIFT_STUFEN = [1, 0.95, 0.9, 0.85];
 /** Ab diesem Alter der letzten Meldung wird der Datenstand abgesetzt (R7-K8). */
@@ -43,7 +56,7 @@ export const STUFEN_SPERRE_MS = 1500;
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 /** Steht der Ort einer Einheit schon im Funkrufnamen? Dann wird er am Telefon nicht noch einmal genannt (R9-K5). */
 export function ortImFunkruf(e: { ort?: string | null; funkruf?: string | null }): boolean {
-  const ort = norm(e.ort ?? "");
+  const ort = norm(ortOhneZusatz(e.ort ?? ""));
   return ort === "" || norm(e.funkruf ?? "").includes(ort);
 }
 
@@ -66,11 +79,7 @@ function stufeMerken(stufe: Stufe): void {
 /** Takt für Uhr, Dauer und „vor X Min". */
 const TAKT_MS = 5_000;
 
-/** Kennung aus der Adresse, wenn die Seite als Lagemonitor aufgerufen wurde. */
-export function lagemonitorKennung(suche: string = window.location.search): string | null {
-  const id = new URLSearchParams(suche).get(URL_PARAMETER);
-  return id ? id : null;
-}
+export { lagemonitorKennung };
 
 /**
  * Lagemonitor in einem zweiten Fenster öffnen. Lässt die Umgebung das nicht zu
@@ -221,6 +230,8 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
   return (
     <div className="lm-tabelle" ref={behaelter}>
       <table className="lm-einheiten" ref={tabelleEl}>
+        {/* Die Reihenfolge steht über der Tabelle: Wer „seine" Einheit sucht, sieht, wonach die Zeilen geordnet sind (R18-K5). */}
+        <caption className="lm-reihenfolge">Reihenfolge: ⚠ älteste Angaben zuerst, danach zuletzt gemeldet</caption>
         <thead>
           <tr>
             <th className="lm-orga">Orga</th><th>Ort</th><th><span className="lm-lang">Funkrufname</span><span className="lm-kurz">Funkruf / Ort</span></th><th className="lm-typ">Einheitentyp</th>
@@ -234,11 +245,14 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
         <tbody>
           {einheiten.map((e) => (
             <tr key={e.id}>
-              <td className="lm-orga">{e.orga}</td>
+              <td className="lm-orga">{e.orga}{e.soll && <abbr className="lm-soll" title="Sollstärke, nicht gemeldet"> S</abbr>}{e.alterMin != null && <abbr className="lm-alt" title={e.standAlt ? "Der Stand der Angaben ist älter als eine Stunde" : "Meldung ist älter als eine Stunde"}> ⚠ {e.standAlt ? "Stand " : ""}{alterKurz(e.alterMin)}</abbr>}</td>
               <td>{e.ort || "–"}</td>
               {/* Am Telefon entfällt die Ort-Spalte: Der Ort steht im Funkrufnamen oder, wenn nicht, als Zusatz darunter (R9-K5). */}
-              <td data-ort={ortImFunkruf(e) ? undefined : e.ort}>{e.funkruf || "–"}</td>
-              <td className="lm-typ">{e.typ || "–"}</td>
+              <td data-ort={ortImFunkruf(e) ? undefined : e.ort}>{e.funkruf || "–"}{e.auftrag && <span className="lm-auftrag-tel">{e.auftrag}</span>}</td>
+              <td className="lm-typ">
+                {e.typ || "–"}
+                {e.auftrag && <span className="lm-auftrag">{e.auftrag}</span>}
+              </td>
               {mitZug && <td className="lm-zug">{e.zug || "–"}</td>}
               <td className="lm-zahl">{e.fuehrer}</td>
               <td className="lm-zahl">{e.unterfuehrer}</td>
@@ -249,7 +263,7 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
         </tbody>
       </table>
       <div className="lm-weitere" ref={hinweisEl} style={weitere === 0 ? { display: "none" } : undefined}>
-        + {Math.max(weitere, 1)} weitere {weitere <= 1 ? "Einheit" : "Einheiten"} · zuletzt eingetroffen zuerst
+        + {Math.max(weitere, 1)} weitere {weitere <= 1 ? "Einheit" : "Einheiten"} · ⚠ und zuletzt eingetroffene zuerst
       </div>
     </div>
   );
@@ -333,11 +347,35 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
     stufeMerken(neu);
   }
   const hellerGesperrt = sperreBis > 0;
+  // Helligkeit gehört ins erste Bild, nicht hinter „Optionen": am Telefon steht die Leiste ganz oben, am Fernseher im Fuß (R10-L3).
+  const stufenleiste = (
+    <div className="lm-zeile lm-stufenleiste">
+      <p className="lm-stufe">Stufe: {STUFEN_NAME[stufe]}</p>
+      <button
+        type="button"
+        className="lm-knopf"
+        aria-disabled={dunkler == null || undefined}
+        data-anschlag={dunkler == null || undefined}
+        onClick={() => dunkler && stufeWechseln(dunkler, false)}
+      >
+        Dunkler
+      </button>
+      <button
+        type="button"
+        className="lm-knopf"
+        aria-disabled={heller == null || hellerGesperrt || undefined}
+        data-anschlag={heller == null || undefined}
+        onClick={() => heller && stufeWechseln(heller, true)}
+      >
+        Heller{stufe === "dunkel" ? " (weiß)" : ""}
+      </button>
+    </div>
+  );
 
   if (!einsatz) {
     const imPapierkorb = einsaetzePapierkorb().some((s) => s.id === einsatzId);
     // Auch hier läuft die Uhr weiter, damit ein Monitor ohne Daten nicht wie ein eingefrorener aussieht (R6-L6).
-    const leer = dtgTeile(new Date(jetzt));
+    const leer = uhrTeile(new Date(jetzt));
     return (
       <main className={`${klasse} lm-leer`}>
         <div className="lm-zeile lm-r1">
@@ -348,9 +386,9 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
               ? "Die gespeicherten Sammlungen sind nicht lesbar und liegen beiseite — im Hauptfenster „Daten sichern…“."
               : "Dieser Einsatz ist auf diesem Gerät nicht (mehr) vorhanden."}
         </div>
-        <div className="lm-zeile lm-dtg" aria-label="Datum-Zeit-Gruppe">
+        <div className="lm-zeile lm-dtg" aria-label="Uhrzeit und Datum">
           <div className="lm-dtg-text">
-            <span>{leer.tag}</span> <strong>{leer.zeit}</strong> <span>{leer.monat}</span> <span>{leer.jahr}</span>
+            <strong>{leer.zeit}</strong> <span>{leer.datum}</span>
           </div>
         </div>
         <button type="button" className="lm-knopf" onClick={schliessen}>Schließen</button>
@@ -360,7 +398,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
 
   const bild = lagebild(einsatz, jetzt);
   const s = bild.summen;
-  const dtg = dtgTeile(new Date(jetzt));
+  const dtg = uhrTeile(new Date(jetzt));
   // Ohne gesetzten Beginn gilt die erste Meldung als Vorschlag, statt einen Fehler auf den Fernseher zu schreiben (R6-K4).
   const dauer = beginn != null ? dauerText(beginn, jetzt) : bild.ersteMeldung != null ? dauerText(bild.ersteMeldung, jetzt) : null;
   // Eine Aussage je Zeile: leer -> nur die Lagezeile sagt es (R7-K8); Zeiten in der Zukunft werden genannt statt verschwiegen (R7-K3).
@@ -376,20 +414,47 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         : bild.zeitenPruefen
           ? "Dauer unklar – Zeiten prüfen (Geräteuhr?)"
           : null;
+  // R19-L1: Übungsmeldungen, die in dieser Lage nicht zählen, stehen in der Größe der Lagezeile da; „Noch nichts gemeldet" neben
+  // „gerade eben eingetroffen" las sich als Widerspruch.
+  const uebungTeil = bild.uebungenDaneben > 0 ? `${bild.uebungenDaneben} ${bild.uebungenDaneben === 1 ? "Übungsmeldung" : "Übungsmeldungen"} nicht gezählt` : "";
   const lage =
     s.einheiten === 0
       ? bild.abgerueckt > 0
         ? `Alle ${bild.abgerueckt} Einheiten abgerückt`
-        : "Noch nichts gemeldet"
-      : `${s.einheiten} ${s.einheiten === 1 ? "Einheit" : "Einheiten"} · ${s.fahrzeuge} ${s.fahrzeuge === 1 ? "Fahrzeug" : "Fahrzeuge"}${bild.abgerueckt > 0 ? ` · ${bild.abgerueckt} abgerückt` : ""}`;
+        : uebungTeil || "Noch nichts gemeldet"
+      : // Jede Angabe bleibt ungeteilt („1 abgerückt" brach am Telefon in „… · 1" und „abgerückt", R17-K11); umbrochen wird nur bei „ · ".
+        (
+          <>
+            <span className="lm-nb">{s.einheiten} {s.einheiten === 1 ? "Einheit" : "Einheiten"}</span>
+            {" · "}
+            <span className="lm-nb">{s.fahrzeuge} {s.fahrzeuge === 1 ? "Fahrzeug" : "Fahrzeuge"}</span>
+            {bild.abgerueckt > 0 && (
+              <>
+                {" · "}
+                <span className="lm-nb">{bild.abgerueckt} abgerückt</span>
+              </>
+            )}
+            {uebungTeil && (
+              <>
+                {" · "}
+                <span className="lm-nb">{uebungTeil}</span>
+              </>
+            )}
+          </>
+        );
+  // Das Alter der anwesenden Einheiten, nicht nur der jüngsten Meldung: eine frische abgerückte Einheit
+  // verdeckte sonst, dass die Stärke auf Meldungen von vor Stunden beruht (R11-K1).
+  const alterAnwesende = bild.zeitenPruefen ? null : anwesendenAlterText(bild.anwesendenAlter, jetzt);
+  // Nur der Teil „älteste Meldung …" trägt Warnfarbe und ⚠; eine frische letzte Meldung ist keine Warnung (R15-K4).
+  const letzteAlt = bild.letzteMeldung != null && jetzt - bild.letzteMeldung >= VERALTET_MIN * 60_000;
   const datenstand = bild.zeitenPruefen
     ? "Meldezeiten liegen in der Zukunft – Zeiten prüfen (Geräteuhr?)"
     : bild.letzteMeldung != null
       ? `letzte Meldung ${alterText(bild.letzteMeldung, jetzt)}`
       : "";
-  const veraltet = bild.zeitenPruefen || (bild.letzteMeldung != null && jetzt - bild.letzteMeldung >= VERALTET_MIN * 60_000);
+  const veraltet = bild.zeitenPruefen || letzteAlt;
   const ortText = bild.ort?.trim() ? <span className="lm-ort"> · {bild.ort.trim()}</span> : null;
-  const sichtbareBewegungen = bild.bewegungen.slice(0, BEWEGUNGEN_MAX);
+  const sichtbareBewegungen = bild.bewegungen.slice(0, bewegungenMax(window.innerWidth, window.innerHeight));
   const weitereBewegungen = bild.bewegungen.length - sichtbareBewegungen.length;
 
   return (
@@ -402,22 +467,26 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
       ) : (
         <h1 className="lm-zeile lm-r1">{einsatz.name}{ortText}</h1>
       )}
-      <div className="lm-zeile lm-dtg" aria-label="Datum-Zeit-Gruppe">
-        <span className="lm-label lm-dtg-label">Uhr</span>
+      <div className="lm-zeile lm-dtg" aria-label="Uhrzeit und Datum">
+        <span className="lm-label lm-dtg-label">Uhrzeit · Datum</span>
         <div className="lm-dtg-text">
-          <span>{dtg.tag}</span> <strong>{dtg.zeit}</strong> <span>{dtg.monat}</span> <span>{dtg.jahr}</span>
+          <strong>{dtg.zeit}</strong> <span>{dtg.datum}</span>
         </div>
       </div>
       <div className="lm-zeile lm-r3" aria-label="Stärke Führer, Unterführer, Mannschaft, gesamt">
-        <span className="lm-label">Stärke F / U / M // gesamt</span>
-        {s.staerke.fuehrer} / {s.staerke.unterfuehrer} / {s.staerke.mannschaft} // <u>{s.staerke.gesamt}</u>
+        {/* Reine Sollstärke steckt in der Gesamtstärke: der Vorbehalt gehört an die Zahl, die vorgelesen wird (R9-K1);
+            er steht in der Beschriftung der Stärkezeile statt in einer eigenen Zeile, die Einheiten kostet (R10-K4). */}
+        <span className="lm-label">
+          Stärke Führer / Unterführer / Mannschaft = gesamt
+          {bild.sollstaerke.einheiten > 0 && (
+            <>
+              {" · "}
+              <span className="lm-label lm-veraltet lm-inline">davon {bild.sollstaerke.personen} Sollstärke (S), nicht gemeldet</span>
+            </>
+          )}
+        </span>
+        {s.staerke.fuehrer} / {s.staerke.unterfuehrer} / {s.staerke.mannschaft} = <u>{s.staerke.gesamt}</u>
       </div>
-      {/* Reine Sollstärke steckt in der Gesamtstärke: der Vorbehalt gehört an die Zahl, die vorgelesen wird (R9-K1). */}
-      {bild.sollstaerke.einheiten > 0 && (
-        <div className="lm-zeile lm-r3 lm-stand">
-          <span className="lm-label lm-veraltet">davon {bild.sollstaerke.personen} Sollstärke, nicht gemeldet</span>
-        </div>
-      )}
       {staleSeit != null && (
         <div className="lm-zeile lm-r3 lm-stand" role="alert">
           <span className="lm-label lm-veraltet">
@@ -427,7 +496,13 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
       )}
       <div className="lm-zeile lm-r3 lm-stand">
         {lage}
-        {datenstand && <span className={`lm-label${veraltet ? " lm-veraltet" : ""}`}>{datenstand}</span>}
+        {datenstand && (
+          <span className={`lm-label${veraltet ? " lm-veraltet" : ""}`}>
+            {datenstand}
+            {/* R19-K11: Der Teil steht als eigene Zeile da (index.html); ein Trennpunkt am Zeilenanfang las sich als Rest eines Satzes. */}
+            {alterAnwesende && <span className="lm-warnteil">⚠ {alterAnwesende}</span>}
+          </span>
+        )}
       </div>
       {dauerZeile && <div className="lm-zeile lm-r2 lm-dauer">{dauerZeile}</div>}
       {bild.einheiten.length > 0 && (
@@ -444,20 +519,19 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
       {bild.zuege.length > 0 && <ZugZeileAnzeige zuege={bild.zuege} />}
       {sichtbareBewegungen.length > 0 && (
         <div className="lm-zeile lm-bewegungen">
-          {sichtbareBewegungen.map((b) => (
+          {sichtbareBewegungen.map((b, i) => (
             <div key={b.id} className="lm-bewegung">
               {b.art}: {b.name}
               {b.detail ? ` – ${b.detail}` : ""}{" "}
               <span className="lm-label lm-inline">
                 {b.nachgetragen != null ? `nachgetragen, da seit ${uhrzeitText(b.nachgetragen, jetzt)}` : alterText(b.zeit, jetzt)}
               </span>
+              {/* Der Rest steht am Ende der letzten Zeile statt in einer eigenen: jede Zeile kostet eine Einheit in der Tabelle. */}
+              {weitereBewegungen > 0 && i === sichtbareBewegungen.length - 1 && (
+                <span className="lm-label lm-inline lm-weitere-bewegungen"> · + {weitereBewegungen} weitere {weitereBewegungen === 1 ? "Bewegung" : "Bewegungen"}</span>
+              )}
             </div>
           ))}
-          {weitereBewegungen > 0 && (
-            <div className="lm-bewegung lm-weitere-bewegungen">
-              + {weitereBewegungen} weitere {weitereBewegungen === 1 ? "Bewegung" : "Bewegungen"}
-            </div>
-          )}
         </div>
       )}
 
@@ -465,7 +539,11 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         <h2 id="lm-einheiten-titel" className="lm-titel">Einheiten</h2>
         {bild.einheiten.length === 0 ? (
           <p className="lm-leer-hinweis">
-            {bild.abgerueckt > 0 ? "Alle Einheiten sind abgerückt." : "Noch keine Einheit gemeldet."}
+            {bild.abgerueckt > 0
+              ? "Alle Einheiten sind abgerückt."
+              : bild.uebungenDaneben > 0
+                ? `Keine Einheit in der Lage (${bild.uebungenDaneben} Übung, nicht gezählt).` /* R20-L4: sagt, was da ist, statt „noch keine“ */
+                : "Noch keine Einheit gemeldet."}
           </p>
         ) : (
           <EinheitenTabelle einheiten={bild.einheiten} />
@@ -481,7 +559,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
           <dt>Einsatzbeginn</dt>
           <dd>
             {beginn != null
-              ? (() => { const b = dtgTeile(new Date(beginn)); return `${b.tag} ${b.zeit} ${b.monat} ${b.jahr}`; })()
+              ? (() => { const b = uhrTeile(new Date(beginn)); return `${b.zeit} Uhr, ${b.datum}`; })()
               : "nicht gesetzt (in der Einsatzansicht einstellen)"}
           </dd>
           <dt>Einheiten</dt><dd>{s.einheiten}</dd>
@@ -489,26 +567,10 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         </dl>
       </details>
 
+      {stufenleiste}
       <details className="lm-zeile lm-klapp">
         <summary>Optionen</summary>
         <div className="lm-optionen">
-          <p className="lm-stufe">Stufe: {STUFEN_NAME[stufe]}</p>
-          <button
-            type="button"
-            className="lm-knopf"
-            aria-disabled={dunkler == null || undefined}
-            onClick={() => dunkler && stufeWechseln(dunkler, false)}
-          >
-            Dunkler
-          </button>
-          <button
-            type="button"
-            className="lm-knopf"
-            aria-disabled={heller == null || hellerGesperrt || undefined}
-            onClick={() => heller && stufeWechseln(heller, true)}
-          >
-            Heller{stufe === "dunkel" ? " (weiß)" : ""}
-          </button>
           <button type="button" className="lm-knopf" onClick={vollbild}>Vollbild</button>
           <button type="button" className="lm-knopf" onClick={schliessen}>Schließen</button>
         </div>
@@ -525,11 +587,13 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
 export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; alleIds: readonly string[] }) {
   const [beginn, setBeginn] = useState<number | null>(() => einsatzbeginnLaden(einsatzId));
   const [fehler, setFehler] = useState(false);
+  // Der Funkrufname meldet ein Scheitern des Speicherns wie der Beginn, mit eigenem Satz (R11-O5).
+  const [funkrufFehler, setFunkrufFehler] = useState(false);
   const [funkruf, setFunkruf] = useState(() => einsatzFunkrufLaden(einsatzId) ?? "");
 
   function setzeFunkruf(text: string) {
     setFunkruf(text.slice(0, FUNKRUF_MAX));
-    setFehler(!einsatzFunkrufSetzen(einsatzId, text, alleIds));
+    setFunkrufFehler(!einsatzFunkrufSetzen(einsatzId, text, alleIds));
   }
 
   function setze(ms: number | null) {
@@ -538,9 +602,76 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
     if (ok) setBeginn(ms);
   }
 
+  /** „Jetzt" ersetzt keinen eingetragenen Beginn ohne Rückfrage, die den alten Wert nennt (R11-D4). */
+  async function setzeJetzt() {
+    if (beginn != null) {
+      const alt = uhrTeile(new Date(beginn));
+      const ja = await frageJaNein({
+        titel: "Einsatzbeginn überschreiben?",
+        text: `Eingetragen ist ${alt.zeit} Uhr, ${alt.datum}. „Jetzt" ersetzt ihn durch die aktuelle Uhrzeit; der alte Beginn ist danach nicht mehr gespeichert.`,
+        ok: "Durch jetzt ersetzen",
+        abbruch: "Beginn behalten",
+        gefahr: true,
+        fokus: "abbruch",
+      });
+      if (!ja) return;
+    }
+    setze(Date.now());
+  }
+
+  /**
+   * „Beginn entfernen" (und Leeren des Feldes) fragt wie „Jetzt" nach und nennt den Wert, der verloren ginge:
+   * die genaue Alarmierungszeit lässt sich später nur schätzen (R13-D1).
+   */
+  async function entferneBeginn() {
+    if (beginn == null) return;
+    const alt = uhrTeile(new Date(beginn));
+    const ja = await frageJaNein({
+      titel: "Einsatzbeginn entfernen?",
+      text: `Eingetragen ist ${alt.zeit} Uhr, ${alt.datum}. Der Beginn ist danach nicht mehr gespeichert, der Fernseher zeigt keine Dauer.`,
+      ok: "Beginn entfernen",
+      abbruch: "Beginn behalten",
+      gefahr: true,
+      fokus: "abbruch",
+    });
+    if (!ja) return;
+    setze(null);
+  }
+
+  // R19-D2: Wird ein vorhandener Beginn im Feld überschrieben, bleibt der alte Wert mit Rückweg stehen.
+  const [beginnWar, setBeginnWar] = useState<number | null>(null);
+  const [beginnLeiste, setBeginnLeiste] = useState<number | null>(null);
+
+  function beginnGeaendert(wert: string) {
+    const ms = ausEingabeWert(wert);
+    if (ms == null && beginn != null) void entferneBeginn();
+    else {
+      if (ms != null && beginn != null && ms !== beginn) {
+        setBeginnWar((war) => war ?? beginn);
+        setBeginnLeiste(Date.now()); // R20-D2: auch am Bildrand sagt eine Leiste mit „Rückgängig“, was der Beginn war
+      }
+      setze(ms);
+    }
+  }
+
+  function beginnZurueck() {
+    if (beginnWar == null) return;
+    const ok = einsatzbeginnSetzen(einsatzId, beginnWar, alleIds);
+    setFehler(!ok);
+    if (ok) {
+      setBeginn(beginnWar);
+      setBeginnWar(null);
+    }
+  }
+
+  const hinweis = beginnHinweis(beginn, Date.now());
+  const [offenAnfang] = useState(() => typeof window.matchMedia !== "function" || !window.matchMedia("(max-width: 30rem)").matches);
+
   return (
-    <div className="lm-block">
-      <p className="lm-block-titel"><strong>Lagemonitor für den Fernseher</strong></p>
+    // R19-M13, G8, S11: Am Telefon ein Aufklapper (der Block war 460 bis 650 px lang und stand zwischen Export und Übergabe); unter dem Block
+    // bleibt ein Abstand zur Karte „Übergabe und Abschluss" (index.html).
+    <details className="lm-block" open={offenAnfang}>
+      <summary className="lm-block-titel"><strong>Lagemonitor für den Fernseher</strong></summary>
       <p className="hinweis">
         Zweites Fenster mit der Lage in großer Schrift, ohne Personennamen — auf den Fernseher ziehen (HDMI,
         erweiterter Bildschirm). Es aktualisiert sich von selbst, solange es auf diesem Gerät läuft. In der ersten
@@ -554,26 +685,55 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
             value={funkruf}
             maxLength={FUNKRUF_MAX}
             placeholder="z. B. Salus Übungsleitung"
+            autoCorrect="off"
+            spellCheck={false}
             onChange={(e) => setzeFunkruf(e.target.value)}
           />
         </label>
       </div>
+      {/* R12-N5: Zweck und Wirkung von Feld und Knöpfen stehen vor ihnen. */}
+      <p className="hinweis lm-beginn-erklaerung">
+        Der Fernseher zeigt die Dauer seit dem Einsatzbeginn („seit Beginn: 2 Stunden, 5 Minuten“). „Jetzt“ setzt den
+        Beginn auf die aktuelle Uhrzeit, „Beginn entfernen“ nimmt ihn zurück — der Einsatz selbst bleibt unverändert.
+      </p>
       <div className="vorlage-aktionen">
         <label>
           Einsatzbeginn{" "}
           <input
             type="datetime-local"
             value={beginn != null ? zuEingabeWert(beginn) : ""}
-            onChange={(e) => setze(ausEingabeWert(e.target.value))}
+            onChange={(e) => beginnGeaendert(e.target.value)}
           />
         </label>{" "}
-        <button type="button" onClick={() => setze(Date.now())}>Jetzt</button>{" "}
-        {beginn != null && <button type="button" onClick={() => setze(null)}>Löschen</button>}{" "}
+        <button type="button" onClick={() => void setzeJetzt()}>Jetzt</button>{" "}
+        {beginn != null && <button type="button" onClick={() => void entferneBeginn()}>Beginn entfernen</button>}{" "}
         <button type="button" className="primaer" onClick={() => lagemonitorOeffnen(einsatzId)}>
           Lagemonitor öffnen
         </button>
       </div>
+      {beginnWar != null && beginn != null && beginnWar !== beginn && (
+        <p className="hinweis lm-beginn-war" role="status">
+          Beginn war {uhrTeile(new Date(beginnWar)).zeit} Uhr, {uhrTeile(new Date(beginnWar)).datum}.{" "}
+          <button type="button" className="link" onClick={beginnZurueck}>Alten Beginn zurückholen</button>
+        </p>
+      )}
+      {beginnLeiste != null && beginnWar != null && beginn != null && beginnWar !== beginn && (
+        <DaumenQuittung
+          key={`beginn:${beginnLeiste}`}
+          sperreKurz
+          kurz={`Beginn war ${uhrTeile(new Date(beginnWar)).zeit} Uhr`}
+          onRueckgaengig={() => { beginnZurueck(); setBeginnLeiste(null); }}
+          rueckgaengigName="Alten Einsatzbeginn zurückholen"
+          onSchliessen={() => setBeginnLeiste(null)}
+        >
+          <strong>Einsatzbeginn geändert:</strong> Beginn war {uhrTeile(new Date(beginnWar)).zeit} Uhr, {uhrTeile(new Date(beginnWar)).datum}.
+        </DaumenQuittung>
+      )}
+      {hinweis && <p className="hinweis warnung-text lm-beginn-hinweis" role="status">{hinweis}</p>}
       {fehler && <p className="fehler" role="status">Der Beginn konnte nicht gespeichert werden (Speicher voll oder gesperrt).</p>}
-    </div>
+      {funkrufFehler && (
+        <p className="fehler" role="status">Der Funkrufname konnte nicht gespeichert werden (Speicher voll oder gesperrt) — der Lagemonitor zeigt ihn nicht.</p>
+      )}
+    </details>
   );
 }

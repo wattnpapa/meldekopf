@@ -18,11 +18,11 @@
  */
 
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PersonalErfassung, type Erfassungsbogen } from "@bos/eeb-format/model";
 import { Dialogschicht } from "@bos/oberflaeche/dialoge";
-import { EinsatzDetail, PRELLSCHUTZ_MS, letzteMeldungText } from "./einsaetze-ui";
+import { EinsatzDetail, PRELLSCHUTZ_MS, letzteMeldungText, tabellenSpaltenFuer } from "./einsaetze-ui";
 import { ORTSSPERRE_MS } from "@bos/oberflaeche/tipp-schutz";
 import {
   EinsatzArt,
@@ -73,7 +73,6 @@ function ansicht(einsatzId: string, extra: Partial<Props> = {}) {
         onExport={() => {}}
         onCsvExport={csvExport}
         onCsvDetailExport={() => {}}
-        onOldenburgExport={() => {}}
         onSammelPdf={sammelPdf}
         onGeloescht={() => {}}
         {...extra}
@@ -144,7 +143,8 @@ describe("Meldung aus dem Einsatz entfernen", () => {
     const dialog = await entfernenDruecken(nutzer);
     await nutzer.click(within(dialog).getByRole("button", { name: "Meldung entfernen" }));
 
-    expect(einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege).toHaveLength(0);
+    // Das Entfernen legt zuerst den Papierkorb-Eintrag an (R19-O1) und ist deshalb asynchron.
+    await waitFor(() => expect(einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege).toHaveLength(0));
     expect(geaendert).toHaveBeenCalled();
   });
 
@@ -158,10 +158,12 @@ describe("Meldung aus dem Einsatz entfernen", () => {
     await nutzer.click(within(karte as HTMLElement).getByRole("button", { name: "Mehr…" }));
     await nutzer.click(within(karte as HTMLElement).getByRole("button", { name: "Entfernen" }));
     const dialog = document.querySelector<HTMLDialogElement>("dialog[aria-label='Meldung entfernen?']")!;
-    expect(dialog.textContent).toContain("Nummern ändern sich");
-    expect(dialog.textContent).toContain("Nr. 2–3 rücken auf und heißen danach Nr. 1–2");
+    // R18-A1: Die Nummern rücken nicht auf; die Rückfrage nennt die frei bleibende Nummer.
+    expect(dialog.textContent).toContain("Nummern bleiben");
+    expect(dialog.textContent).toContain("Nr. 1 bleibt frei, die übrigen Nummern (2–3) bleiben");
     await nutzer.click(within(dialog).getByRole("button", { name: "Meldung entfernen" }));
-    await waitFor(() => expect(document.body.textContent).toContain("rücken auf und heißen danach Nr. 1–2."));
+    // Die Quittung nennt kurz die frei bleibende Nummer (die Rückfrage hatte den ganzen Satz).
+    await waitFor(() => expect(document.querySelector(".quittung-daumen")!.textContent).toContain("Nr. 1 bleibt frei."));
   });
 
   it("behält die Meldung, wenn die Rückfrage abgebrochen wird", async () => {
@@ -249,6 +251,7 @@ describe("Einheit mit Folgemeldung entfernen (R2-D1)", () => {
     const quittung = screen.getByRole("status");
     // Handlung vorn, Name danach — die Leiste kürzt am Ende (R3-G2).
     expect(quittung.textContent).toMatch(/^Entfernt \(2 Fassungen\): Meldung Nr\. \d+ „.*Ulm"/);
+    expect(quittung.className).toContain("quittung-mehrzeilig"); // R11-D2: Umnummerierung nicht abgeschnitten
 
     await nutzer.click(within(quittung).getByRole("button", { name: "Rückgängig" }));
     neuLaden();
@@ -279,11 +282,15 @@ describe("Einheit mit Folgemeldung entfernen (R2-D1)", () => {
     await nutzer.click(within(karte).getByRole("button", { name: "Mehr…" }));
     await nutzer.click(within(karte).getByRole("button", { name: "Entfernen" }));
     let dialog = document.querySelector<HTMLDialogElement>("dialog[aria-label='Meldung entfernen?']")!;
-    expect(dialog.textContent).toMatch(/„Rückgängig" gibt es nur, solange die App geöffnet bleibt/);
-    expect(dialog.textContent).toMatch(/danach ist die Meldung endgültig weg/);
-    // R9-E2: mehrere nacheinander entfernte Meldungen lassen sich der Reihe nach zurückholen — die Rückfrage sagt es.
-    expect(dialog.textContent).toMatch(/mehrmals „Rückgängig" zurück, die zuletzt entfernte zuerst/);
-    expect(dialog.textContent).toMatch(/noch keinen Export und keine Weitergabe/);
+    // Seit R17-E2 liegt die Meldung nach dem Neuladen im Papierkorb der Sammlung statt endgültig weg zu sein.
+    expect(dialog.textContent).toMatch(/„Rückgängig" gilt bis zum Neuladen/);
+    expect(dialog.textContent).toMatch(/danach liegt die Meldung 7 Tage unter „Zuletzt entfernte Meldungen“/);
+    // R10-D1: der Name steht im ersten Satz, R10-S3: die Rückfrage ist kurz (höchstens rund 45 Wörter).
+    // R14-D1: dazu Nummer und Stärke (bei einem abgeteilten Trupp auch der Teil), damit gleich benannte Karten verschieden lauten.
+    expect(dialog.querySelector("p")!.textContent).toMatch(/^(Nr\. \d+ )?„.*Ulm.*" \(\d+ Personen?, Stand .*\) entfernen/);
+    const woerter = dialog.querySelector("p")!.textContent!.split(/\s+/).filter(Boolean).length;
+    expect(woerter).toBeLessThanOrEqual(50);
+    expect(dialog.textContent).toMatch(/Noch kein Export und keine Weitergabe/);
     await nutzer.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
 
     // Mit Export nennt sie die Kopie.
@@ -291,8 +298,8 @@ describe("Einheit mit Folgemeldung entfernen (R2-D1)", () => {
     lageblattVermerken(s);
     await nutzer.click(within(karte).getByRole("button", { name: "Entfernen" }));
     dialog = document.querySelector<HTMLDialogElement>("dialog[aria-label='Meldung entfernen?']")!;
-    expect(dialog.textContent).toMatch(/Eine Kopie steht im Export oder der Weitergabe vom \d\d\.\d\d\.\d{4}/);
-    expect(dialog.textContent).not.toMatch(/noch keinen Export/);
+    expect(dialog.textContent).toMatch(/Kopie: Export oder Weitergabe vom \d\d\.\d\d\.\d{4}/);
+    expect(dialog.textContent).not.toMatch(/Noch kein Export/);
   });
 
   it("hält den Rückweg über das Verlassen der Ansicht hinweg (R3-D4)", async () => {
@@ -395,7 +402,7 @@ describe("Einheit mit Folgemeldung entfernen (R2-D1)", () => {
     // Oberste Zeile ist die aktuelle Fassung (die Folgemeldung).
     await nutzer.click(within(karte).getAllByRole("button", { name: "Fassung verwerfen…" })[0]!);
     const dialog = document.querySelector<HTMLDialogElement>("dialog[aria-label='Fassung verwerfen?']")!;
-    expect(dialog.textContent).toMatch(/Gültig ist dann wieder Stand .* mit Stärke 0 \/ 2 \/ 6 \/ 8/);
+    expect(dialog.textContent).toMatch(/Gültig ist dann wieder Stand .* mit Stärke 0 \/ 2 \/ 6 \/\/ 8/);
     await nutzer.click(within(dialog).getByRole("button", { name: "Fassung verwerfen" }));
     neuLaden();
 
@@ -421,58 +428,32 @@ describe("Einzelbogen einer Meldung als PDF", () => {
     vi.unstubAllGlobals();
   });
 
-  /** Fenster, wie window.open es im Browser liefert — nur so viel, wie der Weg anfasst. */
-  function tabAttrappe() {
-    return {
-      document: { body: { textContent: "" } },
-      close: vi.fn(),
-    } as unknown as Window & { close: ReturnType<typeof vi.fn> };
-  }
-
-  it("öffnet einen Tab im Klick und gibt ihm die Meldung mit", async () => {
+  it("öffnet keinen Tab (R17-A2), sondern lädt herunter und gibt die Meldung ohne Fenster mit", async () => {
     const nutzer = userEvent.setup();
-    const tab = tabAttrappe();
-    const oeffnen = vi.fn(() => tab);
+    const oeffnen = vi.fn(() => null);
     vi.stubGlobal("open", oeffnen);
     buehne();
 
     await nutzer.click(screen.getByRole("button", { name: "Bogen als PDF" }));
 
-    // Leer aufgemacht und erst danach befüllt: nur so übersteht der Tab das
-    // Nachladen des PDF-Satzes, ohne vom Popup-Blocker kassiert zu werden.
-    expect(oeffnen).toHaveBeenCalledWith("", "_blank");
+    // Ein Tab mit dem PDF trug im Download-Ordner eine Zufalls-ID als Namen; der Download hat den Namen aus Einheit und Stand.
+    expect(oeffnen).not.toHaveBeenCalled();
     expect(meldungPdfAnzeigen).toHaveBeenCalledTimes(1);
     const [meldung, fenster] = meldungPdfAnzeigen.mock.calls[0]!;
     expect(meldung.bogen.einheit.hierarchie[0]!.name).toBe("Wardenburg");
-    expect(fenster).toBe(tab);
+    expect(fenster).toBeNull();
   });
 
-  it("schließt den leeren Tab und meldet den Fehler, wenn die PDF scheitert", async () => {
+  it("meldet den Fehler, wenn die PDF scheitert", async () => {
     const nutzer = userEvent.setup();
-    const tab = tabAttrappe();
-    vi.stubGlobal("open", vi.fn(() => tab));
     meldungPdfAnzeigen.mockRejectedValue(new Error("Schriften fehlen"));
     buehne();
 
     await nutzer.click(screen.getByRole("button", { name: "Bogen als PDF" }));
 
-    expect(tab.close).toHaveBeenCalled();
     const dialog = document.querySelector<HTMLDialogElement>("dialog[aria-label='Bogen als PDF']")!;
     expect(dialog).not.toBeNull();
     expect(dialog.textContent).toContain("Schriften fehlen");
-  });
-
-  it("kommt ohne Tab aus, wenn der Popup-Blocker keinen zulässt", async () => {
-    const nutzer = userEvent.setup();
-    vi.stubGlobal("open", vi.fn(() => null));
-    buehne();
-
-    await nutzer.click(screen.getByRole("button", { name: "Bogen als PDF" }));
-
-    // Ohne Fenster bleibt der gewohnte Weg (Download bzw. Share-Sheet) — das
-    // entscheidet meldungPdfAnzeigen, es muss den Fall aber zu sehen bekommen.
-    expect(meldungPdfAnzeigen).toHaveBeenCalledTimes(1);
-    expect(meldungPdfAnzeigen.mock.calls[0]![1]).toBeNull();
   });
 });
 
@@ -554,15 +535,16 @@ describe("Einheiten als Tabelle", () => {
     const koepfe = within(tabelle).getAllByRole("columnheader").map((k) => k.textContent ?? "");
     // F/U/M und Kfz stehen bei der Gesamtstärke — am Laptop lagen sie sonst
     // außerhalb des Rahmens (R3-K7).
-    expect(koepfe.slice(0, 10).map((k) => k.replace(/^(\S+?)[A-ZÄÖÜ].*$/, "$1"))).toEqual([
-      "Einheit", "Zug", "F", "U", "M", "Ges.", "Kfz", "Auftrag", "Eingetr.", "Bedarf",
+    // Ohne vergebenen Zug entfällt die Spalte „Zug" (R10-K3: 45 px leer vor den Zahlen).
+    expect(koepfe.slice(0, 9).map((k) => k.replace(/^(\S+?)[A-ZÄÖÜ].*$/, "$1"))).toEqual([
+      "Einheit", "F", "U", "M", "Ges.", "Kfz", "Auftrag", "Eingetr.", "Bedarf",
     ]);
     const zeile = within(tabelle).getAllByRole("row")[1]!;
     const zellen = [...zeile.children].map((z) => z.textContent ?? "");
     expect(zellen[0]).toContain("Wardenburg");
     expect(zellen[koepfe.findIndex((k) => k.startsWith("Auftrag"))]).toBe("Deich Nord");
     // Die Aufschlüsselung folgt dahinter, der Absender-Stand steht zuletzt.
-    expect(koepfe.findIndex((k) => k.startsWith("Unt. M"))).toBeGreaterThan(9);
+    expect(koepfe.findIndex((k) => k.startsWith("Unterbr. M"))).toBeGreaterThan(8);
     expect(koepfe[koepfe.length - 1]).toMatch(/^Stand/);
   });
 });
@@ -670,11 +652,9 @@ describe("Abrücken mit Zeit, Quittung und Rückweg", () => {
     expect(quittung.textContent).toMatch(/^Abgerückt \d\d:\d\d: Nr\. 1 „.*Crailsheim.*"/);
     expect(quittung.className).toContain("quittung-daumen");
 
-    // Prellschutz: Die Leiste kann unter dem Finger des Doppeltipps liegen —
-    // „Rückgängig" nimmt erst nach einem Augenblick an.
+    // R18-G3: „Rückgängig" ist nie gesperrt und nimmt vom ersten Tipp an.
     const rueckgaengig = within(quittung).getByRole("button", { name: "Rückgängig" }) as HTMLButtonElement;
-    expect(rueckgaengig.disabled).toBe(true);
-    await waitFor(() => expect(rueckgaengig.disabled).toBe(false), { timeout: PRELLSCHUTZ_MS + 500 });
+    expect(rueckgaengig.getAttribute("aria-disabled")).toBeNull();
     await nutzer.click(rueckgaengig);
     const zurueck = gespeichert(einsatzId, "Crailsheim");
     expect(zurueck.status).toBe(MeldeStatus.ANWESEND);
@@ -699,7 +679,7 @@ describe("Abrücken mit Zeit, Quittung und Rückweg", () => {
     expect(quittungen[0]!.textContent).toContain("Crailsheim");
 
     const schliessen = within(quittungen[0]!).getByRole("button", { name: "Quittung schließen" }) as HTMLButtonElement;
-    await waitFor(() => expect(schliessen.disabled).toBe(false), { timeout: PRELLSCHUTZ_MS + 500 });
+    await waitFor(() => expect(schliessen.getAttribute("aria-disabled")).toBeNull(), { timeout: PRELLSCHUTZ_MS + 500 });
     await nutzer.click(schliessen);
     expect(screen.queryByRole("status")).toBeNull();
   });
@@ -732,6 +712,27 @@ describe("Abrücken mit Zeit, Quittung und Rückweg", () => {
     // Die Karte nennt die Abrückzeit ohne weiteren Tipp.
     // Mit Datum, wie Tabelle und Lageblatt (R2-A6).
     expect(document.querySelector(".zeiten-zeile")!.textContent).toMatch(/abgerückt \d\d\.\d\d\.\d{4}, \d\d:\d\d/);
+  });
+
+  it("lässt beim Abrücken alle Knöpfe an ihrer Stelle; „Historie“ kommt hinter „Mehr…“ (R12-G3)", async () => {
+    const nutzer = userEvent.setup();
+    const { neuLaden } = buehne(["Crailsheim"]);
+    const vorher = kartenKnoepfe();
+    const platz = vorher.indexOf("Abrücken");
+    await nutzer.click(screen.getByRole("button", { name: "Abrücken" }));
+    neuLaden();
+    const nachher = kartenKnoepfe();
+    // Jeder Knopf außer dem Statusknopf steht an derselben Stelle, auch „Mehr…“.
+    vorher.forEach((name, i) => {
+      if (i !== platz) expect(nachher[i]).toBe(name);
+    });
+    const mehr = nachher.indexOf("Mehr…");
+    expect(mehr).toBe(vorher.indexOf("Mehr…"));
+    // Die neue Historie steht dahinter, nicht dazwischen.
+    expect(nachher.length).toBeGreaterThanOrEqual(vorher.length);
+    nachher.forEach((name, i) => {
+      if (name.startsWith("Historie")) expect(i).toBeGreaterThan(mehr);
+    });
   });
 
   it("rollt um den Versatz nach, wenn die Karte beim Abrücken wächst — der Rückweg bleibt unter dem Finger", async () => {
@@ -768,13 +769,12 @@ describe("Abrücken mit Zeit, Quittung und Rückweg", () => {
     await nutzer.click(knopfAmPlatz());
     expect(gespeichert(einsatzId, "Crailsheim").status).toBe(MeldeStatus.ABGERUECKT);
     expect(screen.queryByLabelText("Zug")).toBeNull();
-    // Auch ein anderer Knopf der Karte nimmt im Prellfenster nichts an.
-    await nutzer.click(screen.getByRole("button", { name: "Zug zuordnen" }));
-    expect(screen.queryByLabelText("Zug")).toBeNull();
+    // Ein anderer Knopf der Karte nimmt dagegen sofort an (R17-H3): geschützt ist der Wechselknopf selbst, nicht die Karte.
 
     // Nach der Sperre wirkt der Rückweg wie gewohnt.
     const echt = Date.now.bind(Date);
-    const uhr = vi.spyOn(Date, "now").mockImplementation(() => echt() + ORTSSPERRE_MS + 50);
+    // (Eine Minute später: kurz nach dem Abrücken fragt „Wieder anwesend“ erst nach, R19-D9.)
+    const uhr = vi.spyOn(Date, "now").mockImplementation(() => echt() + ORTSSPERRE_MS + 61_000);
     try {
       await waitFor(() => expect((knopfAmPlatz() as HTMLButtonElement).disabled).toBe(false), { timeout: ORTSSPERRE_MS + 500 });
       await nutzer.click(knopfAmPlatz());
@@ -828,10 +828,14 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     const feld = screen.getByLabelText("Eingetroffen am") as HTMLInputElement;
     // Nachtragen vom Papier: die Einheit kam gestern Abend, erfasst wird heute.
     await nutzer.clear(feld);
-    await nutzer.type(feld, "2026-09-26T20:30");
+    // „Gestern Abend" relativ zu jetzt (R12-E4: ältere Zeiten fragen nach).
+    const vorher = new Date(Date.now() - 20 * 3_600_000);
+    const zwei = (n: number) => String(n).padStart(2, "0");
+    const wert = `${vorher.getFullYear()}-${zwei(vorher.getMonth() + 1)}-${zwei(vorher.getDate())}T${zwei(vorher.getHours())}:${zwei(vorher.getMinutes())}`;
+    await nutzer.type(feld, wert);
     await nutzer.click(screen.getByRole("button", { name: "Speichern" }));
 
-    expect(gespeichert(einsatzId, "Wardenburg").eingetroffenAm).toBe(new Date("2026-09-26T20:30").getTime());
+    expect(gespeichert(einsatzId, "Wardenburg").eingetroffenAm).toBe(new Date(wert).getTime());
     expect(geaendert).toHaveBeenCalled();
   });
 
@@ -878,6 +882,33 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     expect(screen.getByRole("button", { name: "Auftrag ändern" })).not.toBeNull();
   });
 
+  // R11-O1: Eingetippt, nicht gespeichert, Feld noch im Fokus — Seite ausgeblendet oder verlassen: Der Text ist nicht weg.
+  it("sichert einen getippten Auftrag beim Ausblenden der Seite und ein Zug-Etikett beim Verlassen (R11-O1)", async () => {
+    const nutzer = userEvent.setup();
+    const { einsatzId } = buehne(["Wardenburg"]);
+
+    await nutzer.click(screen.getByRole("button", { name: "Auftrag/Notiz" }));
+    await nutzer.type(screen.getByLabelText("Auftrag/Notiz"), "Deich Nord ab 14:00 sichern");
+    expect(gespeichert(einsatzId, "Wardenburg").notiz).toBeUndefined();
+    const sicht = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+      if (sicht) Object.defineProperty(Document.prototype, "visibilityState", sicht);
+    }
+    await waitFor(() => expect(gespeichert(einsatzId, "Wardenburg").notiz).toBe("Deich Nord ab 14:00 sichern"));
+    // Das Feld bleibt offen und trägt den Text weiter.
+    expect((screen.getByLabelText("Auftrag/Notiz") as HTMLInputElement).value).toBe("Deich Nord ab 14:00 sichern");
+
+    await nutzer.click(screen.getByRole("button", { name: "Zug zuordnen" }));
+    await nutzer.type(screen.getByLabelText("Zug"), "2. Zug");
+    expect(gespeichert(einsatzId, "Wardenburg").zugEtikett).toBeUndefined();
+    await act(async () => { window.dispatchEvent(new Event("pagehide")); });
+    await waitFor(() => expect(gespeichert(einsatzId, "Wardenburg").zugEtikett).toBe("2. Zug"));
+  });
+
   it("speichert das Zug-Etikett beim Verlassen des Felds, lässt ein leeres Feld aber unverändert", async () => {
     const nutzer = userEvent.setup();
     const { einsatzId, neuLaden } = buehne(["Wardenburg"]);
@@ -915,7 +946,7 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     const namen = [...document.querySelectorAll(".muster-name")].map((n) => n.textContent ?? "");
     expect(namen).toHaveLength(1);
     expect(namen[0]).toContain("Crailsheim");
-    expect(screen.getByRole("heading", { name: /Einheiten \(1 von 2 gemeldet · 2 zählend\)/ })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: /Einheiten \(1 von 2 gemeldet · 2 anwesend\)/ })).not.toBeNull();
   });
 
   it("filtert nicht auf Kraftstoff allein und springt aus „Ruhezeit: n×“ in den Filter (R2-K4)", async () => {
@@ -934,7 +965,7 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
 
     await nutzer.click(screen.getByLabelText(/nur dringender Bedarf/));
     expect(document.querySelectorAll(".muster-name")).toHaveLength(3);
-    await nutzer.click(screen.getByRole("button", { name: "Ruhezeit: 1×" }));
+    await nutzer.click(screen.getByRole("button", { name: "Ruhezeit: 1 Einheit" }));
     namen = [...document.querySelectorAll(".muster-name")].map((n) => n.textContent ?? "");
     expect(namen).toHaveLength(1);
     expect(screen.getByText(/1 Einheit mit Ruhezeit/)).not.toBeNull();
@@ -945,7 +976,7 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     // Ein leerer Bogen: Stärke 0, kein Auftrag — die Prüfliste hat etwas zu sagen.
     buehne(["Wardenburg"]);
     // Der Inhalt statt „n Lücken" (R3-K7).
-    const marke = screen.getByRole("button", { name: /^Hinweise: .* \+ \d+ weitere$/ });
+    const marke = screen.getByRole("button", { name: /^Hinweise: \d+ Punkte, u\. a\. .*$/ });
     expect(marke.getAttribute("aria-expanded")).toBe("false");
     await nutzer.click(marke);
     expect(document.querySelector(".luecken-liste")!.textContent).toContain("Stärke ist 0");
@@ -998,7 +1029,8 @@ describe("Ausgabewege der Einsatzansicht", () => {
       expect(knopf.getAttribute("aria-busy")).toBe("true");
       expect((screen.getByRole("button", { name: "Lageblatt (A4 quer)" }) as HTMLButtonElement).disabled).toBe(true);
       expect((screen.getByRole("button", { name: "Blanko-Vordruck (Papier-Reserve)" }) as HTMLButtonElement).disabled).toBe(true);
-      expect(document.querySelector(".arbeitet-zeile")!.textContent).toMatch(/bis zu einer halben Minute.*nicht noch einmal tippen/);
+      // R15-O1: Die Dauer richtet sich nach der Zahl der Bögen (hier einer), nie nach einer festen Obergrenze.
+      expect(document.querySelector(".arbeitet-zeile")!.textContent).toMatch(/bei 1 Bogen am Telefon etwa 2 Sekunden oder länger\. Nicht noch einmal tippen/);
     } finally {
       fertig();
       await lauf;
@@ -1008,9 +1040,11 @@ describe("Ausgabewege der Einsatzansicht", () => {
 
   it("zeigt die Bestätigung der letzten Erzeugung direkt unter den Knöpfen (R5-L4)", () => {
     buehne(["Wardenburg"], { onWeitergeben: vi.fn(), onLageblatt: vi.fn(), ausgabeQuittung: "✓ Lageblatt erzeugt (A4 quer)." });
+    // R19-O10: Eine schon bekannte Bestätigung (nach dem Neuladen der Ansicht) steht als Absatz unter den Knöpfen, ohne Leiste.
     const zeile = document.querySelector(".ausgabe-quittung")!;
     expect(zeile.textContent).toBe("✓ Lageblatt erzeugt (A4 quer).");
     expect(zeile.previousElementSibling?.classList.contains("einsatz-weitergabe")).toBe(true);
+    expect(document.querySelector(".quittung-daumen")).toBeNull();
   });
 
   it("sagt bei den Papier-Knöpfen, dass die PDFs hell bleiben (R5-L5)", () => {
@@ -1060,13 +1094,14 @@ describe("Nur neue Bögen seit dem letzten Export", () => {
     const nutzer = userEvent.setup();
     const { sammelPdf, csvExport } = buehne(["Wardenburg", "Hatten", "Ganderkesee"], { standAus: ["Wardenburg"] });
 
-    // Je Format ein eigener Bezugspunkt (R4-W2): hier haben alle vier denselben.
-    expect(screen.getAllByText(/seitdem 2 neue Bögen/)).toHaveLength(4);
+    // Je Format ein eigener Bezugspunkt (R4-W2): hier haben alle drei denselben.
+    expect(screen.getAllByText(/seitdem 2 neue Bögen/)).toHaveLength(3);
     await nutzer.click(screen.getByRole("checkbox", { name: /Nur neue Bögen seit dem letzten Export/ }));
 
     await nutzer.click(screen.getByRole("button", { name: /^Sammel-PDF \((nur neue Bögen|erste Lieferung: alle Bögen)\)$/ }));
     expect(sammelPdf).toHaveBeenCalledWith("neue");
-    await nutzer.click(screen.getByRole("button", { name: "Übersicht als CSV" }));
+    // R16-W2: Im Nachtrag-Modus nennt der Knopf Nachtrag und Zahl.
+    await nutzer.click(screen.getByRole("button", { name: "Übersicht als CSV — Nachtrag (2 Einheiten)" }));
     expect(csvExport).toHaveBeenCalledWith("neue");
 
     // Zurück auf alle: die Knöpfe heißen wieder wie vorher und liefern alles.
@@ -1085,7 +1120,7 @@ describe("Nur neue Bögen seit dem letzten Export", () => {
 
     await nutzer.click(screen.getByRole("checkbox", { name: /Nur neue Bögen seit dem letzten Export/ }));
 
-    for (const name of [/^Sammel-PDF \(nur neue Bögen\)$/, "Übersicht als CSV", "Alle Daten als CSV", /^Excel-Liste/]) {
+    for (const name of [/^Sammel-PDF \(nur neue Bögen\)$/, "Übersicht als CSV — Nachtrag: nichts Neues", "Alle Daten als CSV — Nachtrag: nichts Neues"]) {
       expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     await nutzer.click(screen.getByRole("button", { name: /^Sammel-PDF \((nur neue Bögen|erste Lieferung: alle Bögen)\)$/ }));
@@ -1190,7 +1225,7 @@ describe("Summe und Aufnahme im ersten Bild", () => {
       ansicht(angelegt.id, { eingang: { schluessel: zeitz.einheitSchluessel, nonce: 1 } });
 
       const quittung = screen.getByRole("status");
-      expect(quittung.textContent).toMatch(/Zuletzt eingelesen: „.*Zeitz.*" · jetzt 2 Einheiten, Gesamt \d+\./);
+      expect(quittung.textContent).toMatch(/Zuletzt eingelesen: (Nr\. \d+ )?„.*Zeitz.*" · jetzt 2 Einheiten, Gesamt \d+\./);
       // Die Karte blitzt, aber die Seite bleibt oben.
       expect(document.querySelectorAll(".einheit-zeile.eingegangen")).toHaveLength(1);
       expect(gerollt).toEqual([]);
@@ -1358,6 +1393,28 @@ describe("Kompakte Einheiten auf dem Telefon (R2-K7)", () => {
     expect(wahl.open).toBe(true);
   });
 
+  // Audit Runde 10, R10-K2: Der Tipp auf „n ohne Auftrag" zeigte das Werkzeug statt der Einheiten.
+  it("Telefon: „n ohne Auftrag“ filtert, ohne das Filterfeld aufzuklappen, und rollt zur Liste (R10-K2)", async () => {
+    const nutzer = userEvent.setup();
+    const rollen = vi.fn();
+    const alt = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = rollen;
+    try {
+      const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
+      for (const n of ["Aalen", "Biberach", "Celle"]) meldungHinzufuegen(angelegt.id, bogenMitName(n));
+      ansicht(angelegt.id);
+      const wahl = document.querySelector<HTMLDetailsElement>("details.einheiten-filter-wahl")!;
+      await nutzer.click(screen.getByRole("button", { name: "3 ohne Auftrag" }));
+      expect(wahl.open).toBe(false);
+      expect(wahl.querySelector("summary")!.textContent).toBe("Suchen, sortieren, filtern · Filter aktiv: ohne Auftrag");
+      expect(screen.getByRole("button", { name: "Filter aufheben" })).toBeDefined();
+      await vi.waitFor(() => expect(rollen).toHaveBeenCalled());
+      expect(rollen.mock.contexts.some((el) => (el as Element).classList.contains("luecken-zaehler"))).toBe(true);
+    } finally {
+      Element.prototype.scrollIntoView = alt;
+    }
+  });
+
   it("Telefon: Zwischensummen bei zwei Zügen zugeklappt (R4-K5)", () => {
     const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
     const a = meldungHinzufuegen(angelegt.id, bogenMitName("Aalen"))!.eintrag;
@@ -1392,7 +1449,7 @@ describe("Kompakte Einheiten auf dem Telefon (R2-K7)", () => {
     ansicht(angelegt.id);
     const karte = document.querySelector<HTMLElement>(".einheit-zeile")!;
     expect(karte.className).toContain("kompakt");
-    expect(karte.textContent).toMatch(/Stärke \d+ \/ \d+ \/ \d+ \/ \d+/);
+    expect(karte.textContent).toMatch(/Stärke \d+ \/ \d+ \/ \d+ \/\/ \d+/);
     expect(karte.textContent).toContain("Ruhezeit");
     // Keine Knöpfe außer dem Aufklapper, keine Zeitenzeile.
     expect(within(karte).queryByRole("button", { name: "Abrücken" })).toBeNull();
@@ -1462,7 +1519,7 @@ describe("Kompakte Einheiten auf dem Telefon (R2-K7)", () => {
     const [crailsheim, ulm] = [...document.querySelectorAll<HTMLElement>(".einheit-zeile")];
     expect(crailsheim!.className).toContain("kompakt");
     const zeile = crailsheim!.querySelector(".kompakt-zeile")!;
-    expect(zeile.querySelector(".folge-merkmal")!.textContent).toMatch(/^Folgem\. \d\d:\d\d · 12 → 9$/);
+    expect(zeile.querySelector(".folge-merkmal")!.textContent).toMatch(/^Folgemeldung \d\d:\d\d · 12 → 9$/);
     expect(zeile.querySelector(".folge-merkmal")!.className).toContain("staerke-verlust");
     // R7-K6: der Inhalt statt eines Hakens.
     expect(zeile.querySelector(".auftrag-merkmal")!.textContent).toBe("Auftrag: Pumpenstandort Kocherbrücke");
@@ -1497,7 +1554,7 @@ describe("Quittung nennt die zuletzt aufgenommenen Einheiten (R2-S4)", () => {
     neuLaden();
     const quittung = document.querySelector<HTMLElement>(".stapel-eingang")!;
     expect(quittung.getAttribute("role")).toBe("status");
-    expect(quittung.textContent).toMatch(/Neu seit der letzten Kenntnisnahme \(3\): davon 2 Übung, nicht gezählt\./);
+    expect(quittung.textContent).toMatch(/Neu seit dem letzten Mal \(3\): davon 2 Übung, nicht gezählt\./);
     expect([...quittung.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
       "THW Weinsberg — neu gemeldet",
       "THW Albstadt — neu gemeldet",
@@ -1515,6 +1572,30 @@ describe("Quittung nennt die zuletzt aufgenommenen Einheiten (R2-S4)", () => {
 
     await nutzer.click(within(quittung).getByRole("button", { name: "Zur Kenntnis genommen" }));
     expect(document.querySelector(".stapel-eingang")).toBeNull();
+  });
+
+  // R11-D1: „Zur Kenntnis genommen" hat eine Quittung mit „Rückgängig", die die Liste zurückbringt; die Ziele liegen
+  // in einer eigenen Reihe (44-px-Regel im Stylesheet). R11-O4: bei vollem Speicher meldet es das.
+  it("quittiert „Zur Kenntnis genommen“ mit „Rückgängig“ und meldet einen vollen Speicher (R11-D1, R11-O4)", async () => {
+    const nutzer = userEvent.setup();
+    const { einsatzId, neuLaden } = buehne(["Zeitz"]);
+    for (const n of ["Weinsberg", "Albstadt"]) meldungHinzufuegen(einsatzId, bogenMitName(n));
+    neuLaden();
+    const quittung = document.querySelector<HTMLElement>(".stapel-eingang")!;
+    expect(quittung.querySelector(".kenntnis-aktionen")).not.toBeNull();
+    await nutzer.click(within(quittung).getByRole("button", { name: "Zur Kenntnis genommen" }));
+    expect(document.querySelector(".stapel-eingang")).toBeNull();
+    const rueck = await screen.findByRole("button", { name: "Zur Kenntnis genommen rückgängig machen" });
+    await waitFor(() => expect(rueck.getAttribute("aria-disabled")).toBeNull(), { timeout: PRELLSCHUTZ_MS + 500 });
+    await nutzer.click(rueck);
+    expect(document.querySelector(".stapel-eingang")).not.toBeNull();
+
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("voll", "QuotaExceededError");
+    });
+    await nutzer.click(within(document.querySelector<HTMLElement>(".stapel-eingang")!).getByRole("button", { name: "Zur Kenntnis genommen" }));
+    expect(document.querySelector("dialog.abfrage")?.textContent).toContain("Kenntnisnahme nicht gespeichert");
+    vi.restoreAllMocks();
   });
 
   /**
@@ -1567,9 +1648,10 @@ describe("Quittung nennt die zuletzt aufgenommenen Einheiten (R2-S4)", () => {
     const schwabach = karten.find((k) => k.textContent!.includes("Schwabach"))!;
     expect(schwabach.textContent).toContain("Bogen nennt: „Waldbrand Gräfenberg – Wasserversorgung“");
     expect(karten.find((k) => k.textContent!.includes("Albstadt"))!.textContent).not.toContain("Bogen nennt");
-    expect(document.querySelector(".stapel-eingang")!.textContent).toContain("Bogen nennt: „Waldbrand Gräfenberg");
+    expect(document.querySelector(".stapel-eingang")!.textContent).toContain("Ort im Bogen: „Waldbrand Gräfenberg");
     // Gezählt wird er weiter.
-    expect(screen.getByText("Einheiten (2 gemeldet · 2 zählend)")).toBeTruthy();
+    // R21: Die Zahlen stehen in eigenem Span (am Telefon klein unter dem Wort „Einheiten"); der Name der Überschrift bleibt derselbe.
+    expect(screen.getByRole("heading", { name: "Einheiten (2 gemeldet · 2 anwesend)" })).toBeTruthy();
   });
 
   it("zählt Aufteilen nicht als Eingang", async () => {
@@ -1626,7 +1708,7 @@ describe("Folgemeldungen als neue Fassung erkennbar (R3-K1)", () => {
     // Neu aufgebaut wie nach einem Neuladen: die Quittung steht.
     ansicht(angelegt.id);
     const quittung = document.querySelector<HTMLElement>(".stapel-eingang")!;
-    expect(quittung.textContent).toMatch(/Neu seit der letzten Kenntnisnahme \(1\)/);
+    expect(quittung.textContent).toMatch(/Neu seit dem letzten Mal \(1\)/);
     expect(quittung.textContent).toMatch(/THW Crailsheim — Folgemeldung \d\d:\d\d: Stärke 12 → 9 \(−3\)/);
     expect(quittung.querySelector(".staerke-verlust")!.textContent).toBe("Stärke 12 → 9 (−3)");
 
@@ -1698,11 +1780,11 @@ describe("Zeitbezug der letzten Meldung (R3-K5)", () => {
     const e = meldungHinzufuegen(angelegt.id, bogenMitName("Crailsheim"))!.eintrag;
     const zeit = zeitLang(e.empfangenAm);
     ansicht(angelegt.id);
-    expect(document.querySelector(".letzte-meldung")!.textContent).toBe(` · letzte Meldung ${zeit}`);
+    expect(document.querySelector(".letzte-meldung")!.textContent).toBe(` · letzte Meldung ${zeit} (gerade eben)`);
     const s = () => einsaetzeLaden().find((x) => x.id === angelegt.id)!;
-    expect(letzteMeldungText(s())).toBe(`Letzte Meldung ${zeit}`);
+    expect(letzteMeldungText(s())).toBe(`Letzte Meldung ${zeit} (gerade eben)`);
     meldungHinzufuegen(angelegt.id, bogenMitName("Ulm"));
-    expect(letzteMeldungText(s())).toMatch(/^Letzte Meldung .* · 1 neu seit der letzten Kenntnisnahme$/);
+    expect(letzteMeldungText(s())).toMatch(/^Letzte Meldung .* · 1 neu seit dem letzten Mal$/);
   });
 });
 
@@ -1765,6 +1847,8 @@ describe("Aufteilen mit Quittung und Rückweg (R2-D6)", () => {
     expect(document.querySelectorAll(".einheit-zeile")).toHaveLength(2);
     const quittung = screen.getByRole("status");
     expect(quittung.className).toContain("quittung-daumen");
+    // R11-D2: Der Rest des Satzes („abgeteilt", Weg über „Zusammenführen…") wird nicht nach zwei Zeilen abgeschnitten.
+    expect(quittung.className).toContain("quittung-mehrzeilig");
     expect(quittung.textContent).toMatch(/„Fachberater" von „.*Wardenburg" abgeteilt\. Später zurück über „Mehr…" › „Zusammenführen…"\./);
 
     await nutzer.click(within(quittung).getByRole("button", { name: "Rückgängig" }));
@@ -1819,7 +1903,7 @@ describe("Stärke ändern mit Prüfung und Rückweg (R4-E4)", () => {
     await nutzer.click(within(dialog).getByRole("button", { name: "Stärke übernehmen" }));
 
     const frage = document.querySelector<HTMLDialogElement>("dialog[aria-label='Stimmt die Stärke?']")!;
-    expect(frage.textContent).toContain("0 / 0 / 3 / 3 → 0 / 0 / 66 / 66");
+    expect(frage.textContent).toContain("0 / 0 / 3 // 3 → 0 / 0 / 66 // 66");
     expect(frage.textContent).toMatch(/Stärke: 66 Mannschaft — stimmt das\?/);
     expect(einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege).toHaveLength(1);
     await nutzer.click(within(frage).getByRole("button", { name: "Ja, so übernehmen" }));
@@ -1843,7 +1927,7 @@ describe("Stärke ändern mit Prüfung und Rückweg (R4-E4)", () => {
     for (const feld of ["Führer", "Unterführer", "Mannschaft"]) await eintragen(nutzer, dialog, feld, "0");
     await nutzer.click(within(dialog).getByRole("button", { name: "Stärke übernehmen" }));
     const frage = document.querySelector<HTMLDialogElement>("dialog[aria-label='Stimmt die Stärke?']")!;
-    expect(frage.textContent).toContain("0 / 0 / 3 / 3 → 0 / 0 / 0 / 0");
+    expect(frage.textContent).toContain("0 / 0 / 3 // 3 → 0 / 0 / 0 // 0");
     expect(frage.textContent).toMatch(/Gesamt 3 → 0: Die Einheit zählt dann weder in der Stärke noch in der Verpflegung — stimmt das\? Ist die Einheit gar nicht mehr da, bleibt „Abrücken"/);
     expect(einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege).toHaveLength(1);
     await nutzer.click(within(frage).getByRole("button", { name: "Zahlen korrigieren" }));
@@ -1921,7 +2005,7 @@ describe("Stärke ändern mit Prüfung und Rückweg (R4-E4)", () => {
     try {
       await nutzer.click(within(dialog).getByRole("button", { name: "Stärke übernehmen" }));
       const hinweis = await screen.findByRole("dialog", { name: "Stärke ändern" });
-      expect(hinweis.textContent).toMatch(/Gewünscht war für „.*Wardenburg": Stärke 0 \/ 0 \/ 2 \/ 2 \(bisher 0 \/ 0 \/ 3 \/ 3\)/);
+      expect(hinweis.textContent).toMatch(/Gewünscht war für „.*Wardenburg": Stärke 0 \/ 0 \/ 2 \/\/ 2 \(bisher 0 \/ 0 \/ 3 \/\/ 3\)/);
       expect(hinweis.textContent).toMatch(/Meldeblock notieren/);
     } finally {
       vi.restoreAllMocks();
@@ -2008,7 +2092,7 @@ describe("Zusammenführen mit Quittung und Rückweg (R4-D5)", () => {
     const rest = [...document.querySelectorAll<HTMLElement>(".einheit-zeile")].find((k) => !k.textContent!.includes("Fachberater"))!;
     await nutzer.click(within(rest).getByRole("button", { name: "Zusammenführen…" }));
     const sub = [...rest.querySelectorAll(".muster-sub")].map((x) => x.textContent!).find((t) => t.includes("Stand"))!;
-    expect(sub).toMatch(/Stand \d\d\.\d\d\.\d{4}, \d\d:\d\d/);
+    expect(sub).toMatch(/Stand der Angaben \d\d\.\d\d\.\d{4}, \d\d:\d\d/);
     expect(sub).not.toMatch(/Stand \d{6}[a-z]{3}\d\d/);
   });
 });
@@ -2033,7 +2117,7 @@ describe("Übergabevermerk nach „Einsatz übergeben (PDF mit Daten)“ (R2-W5)
     weitergabeVermerken(einsaetzeLaden().find((s) => s.id === angelegt.id)!);
     const { neuLaden } = ansicht(angelegt.id);
     const vermerk = () => document.querySelector<HTMLElement>(".weitergabe-vermerk")!;
-    expect(vermerk().textContent).toMatch(/^Weitergegeben .+ — seitdem hier nichts Neues\.$/);
+    expect(vermerk().textContent).toMatch(/^Weitergabe-Datei erzeugt .+ — Empfang nicht bestätigt, seitdem hier nichts Neues\.$/);
 
     meldungHinzufuegen(angelegt.id, bogenMitName("Kulmbach"));
     neuLaden();
@@ -2320,5 +2404,20 @@ describe("Doppelte Karte erkennen (R7-N1)", () => {
     ansicht(angelegt.id);
     expect(screen.getAllByText(/ähnelt „THW /)).toHaveLength(2);
     expect(screen.getAllByText(/zählt getrennt/).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("Spalten der Einheitentabelle (R10-K3)", () => {
+  const namen = (zug: boolean, kompakt: boolean) => tabellenSpaltenFuer(zug, kompakt).map((x) => x.schluessel);
+
+  it("blendet die Spalte Zug aus, solange keine Einheit einen Zug trägt", () => {
+    expect(namen(false, false)).not.toContain("zugEtikett");
+    expect(namen(true, false).slice(0, 3)).toEqual(["einheit", "zugEtikett", "fuehrer"]);
+  });
+
+  it("stellt am Telefon die Gesamtstärke gleich hinter den Namen, Zug hinter die Aufteilung", () => {
+    expect(namen(false, true).slice(0, 5)).toEqual(["einheit", "gesamt", "fuehrer", "unterfuehrer", "mannschaft"]);
+    expect(namen(true, true).slice(0, 6)).toEqual(["einheit", "gesamt", "fuehrer", "unterfuehrer", "mannschaft", "zugEtikett"]);
+    expect(namen(true, true)).toHaveLength(namen(true, false).length);
   });
 });

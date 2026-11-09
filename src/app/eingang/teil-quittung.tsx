@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/teil-quittung.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/teil-quittung.tsx` (Commit 1d7ed5f).
  *
  * Teil-Quittung: die Kästchenzeile des mehrteiligen QR-Transports.
  *
@@ -51,6 +51,17 @@ export function fehltNochSatz(teile: SegmentTeil[]): string {
   if (fehlen.length === 0) return "";
   if (fehlen.length === 1) return `es fehlt noch Teil ${fehlen[0]}`;
   return `es fehlen noch die ${fehlendeTeileText(teile)}`;
+}
+
+/** „Teil 2 gelesen — es fehlt noch Teil 1.": die Nummer des gelesenen Teils zuerst, dann was fehlt (R15-E3). */
+export function teilGelesenSatz(teilNr: number, teile: SegmentTeil[]): string {
+  return `Teil ${teilNr} gelesen — ${fehltNochSatz(teile)}.`;
+}
+
+/** „1 von 2 Teilen verworfen" — was ein Wechsel des Bogens oder „Abbrechen" wegwirft; leer ohne Zwischenstand (R15-E3). */
+export function verworfeneTeileSatz(teile: SegmentTeil[]): string {
+  const haben = new Set(teile.map((t) => t.teilNr)).size;
+  return haben === 0 ? "" : `${haben} von ${teile[0]!.anzahl} Teilen verworfen`;
 }
 
 /**

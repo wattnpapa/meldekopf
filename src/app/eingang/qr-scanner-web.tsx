@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/qr-scanner-web.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/qr-scanner-web.tsx` (Commit 1d7ed5f).
  *
  * QR-Scanner für Browser und Desktop: Webcam per getUserMedia, Dekodierung
  * mit ZXing (WebAssembly, jsQR als Rückfallebene — siehe qr-decoder.ts) als
@@ -7,8 +7,9 @@
  * Capacitor-Scanner (siehe nativ.ts).
  */
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type SyntheticEvent } from "react";
 import { gemerkteKamera, kameraListe, merkeKamera, suchAusschnitt, type Kamera } from "./kamera";
+import { gemerkterScanWeg, handscannerLauscher, merkeScanWeg, type ScanWeg } from "./handscanner";
 import { qrLeserLaden, type QrLeser } from "./qr-decoder";
 import { TeilQuittung } from "./teil-quittung";
 import { useModalesOverlay } from "@bos/oberflaeche/modal-overlay";
@@ -51,19 +52,20 @@ function kameraRat(err: unknown): KameraFehler {
   }
 }
 
+/** „QR aus Bild einlesen…": ein Foto oder Bildschirmfoto des Codes statt der Kamera. Immer dieselbe Instanz an derselben Stelle: Ein Neuaufbau, wenn die Kamera scheitert, verlöre ein schon gewähltes Bild. */
+function BildKnopf({ onBild, klasse }: { onBild: (e: ChangeEvent<HTMLInputElement>) => void; klasse?: string }) {
+  return (
+    <label className={`datei-knopf${klasse ? ` ${klasse}` : ""}`}>
+      QR aus Bild einlesen…
+      <input type="file" accept="image/*" onChange={onBild} className="nur-sr" />
+    </label>
+  );
+}
+
 /** Verweigert bleibt verweigert — hier lohnt kein zweiter Anlauf. */
 function istVerweigert(err: unknown): boolean {
   return err instanceof Error && (err.name === "NotAllowedError" || err.name === "SecurityError");
 }
-
-// USB-Handscanner melden sich als Tastatur („Keyboard-Wedge"): Sie tippen den
-// QR-Inhalt als sehr schnelle Tastenfolge und schließen werkseitig mit Enter
-// (manche mit Tab) ab. Menschliches Tippen hat deutlich größere Lücken —
-// alles über dieser Pause verwirft den Puffer.
-const HANDSCANNER_PAUSE_MS = 500;
-// Unter dieser Länge ist es kein Bogen-Payload (kürzester Link ist weit
-// länger) — versehentliche Tasten plus Enter lösen so keinen Scan aus.
-const HANDSCANNER_MINDESTLAENGE = 8;
 
 // Längste Kante des Dekodier-Ausschnitts. Der Ausschnitt ist der Suchrahmen
 // (plus Zugabe) in Kamerapixeln; größer als dieses Maß wird er verkleinert,
@@ -127,6 +129,15 @@ async function kameraOeffnen(wunschId: string): Promise<MediaStream> {
 // Nach dieser Zeit ohne Treffer bekommt der Nutzer den Rat, den sonst nur
 // kennt, wer die Naheinstellgrenze von Handykameras kennt.
 const TIPP_NACH_MS = 6000;
+
+/**
+ * R20-L5: „Hinweise zum Handscanner" aufgeklappt: Der Text beginnt oben im rollbaren Fenster (nicht mitten im Satz am unteren Rand);
+ * Rollleiste und Schattenkante (index.html, „Runde 20 (Layout)") zeigen, dass darunter mehr steht.
+ */
+export function hinweiseGeoeffnet(e: SyntheticEvent<HTMLDetailsElement>) {
+  const d = e.currentTarget;
+  if (d.open && typeof d.scrollIntoView === "function") d.scrollIntoView({ block: "start" });
+}
 
 /**
  * Quittung des Suchrahmens: kurz nach jedem angenommenen Teil `true`.
@@ -217,10 +228,24 @@ export function QrScannerWeb(props: {
   // Ohne Kamerabild sieht man sonst nicht, ob der Scanner überhaupt am Rechner
   // ankommt — ein stummer Bildschirm wirkt wie ein kaputter Scanner.
   const [scannerZeichen, setScannerZeichen] = useState(0);
+  // Kamera oder Handscanner: Beim Probelauf hatten die meisten Notebooks die
+  // Kamera freigegeben — der Handscanner-Weg erschien darum nie, und wer mit
+  // dem Scanner arbeiten wollte, fand keinen Hinweis darauf. Der Weg lässt
+  // sich jetzt umschalten und bleibt gemerkt: Am Meldekopf mit Handscanner
+  // öffnet das Fenster beim nächsten Mal gleich ohne Kamera.
+  const [weg, setWeg] = useState<ScanWeg>(gemerkterScanWeg);
   // Rat zum Abstand, sobald die Kamera eine Weile läuft, ohne etwas zu finden.
   const [tipp, setTipp] = useState(false);
+  function wegWaehlen(neu: ScanWeg) {
+    merkeScanWeg(neu);
+    setFehler(null);
+    setTipp(false);
+    setWeg(neu);
+  }
 
   useEffect(() => {
+    // Ohne Kamera-Weg keine Kamera: kein getUserMedia, keine Freigabefrage.
+    if (weg === "handscanner") return;
     let aktiv = true;
     let stream: MediaStream | null = null;
     let rahmen = 0;
@@ -324,63 +349,39 @@ export function QrScannerWeb(props: {
     })();
 
     return stoppen;
-  }, [versuch, wunschKamera]);
+  }, [versuch, wunschKamera, weg]);
 
-  // Tastatur-Lauscher für USB-Handscanner: dicht aufeinanderfolgende Zeichen
-  // sammeln und beim Enter/Tab-Abschluss als Scan melden. Läuft unabhängig
-  // von der Kamera — gerade an PCs ohne (freigegebene) Webcam ist der
-  // Handscanner der einzige Weg. Capture-Phase, damit ein fokussierter Knopf
-  // das abschließende Enter nicht als Klick schluckt.
-  useEffect(() => {
-    let puffer = "";
-    let zuletzt = 0;
-    function beiTaste(e: KeyboardEvent) {
-      if (e.ctrlKey || e.metaKey || e.altKey) return; // Kurzbefehle unangetastet lassen
-      // Escape schließt das Overlay — der Ausgang, den jeder Vollbild-Dialog
-      // hat. Ohne ihn saß, wer ohne Kamera scannen wollte, auf einem kleinen
-      // Bildschirm fest (Audit: „Abbrechen" außerhalb, kein Weg zurück).
-      // Vor dem Puffer geprüft und ohne ihn anzufassen: ein Handscanner tippt
-      // kein Escape, und ein angefangener Puffer verfällt ohnehin nach der
-      // Pause.
-      if (e.key === "Escape") {
-        e.preventDefault();
-        propsRef.current.onAbbruch();
-        return;
-      }
-      const jetzt = performance.now();
-      if (jetzt - zuletzt > HANDSCANNER_PAUSE_MS) puffer = "";
-      zuletzt = jetzt;
-      setScannerZeichen(puffer.length);
-      // Leertaste ausgenommen: Sie bedient fokussierte Knöpfe, und kein
-      // Payload-Zeichensatz (URL, Base41, Base64url) enthält Leerzeichen.
-      if (e.key.length === 1 && e.key !== " ") {
-        puffer += e.key;
-        setScannerZeichen(puffer.length);
-        // Sonst springt z. B. die Kamera-Auswahl bei Buchstaben mit.
-        e.preventDefault();
-        return;
-      }
-      if ((e.key === "Enter" || e.key === "Tab") && puffer.length >= HANDSCANNER_MINDESTLAENGE) {
-        e.preventDefault();
-        const text = puffer;
-        puffer = "";
-        setScannerZeichen(0);
-        propsRef.current.onErgebnis(text);
-      }
-    }
-    window.addEventListener("keydown", beiTaste, true);
-    return () => window.removeEventListener("keydown", beiTaste, true);
-  }, []);
+  // Tastatur-Lauscher für USB-Handscanner (siehe handscanner.ts). Läuft
+  // unabhängig von der Kamera — gerade an PCs ohne (freigegebene) Webcam ist
+  // der Handscanner der einzige Weg. Escape schließt das Overlay — der Ausgang,
+  // den jeder Vollbild-Dialog hat. Ohne ihn saß, wer ohne Kamera scannen
+  // wollte, auf einem kleinen Bildschirm fest (Audit: „Abbrechen" außerhalb,
+  // kein Weg zurück).
+  useEffect(
+    () =>
+      handscannerLauscher(window, {
+        streng: true,
+        onScan: (text) => propsRef.current.onErgebnis(text),
+        onZeichen: setScannerZeichen,
+        onEscape: () => propsRef.current.onAbbruch(),
+      }),
+    [],
+  );
 
   // Wert der Auswahl: die laufende Kamera, solange sie in der Liste steht —
   // sonst der Wunsch bzw. die erste Kamera, damit die Auswahl nie leer wirkt.
   const auswahl = [benutzteKamera, wunschKamera].find((id) => kameras.some((k) => k.id === id))
     ?? kameras[0]?.id
     ?? "";
+  // Handscanner-Fläche statt Suchrahmen: bei Kamerafehler und auf Wunsch.
+  const ohneKamera = !!fehler || weg === "handscanner";
 
   return (
     <dialog ref={dialogRef} className="scanner" aria-label="QR-Code scannen" tabIndex={-1} data-zurueck="eigen">
       <video ref={videoRef} playsInline muted />
+      {/* Mit Kamera löst sich die Mitte auf (display: contents, Layout wie bisher); ohne Kamera rollt sie zwischen Kopf und Knopfleiste,
+          statt unter der Leiste durchzulaufen (R18-M5, L2, S9, H8). */}
+      <div className={`scanner-mitte${ohneKamera ? " scrollt" : ""}`}>
       {fehler
         ? (
           <div className="scanner-text fehler">
@@ -390,9 +391,13 @@ export function QrScannerWeb(props: {
                 {fehler.schritte.map((schritt) => <li key={schritt}>{schritt}</li>)}
               </ul>
             )}
+            {/* „Kamera erneut versuchen" gehört zur Meldung, nicht in die Knopfleiste (R18-M5, S9, H8). */}
+            <button type="button" className="scanner-erneut" onClick={() => { setFehler(null); setVersuch((n) => n + 1); }}>
+              Kamera erneut versuchen
+            </button>
           </div>
         )
-        : (
+        : ohneKamera ? null : (
           <div className="scanner-text">
             {/* role="status": der Fortschritt wechselt mit jedem gelesenen Teil
                 — ohne Ansage wüsste ein Screenreader im Overlay nichts davon. */}
@@ -410,19 +415,35 @@ export function QrScannerWeb(props: {
               </p>
             )}
             <TeilQuittung teile={props.teile ?? []} />
+            {/* Der Handscanner arbeitet auch bei laufender Kamera — das stand
+                nirgends, solange die Kamera lief: Wer den Scanner auslöste,
+                sah nur das Kamerabild und hielt ihn für tot. Die Zeile sagt
+                es, und sie quittiert die ankommenden Zeichen. */}
+            <p role="status" className={`handscanner-kurz${scannerZeichen ? " aktiv" : ""}`}>
+              {scannerZeichen
+                ? `Handscanner erkannt — ${scannerZeichen} Zeichen …`
+                : "Mit USB-Handscanner: einfach auslösen, das Fenster nimmt den Code an."}
+            </p>
           </div>
         )}
-      {!fehler
+      {!ohneKamera
         ? <div className={`scanner-rahmen${rahmenQuittung ? " angenommen" : ""}`} aria-hidden="true" ref={rahmenRef} />
         : (
           /* Der zweite Weg ist ohne Kamera der einzige — er bekommt deshalb
              die Mitte des Bildschirms, dort wo sonst der Suchrahmen steht,
              statt als Nachsatz unter der Fehlermeldung zu stehen. */
           <div className="scanner-handscanner">
-            <p className="handscanner-titel">Ohne Kamera: mit dem USB-Handscanner scannen</p>
+            {/* Am Telefon ohne Kamera ist das Foto oder der Bildschirmfoto des Codes der naheliegende Weg, der USB-Handscanner die
+                Ausnahme: Der Bildknopf steht deshalb oben im Rahmen, der Handscanner darunter (R17-N8). */}
+            {fehler && props.onBild && (
+              <div className="scanner-bildweg">
+                <p className="handscanner-titel">Am Telefon: Foto oder Bildschirmfoto des Codes — Knopf unten</p>
+              </div>
+            )}
+            <p className="handscanner-titel">{fehler ? "Oder mit dem USB-Handscanner scannen" : "Mit dem USB-Handscanner scannen"}</p>
             <ol className="scanner-schritte">
-              <li>QR-Code des Erfassungsbogens auf Papier oder Bildschirm anvisieren.</li>
-              <li>Am Handscanner auslösen — dieses Fenster nimmt den Code sofort an, ohne Klick in ein Feld.</li>
+              <li>QR-Code auf Papier oder Bildschirm anvisieren.</li>
+              <li>Am Handscanner auslösen — das Fenster nimmt den Code sofort an.</li>
             </ol>
             {/* role="status": Ohne Kamerabild ist diese Zeile die einzige
                 Rückmeldung — erst dass der Scanner ankommt, dann bei einem
@@ -438,7 +459,7 @@ export function QrScannerWeb(props: {
                 tippt oder gar nicht ankommt. Ausgeklappt standen sie zwischen
                 dem Helfer und „Abbrechen" und schoben den Ausgang bei 640 px
                 Höhe aus dem Bild. */}
-            <details className="handscanner-hinweise">
+            <details className="handscanner-hinweise" onToggle={hinweiseGeoeffnet}>
               <summary>Hinweise zum Handscanner</summary>
               <p className="handscanner-fussnote">
                 Der Scanner muss den Code mit Enter abschließen (Werkseinstellung der meisten Geräte).
@@ -449,8 +470,9 @@ export function QrScannerWeb(props: {
             </details>
           </div>
         )}
+      </div>
       <div className="scanner-aktionen">
-        {kameras.length > 1 && !fehler && (
+        {kameras.length > 1 && !ohneKamera && (
           <label className="scanner-kamera">
             <span className="nur-sr">Kamera</span>
             <select
@@ -461,17 +483,16 @@ export function QrScannerWeb(props: {
             </select>
           </label>
         )}
-        {fehler && (
-          <button type="button" onClick={() => { setFehler(null); setVersuch((n) => n + 1); }}>
-            Kamera erneut versuchen
-          </button>
+        {/* Der Wechsel zwischen den Wegen steht in der Knopfleiste, nicht in
+            einer Vorabfrage: Wer die Kamera nutzt, soll keinen Klick mehr
+            brauchen — wer den Handscanner nutzt, wählt ihn einmal, dann
+            öffnet das Fenster so. */}
+        {!fehler && (
+          weg === "handscanner"
+            ? <button type="button" onClick={() => wegWaehlen("kamera")}>Kamera verwenden</button>
+            : <button type="button" onClick={() => wegWaehlen("handscanner")}>Handscanner statt Kamera</button>
         )}
-        {props.onBild && (
-          <label className="datei-knopf">
-            QR aus Bild einlesen…
-            <input type="file" accept="image/*" onChange={props.onBild} className="nur-sr" />
-          </label>
-        )}
+        {props.onBild && <BildKnopf onBild={props.onBild} klasse={fehler ? "primaer" : undefined} />}
         <button type="button" onClick={props.onAbbruch}>{props.abbruchText ?? "Abbrechen"}</button>
       </div>
     </dialog>

@@ -85,7 +85,7 @@ export interface OfflineZustand {
   online: boolean;
   /** Erste Stufe (Kern) beim Laden: Bytes im Vorrat / gesamt (R3-O3). */
   kern?: { geladen: number; gesamt: number } | null;
-  /** Zweite Stufe (Beispielbögen, Themenseiten): Dateien da / gesamt. */
+  /** Zweite Stufe (Begleitseiten): Dateien da / gesamt. */
   zusatz?: { fertig: number; gesamt: number } | null;
   /**
    * Das Nachladen der zweiten Stufe hakt: Abrufe scheiterten, ein neuer Versuch
@@ -316,6 +316,56 @@ export function useOfflineStand(): OfflineZustand {
   };
 }
 
+/**
+ * Die Zeile ist noch nicht in ihrer Endfassung (R17-H1): Sie wechselt in den ersten Sekunden mehrfach zwischen zwei und sechs
+ * Zeilen (Laden, „bereit", Beispielbögen n von m) und schob Knöpfe darüber oder darunter um 42 bis 58 px. Solange es so ist,
+ * hält das Stylesheet (`.offline-offen`) die Höhe der längsten Fassung frei; nur der Wechsel auf die Endfassung ändert sie noch.
+ */
+export function offlineZeileOffen(s: OfflineZustand): boolean {
+  if (s.stand !== "bereit") return s.stand !== "ohne";
+  return s.zusatz != null ? s.zusatz.fertig < s.zusatz.gesamt : s.zweiStufen === true;
+}
+
+/**
+ * Die längste Fassung der Zeile bei dieser Netzlage und Speicherlage (R18-K7, M10). Die Startseite legt sie unsichtbar unter die
+ * Zeile (`.offline-platz`), solange der Erstbesuch sie wechseln lässt: Die Zeile behält dann auch in ihrer kurzen Endfassung die
+ * Höhe der längsten, und nichts darunter springt (R17-H1 hielt die Höhe nur bis zum Wechsel auf die Endfassung).
+ */
+export function offlineLangText(s: OfflineZustand): string {
+  const grund: OfflineZustand = { ...s, frischBereit: true, abgebrochen: false, kernHakt: false, zusatzHakt: false, online: true };
+  const kern = s.kern && s.kern.gesamt > 0 ? s.kern : { geladen: 99_000_000, gesamt: 99_000_000 };
+  const zusatz = { fertig: 100, gesamt: 999 };
+  const fassungen = [
+    offlineText({ ...grund, stand: "laedt", kern }),
+    offlineText({ ...grund, stand: "laedt", kern, abgebrochen: true }),
+    offlineText({ ...grund, stand: "bereit", zusatz, zweiStufen: true, zusatzHakt: true }),
+    offlineText({ ...grund, stand: "bereit", zusatz, zweiStufen: true, online: false }),
+  ];
+  return fassungen.reduce((a, b) => (b.length > a.length ? b : a));
+}
+
+/**
+ * Braucht der Stand den Kasten auf der Startseite? Sobald der Kern im Gerät liegt („bereit"), gehen Bogen, PDF, QR-Code und
+ * Empfang ohne Netz; was dann noch nachlädt, ist Beiwerk. Der Text steht in diesen Ständen leise in der Fußzeile, der Fortschritt
+ * als dünner Balken oben auf der Seite. Den Kasten behalten nur Stände, die etwas verlangen: Kern lädt noch, kein Vorrat möglich,
+ * Speicher gesperrt.
+ */
+export function offlineRuhig(s: OfflineZustand): boolean {
+  return s.stand === "bereit" && !s.speicherGesperrt;
+}
+
+/**
+ * Anteil des laufenden Ladens (0 bis 1) für den Balken oben auf der Startseite, oder null, wenn nichts lädt: erst die erste Stufe
+ * in Bytes, danach die zweite in Dateien.
+ */
+export function offlineFortschritt(s: OfflineZustand): number | null {
+  if (s.stand === "laedt") return s.kern && s.kern.gesamt > 0 ? Math.min(1, s.kern.geladen / s.kern.gesamt) : null;
+  if (s.stand === "bereit" && s.zusatz && s.zusatz.gesamt > 0 && s.zusatz.fertig < s.zusatz.gesamt) {
+    return s.zusatz.fertig / s.zusatz.gesamt;
+  }
+  return null;
+}
+
 /** Text der Offline-Zeile auf der Startseite. */
 export function offlineText(s: OfflineZustand): string {
   // Sperrt der Browser den Speicher, bleibt nichts auf dem Gerät — die Zeile
@@ -328,22 +378,26 @@ export function offlineText(s: OfflineZustand): string {
     // Zweite Stufe noch unvollständig: Bogen, PDF, QR und Empfang gehen
     // schon ohne Netz, Begleitseiten folgen (R3-O3).
     if (s.zusatz && s.zusatz.fertig < s.zusatz.gesamt) {
-      const kopf = s.frischBereit ? "✓ Jetzt offline bereit" : "✓ Offline bereit";
+      // R20-N7: „Jetzt offline bereit" erst, wenn alles geladen ist – hier steht nur, dass der Kern bereit ist,
+      // und der Rest getrennt als „lädt noch".
+      const kopf = "✓ Sammlung, Eingänge und Ausgabe gehen offline";
       // Hakt das Nachladen, sagt die Zeile es und dass der Versuch weiterläuft
       // (R5-O2) — „werden nachgeladen" bei stehendem Zähler war falsch.
       if (s.online && s.zusatzHakt) {
-        return `${kopf} für Sammlung, Eingänge und Ausgabe. Begleitseiten: ${s.zusatz.fertig} von ${s.zusatz.gesamt} da, das Netz hakt — der nächste Versuch läuft von selbst — ${daten}`;
+        return `${kopf}. Rest (Begleitseiten): ${s.zusatz.fertig} von ${s.zusatz.gesamt} da, das Netz hakt — der nächste Versuch läuft von selbst — ${daten}`;
       }
       return s.online
-        ? `${kopf} für Sammlung, Eingänge und Ausgabe. Begleitseiten werden nachgeladen (${s.zusatz.fertig} von ${s.zusatz.gesamt}) — ${daten}`
-        : `${kopf} für Sammlung, Eingänge und Ausgabe. Begleitseiten fehlen noch (${s.zusatz.fertig} von ${s.zusatz.gesamt}), sie folgen beim nächsten Netz — ${daten}`;
+        ? `${kopf}. Rest lädt noch (Begleitseiten): ${s.zusatz.fertig} von ${s.zusatz.gesamt} — ${daten}`
+        : `${kopf}. Rest fehlt noch (Begleitseiten): ${s.zusatz.fertig} von ${s.zusatz.gesamt}, folgt beim nächsten Netz — ${daten}`;
     }
     // Zweite Stufe noch nicht gezählt (gleich nach dem Aktivieren, oder das
     // Verzeichnis der Stufen fehlt): sicher ist nur der Kern. Vorher stand hier
     // kurz „komplett offline", obwohl noch keine Beispielbögen im Gerät lagen.
     if (s.zweiStufen && !s.zusatz) {
-      return `${s.frischBereit ? "✓ Jetzt offline bereit" : "✓ Offline bereit"} für Sammlung, Eingänge und Ausgabe — ${daten}`;
+      return `✓ Sammlung, Eingänge und Ausgabe gehen offline. Der Rest (Begleitseiten) wird noch gezählt — ${daten}`;
     }
+    // Der Erfassungsbogen nennt hier die Bögen der THW-Ortsverbände als
+    // Ausnahme (BB-S1, BB-O1); Beispielbögen gibt es im Meldekopf nicht.
     return s.frischBereit
       ? `✓ Jetzt offline bereit. Funktioniert komplett offline — ${daten}`
       : `✓ Funktioniert komplett offline — ${daten}`;

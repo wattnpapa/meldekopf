@@ -25,8 +25,10 @@ import {
   zeitpunktAusIso,
   type Erfassungsbogen,
 } from "@bos/eeb-format/model";
-import { einheitAnzeigename, neuePerson, neuesFahrzeug, zeitgruppe, type QrSatz } from "../hilfen";
+import { einheitAnzeigename, orgLabel, neuePerson, neuerBogen, neuesFahrzeug, zeitgruppe, type QrSatz } from "../hilfen";
 import { EEB_JSON_DATEINAME, aenderungFuerPapier, bogenAlsEingebetteteDatei, einsatzLageblattDokument, einsatzPdfDokument, pdfDokument, stiftHinweis, STIFT_KAESTCHEN, codeKopfzeile, meldekopfVermerk, ohneVorbelegung, erreichbarkeitZeilen, nichtDarstellbareNamen, nichtDarstellbareBetroffene, ansprechpersonPapier, umschrift, umschriftBetroffene } from "./pdf-dokument";
+import { THW_LOGO_JPEG } from "./pdf-logo-thw";
+import { ORG_LOGOS } from "./pdf-logos";
 
 const QR_BILD = "data:image/png;base64,QRTESTBILD";
 const QR_URL = "https://erfassungsbogen.app/#TESTPAYLOAD";
@@ -117,7 +119,8 @@ describe("pdfDokument()", () => {
   it("setzt A4, Titel und übernimmt das QR-Bild", () => {
     const dd = pdfDokument(basisBogen(), QR);
     expect(dd.pageSize).toBe("A4");
-    expect((dd.info as { title: string }).title).toBe("Erfassungsbogen FGr K (A)");
+    // Mit Einheit und Stand: ein im Tab angezeigter Bogen hat keinen Dateinamen (R16-A3).
+    expect((dd.info as { title: string }).title).toMatch(/^Erfassungsbogen .*FGr K \(A\), Stand \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
     // Das übergebene QR-Bild muss unverändert im Dokument landen.
     expect(JSON.stringify(dd.content)).toContain(QR_BILD);
     expect(texte(dd.content)).toContain(
@@ -249,7 +252,7 @@ describe("pdfDokument()", () => {
     expect(t).toContain("THW");
     expect(t).toContain("Fernmeldebauübung Kabelblitz");
     expect(t).toContain("Oldenburg - Ni (OODE)");
-    expect(t).toContain("1 / 0 / 1 / 2"); // Stärke: 1 Führer, 0 Unterführer, 1 Mannschaft, 2 gesamt
+    expect(t).toContain("1 / 0 / 1 // 2"); // Stärke: 1 Führer, 0 Unterführer, 1 Mannschaft, 2 gesamt
     expect(t).toContain("Johannes Rudolph"); // Ansprechpartner/in = erste Person
   });
 
@@ -259,6 +262,54 @@ describe("pdfDokument()", () => {
     expect(t).toContain("Weber, Anna");
     expect(t).toContain("Mobil: 01701234501 (P)");
     expect(t).toContain("Bootsführer");
+  });
+
+  it("nennt den Funkrufname einer Person ohne (D)/(P) — in der Personaltabelle und auf dem Lageblatt (Schema 12)", () => {
+    const b = basisBogen();
+    b.personal[0]!.kontakte = [
+      { art: KontaktArt.MOBIL, dienstlich: true, wert: "01701234501" },
+      { art: KontaktArt.FUNK, dienstlich: true, wert: "Heros Oldenburg 18/13-1" },
+    ];
+    const t = texte(pdfDokument(b, QR).content).join("\n");
+    expect(t).toContain("Funk: Heros Oldenburg 18/13-1");
+    expect(t).not.toContain("Funk: Heros Oldenburg 18/13-1 (");
+    const zeilen = erreichbarkeitZeilen(b);
+    expect(zeilen).toContain("01701234501 (D) J. Rudolph");
+    expect(zeilen).toContain("Heros Oldenburg 18/13-1 (Funk) J. Rudolph");
+    // Nur Funk, keine Rufnummer: der OV-Rückruf bleibt die Telefonzeile, der Funkrufname kommt dazu.
+    b.personal[0]!.kontakte = [{ art: KontaktArt.FUNK, dienstlich: true, wert: "Heros Oldenburg 18/13-1" }];
+    expect(erreichbarkeitZeilen(b)).toEqual(expect.arrayContaining(["04413401050 (OV)", "Heros Oldenburg 18/13-1 (Funk) J. Rudolph"]));
+  });
+
+  /**
+   * Rückmeldung aus einem THW-Ortsverband: Beruf UND Qualifikation gehören in
+   * die Tabelle „weitere interne / externe Qualifikationen". Die Berufe stehen
+   * als ein „Beruf: …"-Block hinter den Qualifikationen, egal in welcher
+   * Reihenfolge der Bogen sie führt.
+   */
+  it("schreibt Berufe als eigenen Block hinter die Qualifikationen derselben Person", () => {
+    const b = basisBogen();
+    b.personal[0]!.zusatzqualifikationen = [
+      { freitext: "Beruf: Elektroniker/in" },
+      { freitext: "Bootsführer" },
+      { freitext: "Beruf: Dachdecker/in" },
+    ];
+    b.personal[1]!.zusatzqualifikationen = [{ freitext: "Beruf: Zimmerer/in" }];
+    const t = texte(pdfDokument(b, QR).content).join("\n");
+    expect(t).toContain("Bootsführer, Beruf: Elektroniker/in, Dachdecker/in");
+    expect(t).toContain("Weber, Anna");
+    expect(t).toContain("Beruf: Zimmerer/in");
+  });
+
+  it("nennt eine abweichende Dienststelle als „OV:“-Zeile in der Kontaktspalte, die der Einheit nicht", () => {
+    const b = basisBogen();
+    b.personal[1]!.dienststelle = "Bremen - Nord";
+    const t = texte(pdfDokument(b, QR).content).join("\n");
+    expect(t).toContain("OV: Bremen - Nord\n");
+    // Die erste Person kommt aus der Dienststelle der Einheit: keine OV-Zeile, Name unverändert.
+    expect(t).toContain("Rudolph, Johannes");
+    expect(t).not.toContain("OV: Oldenburg");
+    expect(t).not.toContain("(Bremen - Nord)");
   });
 
   it("stellt Fahrzeug mit Kennzeichen, Funkruf und StAN-Angabe dar", () => {
@@ -274,8 +325,29 @@ describe("pdfDokument()", () => {
   it("zeigt Sofortbedarf und Sonstiges, wenn vorhanden", () => {
     const t = texte(pdfDokument(basisBogen(), QR).content).join("\n");
     expect(t).toContain("Sofortbedarf:");
-    expect(t).toContain("Verpflegung für 2 Personen, davon 0 vegetarisch, 1 vegan");
+    expect(t).toContain("Verpflegung für 2 Personen, davon 1 vegan");
     expect(t).toContain("Sonstiges: Bitte Verpflegung ab 12 Uhr.");
+  });
+
+  it("druckt beim Sofortbedarf nur, was angefordert ist — keine Nullzeilen (OV Chemnitz, 11/2026)", () => {
+    const b = basisBogen();
+    b.sofortbedarf = { verpflegungPersonen: 0, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: true, ruhezeitErforderlich: true };
+    const t = texte(pdfDokument(b, QR).content).join("\n");
+    expect(t).toContain("Sofortbedarf:");
+    expect(t).not.toContain("Verpflegung für");
+    expect(t).not.toContain("Betriebsstoff");
+    expect(t).toContain("[X]  Unterbringung");
+    expect(t).toContain("[X]  Ruhezeit erforderlich");
+    expect(t).not.toMatch(/\[ {2}\] {1,2}(Unterbringung|Ruhezeit)/);
+  });
+
+  it("druckt den Sitzplatz-Richtwert gekennzeichnet, eine erfasste Zahl ohne Zusatz (OV Chemnitz, 11/2026)", () => {
+    const b = basisBogen();
+    expect(texte(pdfDokument(b, QR).content).join("\n")).toMatch(/Sitzplätze: \d+ \(Richtwert\)/);
+    b.fahrzeuge[0]!.sitzplaetze = 4;
+    const t = texte(pdfDokument(b, QR).content).join("\n");
+    expect(t).toContain("Sitzplätze: 4");
+    expect(t).not.toContain("(Richtwert)");
   });
 
   it("lässt Sofortbedarf und Sonstiges weg, wenn nicht gesetzt", () => {
@@ -324,7 +396,7 @@ describe("pdfDokument()", () => {
     b.staerkeManuell = { fuehrer: 1, unterfuehrer: 3, mannschaft: 17, gesamt: 21 };
     const t = texte(pdfDokument(b, QR).content).join("\n");
     expect(t).toContain("Personal am Meldekopf nur in Stärke erfasst.");
-    expect(t).toContain("1 / 3 / 17 / 21");
+    expect(t).toContain("1 / 3 / 17 // 21");
   });
 
   it("bettet den Bogen als maschinenlesbares JSON ein (ZUGFeRD-artig)", () => {
@@ -413,7 +485,7 @@ describe("einsatzPdfDokument()", () => {
     expect(t).toContain("NACHTRAG seit 05.10.2026, 20:49 — nicht die ganze Lage:");
     expect(t).not.toMatch(/^Lage: $/m);
     expect(t).toContain("Bedarf (nur Nachtrag):");
-    expect(t).toContain("Bedarf Nachtrag (1 Einheiten");
+    expect(t).toContain("Bedarf Nachtrag (1 Einheit,");
     expect(t).toContain("Summe Nachtrag (");
     expect(JSON.stringify(typeof dd.footer === "function" ? dd.footer(1, 1, { width: 0, height: 0, orientation: "landscape" }) : dd.footer)).toContain("NACHTRAG seit");
     // Die Gesamtfassung bleibt, wie sie war.
@@ -459,7 +531,7 @@ describe("einsatzPdfDokument()", () => {
       ]).content,
     ).join("\n");
     expect(t).toContain("Summe (2 zählend)");
-    expect(t).toContain("2 / 0 / 2 / 4");
+    expect(t).toContain("2 / 0 / 2 // 4");
   });
 
   it("führt abgerückte Einheiten in einem eigenen Block mit Zeiten auf und zählt sie nicht", () => {
@@ -481,8 +553,8 @@ describe("einsatzPdfDokument()", () => {
     expect(t).toContain("Deichabschnitt Nord");
     expect(t).toContain("Summe (1 zählend · 1 abgerückt)");
     // Stärke und Bedarf nur über die zählende Einheit.
-    expect(t).toContain("1 / 0 / 1 / 2");
-    expect(t).toContain("Bedarf gesamt (1 Einheiten, 2 Personen)");
+    expect(t).toContain("1 / 0 / 1 // 2");
+    expect(t).toContain("Bedarf gesamt (1 Einheit, 2 Personen)");
     // Beide Bögen hängen trotzdem an — „alle Bögen" heißt alle.
     const umbrueche = (einsatzPdfDokument("Lage", [
       { bogen: basisBogen(), qr: QR },
@@ -540,8 +612,10 @@ describe("einsatzPdfDokument()", () => {
     // Quartier und WC/Dusche getrennt beschriftet (R3-K4).
     expect(t).toContain("Unterbringung angefordert:\n2 Einheiten, 4 Personen (2 männl. / 2 weibl. / 0 div.)");
     expect(t).toContain("WC/Dusche (alle Anwesenden):\n2 männl. / 2 weibl. / 0 div.");
-    expect(t).toContain("Diesel 400 l · Benzin 0 l");
-    expect(t).toContain("2 Fahrzeuge · Ruhezeit erforderlich bei 0 Einheit(en)");
+    // Nur gemeldete Sorten, wie Einsatzansicht und Monitor (R14-K4).
+    expect(t).toContain("Diesel 400 l");
+    expect(t).not.toContain("Benzin 0 l");
+    expect(t).toContain("2 Fahrzeuge · Ruhezeit erforderlich bei 0 Einheiten");
   });
 
   it("zeigt Zwischensummen erst ab zwei Zügen — und stellt „ohne Zug“ ans Ende", () => {
@@ -658,12 +732,33 @@ describe("einsatzLageblattDokument()", () => {
     expect((dd.content as { pageBreak?: string }[]).some((c) => c && c.pageBreak === "before")).toBe(false);
   });
 
+  it("setzt Bedarf und Zwischensummen nach Zug vor das Raster zum Nachtragen (R16-K4)", () => {
+    const dd = einsatzLageblattDokument("Lage", [
+      { bogen: basisBogen(), zugEtikett: "1. Zug" },
+      { bogen: basisBogen(), zugEtikett: "2. Zug" },
+    ], 0, 12);
+    const t = texte(dd.content).join("\n");
+    const zug = t.indexOf("Zwischensummen nach Zug");
+    const bedarf = t.indexOf("Bedarf gesamt");
+    const raster = t.indexOf("Nachtrag von Hand");
+    expect(zug).toBeGreaterThan(-1);
+    expect(raster).toBeGreaterThan(zug);
+    expect(raster).toBeGreaterThan(bedarf);
+    // Mit Zügen stehen Bedarf und Zugsummen sogar vor der Einheitentabelle, damit sie auf Seite 1 bleiben.
+    expect(zug).toBeLessThan(t.indexOf("Veränderung seit der letzten Meldung"));
+    // Ohne Zug-Etiketten bleibt die gewohnte Reihenfolge: Tabelle, dann Bedarf.
+    const ohneZug = texte(einsatzLageblattDokument("Lage", [{ bogen: basisBogen() }], 0, 12).content).join("\n");
+    expect(ohneZug.indexOf("Bedarf gesamt")).toBeGreaterThan(ohneZug.indexOf("Veränderung seit der letzten Meldung"));
+    expect(ohneZug.indexOf("Nachtrag von Hand")).toBeGreaterThan(ohneZug.indexOf("Bedarf gesamt"));
+  });
+
   it("beschriftet die Stärke-Linien des Blanko-Vordrucks (R2-A6)", () => {
     const blanko = texte(pdfDokument(basisBogen(), null, { fahrzeuge: 1, personal: 1, qualifikationen: 1 }).content).join("\n");
-    expect(blanko).toContain("Stärke (F / UF / M / Ges.):");
+    // Seit dem Raster der THWin-Vorlage zweizeilig: „Stärke:“ und darunter klein die Legende.
+    expect(blanko).toContain("Stärke:\nF / UF / M // Ges.");
     // Seit R3-A6 auch auf dem ausgefüllten Bogen — gleiche Beschriftung wie der Vordruck.
     const voll = texte(pdfDokument(basisBogen(), QR).content).join("\n");
-    expect(voll).toContain("Stärke (F / UF / M / Ges.):");
+    expect(voll).toContain("Stärke:\nF / UF / M // Ges.");
   });
 
   it("Blanko-Vordruck trägt den Meldekopf-Kasten mit „ins Gerät übertragen“ und dem Kästchen „Übung“ (R4-A4)", () => {
@@ -724,7 +819,8 @@ describe("einsatzLageblattDokument()", () => {
     const t = texte(dd.content).join("\n").replace(/\u200B/g, "");
     expect(t).toContain("Funkrufname /\nRückruf");
     expect(t).toContain("Oldenburg - Ni 18/13");
-    expect(t).toContain("01701234501 (J. Rudolph)");
+    // Die Art der Nummer steht hinter der Nummer wie auf dem Bogen (R14-A3).
+    expect(t).toContain("01701234501 (P) J. Rudolph");
     expect(t).toContain("Nachtrag von Hand");
     // Mindestens fünf Nachtragszeilen (R3-A5); den Rest der Seite füllt
     // einsatzLageblattSeiteFuellen (gemessen in pdf-seiten.test.ts).
@@ -743,12 +839,12 @@ describe("einsatzLageblattDokument()", () => {
     const t = texte(dd.content).join("\n");
     expect(t).toContain("Rolle\nF/UF/M");
     // Johannes Rudolph ist Führer, Anna Weber Mannschaft.
-    expect(t).toMatch(/\nF\ncenter\nRudolph, Johannes\n/);
-    expect(t).toMatch(/\nM\ncenter\nWeber, Anna\n/);
+    expect(t).toMatch(/\nF\nmiddle\ncenter\nRudolph, Johannes\n/);
+    expect(t).toMatch(/\nM\nmiddle\ncenter\nWeber, Anna\n/);
     // Ohne Messung keine freien Zeilen — die gibt es nur über einzelPdfDokument.
-    expect(JSON.stringify(dd.content)).not.toContain('"text":" ","margin":[0,5,0,5]');
+    expect(JSON.stringify(dd.content)).not.toContain('"text":" ","margin":[0,2,0,2]');
     const frei = pdfDokument(basisBogen(), QR, undefined, undefined, { freiePersonalZeilen: 2, freiesFahrzeug: true });
-    expect(JSON.stringify(frei.content).match(/"text":" ","margin":\[0,5,0,5\]/g)).toHaveLength(8);
+    expect(JSON.stringify(frei.content).match(/"text":" ","margin":\[0,2,0,2\]/g)).toHaveLength(6);
     expect(texte(frei.content)).toContain("Kennzeichen:");
   });
 
@@ -771,7 +867,7 @@ describe("einsatzLageblattDokument()", () => {
     expect(t).toContain("Auftrag / Notiz\n(Bemerkung der Einheit)");
     expect(t).toContain("Ölsperre Kocher km 12");
     expect(t).toContain("(Ölsperre 200 m verbraucht, Nachschub nötig)");
-    expect(t).toContain(`(${"x".repeat(70)} … (Rest: Sammel-PDF))`);
+    expect(t).toContain(`(${"x".repeat(70)} … Rest: Sammel-PDF)`);
   });
 
   /**
@@ -806,7 +902,7 @@ describe("einsatzLageblattDokument()", () => {
     const inhalt = dd.content as unknown[];
     // Kopfleiste direkt nach dem Titel, vor der Einheitentabelle.
     const kopf = texte(inhalt[1]).filter((x) => x !== "*").join("");
-    expect(kopf).toMatch(/^Lage: 1 Einheit zählend · Stärke F \/ U \/ M \/ G \d+ \/ \d+ \/ \d+ \/ \d+ · 1 Fahrzeuge/);
+    expect(kopf).toMatch(/^Lage: 1 Einheit zählend · Stärke F \/ U \/ M \/\/ G \d+ \/ \d+ \/ \d+ \/\/ \d+ · 1 Fahrzeuge/);
     expect(kopf).toContain("Bedarf: Verpflegung");
     expect(kopf).toContain("Ruhezeit: 1 Einheit");
     expect(kopf).toContain("Diesel 80 l");
@@ -816,7 +912,7 @@ describe("einsatzLageblattDokument()", () => {
     expect(json).toContain('{"text":"Diesel 80 l"}');
     // Änderungen: die Gesamtstärke zuerst.
     const t = texte(inhalt[2]).join("\n");
-    expect(t).toMatch(/gegenüber .*:\nGesamtstärke: von \d+ auf \d+\nBedarf\/Auftrag: Unterbringung M\/W\/D .*\nweitere: .*Personal \(2\)/);
+    expect(t).toMatch(/gegenüber .*:\nGesamtstärke: von \d+ auf \d+\nBedarf\/Auftrag: WC\/Dusche M\/W\/D .*\nweitere: .*Personal \(2\)/);
   });
 
   it("sagt auf einem leeren Blatt, dass noch nichts gemeldet ist", () => {
@@ -826,7 +922,7 @@ describe("einsatzLageblattDokument()", () => {
     expect(t).toContain("Summe (von Hand)");
     expect(t).not.toContain("zählend");
     expect(t).not.toMatch(/\b0 \/ 0|0 Portionen|Diesel 0 l/);
-    expect(t).toContain("Stärke F / U / M / G ____ / ____ / ____ / ____");
+    expect(t).toContain("Stärke F / U / M // G ____ / ____ / ____ // ____");
     expect(t).toContain("Bedarf gesamt (von Hand)");
   });
 });
@@ -842,7 +938,22 @@ describe("lageblattAenderungen (Audit Runde 5, R5-K7)", () => {
     neu.sonstiges = "Nachschub nötig";
     const z = lageblattAenderungen(bogenDiff(alt, neu));
     expect(z.join("\n")).toContain("Diesel von 100 l auf 400 l");
-    expect(z.join("\n")).toContain("weitere: Bemerkung/Sonstiges");
+    expect(z.join("\n")).toContain("weitere: Bemerkung");
+  });
+
+  it("R21-A10: nennt eine Ortsänderung beim Namen und setzt „weitere:“ nur hinter eine Aufzählung", async () => {
+    const { lageblattAenderungen } = await import("./pdf-dokument");
+    const { bogenDiff } = await import("@bos/meldekopf/meldung-diff");
+    const alt = neuerBogen();
+    alt.einheit.hierarchie[0]!.name = "Oldenburg";
+    const neu = structuredClone(alt);
+    neu.einheit.hierarchie[0]!.name = "Husum";
+    const nurOrt = lageblattAenderungen(bogenDiff(alt, neu));
+    expect(nurOrt).toEqual(["Ort der Einheit geändert: THW Oldenburg → THW Husum"]);
+    // Nur eine Bemerkung: keine Aufzählung davor, also „Geändert:“ statt „weitere:“.
+    const bemerkung = structuredClone(alt);
+    bemerkung.sonstiges = "Nachschub nötig";
+    expect(lageblattAenderungen(bogenDiff(alt, bemerkung))).toEqual(["Geändert: Bemerkung"]);
   });
 });
 
@@ -953,5 +1064,61 @@ describe("ansprechpersonPapier() (R8-A3)", () => {
     b.personalErfassung = 1;
     b.personal = [{ ...neuePerson() }, { ...neuePerson() }];
     expect(JSON.stringify(pdfDokument(b, null).content)).toContain("Sollstärke der Vorbelegung");
+  });
+});
+
+describe("Titelbalken im Raster der THWin-Vorlage", () => {
+  it("THW-Bogen: Wortbildmarke rechts, Balken im Vorlagen-Blau #003399", () => {
+    const b = basisBogen();
+    b.uebung = false;
+    const t = JSON.stringify(pdfDokument(b, QR).content);
+    expect(t).toContain(THW_LOGO_JPEG);
+    expect(t).toContain('"fillColor":"#003399"');
+  });
+
+  it("Organisation ohne Logo: kein THW-Logo, stattdessen der Name der Organisation", () => {
+    const b = basisBogen();
+    b.einheit.organisation = OrganisationsTyp.POLIZEI;
+    b.einheit.organisationName = "Polizeidirektion Musterstadt";
+    const t = JSON.stringify(pdfDokument(b, QR).content);
+    expect(t).not.toContain(THW_LOGO_JPEG);
+    expect(t).toContain('"text":"Polizei"');
+    expect(t).toContain("Polizeidirektion Musterstadt");
+  });
+
+  it.each([
+    OrganisationsTyp.ASB,
+    OrganisationsTyp.BUNDESPOLIZEI,
+    OrganisationsTyp.BUNDESWEHR,
+    OrganisationsTyp.DLRG,
+    OrganisationsTyp.DRK,
+    OrganisationsTyp.JUH,
+    OrganisationsTyp.MHD,
+  ])("Organisation %i mit bekanntem Logo: Logo als Vektor statt Name, Gliederung darunter", (org) => {
+    const b = basisBogen();
+    b.einheit.organisation = org;
+    b.einheit.organisationName = "Kreisverband Musterstadt";
+    const logo = ORG_LOGOS[org]!;
+    const t = JSON.stringify(pdfDokument(b, QR).content);
+    expect(t).toContain(JSON.stringify(logo.svg));
+    expect(t).not.toContain(THW_LOGO_JPEG);
+    expect(t).not.toContain(`"text":"${orgLabel(org)}"`);
+    expect(t).toContain("Kreisverband Musterstadt");
+  });
+
+  it("Logos passen in den Platz der THW-Marke und kommen ohne Stylesheet aus", () => {
+    for (const logo of Object.values(ORG_LOGOS)) {
+      expect(logo.breite).toBeLessThanOrEqual(96);
+      expect(logo.hoehe).toBeLessThanOrEqual(19);
+      // pdfmake (svg-to-pdfkit) zeichnet weder <style>/class noch <switch>.
+      expect(logo.svg).not.toMatch(/<style|class=|<switch|<foreignObject/);
+    }
+  });
+
+  it("Vordruck: weder Logo noch Organisation, nur die Beschriftung zum Ausfüllen", () => {
+    const t = JSON.stringify(pdfDokument(basisBogen(), null, { fahrzeuge: 1, personal: 1, qualifikationen: 1 }).content);
+    expect(t).not.toContain(THW_LOGO_JPEG);
+    expect(t).toContain('"text":"Organisation:"');
+    expect(t).toContain('"text":"Einheit:"');
   });
 });

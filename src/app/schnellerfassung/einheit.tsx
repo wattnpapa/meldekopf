@@ -2,7 +2,7 @@
  * Abschnitt Einheit der Schnellerfassung: Organisation, Einheitstyp und die
  * Hierarchie der Kontaktstellen (beim THW mit OV-Vorschlagsliste).
  *
- * Herkunft: Erfassungsbogen `src/app/schritte/einheit.tsx` (Commit 441811c),
+ * Herkunft: Erfassungsbogen `src/app/schritte/einheit.tsx` (Commit 1d7ed5f),
  * mit den Befunden der Audit-Runden 2 bis 9 (OV-Auflösung R3-S4, R4-H1,
  * R4-N5; Vorbelegung mit Rückweg R4-D4, R5-D5, R7-E5; Ebene entfernen R9-D3).
  * Geändert: Die Landesvorlagen entfallen (bleiben im Erfassungsbogen,
@@ -11,7 +11,7 @@
  * (`vokabSortiert`), weil `VokabAuswahl` aus `@bos/oberflaeche` es nicht tut.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Einheit,
   Ernaehrung,
@@ -29,6 +29,7 @@ import { vokabSortiert } from "@bos/meldekopf/darstellung";
 import { stanPersonalVorbelegung } from "@bos/vokabulare/thw-stan-personal";
 import {
   ORG_OPTIONEN,
+  bogenHatInhalt,
   einheitAnzeigename,
   ersteEbene,
   fahrzeugUnbenannt,
@@ -40,23 +41,28 @@ import {
   vokabularFuer,
 } from "../hilfen";
 import { frageJaNein } from "@bos/oberflaeche/dialoge";
+import { ortOhneOrganisation } from "../ort-praefix";
+import { andereOrganisationImOrt, schnellOrganisationMerken } from "../schnell-organisation";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
 import { EBENE_WEG_SCHLUESSEL, rueckwegHolen, rueckwegMerken } from "./rueckweg-sitzung";
 import { vorbelegungWegLesen, vorbelegungWegSichern, zustandsAbdruck, type VorbelegungWeg } from "./vorbelegung-rueckweg";
-import { Auswahl, Feld, FREMDE_DATEN, Hinweise, KENNUNG_EINGABE, VokabAuswahl, VorschlagFeld } from "@bos/oberflaeche/bausteine";
+import { Auswahl, Feld, FREMDE_DATEN, Hinweise, KENNUNG_EINGABE, NAMEN_EINGABE, VokabAuswahl, VorschlagFeld } from "@bos/oberflaeche/bausteine";
 import type { AbschnittProps } from "./abschnitt";
+import { TelefonFeld } from "./telefon-feld";
+import { ortAnzeige, sucheForm } from "@bos/oberflaeche/schreibweise";
+import { emailProblem, emailSatz } from "../email-pruefung";
 
 // Das große Datenpaket lädt erst mit der Schnellerfassung, nicht mit dem
 // Start-Bundle: das THW-OV-Verzeichnis (~190 KB Quelldaten). Einmal geladen,
 // bleiben die Module im Cache —
 // der useState-Startwert greift dann sofort, ohne Nachlade-Flackern.
-type OvDaten = typeof import("@bos/vokabulare/thw-ov") &
+export type OvDaten = typeof import("@bos/vokabulare/thw-ov") &
   typeof import("@bos/vokabulare/thw-ov-regionalstruktur");
 
 let ovDatenCache: OvDaten | null = null;
 
-/** THW-OV-Verzeichnis samt Regionalstruktur; lädt nur, wenn `aktiv` (THW gewählt). */
-function useOvDaten(aktiv: boolean): OvDaten | null {
+/** THW-OV-Verzeichnis samt Regionalstruktur; lädt nur, wenn `aktiv` (THW gewählt). Auch Schritt 3 nutzt es (Dienststelle je Person). */
+export function useOvDaten(aktiv: boolean): OvDaten | null {
   const [daten, setDaten] = useState(ovDatenCache);
   useEffect(() => {
     if (!aktiv || daten) return;
@@ -93,11 +99,17 @@ function ebeneNameSetzen(
   return [...hierarchie, { bezeichnung: { code }, ...felder }];
 }
 
+/** Steht im Ortsfeld nicht mehr der Ort, der zuletzt aus dem Verzeichnis ergänzt wurde (R11-E1)? */
+export function ortGeaendert(aktuell: string, ergaenzt: string): boolean {
+  const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+  return norm(aktuell) !== norm(ergaenzt);
+}
+
 /**
  * Übernimmt einen OV in die OV-Zeile `i` (Name + Kontaktdaten) und füllt,
  * soweit bekannt, Regionalstelle (Ebene 2) und Landesverband (Ebene 3) mit.
  */
-function ovInHierarchieUebernehmen(daten: OvDaten, hierarchie: HierarchieEbene[], i: number, ov: ThwOrtsverband): HierarchieEbene[] {
+export function ovInHierarchieUebernehmen(daten: OvDaten, hierarchie: HierarchieEbene[], i: number, ov: ThwOrtsverband): HierarchieEbene[] {
   let neu = hierarchie.map((h, j) =>
     j === i
       ? { ...h, name: ov.name, kurz: ov.kurz || undefined, telefon: ov.telefon.replace(/\D/g, "") || undefined, email: ov.email || undefined }
@@ -144,14 +156,40 @@ export function ovImText(verzeichnis: ThwOrtsverband[], text: string): ThwOrtsve
   return beste;
 }
 
+/** Die Vorschläge zu einer Eingabe (höchstens acht) — auch für den Hinweis nach dem Verlassen des Feldes (R16-E4). */
+export function ovTreffer(verzeichnis: readonly ThwOrtsverband[], wert: string): ThwOrtsverband[] {
+  const suche = sucheForm(wert);
+  return suche
+    ? verzeichnis
+        .filter((o) => sucheForm(o.name).includes(suche) || sucheForm(o.kurz).startsWith(suche) || sucheForm(o.ort).startsWith(suche))
+        .sort((a, b) => Number(sucheForm(b.name).startsWith(suche)) - Number(sucheForm(a.name).startsWith(suche)))
+        .slice(0, 8)
+    : [];
+}
+
+/** Satz zu einem Ortsverband-Namen ohne Kürzel: mehrdeutig („mehrere Orte heißen so") oder nicht im Verzeichnis (R16-E4). */
+export function ovFreiHinweis(name: string, treffer: readonly ThwOrtsverband[]): string {
+  if (treffer.length === 0) {
+    return `„${name}" ist nicht im OV-Verzeichnis — Vorschlag antippen, sonst fehlen Kürzel, Telefon und E-Mail. Ein Ortsverband, den es dort nicht gibt, darf so stehen bleiben.`;
+  }
+  // R20-S4: den vollen Namen des Vorschlags mit Kürzel nennen („OV Flensburg (OFLE)"), damit er sich vom Eingegebenen unterscheidet.
+  const voll = (o: ThwOrtsverband) => `OV ${o.name} (${o.kurz})`;
+  const namen = treffer.slice(0, 3).map(voll).join(", ") + (treffer.length > 3 ? " …" : "");
+  return treffer.length === 1
+    ? `„${name}" meint vielleicht ${namen} — Vorschlag antippen, dann kommen Kürzel, Telefon und E-Mail dazu.`
+    : `„${name}" kann mehrere Ortsverbände meinen (${namen}) — Vorschlag antippen, dann kommen Kürzel, Telefon und E-Mail dazu.`;
+}
+
 /**
  * OV-Namensfeld mit Vorschlagsliste aus dem OV-Verzeichnis. Auswahl übernimmt
  * Kürzel + Kontaktdaten; ein direkt eingetipptes Kürzel ("OODE") wird beim
  * Verlassen des Felds aufgelöst.
  */
-function OvVorschlagFeld(props: {
+export function OvVorschlagFeld(props: {
   /** id des Eingabefelds — Sprungziel einer Rückfrage („Name der Einheit fehlt"). */
   id?: string;
+  /** Zugänglicher Name, wo kein <Feld> ihn liefert (Tabellenzelle). */
+  beschriftung?: string;
   wert: string;
   platzhalter: string;
   /** OV-Verzeichnis; leer, solange das Datenpaket noch lädt. */
@@ -162,38 +200,40 @@ function OvVorschlagFeld(props: {
   aufgeloest?: (ov: ThwOrtsverband) => void;
   /** true: das Feld nimmt das Kürzel auf, nicht den Namen (R2-M6). */
   kennung?: boolean;
+  /** Beim Verlassen des Felds, vor der Auflösung — etwa um einen Tipp-Entwurf zu verwerfen. */
+  verlassen?: (wert: string) => void;
 }) {
-  const { id, wert, platzhalter, verzeichnis, tippen, uebernehmen, aufgeloest, kennung } = props;
+  const { id, beschriftung, wert, platzhalter, verzeichnis, tippen, uebernehmen, aufgeloest, kennung, verlassen } = props;
 
-  const suche = wert.trim().toLowerCase();
-  const treffer = suche
-    ? verzeichnis
-        .filter(
-          (o) => o.name.toLowerCase().includes(suche) || o.kurz.toLowerCase().startsWith(suche) || o.ort.toLowerCase().startsWith(suche),
-        )
-        .sort((a, b) => Number(b.name.toLowerCase().startsWith(suche)) - Number(a.name.toLowerCase().startsWith(suche)))
-        .slice(0, 8)
-    : [];
+  // Beide Seiten gefaltet (R11-H1): „Hassmersheim" und „Muellheim" finden „Haßmersheim" und „Müllheim".
+  // Bindestrich und Leerzeichen gleich (R13-H2): „Neu Ulm" findet „Neu-Ulm".
+  const treffer = ovTreffer(verzeichnis, wert);
+  // R11-N2: steht das Kürzel schon da und ist der einzige Vorschlag, wiederholt die Liste nur den Eintrag und verdeckt Telefon und E-Mail.
+  const nurEintrag = !!kennung && treffer.length === 1 && treffer[0]!.kurz === wert.trim().toUpperCase();
+  const gezeigt = nurEintrag ? [] : treffer;
 
   return (
     <VorschlagFeld
       id={id}
+      beschriftung={beschriftung}
       wert={wert}
       platzhalter={platzhalter}
-      treffer={treffer}
+      treffer={gezeigt}
       schluessel={(o) => o.name}
       zeile={(o) => (
         <>
           {o.name}
           <small>
-            {o.kurz} · {o.plz} {o.ort}
+            {o.kurz} · {o.plz} {ortAnzeige(o.ort)}
           </small>
         </>
       )}
       tippen={tippen}
       waehlen={uebernehmen}
       kennung={kennung}
+      keineTreffer={kennung ? undefined : "Kein Ort mit diesem Namen in der Liste — Schreibweise prüfen. Ein Ortsverband, den es dort nicht gibt, darf so stehen bleiben."}
       verlassen={(eingabe) => {
+        verlassen?.(eingabe);
         const e = eingabe.trim();
         if (!e) return;
         // Beim Verlassen nur eindeutig auflösen: das Kürzel, oder ein Name,
@@ -201,30 +241,19 @@ function OvVorschlagFeld(props: {
         // Kürzel und Telefon von Neustadt (Holstein) ein, obwohl ebenso
         // „Neustadt an der Aisch" oder „… an der Weinstraße" gemeint sein
         // konnte — ohne dass jemand gewählt hatte (Audit Runde 3, R3-S4).
-        const klein = e.toLowerCase();
-        const gleichAnfang = verzeichnis.filter((o) => o.name.toLowerCase().startsWith(klein));
+        const klein = sucheForm(e);
+        const gleichAnfang = verzeichnis.filter((o) => sucheForm(o.name).startsWith(klein));
         // Ohne Groß-/Kleinschreibung: „ulm" gehörte zu „Ulm", blieb aber Freitext
-        // ohne Kürzel und Kontakt (Audit Runde 4, R4-H1).
+        // ohne Kürzel und Kontakt (Audit Runde 4, R4-H1); ohne Umlaut-Unterschiede (R11-H1).
         const ov =
           verzeichnis.find((o) => o.kurz === e.toUpperCase()) ??
-          (gleichAnfang.length === 1 && gleichAnfang[0]!.name.toLowerCase() === klein ? gleichAnfang[0] : undefined);
+          (gleichAnfang.length === 1 && sucheForm(gleichAnfang[0]!.name) === klein ? gleichAnfang[0] : undefined);
         if (ov) (aufgeloest ?? uebernehmen)(ov);
       }}
     />
   );
 }
 
-
-/** In der Schnellerfassung zugeklappt (`details`), sonst ohne Rahmen. */
-function AufklappRahmen(props: { aktiv: boolean; titel: string; children: ReactNode }) {
-  if (!props.aktiv) return <>{props.children}</>;
-  return (
-    <details className="zugehoerigkeit-klappe">
-      <summary>{props.titel}</summary>
-      {props.children}
-    </details>
-  );
-}
 
 /** Steht in der Ebene etwas, das beim Entfernen verloren ginge? */
 function ebeneHatInhalt(h: HierarchieEbene): boolean {
@@ -258,7 +287,7 @@ const ORGANISATIONSNAME_BEISPIEL: Partial<Record<OrganisationsTyp, string>> = {
  * (Audit Runde 3, R3-H7, R3-N6).
  */
 const EINHEITSTYP_BEISPIEL: Partial<Record<OrganisationsTyp, string>> = {
-  [OrganisationsTyp.THW]: "z. B. Bergungsgruppe, FGr Wasserschaden/Pumpen",
+  [OrganisationsTyp.THW]: "z. B. Bergungsgruppe, FGr WP",
   [OrganisationsTyp.FEUERWEHR]: "z. B. Löschzug, Löschgruppe",
   [OrganisationsTyp.DRK]: "z. B. SEG Sanität, Betreuungszug",
   [OrganisationsTyp.JUH]: "z. B. SEG Sanität, Betreuungszug",
@@ -267,10 +296,21 @@ const EINHEITSTYP_BEISPIEL: Partial<Record<OrganisationsTyp, string>> = {
   [OrganisationsTyp.DLRG]: "z. B. Wasserrettungszug, Bootstrupp",
 };
 
+/** Schnellerfassung (R19-E3, S2, O7): alles außer Ort und Typ steht hinter einem Aufklapper. */
+function SchnellMehr({ children }: { children?: ReactNode }) {
+  return (
+    <details className="schnell-mehr">
+      <summary>Organisationsname, Ebenen, Kontakt (optional)</summary>
+      {children}
+    </details>
+  );
+}
+
 export function AbschnittEinheit({
   bogen,
   aendern: aendernRoh,
   kompakt = false,
+  ortFokus = false,
 }: AbschnittProps & {
   /**
    * Schnellerfassung: Der Ort steht oben, Kontaktstellen und übergeordnete
@@ -280,8 +320,27 @@ export function AbschnittEinheit({
    * Phase 6, Feldnutzer und Handschuh, P1).
    */
   kompakt?: boolean;
+  /** Fokus beim Öffnen in den Ort, solange er leer ist (Erfassungsbogen R11-M1). */
+  ortFokus?: boolean;
 }) {
   const e = bogen.einheit;
+  // Im Meldekopf ist jede Erfassung eine Schnellerfassung; `kompakt` entspricht dem `schnell` des Erfassungsbogens.
+  const schnell = kompakt;
+  const Mehr = schnell ? SchnellMehr : Fragment;
+  // Schnell- und manuelle Erfassung für eine Sammlung (R11-M1): Das einzige Pflichtfeld liegt sonst zwei Bildschirme
+  // unter dem Kopf. Beim Öffnen (nur solange der Ort noch leer ist, nicht beim Zurückblättern) steht der Fokus dort.
+  useEffect(() => {
+    if (!ortFokus || (bogen.einheit.hierarchie[0]?.name ?? "").trim() !== "") return;
+    const feld = document.getElementById("feld-einheit-name");
+    // R16-M1: Die Seite bleibt am Anfang (Kopf, Marke „Aufnahme für: …", „1. Einheit"); der Fokus springt nicht mehr hinunter.
+    try {
+      window.scrollTo(0, 0);
+    } catch {
+      /* Testumgebung ohne Layout */
+    }
+    feld?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Vorbelegung und Typwechsel verändern die Personalliste — der Verpflegungs-
   // Bedarf in Schritt 5 zieht mit (siehe verpflegungMitziehen).
   // Jede weitere Änderung verwirft den Rückweg der Vorbelegung, damit
@@ -311,7 +370,13 @@ export function AbschnittEinheit({
     });
   };
   /** `aendern` mit Rückweg, wenn dabei unbenannte Sollplätze weggehen (oder schon eine Leiste steht). */
-  function aendernMitVorbelegungWeg(patch: Partial<typeof bogen>, titel: string, immer = false) {
+  function aendernMitVorbelegungWeg(
+    patch: Partial<typeof bogen>,
+    titel: string,
+    immer = false,
+    /** Mit Angabe ersetzt der neue Schritt Titel und Ziel einer schon stehenden Leiste; der Rückweg bleibt der erste Stand. */
+    aktualisieren?: (alt: VorbelegungWeg) => string | undefined,
+  ) {
     if (immer || vorbelegtePersonen > 0 || vorbelegteFahrzeuge > 0) {
       const teile = [
         vorbelegtePersonen > 0 ? anzahlText(vorbelegtePersonen, "Person", "Personen") : "",
@@ -337,7 +402,9 @@ export function AbschnittEinheit({
         nonce: Date.now(),
         danach: zustandsAbdruck(patch.personal ?? bogen.personal, patch.fahrzeuge ?? bogen.fahrzeuge),
       };
-      setVorbelegungWeg((alt) => alt ?? neu);
+      setVorbelegungWeg((alt) =>
+        alt && aktualisieren ? { ...alt, kopf: neu.kopf, ziel: aktualisieren(alt), nonce: neu.nonce, danach: neu.danach } : (alt ?? neu),
+      );
     }
     aendernRoh(verpflegungMitziehen(bogen, patch));
   }
@@ -385,6 +452,9 @@ export function AbschnittEinheit({
    * geleerter oder frei getippter Typ hat keine Vorbelegung — dann gehen die
    * unbenannten Karten nur weg.
    */
+  // Letzter Typ mit Sollstärke: Beim Umtippen im Feld liegt zwischendurch ein leerer oder halber Typ an — der Vergleich
+  // „stehen noch die Sollzahlen?" braucht den Typ davor.
+  const letzterSollTyp = useRef(e.einheitsTyp);
   function einheitstypSetzen(v: Einheit["einheitsTyp"]) {
     const einheit = { ...e, einheitsTyp: v };
     // Derselbe Code noch einmal (Combobox-Auflösung beim Verlassen): nichts anfassen.
@@ -406,11 +476,27 @@ export function AbschnittEinheit({
       ...bogen.fahrzeuge.filter((f) => !fahrzeugUnbenannt(f)),
       ...(bogen.personalErfassung === PersonalErfassung.NUR_STAERKE ? [] : fahrzeugVorbelegung(einheit)),
     ];
+    // Nur Stärke: Stehen noch genau die Sollzahlen des bisherigen Typs da (niemand hat gezählt), folgen sie dem
+    // neuen Typ — sonst meldete der Bogen die Stärke der zuerst gewählten Fachgruppe (Rückmeldung OV Chemnitz,
+    // 11/2026). Gezählte Zahlen bleiben.
+    const sollAlt = staerke({ personal: stanPersonalVorbelegung(e.organisation, letzterSollTyp.current) });
+    const sollNeu = staerke({ personal: stanPersonalVorbelegung(e.organisation, v) });
+    if (sollNeu.gesamt > 0) letzterSollTyp.current = v;
+    const manuell = bogen.staerkeManuell;
+    const staerkeFolgt =
+      bogen.personalErfassung === PersonalErfassung.NUR_STAERKE &&
+      manuell != null &&
+      sollAlt.gesamt > 0 &&
+      sollNeu.gesamt > 0 &&
+      manuell.fuehrer === sollAlt.fuehrer &&
+      manuell.unterfuehrer === sollAlt.unterfuehrer &&
+      manuell.mannschaft === sollAlt.mannschaft;
     aendernMitVorbelegungWeg(
       {
         einheit,
         ...(personal.length !== bogen.personal.length || personal.some((p, i) => p !== bogen.personal[i]) ? { personal } : {}),
         ...(fahrzeuge.length !== bogen.fahrzeuge.length || fahrzeuge.some((f, i) => f !== bogen.fahrzeuge[i]) ? { fahrzeuge } : {}),
+        ...(staerkeFolgt ? { staerkeManuell: sollNeu } : {}),
       },
       "Vorbelegung des bisherigen Typs ersetzt",
     );
@@ -434,10 +520,14 @@ export function AbschnittEinheit({
    * dreier Ebenen. Steht davon etwas im Bogen, wird gefragt und benannt, was
    * verloren geht; bei Abbruch bleibt die Auswahl, wie sie war.
    */
-  async function organisationWechseln(organisation: OrganisationsTyp) {
+  /**
+   * `ortBehalten` (R21-W2): der Ort, der beim Wechsel stehen bleibt (die Zeile „klingt nach DRK" stellt um, ohne den eingetippten Ort
+   * zu verlieren; Organisation und Ort stehen ohnehin im Namen, `einheitAnzeigename` führt jeden Teil nur einmal).
+   */
+  async function organisationWechseln(organisation: OrganisationsTyp, ortBehalten?: string) {
     if (organisation === e.organisation) return;
     const typText = vokabText(e.einheitsTyp, einheitstypen, "kurz").trim();
-    const ebenenMitInhalt = e.hierarchie.filter(ebeneHatInhalt);
+    const ebenenMitInhalt = e.hierarchie.filter((h, i) => ebeneHatInhalt(h) && !(ortBehalten !== undefined && i === 0 && !h.kurz?.trim() && !h.telefon?.trim() && !h.email?.trim()));
     const verluste: string[] = [];
     if (typText) verluste.push(`Einheitstyp „${typText}"`);
     if (ebenenMitInhalt.length > 0) {
@@ -474,17 +564,27 @@ export function AbschnittEinheit({
     ) {
       return;
     }
+    // R21-W2: Die Schnellerfassung beginnt beim nächsten Mal mit dieser Organisation.
+    if (schnell) schnellOrganisationMerken(organisation);
     // Mit Rückweg (R7-E5): die Leiste im Daumenbereich stellt Organisation, Typ
     // und Zugehörigkeit samt Vorbelegung wieder her.
     aendernMitVorbelegungWeg(
       {
-        einheit: { ...e, organisation, einheitsTyp: {}, hierarchie: [ersteEbene(organisation)] },
+        einheit: {
+          ...e,
+          organisation,
+          einheitsTyp: {},
+          hierarchie: [ortBehalten !== undefined ? { ...ersteEbene(organisation), name: ortBehalten } : ersteEbene(organisation)],
+        },
         // Wie beim Leeren des Typs: die Vorbelegung gehört zum alten Typ.
         personal: bogen.personal.filter((p) => !personUnbenannt(p)),
         fahrzeuge: bogen.fahrzeuge.filter((f) => !fahrzeugUnbenannt(f)),
       },
       `Organisation auf „${orgLabel(organisation)}" gewechselt (Einheitstyp und Zugehörigkeit zurückgesetzt)`,
       true,
+      // R12-N2: Die Zeile nennt die letzte Wahl und, wohin „Rückgängig“ führt (der Stand vor dem ersten Wechsel).
+      (alt) =>
+        alt.einheit.organisation === organisation ? undefined : `Rückgängig stellt „${orgLabel(alt.einheit.organisation)}" wieder her.`,
     );
   }
   // Welches Namensfeld der Zugehörigkeit gerade den Fokus hat (Hinweis „nicht im Verzeichnis" erst danach).
@@ -551,84 +651,163 @@ export function AbschnittEinheit({
     setErgaenzt(null);
   }
 
-  /** Namensfeld einer Ebene samt der Hinweise darunter (ergänzt, nicht im Verzeichnis). */
-  const nameUndHinweise = (h: HierarchieEbene, i: number) => (
+
+  const alleHinweise = pruefpunkte(bogen, false);
+  const andereOrg = andereOrganisationImOrt(e.hierarchie[0]?.name ?? "", e.organisation);
+  const mailPunkt = (adresse?: string) => (emailProblem(adresse) ? alleHinweise.find((p) => p.schritt === 0 && p.text.includes(emailSatz(adresse))) : undefined);
+  const imFeld = new Set(e.hierarchie.map((h) => mailPunkt(h.email)?.text));
+  /** „Ort der Einheit" (bzw. „Name" der übergeordneten Ebene) samt den Hinweisen darunter; in der Schnellerfassung steht er ganz oben (R19-E3). */
+  const ortBlock = (h: (typeof e.hierarchie)[number], i: number) => (
     <>
-            {/* Nur zum Beobachten des Fokus: Der Hinweis „nicht im Verzeichnis" kommt
-                erst, wenn das Namensfeld verlassen ist. */}
-            <span
-              style={{ display: "contents" }}
-              onFocusCapture={() => setNameImFokus(i)}
-              onBlurCapture={() => setNameImFokus((z) => (z === i ? null : z))}
-            >
-            <Feld titel={i === 0 ? "Ort der Einheit (Pflicht)" : "Name"}>
-              {e.organisation === OrganisationsTyp.THW && h.bezeichnung.code === 1 ? (
-                <OvVorschlagFeld
-                  id={i === 0 ? "feld-einheit-name" : undefined}
-                  wert={h.name}
-                  platzhalter="tippen für Vorschläge…"
-                  verzeichnis={ovVerzeichnis}
-                  tippen={(name) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name } : x)) })}
-                  uebernehmen={(ov) => {
-                    setErgaenzt(null);
-                    ovUebernehmen(i, ov);
-                  }}
-                  aufgeloest={(ov) => ovAufgeloest(i, ov)}
-                />
-              ) : (
-                <input
-                  id={i === 0 ? "feld-einheit-name" : undefined}
-                  value={h.name}
-                  onChange={(ev) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)) })}
-                />
-              )}
-            </Feld>
-            </span>
-            {/* Direkt unter dem Namensfeld, das ergänzt hat — dort liegt der Blick. */}
-            {/* Kompakt nicht hier: Der Satz erschiene beim Verlassen des Felds und
-                schöbe die Zähler darunter weg (dort steht er als feste Leiste). */}
-            {!kompakt && ergaenzt && ergaenzt.i === i && e.hierarchie[ergaenzt.i]?.kurz === ergaenzt.ov.kurz && (
-              <p className="hinweis ov-ergaenzt" role="status">
-                Aus dem OV-Verzeichnis ergänzt: {ergaenzt.ov.name} ({ergaenzt.ov.kurz}) mit Telefon und E-Mail
-                {e.hierarchie.length > 1 ? ", dazu die übergeordneten Ebenen" : ""}.{" "}
-                <button type="button" className="link" onClick={ergaenzungZuruecknehmen}>Rückgängig</button>
-              </p>
-            )}
-            {/* Ein OV-Name ohne Kürzel ist Freitext: nicht aus dem Verzeichnis, ohne
-                Telefon und E-Mail (Audit Runde 4, R4-H1). Erst nach dem Verlassen
-                des Namensfelds, nicht schon beim Tippen. */}
-            {!(kompakt && i === 0) &&
-              e.organisation === OrganisationsTyp.THW &&
-              h.bezeichnung.code === 1 &&
-              ovVerzeichnis.length > 0 &&
-              h.name.trim() &&
-              !h.kurz?.trim() &&
-              nameImFokus !== i && (
-                <p className="hinweis warnung-text ov-frei-hinweis" role="status">
-                  „{h.name.trim()}" ist nicht im OV-Verzeichnis — Vorschlag antippen, sonst fehlen Kürzel, Telefon und E-Mail.
-                  Ein Ortsverband, den es dort nicht gibt, darf so stehen bleiben.
-                </p>
-              )}
+      {/* Nur zum Beobachten des Fokus: Der Hinweis „nicht im Verzeichnis" kommt
+          erst, wenn das Namensfeld verlassen ist. */}
+      <span
+        style={{ display: "contents" }}
+        onFocusCapture={() => setNameImFokus(i)}
+        onBlurCapture={() => {
+          setNameImFokus((z) => (z === i ? null : z));
+          // R20-H1: „THW Oldenburg" statt „Oldenburg" getippt – die Organisation steht schon davor, nicht doppelt speichern.
+          if (e.organisation === OrganisationsTyp.THW && h.bezeichnung.code === 1) {
+            const sauber = ortOhneOrganisation(h.name, orgLabel(e.organisation));
+            if (sauber !== h.name) setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name: sauber } : x)) });
+          }
+        }}
+      >
+      <Feld titel={i === 0 ? "Ort der Einheit (Pflicht)" : "Name"}>
+        {e.organisation === OrganisationsTyp.THW && h.bezeichnung.code === 1 ? (
+          <OvVorschlagFeld
+            id={i === 0 ? "feld-einheit-name" : undefined}
+            wert={h.name}
+            platzhalter="tippen für Vorschläge…"
+            verzeichnis={ovVerzeichnis}
+            tippen={(name) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name } : x)) })}
+            uebernehmen={(ov) => {
+              setErgaenzt(null);
+              ovUebernehmen(i, ov);
+            }}
+            aufgeloest={(ov) => ovAufgeloest(i, ov)}
+          />
+        ) : (
+          <input
+            {...NAMEN_EINGABE}
+            autoComplete="off" // Ortsnamen und Dienststellen: keine Autokorrektur, keine Vorschläge aus anderen Formularen (R16-H2)
+            id={i === 0 ? "feld-einheit-name" : undefined}
+            value={h.name}
+            onChange={(ev) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)) })}
+          />
+        )}
+      </Feld>
+      </span>
+      {/* R21-W2, H2: Der Ort nennt eine andere Organisation als die gewählte („DRK Bremen" bei „THW"): die App fragt, statt still „THW DRK Bremen" abzulegen. */}
+      {i === 0 && andereOrg !== undefined && nameImFokus !== 0 && (
+        <p className="hinweis warnung-text organisation-im-ort" role="status">
+          „{h.name.trim()}“ klingt nach {orgLabel(andereOrg)}, die Organisation steht auf {orgLabel(e.organisation)}.{" "}
+          <button type="button" onClick={() => void organisationWechseln(andereOrg, ortOhneOrganisation(h.name, orgLabel(andereOrg)))}>Auf {orgLabel(andereOrg)} stellen</button>
+        </p>
+      )}
+      {/* Direkt unter dem Namensfeld, das ergänzt hat — dort liegt der Blick. */}
+      {/* Schnellerfassung: Der Satz „ergänzt“ steht als feste Leiste unten (DaumenQuittung), nicht hier — er erschiene beim
+          Verlassen des Felds und schöbe die Zähler darunter weg (Meldekopf, Audit Phase 6, P1). „Ort geändert“ bleibt hier. */}
+      {ergaenzt && ergaenzt.i === i && e.hierarchie[ergaenzt.i]?.kurz === ergaenzt.ov.kurz && (!(schnell && i === 0) || ortGeaendert(h.name, ergaenzt.ov.name)) && (
+        ortGeaendert(h.name, ergaenzt.ov.name) ? (
+          // Der Ort wurde nach der Ergänzung geändert (R11-E1): Kürzel, Telefon, E-Mail, RB und LV
+          // stammen noch vom zuerst gewählten Ortsverband — das sagt die Zeile statt „ergänzt".
+          <p className="hinweis warnung-text ov-ergaenzt ov-ort-geaendert" role="status">
+            Ort geändert — Kürzel, Telefon und E-Mail{e.hierarchie.length > 1 ? " und die übergeordneten Ebenen" : ""} stammen noch
+            von {ergaenzt.ov.name} ({ergaenzt.ov.kurz}).{" "}
+            <button type="button" className="link" onClick={ergaenzungZuruecknehmen}>
+              Angaben von {ergaenzt.ov.name} entfernen
+            </button>
+          </p>
+        ) : (
+          <p className="hinweis ov-ergaenzt" role="status">
+            Aus dem OV-Verzeichnis ergänzt: {ergaenzt.ov.name} ({ergaenzt.ov.kurz}) mit Telefon und E-Mail
+            {e.hierarchie.length > 1 ? ", dazu die übergeordneten Ebenen" : ""}.{" "}
+            <button type="button" className="link" onClick={ergaenzungZuruecknehmen}>Rückgängig</button>
+          </p>
+        )
+      )}
+      {/* Ein OV-Name ohne Kürzel ist Freitext: nicht aus dem Verzeichnis, ohne
+          Telefon und E-Mail (Audit Runde 4, R4-H1). Erst nach dem Verlassen
+          des Namensfelds, nicht schon beim Tippen. */}
+      {/* Schnellerfassung: für die eigene Einheit im Aufklapper, aus demselben Grund. */}
+      {!(schnell && i === 0) &&
+        e.organisation === OrganisationsTyp.THW &&
+        h.bezeichnung.code === 1 &&
+        ovVerzeichnis.length > 0 &&
+        h.name.trim() &&
+        !h.kurz?.trim() &&
+        nameImFokus !== i && (
+          <p className="hinweis warnung-text ov-frei-hinweis" role="status">
+            {ovFreiHinweis(h.name.trim(), ovTreffer(ovVerzeichnis, h.name))}
+          </p>
+        )}
     </>
   );
+  const organisationFeld = (
+    <Feld titel="Organisation">
+      <Auswahl
+        value={e.organisation}
+        onChange={(ev) => void organisationWechseln(Number(ev.target.value))}
+      >
+        {ORG_OPTIONEN.map((o) => (
+          <option key={o.wert} value={o.wert}>{o.label}</option>
+        ))}
+      </Auswahl>
+    </Feld>
+  );
+  const typZeile = (
+    <div className="zeile">
+      <Feld titel="Einheitstyp">
+        <VokabAuswahl
+          wert={e.einheitsTyp}
+          aendern={einheitstypSetzen}
+          tabelle={vokabSortiert(einheitstypen)}
+          platzhalter={EINHEITSTYP_BEISPIEL[e.organisation] ?? "z. B. Löschzug, SEG Sanität"}
+          suchbar
+          freitextHinweis
+        />
+      </Feld>
+    </div>
+  );
+  // Die Vorbelegung wird angesagt, wo sie ausgelöst wird. Vorher stand auf Schritt 1 nichts davon — erst Schritt 3 meldete
+  // „7 Personenkarten ohne Angaben zählen in die Stärke", ohne zu sagen, woher sie kamen.
+  const vorbelegungHinweis =
+    typHatVorlage && (vorbelegtePersonen > 0 || vorbelegteFahrzeuge > 0) ? (
+      <p className="hinweis vorbelegung-hinweis" role="status">
+        Vorbelegt nach StAN:{" "}
+        {[
+          vorbelegtePersonen > 0 ? `${anzahlText(vorbelegtePersonen, "Person", "Personen")} (Namen offen)` : "",
+          vorbelegteFahrzeuge > 0 ? `${anzahlText(vorbelegteFahrzeuge, "Fahrzeug", "Fahrzeuge")} (Kennzeichen offen)` : "",
+        ]
+          .filter(Boolean)
+          .join(", ")}
+        . Sie zählen in die Stärke, bis sie ausgefüllt oder entfernt sind; ein anderer Einheitstyp
+        ersetzt sie durch seine eigenen Sollplätze.{" "}
+        <button type="button" onClick={vorbelegungEntfernen}>Vorbelegung entfernen</button>
+      </p>
+    ) : null;
 
   return (
-    <section className="karte">
+    <section className={`karte${schnell ? " schnell-einheit" : ""}`}>
       <h2>Einheit</h2>
+      {/* Schnellerfassung (R19-E3, S2, O7, G11, M7, N4): Der Ort — das einzige Pflichtfeld — steht als erstes Feld, dann der Typ;
+          der Rest („kann offen bleiben") liegt hinter dem Aufklapper. */}
+      {/* R21-W2, H2: In der Schnellerfassung steht die Organisation sichtbar über dem Ort (Standard: die letzte Wahl), nicht
+          eingeklappt auf „THW"; im Aufklapper bleibt nur der Organisationsname. Sie steht vor dem Ort, weil ein Wechsel Ort, Typ und
+          Zugehörigkeit zurücksetzt. */}
+      {schnell && <div className="zeile schnell-organisation">{organisationFeld}</div>}
+      {schnell && e.hierarchie[0] && ortBlock(e.hierarchie[0], 0)}
+      {schnell && typZeile}
+      {schnell && vorbelegungHinweis}
+      <Mehr>
       <div className="zeile">
-        <Feld titel="Organisation">
-          <Auswahl
-            value={e.organisation}
-            onChange={(ev) => void organisationWechseln(Number(ev.target.value))}
-          >
-            {ORG_OPTIONEN.map((o) => (
-              <option key={o.wert} value={o.wert}>{o.label}</option>
-            ))}
-          </Auswahl>
-        </Feld>
+        {!schnell && organisationFeld}
         <Feld titel={`Organisationsname${e.organisation === OrganisationsTyp.SONSTIGE ? " (Pflicht)" : " (optional)"}`}>
           <input
+            {...NAMEN_EINGABE}
             value={e.organisationName ?? ""}
+            autoComplete="off"
             onChange={(ev) => setE({ organisationName: ev.target.value || undefined })}
             placeholder={ORGANISATIONSNAME_BEISPIEL[e.organisation] ?? "z. B. Name der Organisation"}
           />
@@ -643,40 +822,14 @@ export function AbschnittEinheit({
           </button>
         </p>
       )}
-      <div className="zeile">
-        <Feld titel="Einheitstyp">
-          <VokabAuswahl
-            wert={e.einheitsTyp}
-            aendern={einheitstypSetzen}
-            tabelle={vokabSortiert(einheitstypen)}
-            platzhalter={EINHEITSTYP_BEISPIEL[e.organisation] ?? "z. B. Löschzug, SEG Sanität"}
-            suchbar
-            freitextHinweis
-          />
-        </Feld>
-      </div>
-      {/* Die Vorbelegung wird angesagt, wo sie ausgelöst wird. Vorher stand
-          auf Schritt 1 nichts davon — erst Schritt 3 meldete „7 Personenkarten
-          ohne Angaben zählen in die Stärke", ohne zu sagen, woher sie kamen. */}
-      {typHatVorlage && (vorbelegtePersonen > 0 || vorbelegteFahrzeuge > 0) && (
-        <p className="hinweis vorbelegung-hinweis" role="status">
-          Vorbelegt nach StAN:{" "}
-          {[
-            vorbelegtePersonen > 0 ? `${anzahlText(vorbelegtePersonen, "Person", "Personen")} (Namen offen)` : "",
-            vorbelegteFahrzeuge > 0 ? `${anzahlText(vorbelegteFahrzeuge, "Fahrzeug", "Fahrzeuge")} (Kennzeichen offen)` : "",
-          ]
-            .filter(Boolean)
-            .join(", ")}
-          . Sie zählen in die Stärke, bis sie ausgefüllt oder entfernt sind; ein anderer Einheitstyp
-          ersetzt sie durch seine eigenen Sollplätze.{" "}
-          <button type="button" onClick={vorbelegungEntfernen}>Vorbelegung entfernen</button>
-        </p>
-      )}
+      {/* R20-N2: Auch im Vollassistenten steht der Ort — das einzige Pflichtfeld — gleich unter der Organisation, nicht hinter dem
+          Absatz „Zugehörigkeit / Kontaktstellen" unter dem Falz. */}
+      {!schnell && e.hierarchie[0] && ortBlock(e.hierarchie[0], 0)}
+      {!schnell && typZeile}
+      {!schnell && vorbelegungHinweis}
 
-      {kompakt && e.hierarchie[0] && <div className="zeile">{nameUndHinweise(e.hierarchie[0], 0)}</div>}
-      <AufklappRahmen aktiv={kompakt} titel="Zugehörigkeit und Kontakt (optional)">
-      {/* Kompakt steht der Hinweis „nicht im Verzeichnis" hier, aus demselben Grund. */}
-      {kompakt &&
+      {/* Schnellerfassung: Der Hinweis „nicht im Verzeichnis“ steht hier, nicht unter dem Ort (s. ortBlock). */}
+      {schnell &&
         e.organisation === OrganisationsTyp.THW &&
         e.hierarchie[0]?.bezeichnung.code === 1 &&
         ovVerzeichnis.length > 0 &&
@@ -691,7 +844,7 @@ export function AbschnittEinheit({
       <p className="hinweis">
         Die erste Ebene ist die eigene Einheit, jede weitere Zeile die nächsthöhere Stelle
         {ebenen.length > 0 && <> ({ebenen.map((v) => v.name).join(" → ")})</>}.
-        Aus Name, Organisation und Einheitstyp bildet sich die Bezeichnung auf dem Bogen: <b>{einheitAnzeigename(e)}</b>
+        Aus Ort der Einheit, Organisation und Einheitstyp bildet sich die Bezeichnung auf dem Bogen: <b>{einheitAnzeigename(e)}</b>
       </p>
       {e.hierarchie.map((h, i) => (
         <div className="zeile ebenen-zeile" key={i}>
@@ -706,7 +859,7 @@ export function AbschnittEinheit({
               platzhalter="z. B. Landkreis"
             />
           </Feld>
-          {!(kompakt && i === 0) && nameUndHinweise(h, i)}
+          {i > 0 && ortBlock(h, i)}
           {/* Das Kürzel (z. B. THW-OV "OODE") ergibt nur beim THW Sinn; andere Organisationen führen keine solchen Kürzel.
               „Dienststellen-Kürzel (optional)": „Kürzel" allein las ein Neuling als
               irgendeine Abkürzung und tippte „OV OL" — das Beispiel sagt, was gemeint ist. */}
@@ -747,15 +900,13 @@ export function AbschnittEinheit({
                 tippt niemand im Regen gern zweimal. Kein type="number":
                 Vorwahl-Trennzeichen und führende Null gehören nicht in ein
                 Rechenfeld. */}
-            <input
-              type="tel"
-              inputMode="tel"
-              // Dienststellenkontakt, nicht der eigene: „tel" bot die private
-              // Handynummer des Helfers an (R2-M6).
-              {...FREMDE_DATEN}
-              value={h.telefon ?? ""}
-              onChange={(ev) =>
-                setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, telefon: ev.target.value.replace(/\D/g, "") || undefined } : x)) })
+            {/* Dienststellenkontakt, nicht der eigene: „tel" bot die private
+                Handynummer des Helfers an (R2-M6). Führendes „+" bleibt, entfernte Zeichen und eine
+                zweite Nummer werden genannt, eine zu kurze Nummer fragt nach (R11-E3). */}
+            <TelefonFeld
+              wert={h.telefon}
+              setzen={(telefon) =>
+                setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, telefon: telefon || undefined } : x)) })
               }
             />
           </Feld>
@@ -768,6 +919,8 @@ export function AbschnittEinheit({
               onChange={(ev) => setE({ hierarchie: e.hierarchie.map((x, j) => (j === i ? { ...x, email: ev.target.value || undefined } : x)) })}
             />
           </Feld>
+          {/* R19-E4: Die Rückfrage zur Adresse steht direkt unter dem Feld, nicht erst unter allen Ebenen. */}
+          {mailPunkt(h.email) && <Hinweise punkte={[mailPunkt(h.email)!]} aktuellerSchritt={0} />}
           {/* Die unterste Ebene ist die Einheit selbst und bleibt stehen. Ihr
               Platz bleibt trotzdem reserviert — sonst stünde die E-Mail-Spalte
               der ersten Zeile um eine Knopfbreite weiter als die darunter. */}
@@ -842,11 +995,11 @@ export function AbschnittEinheit({
               });
             }}
           >
-            OV/RB/LV-Vorlage
+            Regionalbereich und Landesverband anlegen
           </button>
         )}
       </p>
-      </AufklappRahmen>
+      </Mehr>
       {/* Derselbe Hinweisblock wie im Personal-Schritt, und aus demselben
           Grund: „Ort der Einheit (Pflicht)" konnte man kommentarlos leer lassen und
           „Weiter" drücken — der Fehler fiel erst fünf Schritte später in der
@@ -854,8 +1007,9 @@ export function AbschnittEinheit({
           weiterhin nichts: wer den OV-Namen gerade nicht weiß, soll
           weiterkommen und ihn nachtragen. Er steht jetzt nur nicht mehr still
           da. */}
-      <Hinweise punkte={pruefpunkte(bogen, false)} aktuellerSchritt={0} />
-      {kompakt && ergaenzt && e.hierarchie[ergaenzt.i]?.kurz === ergaenzt.ov.kurz && !ebenenWeg && !vorbelegungWeg && (
+      {/* R19-N14: Warnungen erst nach der ersten Eingabe; der leere Schritt 1 zeigte schon zwei gelbe Kästen. */}
+      <Hinweise punkte={bogenHatInhalt(bogen) ? alleHinweise.filter((p) => !imFeld.has(p.text)) : []} aktuellerSchritt={0} />
+      {schnell && ergaenzt && e.hierarchie[ergaenzt.i]?.kurz === ergaenzt.ov.kurz && !ebenenWeg && !vorbelegungWeg && (
         <DaumenQuittung key={`ergaenzt:${ergaenzt.ov.kurz}`} onRueckgaengig={ergaenzungZuruecknehmen} onSchliessen={() => setErgaenzt(null)}>
           Aus dem OV-Verzeichnis ergänzt: {ergaenzt.ov.name} ({ergaenzt.ov.kurz}) mit Telefon und E-Mail
           {e.hierarchie.length > 1 ? ", dazu die übergeordneten Ebenen" : ""}.
@@ -868,7 +1022,9 @@ export function AbschnittEinheit({
       )}
       {vorbelegungWeg && (
         <DaumenQuittung key={`vorbelegung:${vorbelegungWeg.nonce}`} onRueckgaengig={vorbelegungZurueck} onSchliessen={() => setVorbelegungWeg(null)}>
-          {vorbelegungWeg.kopf} — Stärke {vorbelegungWeg.vor} → {staerke(bogen).gesamt}.
+          {vorbelegungWeg.kopf}
+          {vorbelegungWeg.vor !== staerke(bogen).gesamt && ` — Stärke ${vorbelegungWeg.vor} → ${staerke(bogen).gesamt}`}.
+          {vorbelegungWeg.ziel && ` ${vorbelegungWeg.ziel}`}
         </DaumenQuittung>
       )}
     </section>

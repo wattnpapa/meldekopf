@@ -1,22 +1,22 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/schritte/einheit.test.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/schritte/einheit.test.tsx` (Commit 1d7ed5f).
  *
  * Schritt 1 — Einheit. Geprüft wird das, was hier Daten verändert: der
  * Organisationswechsel, die OV-Vorschlagsliste (samt mitgeführter Struktur)
  * und die Sichtbarkeit der Landesvorlagen.
  */
 
-import { describe, it, expect } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { describe, it, expect, beforeAll } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { Dialogschicht } from "@bos/oberflaeche/dialoge";
 import { neuePerson, neuerBogen, vokabularFuer } from "../hilfen";
-import { Ernaehrung, Geschlecht, OrganisationsTyp, PersonalErfassung, type Erfassungsbogen } from "@bos/eeb-format/model";
+import { Ernaehrung, Geschlecht, OrganisationsTyp, PersonalErfassung, staerke, type Erfassungsbogen } from "@bos/eeb-format/model";
 import { stanPersonalVorbelegung } from "@bos/vokabulare/thw-stan-personal";
 import { stanFahrzeugVorbelegung } from "@bos/vokabulare/thw-stan-fahrzeuge";
 import { AbschnittBuehne } from "../../test/abschnitt-buehne";
-import { AbschnittEinheit, ovImText } from "./einheit";
+import { AbschnittEinheit, ovFreiHinweis, ovImText } from "./einheit";
 
 const buehne = () => render(<AbschnittBuehne komponente={AbschnittEinheit} />);
 
@@ -207,6 +207,25 @@ describe("Abschnitt Einheit", () => {
     expect(document.querySelector(".ov-frei-hinweis")!.textContent).toContain("„Xyzstadt\"");
   }, 15000);
 
+  it("nennt bei einem mehrdeutigen Ortsnamen die Treffer statt „nicht im Verzeichnis“ (R16-E4)", async () => {
+    const nutzer = userEvent.setup();
+    buehne();
+    await nutzer.type(screen.getByLabelText("Ort der Einheit (Pflicht)"), "Oldenburg");
+    await nutzer.tab();
+    const hinweis = await screen.findByText(/kann mehrere Ortsverbände meinen/, undefined, { timeout: 5000 });
+    expect(hinweis.textContent).toContain("„Oldenburg\"");
+    expect(hinweis.textContent).toMatch(/Oldenburg \(NI\)/);
+    expect(hinweis.textContent).not.toContain("nicht im OV-Verzeichnis");
+    expect(hinweis.textContent).not.toContain("darf so stehen bleiben");
+  }, 15000);
+
+  it("ovFreiHinweis: nur ohne jeden Vorschlag heißt es „nicht im OV-Verzeichnis“ (R16-E4)", () => {
+    const ov = (name: string) => ({ name, kurz: "XX", ort: name, plz: "1" }) as never;
+    expect(ovFreiHinweis("Xyz", [])).toContain("nicht im OV-Verzeichnis");
+    expect(ovFreiHinweis("Ulm", [ov("Ulm"), ov("Neu-Ulm")])).toContain("mehrere Ortsverbände");
+    expect(ovFreiHinweis("Ulm", [ov("Ulm")])).toContain("meint vielleicht OV Ulm (XX)");
+  });
+
   it("zeigt beim Antippen des Einheitstyps die ganze Liste, nicht nur die ersten acht", async () => {
     const nutzer = userEvent.setup();
     buehne();
@@ -287,14 +306,14 @@ describe("Abschnitt Einheit", () => {
  * Wort auf Schritt 2, und die einzige Rückmeldung war ein „•" statt „✓" in der
  * Schrittleiste — ein Zeichen, dessen Bedeutung nirgends erklärt wird. Der
  * Fehler fiel erst fünf Schritte später in der Übersicht auf, als
- * „(Standort offen)" auf dem Bogen. Gesperrt wird weiterhin nichts: wer den
+ * „(Ort offen)" auf dem Bogen. Gesperrt wird weiterhin nichts: wer den
  * OV-Namen gerade nicht weiß, kommt weiter und trägt ihn nach.
  */
 describe("Schritt Einheit — Beispiel im Einheitstyp (R3-H7)", () => {
   it("nennt beim THW THW-Einheiten statt „Löschzug, SEG Sanität“", () => {
     buehne();
     const feld = screen.getByRole("combobox", { name: "Einheitstyp" }) as HTMLInputElement;
-    expect(feld.placeholder).toBe("z. B. Bergungsgruppe, FGr Wasserschaden/Pumpen");
+    expect(feld.placeholder).toBe("z. B. Bergungsgruppe, FGr WP");
   });
 
   it("nennt bei der Feuerwehr Feuerwehr-Einheiten", () => {
@@ -309,10 +328,15 @@ describe("Schritt Einheit — Beispiel im Einheitstyp (R3-H7)", () => {
 });
 
 describe("Schritt Einheit — offene Pflichtangaben", () => {
-  it("nennt den fehlenden Namen der eigenen Einheit schon auf Schritt 1", () => {
-    render(<AbschnittEinheit bogen={neuerBogen()} aendern={() => {}} />);
-
-    expect(screen.getByText(/Name der eigenen Einheit .* fehlt/)).toBeDefined();
+  it("nennt den fehlenden Namen der eigenen Einheit schon auf Schritt 1, sobald etwas eingetragen ist (R19-E4)", () => {
+    const bogen = neuerBogen();
+    // Ein frischer Bogen bleibt still (kein Warnton vor der ersten Eingabe) ...
+    const { unmount } = render(<AbschnittEinheit bogen={bogen} aendern={() => {}} />);
+    expect(screen.queryByText(/Ort der Einheit .* fehlt/)).toBeNull();
+    unmount();
+    // ... mit einem Typ ohne Ort steht der Hinweis da.
+    render(<AbschnittEinheit bogen={{ ...bogen, einheit: { ...bogen.einheit, einheitsTyp: { freitext: "Bergungsgruppe" } } }} aendern={() => {}} />);
+    expect(screen.getByText(/Ort der Einheit .* fehlt/)).toBeDefined();
   });
 
   it("nimmt den Hinweis zurück, sobald der Name steht", () => {
@@ -324,7 +348,7 @@ describe("Schritt Einheit — offene Pflichtangaben", () => {
       />,
     );
 
-    expect(screen.queryByText(/Name der eigenen Einheit .* fehlt/)).toBeNull();
+    expect(screen.queryByText(/Ort der Einheit .* fehlt/)).toBeNull();
   });
 
   /**
@@ -354,6 +378,47 @@ describe("Schritt Einheit — offene Pflichtangaben", () => {
     expect(kuerzel.getAttribute("autocorrect")).toBe("off");
     expect(kuerzel.getAttribute("spellcheck")).toBe("false");
   });
+
+  /** R16-H2: Namen der höheren Ebenen (RB, LV) und der Organisationsname tragen wie das Ortsfeld keine Autokorrektur. */
+  it("schaltet Autokorrektur und Rechtschreibprüfung an den Namensfeldern der höheren Ebenen und am Organisationsnamen aus (R16-H2)", () => {
+    const b = neuerBogen();
+    b.einheit.hierarchie = [
+      { bezeichnung: { code: 1 }, name: "Husum" },
+      { bezeichnung: { code: 2 }, name: "Heilbronn" },
+      { bezeichnung: { code: 3 }, name: "Baden-Württemberg" },
+    ];
+    render(<AbschnittEinheit bogen={b} aendern={() => {}} />);
+
+    const felder = [...screen.getAllByLabelText("Name"), screen.getByLabelText(/Organisationsname/)];
+    expect(felder.length).toBeGreaterThanOrEqual(3);
+    for (const f of felder) {
+      expect(f.getAttribute("autocorrect")).toBe("off");
+      expect(f.getAttribute("spellcheck")).toBe("false");
+      expect(f.getAttribute("autocomplete")).toBe("off");
+    }
+  });
+
+  /**
+   * Der Schnell-Einstieg der Startseite landet in genau diesem Assistenten —
+   * sechs Schritte, dieselbe Überschrift. Dass nur Stärke gemeint ist, stand
+   * vorher erst auf Schritt 3.
+   */
+  it("zeigt in der Schnellerfassung den Ort als erstes Feld, den Rest hinter „Mehr zur Einheit“ (R19-E3)", () => {
+    const bogen = neuerBogen();
+    render(
+      <AbschnittEinheit
+        bogen={{ ...bogen, personalErfassung: PersonalErfassung.NUR_STAERKE }}
+        aendern={() => {}}
+        kompakt
+      />,
+    );
+
+    const karte = document.querySelector("section.schnell-einheit")!;
+    expect(karte).not.toBeNull();
+    const erstes = karte.querySelector("input")!;
+    expect(erstes.id).toBe("feld-einheit-name");
+    expect(karte.querySelector("details.schnell-mehr")).not.toBeNull();
+  });
 });
 
 /**
@@ -374,6 +439,7 @@ describe("Schritt Einheit — Vorbelegung nach Einheitstyp", () => {
           Personal: <output data-testid="personal">{bogen.personal.length}</output>
           {" · "}Namen: <output data-testid="namen">{bogen.personal.map((p) => p.nachname).filter(Boolean).join(", ") || "keine"}</output>
           {" · "}Fahrzeuge: <output data-testid="fahrzeuge">{bogen.fahrzeuge.length}</output>
+          {" · "}Stärke: <output data-testid="staerke">{bogen.staerkeManuell ? `${bogen.staerkeManuell.fuehrer}/${bogen.staerkeManuell.unterfuehrer}/${bogen.staerkeManuell.mannschaft}` : "-"}</output>
           {" · "}Kennzeichen: <output data-testid="kennzeichen">{bogen.fahrzeuge.map((f) => f.kennzeichen).filter(Boolean).join(", ") || "keine"}</output>
         </p>
         <Dialogschicht />
@@ -410,6 +476,30 @@ describe("Schritt Einheit — Vorbelegung nach Einheitstyp", () => {
     // Nur die Sollplätze des neuen Typs — nicht die Summe beider.
     expect(zahl("personal")).toBe(personen(klein.code));
     expect(zahl("fahrzeuge")).toBe(fahrzeuge(klein.code));
+  });
+
+  it("„Nur Stärke“: die ungezählten Sollzahlen folgen dem neuen Typ, gezählte bleiben (OV Chemnitz, 11/2026)", async () => {
+    const nutzer = userEvent.setup();
+    const soll = (code: number) => {
+      const s = staerke({ personal: stanPersonalVorbelegung(org, { code }) });
+      return `${s.fuehrer}/${s.unterfuehrer}/${s.mannschaft}`;
+    };
+    const start = neuerBogen();
+    start.einheit.einheitsTyp = { code: gross.code };
+    start.personalErfassung = PersonalErfassung.NUR_STAERKE;
+    start.personal = [];
+    start.staerkeManuell = staerke({ personal: stanPersonalVorbelegung(org, { code: gross.code }) });
+    render(<VorbelegungBuehne start={start} />);
+
+    await typWaehlen(nutzer, klein.name);
+    expect(screen.getByTestId("staerke").textContent).toBe(soll(klein.code));
+
+    // Gezählt (abweichend vom Soll): bleibt beim nächsten Wechsel stehen.
+    cleanup();
+    const gezaehlt = { ...start, staerkeManuell: { fuehrer: 1, unterfuehrer: 1, mannschaft: 5, gesamt: 7 } };
+    render(<VorbelegungBuehne start={gezaehlt} />);
+    await typWaehlen(nutzer, klein.name);
+    expect(screen.getByTestId("staerke").textContent).toBe("1/1/5");
   });
 
   it("nimmt beim Leeren des Typs die unbenannten Karten mit, benannte bleiben", async () => {
@@ -671,10 +761,11 @@ describe("Schritt Einheit — Ebene entfernen", () => {
  * dass gelbe Kästen ohnehin immer da sind, überliest später auch die, die zählen.
  */
 describe("Schritt Einheit — nur eigene Hinweise", () => {
-  it("weist auf einem frischen Bogen höchstens auf den fehlenden Namen hin", () => {
-    render(<AbschnittEinheit bogen={neuerBogen()} aendern={() => {}} />);
+  it("weist auf einem frischen Bogen auf nichts hin und danach höchstens auf den fehlenden Namen", () => {
+    const bogen = neuerBogen();
+    render(<AbschnittEinheit bogen={{ ...bogen, einheit: { ...bogen.einheit, einheitsTyp: { freitext: "Bergungsgruppe" } } }} aendern={() => {}} />);
 
-    expect(screen.getByText(/Name der eigenen Einheit .* fehlt/)).toBeDefined();
+    expect(screen.getByText(/Ort der Einheit .* fehlt/)).toBeDefined();
     expect(screen.queryByText(/Stärke ist 0/)).toBeNull();
     expect(screen.queryByText(/Ort\/Auftrag/)).toBeNull();
   });

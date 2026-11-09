@@ -33,7 +33,7 @@ import {
   type SegmentTeil,
 } from "@bos/eeb-format/codec";
 import { browserKompressor } from "../hilfen";
-import { qrAlleAusBild } from "./qr-bild";
+import { BildNichtLesbar, qrAlleAusBild } from "./qr-bild";
 
 /** Eine Datei des Stapels — Name nur für den Bericht, gelesen wird der Blob. */
 export interface StapelDatei {
@@ -49,7 +49,7 @@ export interface StapelFund {
   payload: Uint8Array | null;
 }
 
-export type StapelGrund = "kein-code" | "kein-bogen" | "vorlage";
+export type StapelGrund = "kein-code" | "kein-bild" | "kein-bogen" | "vorlage";
 
 /** Eine Datei, aus der kein Bogen wurde. */
 export interface StapelFehler {
@@ -232,14 +232,20 @@ export async function qrStapelLesen(dateien: StapelDatei[], optionen: StapelOpti
       break;
     }
     let texte: string[] = [];
+    let keinBild = false;
     try {
       const roh = await lesen(datei.blob);
       texte = (Array.isArray(roh) ? roh : [roh]).filter((t): t is string => !!t);
-    } catch {
-      texte = []; // defektes/unlesbares Bild zählt wie „kein Code drin"
+    } catch (e) {
+      texte = []; // defektes/unlesbares Bild zählt wie „kein Code drin" — außer, die Datei ist gar kein Bild (R16-E5)
+      keinBild = e instanceof BildNichtLesbar;
     }
     gelesen++;
     optionen.beiFortschritt?.(gelesen, liste.length, datei.name);
+    if (texte.length === 0 && keinBild) {
+      fehler.push({ datei: datei.name, grund: "kein-bild", text: "Datei lässt sich nicht als Bild öffnen — als JPEG, Screenshot oder PDF-Seite erneut versuchen." });
+      continue;
+    }
     if (texte.length === 0) {
       fehler.push({ datei: datei.name, grund: "kein-code", text: "Kein QR-Code im Bild gefunden." });
       continue;

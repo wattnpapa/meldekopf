@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/papier-abgleich-ui.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/papier-abgleich-ui.tsx` (Commit 1d7ed5f).
  *
  * „Lage vom Papier abgleichen" — der Rückweg nach einem Geräteausfall, wenn
  * nur das gedruckte Übergabeblatt da ist (Audit Runde 3, R3-A2).
@@ -26,6 +26,7 @@ import {
   abgleichEntwurfLoeschen,
   abgleichEntwurfSpeichern,
   abgleichZeilenMitEntwurf,
+  ENTWURF_DAUER_TEXT,
   geaenderteZeilen,
   type AbgleichZeile,
 } from "./papier-abgleich-entwurf";
@@ -303,13 +304,12 @@ export function PapierAbgleich(props: {
               Vom Papier eingelesen, Lage noch nicht abgeglichen: {offen.length === 1 ? "1 Einheit" : `${offen.length} Einheiten`}.
             </strong>{" "}
             Die Eintreffzeit ist die Zeit des Einlesens und gilt als nicht bestätigt, alle stehen als anwesend, ohne Zug, Auftrag und Nummer. Die Angaben vom
-            Blatt (Seite 1 bzw. Kasten „Stand am Meldekopf“) hier in einem Schritt eintragen.
+            Blatt (Kopfzeile „Meldekopf“ auf Seite 1 des Bogens bzw. Kasten „Stand am Meldekopf“ der Sammel-PDF) hier in einem Schritt eintragen.
           </p>
         )}
         {entwurfAnzahl > 0 && (
           <p className="hinweis">
-            Angefangene Eingaben für {entwurfAnzahl === 1 ? "1 Einheit" : `${entwurfAnzahl} Einheiten`} sind noch da (nur in diesem Browserfenster, bis du
-            sie übernimmst oder den Tab schließt). Sie erscheinen wieder, wenn du den Abgleich öffnest.
+            Angefangene Eingaben für {entwurfAnzahl === 1 ? "1 Einheit" : `${entwurfAnzahl} Einheiten`} sind noch da ({ENTWURF_DAUER_TEXT}). Sie erscheinen wieder, wenn du den Abgleich öffnest.
           </p>
         )}
         {props.knopfImBericht ? (
@@ -327,7 +327,7 @@ export function PapierAbgleich(props: {
     <section className="karte papier-abgleich" aria-label="Lage vom Papier abgleichen" ref={karte}>
       <h3>Lage vom Papier abgleichen ({zeilen.length})</h3>
       <p className="hinweis">
-        Je Einheit, was auf dem Blatt steht — auch „Nr.“ und „Auftrag / Notiz“ aus dem Kasten „Stand am Meldekopf“.
+        Je Einheit, was auf dem Blatt steht — „Nr.“ aus der Kopfzeile „Meldekopf“ des Bogens, „Auftrag / Notiz“ aus dem Kasten „Stand am Meldekopf“ der Sammel-PDF.
         „Abgleich übernehmen“ schreibt alles auf einmal.
       </p>
       <datalist id={listeId}>
@@ -403,7 +403,7 @@ export function PapierAbgleich(props: {
         <button type="button" className="gefahr" onClick={() => void eingabenVerwerfen()}>
           Eingaben verwerfen…
         </button>
-        <p className="hinweis">„Später“ schließt nur das Formular; die Eingaben bleiben für diese Sitzung erhalten.</p>
+        <p className="hinweis">„Später“ schließt nur das Formular; die Eingaben bleiben erhalten ({ENTWURF_DAUER_TEXT}).</p>
       </div>
     </section>
   );

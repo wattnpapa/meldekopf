@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/bogen-pruefung.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/bogen-pruefung.ts` (Commit 1d7ed5f).
  *
  * Pflichtfelder eines Bogens prüfen und, wo es harmlos ist, ergänzen (Audit
  * Runde 5, R5-E1).
@@ -32,6 +32,8 @@ import {
   SCHEMA_VERSION,
   StaerkeRolle,
   type Erfassungsbogen,
+  zeitraumIso,
+  zeitraumIsoLesen,
 } from "@bos/eeb-format/model";
 
 function istObjekt(x: unknown): x is Record<string, unknown> {
@@ -109,6 +111,15 @@ export function bogenBefund(x: unknown): BogenBefund {
   }
   if (einsatz.einsatzbeginn != null && !istZahl(einsatz.einsatzbeginn)) delete einsatz.einsatzbeginn;
   if (einsatz.einsatzende != null && !istZahl(einsatz.einsatzende)) delete einsatz.einsatzende;
+  // Zeitraum mit Uhrzeit (ab Schema 11): ISO 8601 mit Offset, sonst weg — der Tag allein bleibt gültig. Weicht der
+  // Datumsteil vom Tag ab (von Hand bearbeitete Datei), gilt der Tag wie im Codec; die Uhrzeit wird darauf gesetzt.
+  for (const [feld, tag] of [["zeitraumVonIso", einsatz.zeitraumVon], ["zeitraumBisIso", einsatz.zeitraumBis]] as const) {
+    const wert = einsatz[feld];
+    if (wert == null) continue;
+    const z = typeof wert === "string" ? zeitraumIsoLesen(wert) : undefined;
+    if (!z || z.offsetMinuten % 15 !== 0) delete einsatz[feld];
+    else if (z.tag !== tag) einsatz[feld] = zeitraumIso({ ...z, tag });
+  }
 
   // Personal
   const personal = (b.personal as unknown[]).filter((p) => {
@@ -139,6 +150,7 @@ export function bogenBefund(x: unknown): BogenBefund {
       }
     }
     if (p.weitereFahrerlaubnisse != null && !Array.isArray(p.weitereFahrerlaubnisse)) delete p.weitereFahrerlaubnisse;
+    if (p.dienststelle != null && (typeof p.dienststelle !== "string" || !p.dienststelle.trim())) delete p.dienststelle;
   }
   b.personal = personal;
 

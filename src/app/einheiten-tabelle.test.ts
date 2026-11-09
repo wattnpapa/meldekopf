@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/einheiten-tabelle.test.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/einheiten-tabelle.test.ts` (Commit 1d7ed5f).
  *
  * Tabellensicht des Meldekopfs. Geprüft wird das, worauf sich in einer
  * Lagebesprechung jemand verlässt: dass die Summenzeile genau die Zeilen zählt,
@@ -369,7 +369,7 @@ describe("Lücken mit Inhalt statt Zahl (Audit Runde 3, R3-K7)", () => {
   it("fasst mehrere Punkte als ersten Punkt plus Anzahl zusammen", () => {
     expect(lueckenText([])).toBe("");
     expect(lueckenText(["Stärke ist 0."])).toBe("Stärke 0");
-    expect(lueckenText(["Stärke ist 0.", "Ort/Auftrag ist noch leer.", "x"])).toBe("Stärke 0 + 2 weitere");
+    expect(lueckenText(["Stärke ist 0.", "Ort/Auftrag ist noch leer.", "x"])).toBe("3 Punkte, u. a. Stärke 0"); // Gesamtzahl vorn (R14-N2)
   });
 
   it("gibt den häufigen Prüfpunkten Stichworte statt eines abgeschnittenen Satzanfangs (R4-K3)", () => {
@@ -544,8 +544,9 @@ describe("Nummern und Sollstärke (Audit Runde 8)", () => {
 
   it("R8-D2: Entfernen von Nr. 2 von 6 nennt die aufrückenden Nummern 3–6 → 2–5", async () => {
     const { entfernenNummernText } = await import("./einheiten-tabelle");
-    expect(entfernenNummernText(sechs, "b")).toBe("Die Einheiten Nr. 3–6 rücken auf und heißen danach Nr. 2–5");
-    expect(entfernenNummernText(sechs, "e")).toBe("Die Einheit Nr. 6 rückt auf und heißt danach Nr. 5");
+    // R18-A1: Die Nummern rücken nicht mehr auf; die Rückfrage sagt, welche Nummer frei bleibt.
+    expect(entfernenNummernText(sechs, "b")).toBe("Nr. 2 bleibt frei, die übrigen Nummern (3–6) bleiben");
+    expect(entfernenNummernText(sechs, "e")).toBe("Nr. 5 bleibt frei, die übrigen Nummern (6) bleiben");
     expect(entfernenNummernText(sechs, "f")).toBe("");
   });
 

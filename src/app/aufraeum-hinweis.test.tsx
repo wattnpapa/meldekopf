@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/aufraeum-hinweis.test.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/aufraeum-hinweis.test.tsx` (Commit 1d7ed5f).
  *
  * Audit Runde 2, R2-D5: Ruhende Sammlungen verschwanden nach 90 Tagen ohne
  * Nachricht. Geprüft wird der ganze Weg über den echten Speicher: Sammlung
@@ -83,7 +83,6 @@ describe("Nachricht nach automatischer Löschung (R2-D5)", () => {
         onExport={nichts}
         onCsvExport={nichts}
         onCsvDetailExport={nichts}
-        onOldenburgExport={nichts}
         onSammelPdf={nichts}
         onGeloescht={nichts}
       />,

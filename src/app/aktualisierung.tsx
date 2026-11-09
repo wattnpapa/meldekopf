@@ -2,7 +2,7 @@
 /**
  * Update-Hinweise der Web-App.
  *
- * Herkunft: Erfassungsbogen `src/app/aktualisierung.tsx` (Commit f2b77f1), auf
+ * Herkunft: Erfassungsbogen `src/app/aktualisierung.tsx` (Commit 1d7ed5f), auf
  * den Web-Teil gekürzt. Das Android-Selbst-Update des Erfassungsbogens
  * (Capacitor-Plugin AppUpdate) entfällt: Es fragte beim Start api.github.com
  * ab, und außer der Reichweitenmessung hat diese App keine Fremdverbindung
@@ -20,8 +20,37 @@ import { istNativ } from "./nativ";
  * geführte Sammlung nicht unterbrochen wird). In der Capacitor-/Electron-App
  * wird der SW nicht registriert – dort rendert die Komponente nichts.
  */
+/** So lange wartet „Neu laden" auf das Neuladen durch den Service Worker, bevor die Seite es selbst tut. */
+export const NEULADEN_RUECKFALL_MS = 1500;
+
+/**
+ * „Neu laden" im Update-Hinweis (R13-O4): Der Service Worker wird aktiviert; das Neuladen hängt in der
+ * Registrierung an einem Ereignis, das nur kommt, wenn die Seite beim Registrieren schon gesteuert war. In einer
+ * Sitzung seit der Erstinstallation blieb der Tipp deshalb wirkungslos. Darum lädt die Seite nach kurzer Frist
+ * selbst neu — wer vorher neu geladen wurde, merkt davon nichts.
+ */
+export function neuLadenMitRueckfall(
+  aktivieren: () => Promise<void> | void,
+  neuladen: () => void,
+  warteMs: number = NEULADEN_RUECKFALL_MS,
+): void {
+  let fertig = false;
+  const lade = () => {
+    if (fertig) return;
+    fertig = true;
+    neuladen();
+  };
+  setTimeout(lade, warteMs);
+  try {
+    void Promise.resolve(aktivieren()).catch(() => lade());
+  } catch {
+    lade();
+  }
+}
+
 export function WebUpdateBanner() {
   const [neueVersion, setNeueVersion] = useState(false);
+  const [laedt, setLaedt] = useState(false);
   // updateSW(true) aktiviert den wartenden SW (SKIP_WAITING) und lädt neu.
   const [neuLaden, setNeuLaden] = useState<(() => void) | null>(null);
 
@@ -59,8 +88,19 @@ export function WebUpdateBanner() {
 
   return (
     <div className="update-banner" role="status">
-      <span>Neue Version verfügbar.</span>
-      <button type="button" className="primaer" onClick={() => neuLaden?.()}>Neu laden</button>
+      <span>{laedt ? "Die neue Version wird geladen …" : "Neue Version verfügbar."}</span>
+      <button
+        type="button"
+        className="primaer"
+        disabled={laedt}
+        onClick={() => {
+          if (laedt) return;
+          setLaedt(true);
+          neuLadenMitRueckfall(() => neuLaden?.(), () => window.location.reload());
+        }}
+      >
+        Neu laden
+      </button>
       <button type="button" className="link" onClick={() => setNeueVersion(false)}>Später</button>
     </div>
   );

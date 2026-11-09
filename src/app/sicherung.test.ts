@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/sicherung.test.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/sicherung.test.ts` (Commit 1d7ed5f).
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import {
@@ -102,8 +102,8 @@ describe("sicherungErstellen() / sicherungEinspielen()", () => {
     (globalThis as { localStorage?: Storage }).localStorage = mem;
     // Die Einsatz-Sammlung bekommt ihre Ablage hineingereicht (ADR-003).
     speicherhuelleSetzen(mem);
-    // Zwei Nutzdaten-Einträge plus der Vermerk der Sicherung selbst (R2-O6).
-    expect(sicherungEinspielen(datei)).toBe(3);
+    // Zwei Nutzdaten-Einträge plus die Vermerke der Sicherung selbst: Zeitpunkt (R2-O6) und Datenstand (R12-O4).
+    expect(sicherungEinspielen(datei)).toBe(4);
     expect(letzteSicherung()).not.toBeNull();
     expect(localStorage.getItem("eeb.vorlagen.v1")).toBe("[1]");
     expect(localStorage.getItem("eeb.einsaetze.v1")).toBe("[2]");

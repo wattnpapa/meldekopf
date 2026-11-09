@@ -32,7 +32,7 @@ import {
   einsaetzePapierkorb as kernEinsaetzePapierkorb,
 } from "@bos/meldekopf/einsaetze";
 import { entfernteMerken } from "./entfernte-meldungen";
-import { geltendeJeEinheit } from "./fassung-vorrang";
+import { fassungenJeEinheit, geltendeJeEinheit } from "./fassung-vorrang";
 import { zugNormalisiert } from "./zug-name";
 import { EEB_EPOCHE_MS, type EebZeitpunkt } from "@bos/eeb-format/model";
 
@@ -138,8 +138,34 @@ export function eintreffzeit(e: MeldeEintrag): number {
   return e.eingetroffenAm ?? e.empfangenAm;
 }
 
+/**
+ * Ist die Eintreffzeit der Meldung nur die Zeit, zu der das Gerät sie angenommen hat? Von Hand gesetzte oder
+ * korrigierte Zeiten (Zettel-Eingabe, „ändern") weichen vom Eingang der ersten Fassung ab; manuell erfasste
+ * Einheiten stammen vom Meldeblock (R14-A1).
+ */
+export function zeitEingelesen(m: MeldeEintrag, fassungenNeuesteZuerst: MeldeEintrag[]): boolean {
+  const erste = fassungenNeuesteZuerst[fassungenNeuesteZuerst.length - 1] ?? m;
+  // Nur die erste Fassung entscheidet: Eine von Hand korrigierte Stärke (Quelle „manuell") erbt die Eintreffzeit der
+  // eingelesenen Meldung und damit auch deren Kennzeichnung (R15-A1).
+  if (erste.quelle === "manuell") return false;
+  return eintreffzeit(m) === erste.empfangenAm;
+}
+
+/** Fußnote zur Eintreffzeit: Lageblatt, Sammel-PDF, Excel und CSV sagen dasselbe (R16-A1). */
+export const EINTREFF_HINWEIS = "Eintreffzeit = Zeit des Einlesens am Gerät, nicht vom Absender oder Meldeblock bestätigt.";
+
+/**
+ * Ist die Eintreffzeit dieser Meldung vom Gerät und nicht vom Absender bestätigt (Einlesen oder vom Papier)?
+ * `historie` ist die ganze Sammlung: Beim Teilexport fehlt die erste Fassung sonst (R16-A1).
+ */
+export function eintreffzeitUnbestaetigt(m: MeldeEintrag, historie: readonly MeldeEintrag[]): boolean {
+  return m.vomPapier != null || zeitEingelesen(m, fassungenJeEinheit(historie, m.einheitSchluessel));
+}
+
 /** Spielraum für „in der Zukunft": Uhren zweier Geräte gehen nie gleich. */
 export const ZUKUNFT_TOLERANZ_MS = 15 * 60_000;
+/** Wie weit vor der Aufnahme eine Eintreffzeit liegen darf, ohne dass nachgefragt wird (R12-E4). */
+export const VERGANGENHEIT_TOLERANZ_MS = 24 * 3_600_000;
 
 /**
  * Passt die Zeit zusammen? Eintreff- oder Abrückzeit mehr als eine
@@ -151,9 +177,22 @@ export const ZUKUNFT_TOLERANZ_MS = 15 * 60_000;
 export function zeitUnstimmigkeit(
   z: { eintreffen: number; abgerueckt?: number | null },
   jetzt = Date.now(),
+  /**
+   * Bezug für die Gegenrichtung (R12-E4): Aufnahmezeit der Meldung und Beginn des Einsatzzeitraums in ms. Eine
+   * Eintreffzeit, die mehr als einen Tag vor der Aufnahme UND vor dem Zeitraum liegt, ist meist ein Dreher im
+   * Jahr oder bei Tag und Monat.
+   */
+  bezug?: { aufnahme: number; zeitraumVon?: number },
 ): string | null {
   if (z.eintreffen > jetzt + ZUKUNFT_TOLERANZ_MS) {
     return `Eingetroffen ${zeitLang(z.eintreffen)} liegt in der Zukunft — Tag oder Monat vertauscht?`;
+  }
+  if (
+    bezug &&
+    z.eintreffen < bezug.aufnahme - VERGANGENHEIT_TOLERANZ_MS &&
+    (bezug.zeitraumVon == null || z.eintreffen < bezug.zeitraumVon)
+  ) {
+    return `Eingetroffen ${zeitLang(z.eintreffen)} liegt mehr als einen Tag vor der Aufnahme (${zeitLang(bezug.aufnahme)}) — Jahr, Tag oder Monat vertauscht?`;
   }
   if (z.abgerueckt != null && z.abgerueckt > jetzt + ZUKUNFT_TOLERANZ_MS) {
     return `Abgerückt ${zeitLang(z.abgerueckt)} liegt in der Zukunft — Tag oder Monat vertauscht?`;
@@ -185,14 +224,39 @@ export function zeitLang(ms: number): string {
  */
 export class SpeicherVollFehler extends Error {
   constructor(ursache?: unknown) {
-    super(
-      "Speichern fehlgeschlagen — der Speicher dieses Geräts ist voll. " +
-        "Platz schafft nur Löschen: nicht mehr benötigte Einsätze sichern, den Papierkorb leeren oder einen gesicherten Einsatz dort endgültig löschen " +
-        "(die Sicherung selbst schafft keinen Platz; ins Papierkorb-Legen braucht bei vollem Speicher selbst etwas).",
-    );
+    // R20-H13/N9: Zuerst was los ist, dann nur Wege, die in diesem Zustand bestehen (siehe `platzRat`).
+    super(`Speichern fehlgeschlagen — der Speicher dieses Geräts ist voll${belegungKlammer()}. ${platzRat()}`);
     this.name = "SpeicherVollFehler";
     (this as { cause?: unknown }).cause = ursache;
   }
+}
+
+/** „ (zu 100 % belegt)" — die Belegung, soweit der Browser sie lesen lässt; sonst leer (R20-N9). */
+function belegungKlammer(): string {
+  const b = speicherBelegung();
+  return b ? ` (zu ${Math.round(b.anteil * 100)} % belegt)` : "";
+}
+
+/**
+ * Was bei vollem Speicher Platz schafft — nur die Wege, die im jetzigen Zustand bestehen (R20-N9): Einen leeren
+ * Papierkorb gibt es nicht zu leeren, und ein Einsatz, den es nicht gibt, lässt sich nicht löschen. Sichern kommt
+ * zuerst, weil Löschen nicht rückholbar ist; die Sicherung selbst schafft keinen Platz.
+ */
+export function platzRat(): string {
+  let korb = 0;
+  let sammlungen = 0;
+  try {
+    korb = einsaetzePapierkorb().length;
+    sammlungen = einsaetzeLaden().length;
+  } catch {
+    /* nicht lesbar: dann nennt der Rat nur den allgemeinen Weg */
+  }
+  const wege: string[] = [];
+  if (korb > 0) wege.push(`den Papierkorb leeren (${korb} ${korb === 1 ? "Einsatz" : "Einsätze"})`);
+  if (sammlungen > 0) wege.push("einen gesicherten Einsatz endgültig löschen", "unter „Mehr…“ Meldungen endgültig entfernen");
+  if (wege.length === 0) wege.push("„Alle Daten löschen“ (nach der Sicherung)");
+  const liste = wege.length > 1 ? `${wege.slice(0, -1).join(", ")} oder ${wege[wege.length - 1]}` : wege[0]!;
+  return `Erst sichern${sammlungen > 0 ? " (Einsatz weitergeben / sichern)" : ""}, dann Platz schaffen: ${liste}.`;
 }
 
 /**
@@ -204,8 +268,7 @@ export function speicherVollMeldung(anzahl: number): string {
   if (anzahl <= 0) return "";
   return (
     `Nicht aufgenommen: ${anzahl === 1 ? "1 Bogen" : `${anzahl} Bögen`} — der Speicher dieses Geräts ist voll, ` +
-    "die Datei selbst ist in Ordnung. Platz schafft nur Löschen: nicht mehr benötigte Einsätze sichern, " +
-    "den Papierkorb leeren oder einen gesicherten Einsatz dort endgültig löschen; danach dieselbe Datei noch einmal einlesen."
+    `die Datei selbst ist in Ordnung. ${platzRat()} Danach dieselbe Datei noch einmal einlesen.`
   );
 }
 
@@ -239,6 +302,18 @@ export function sammlungenSchreiben(liste: Einsatzsammlung[]): void {
     if (istSpeicherVoll(e)) throw new SpeicherVollFehler(e);
     throw e;
   }
+}
+
+/**
+ * Eine Sammlung auf einen früheren Stand zurücksetzen (Rückgängig nach dem Zusammenführen, R20-D3). Ersetzt die Sammlung gleicher ID
+ * vollständig; gibt es sie nicht mehr, wird sie wieder angelegt. Ein voller Speicher kommt als {@link SpeicherVollFehler}.
+ */
+export function sammlungZuruecksetzen(vorher: Einsatzsammlung): void {
+  const liste = alleSammlungen();
+  const i = liste.findIndex((x) => x.id === vorher.id);
+  if (i < 0) liste.push(vorher);
+  else liste[i] = vorher;
+  sammlungenSchreiben(liste);
 }
 
 /**
@@ -281,6 +356,23 @@ export function eintreffzeitErben(einsatzId: string, eintragIds: string[], zeitp
   if (!geaendert) return;
   s.geaendert = Date.now();
   sammlungenSchreiben(liste);
+}
+
+/**
+ * Name und Ort/Auftrag einer Sammlung nachträglich ändern (R16-K1): Beides steht beim Anlegen oft noch nicht fest. Der
+ * Kern bietet dafür keinen Setter; Einheiten, Zeiten und Aufträge bleiben unberührt. Ein leerer Name lässt den alten
+ * stehen, ein leerer Ort löscht ihn. Liefert die Werte davor (für „Rückgängig"); `null`, wenn es den Einsatz nicht gibt.
+ */
+export function einsatzKopfSetzen(einsatzId: string, name: string, ort: string): { name: string; ort: string } | null {
+  const liste = alleSammlungen();
+  const s = liste.find((x) => x.id === einsatzId);
+  if (!s) return null;
+  const vorher = { name: s.name, ort: s.ort ?? "" };
+  s.name = name.trim() || s.name;
+  s.ort = ort.trim() || undefined;
+  s.geaendert = Date.now();
+  sammlungenSchreiben(liste);
+  return vorher;
 }
 
 /** Eintreffzeit einer Meldung korrigieren (Nachtragen vom Papier). */
@@ -640,7 +732,15 @@ export function speicherGesperrt(): boolean {
 export function speicherText(b: { belegt: number; grenze: number; anteil?: number }): string {
   const anteil = b.anteil ?? Math.min(1, b.belegt / b.grenze);
   const mio = (n: number) => (n / 1_000_000).toLocaleString("de-DE", { maximumFractionDigits: 1 });
-  return `${Math.round(anteil * 100)} % (${mio(Math.min(b.belegt, b.grenze))} von ${mio(b.grenze)} Mio. Zeichen)`;
+  // Unter einer Million in Tausend: „0 von 5 Mio." neben „1 %" las sich als leerer Speicher (R10-O4).
+  const belegt = Math.min(b.belegt, b.grenze);
+  const menge =
+    belegt > 0 && belegt < 1_000_000
+      ? belegt < 1000
+        ? "unter 1 Tsd."
+        : `${Math.round(belegt / 1000).toLocaleString("de-DE")} Tsd.`
+      : mio(belegt);
+  return `${Math.round(anteil * 100)} % (${menge} von ${mio(b.grenze)} Mio. Zeichen)`;
 }
 
 /**
@@ -706,14 +806,26 @@ export function einheitVerschieben(vonEinsatzId: string, nachEinsatzId: string, 
  * damit kein halb entfernter Zustand im Speicher landen kann.
  *
  * Rückgabe: die entfernten Einträge unverändert (Signatur, Herkunft, Zeiten,
- * Notiz, Zug, Etiketten) — für „Rückgängig".
+ * Notiz, Zug, Etiketten) — für „Rückgängig". `nummern` = die Nummern vor dem Entfernen (`meldungsNummern`): Sie werden an
+ * allen Fassungen festgeschrieben, damit die übrigen Einheiten nicht aufrücken (R18-A1).
  */
-export function einheitEntfernen(einsatzId: string, einheitSchl: string): MeldeEintrag[] {
+export function einheitEntfernen(einsatzId: string, einheitSchl: string, nummern?: ReadonlyMap<string, number>): MeldeEintrag[] {
   const liste = alleSammlungen();
   const s = liste.find((x) => x.id === einsatzId);
   if (!s) return [];
+  if (!s.eintraege.some((e) => e.einheitSchluessel === einheitSchl)) return [];
+  // Die Nummern gehören der Einheit, nicht ihrer Listenstelle (R18-A1/W2): Das Papier (Meldeblock, Lageblatt, Funk)
+  // trägt die vergebenen Nummern. Vor dem Entfernen werden sie festgeschrieben; die übrigen rücken nicht auf,
+  // und die entfernte Einheit bekommt ihre Nummer beim Zurückholen wieder. Die Zählung (`meldungsNummern`) bringt der
+  // Aufrufer mit: Dieses Modul darf `einheiten-tabelle` nicht importieren (Zyklus; er holte das Modul samt Nachbarn
+  // ins Startbündel, ADR-003 Aufnahmeregel 5).
+  if (nummern) {
+    for (const x of s.eintraege) {
+      const n = nummern.get(x.einheitSchluessel);
+      if (x.nummer == null && n != null) x.nummer = n;
+    }
+  }
   const weg = s.eintraege.filter((e) => e.einheitSchluessel === einheitSchl);
-  if (weg.length === 0) return [];
   s.eintraege = s.eintraege.filter((e) => e.einheitSchluessel !== einheitSchl);
   s.geaendert = Date.now();
   sammlungenSchreiben(liste);

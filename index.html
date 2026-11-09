@@ -95,6 +95,16 @@
       if (eebNativ || location.protocol === "file:" || location.protocol === "capacitor:")
         document.documentElement.classList.add("als-app");
     } catch (e) { /* Im Zweifel bleibt es beim Web-Verhalten. */ }
+
+    // Wiedereinstieg in einen Einsatz (Erfassungsbogen R21-A2, E2): Wer zuletzt eine Einsatz-Sammlung offen hatte
+    // (letzter-einsatz.ts, LETZTER_EINSATZ_SCHLUESSEL: höchstens zwölf Stunden her) und ohne Bogen im Link startet,
+    // bekommt statt des Start-Gerüsts einen ruhigen Kopf „Einsatz wird geladen …" — die Startseite blitzte sonst
+    // kurz auf, und ein früher Tipp traf ihre Knöpfe. Nur eine Klasse; die App entscheidet danach selbst (main.tsx).
+    try {
+      var eebLetzter = JSON.parse(localStorage.getItem("eeb.letzterEinsatz.v1") || "null");
+      if (eebLetzter && typeof eebLetzter.id === "string" && Date.now() - eebLetzter.um <= 12 * 60 * 60 * 1000 && !location.hash)
+        document.documentElement.classList.add("einsatz-wiedereinstieg");
+    } catch (e) { /* ohne Speicher eben das Start-Gerüst */ }
   </script>
   <style>
     /* ===============================================================

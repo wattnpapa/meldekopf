@@ -76,7 +76,7 @@ describe("Lagemonitor", () => {
     const stand = document.querySelector(".lm-stand")!.textContent!;
     expect(stand).toMatch(/1 Einheit · \d+ Fahrzeuge?/);
     expect(stand).toMatch(/letzte Meldung gerade eben/);
-    expect(screen.getByText(/Stärke F \/ U \/ M/)).toBeTruthy();
+    expect(screen.getByText(/Stärke Führer \/ Unterführer \/ Mannschaft = gesamt/)).toBeTruthy();
   });
 
   it("kennzeichnet eine Übung im Hauptbild, auch wenn der Name es nicht tut (R6-K3)", () => {
@@ -87,7 +87,7 @@ describe("Lagemonitor", () => {
 
   it("zeigt im Fehlerzustand weiter die Uhr und eine Taste in Monitorschrift (R6-L6)", () => {
     render(<Lagemonitor einsatzId="gibt-es-nicht" />);
-    expect(screen.getByLabelText("Datum-Zeit-Gruppe")).toBeTruthy();
+    expect(screen.getByLabelText("Uhrzeit und Datum")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Schließen" }).className).toContain("lm-knopf");
   });
 
@@ -167,12 +167,27 @@ describe("Lagemonitor, Runde 7", () => {
     return { e, ids };
   }
 
-  it("nennt mehr als drei Bewegungen mit „+ n weitere“ (R7-K2)", () => {
+  it("nennt mehr als drei Bewegungen mit „+ n weitere“ am Ende der letzten Zeile (R7-K2, R17-K3)", () => {
     const { e, ids } = mitEinheiten(5);
     for (const id of ids) statusMitZeitSetzen(e.id, id, MeldeStatus.ABGERUECKT);
+    // Großes Bild (1080p): drei Zeilen; der Rest steht in der dritten, nicht in einer eigenen.
+    vi.stubGlobal("innerHeight", 1080);
+    vi.stubGlobal("innerWidth", 1920);
     render(<Lagemonitor einsatzId={e.id} />);
-    expect(document.querySelectorAll(".lm-bewegung:not(.lm-weitere-bewegungen)")).toHaveLength(3);
-    expect(document.querySelector(".lm-weitere-bewegungen")!.textContent).toBe("+ 2 weitere Bewegungen");
+    expect(document.querySelectorAll(".lm-bewegung")).toHaveLength(3);
+    expect(document.querySelector(".lm-bewegung:last-child .lm-weitere-bewegungen")!.textContent).toBe(" · + 2 weitere Bewegungen");
+    vi.unstubAllGlobals();
+  });
+
+  it("zeigt bei 720p und am Telefon nur eine Bewegungszeile und lässt der Einheitentabelle den Platz (R17-K3)", () => {
+    const { e, ids } = mitEinheiten(5);
+    for (const id of ids) statusMitZeitSetzen(e.id, id, MeldeStatus.ABGERUECKT);
+    vi.stubGlobal("innerHeight", 720);
+    vi.stubGlobal("innerWidth", 1280);
+    render(<Lagemonitor einsatzId={e.id} />);
+    expect(document.querySelectorAll(".lm-bewegung")).toHaveLength(1);
+    expect(document.querySelector(".lm-weitere-bewegungen")!.textContent).toBe(" · + 4 weitere Bewegungen");
+    vi.unstubAllGlobals();
   });
 
   it("führt das Eintreffen einer neuen Einheit als Bewegung (R7-W4) und setzt die Folgemeldung mit Betrag (R7-K2)", () => {
@@ -210,8 +225,11 @@ describe("Lagemonitor, Runde 7", () => {
     const e = einsatzAnlegen("Tag", EinsatzArt.UEBUNG);
     einsatzbeginnSetzen(e.id, Date.now() - 5 * 60_000, [e.id]);
     render(<Lagemonitor einsatzId={e.id} />);
-    expect(screen.getByText(/^seit Beginn: 0 Stunden, 5 Minuten/)).toBeTruthy();
-    expect(screen.getByText("Uhr")).toBeTruthy();
+    expect(screen.getByText(/^seit Beginn: 5 Minuten/)).toBeTruthy();
+    // R10-H3: Uhrzeit mit Doppelpunkt, Datum getrennt und beschriftet.
+    expect(screen.getByText("Uhrzeit · Datum")).toBeTruthy();
+    expect(document.querySelector(".lm-dtg-text strong")!.textContent).toMatch(/^\d{2}:\d{2}$/);
+    expect(document.querySelector(".lm-dtg-text span")!.textContent).toMatch(/^\d{1,2}\. \S+ \d{4}$/);
   });
 
   it("hebt einen Datenstand ab einer Stunde hervor (R7-K8)", () => {
@@ -299,7 +317,7 @@ describe("Lagemonitor, Runde 7", () => {
     expect(zeilen).toHaveLength(2);
     expect(zeilen[0]).toContain("OV Neu");
     expect(zeilen[1]).toContain("OV Alt");
-    expect(document.querySelector(".lm-weitere")!.textContent).toMatch(/zuletzt eingetroffen zuerst/);
+    expect(document.querySelector(".lm-weitere")!.textContent).toMatch(/⚠ und zuletzt eingetroffene zuerst/);
   });
 });
 
@@ -472,5 +490,71 @@ describe("Lagemonitor, Stil Runde 9", () => {
     expect(css).toMatch(/\.lm-label\.lm-veraltet \{[^}]*color: var\(--lm-warn\); font-weight: 700;/);
     expect(css).toContain('.lm-label.lm-veraltet::before { content: "\\26A0');
     expect(css).not.toMatch(/--lm-warn:\s*#ff0000/);
+  });
+});
+
+// Runde 10 (R10-H3, R10-L3, R10-L4, R10-K4, R10-K5): Stilregeln werden gerechnet, Layout misst die Browserprüfung.
+describe("Lagemonitor, Runde 10", () => {
+  const css = readFileSync("src/app/lagemonitor.css", "utf8");
+  const farbe = (selektor: string, name: string): string => {
+    const block = css.slice(css.indexOf(selektor + " {"));
+    const m = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{3,6})\\b`).exec(block.slice(0, block.indexOf("}")));
+    if (!m) return selektor === "main.lm" ? (() => { throw new Error(name); })() : farbe("main.lm", name); // nicht überschrieben: gilt die Grundstufe
+    return m[1]!.length === 4 ? "#" + [...m[1]!.slice(1)].map((c) => c + c).join("") : m[1]!;
+  };
+  const kanaele = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const luma = (hex: string) => { const [r, g, b] = kanaele(hex); return 0.299 * r! + 0.587 * g! + 0.114 * b!; };
+  const hellsterPunkt = (st: string) => Math.max(...kanaele(farbe(st, "--lm-text")));
+  const rel = (hex: string) => {
+    const l = kanaele(hex).map((c) => { const x = c / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * l[0]! + 0.7152 * l[1]! + 0.0722 * l[2]!;
+  };
+  const kontrast = (a: string, b: string) => { const [x, y] = [rel(a), rel(b)].sort((p, q) => q - p); return (x! + 0.05) / (y! + 0.05); };
+  const gedimmt = "main.lm.lm-gedimmt";
+  const dunkel = "main.lm";
+  const hell = "main.lm.lm-hell";
+
+  it("ordnet die Stufen nach Leuchtdichte: Gedimmt < Dunkel < Hell, Dunkel höchstens ~200 (R10-L4)", () => {
+    // Mittlere Leuchtdichte des Bildes: Fläche in Grund- und Textfarbe, Text mit etwa 12 % Anteil.
+    const mittel = (st: string) => 0.88 * luma(farbe(st, "--lm-grund")) + 0.12 * luma(farbe(st, "--lm-text"));
+    expect(mittel(gedimmt)).toBeLessThan(mittel(dunkel));
+    expect(mittel(dunkel)).toBeLessThan(mittel(hell));
+    expect(hellsterPunkt(gedimmt)).toBeLessThan(hellsterPunkt(dunkel));
+    expect(hellsterPunkt(dunkel)).toBeLessThanOrEqual(205);
+    // Lesbarkeit bleibt auf jeder Stufe erhalten.
+    for (const st of [gedimmt, dunkel]) {
+      for (const n of ["--lm-text", "--lm-zeit", "--lm-warn"]) expect(kontrast(farbe(st, n), "#000000"), `${st} ${n}`).toBeGreaterThanOrEqual(4.5);
+      expect(kontrast(farbe(st, "--lm-rahmen"), "#000000"), `${st} Rahmen`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("zeigt „Optionen“ mit Aufklappzeichen und die Helligkeit außerhalb davon (R10-L3)", () => {
+    expect(css).toContain('.lm-klapp > summary::before { content: "\\25B8"');
+    expect(css).toContain('.lm-klapp[open] > summary::before { content: "\\25BE"');
+    const e = einsatzAnlegen("Leiste", EinsatzArt.EINSATZ);
+    render(<Lagemonitor einsatzId={e.id} />);
+    const optionen = Array.from(document.querySelectorAll("details.lm-klapp")).find((d) => d.querySelector("summary")!.textContent === "Optionen")!;
+    expect(within(optionen as HTMLElement).queryByRole("button", { name: "Dunkler" })).toBeNull();
+    expect(document.querySelector(".lm-stufenleiste")!.contains(screen.getByRole("button", { name: "Dunkler" }))).toBe(true);
+    // Telefon: Leiste hinter allem anderen (order 99, R17-K11), Fuß löst sich in die Spalte auf.
+    expect(css).toMatch(/\.lm-fuss \{ display: contents; \}/);
+    expect(css).toMatch(/\.lm-stufenleiste \{ order: 99;/);
+  });
+
+  it("markiert Soll-Einheiten in der Tabelle mit „S“, der Vorbehalt steht in der Stärkezeile (R10-K4)", () => {
+    const e = einsatzAnlegen("Soll", EinsatzArt.EINSATZ);
+    const bogen = neuerBogen();
+    bogen.einheit.organisation = 0 as never;
+    bogen.fahrzeuge = [neuesFahrzeug()];
+    meldungHinzufuegen(e.id, bogen);
+    render(<Lagemonitor einsatzId={e.id} />);
+    const soll = einsaetzeLaden().find((s) => s.id === e.id)!;
+    expect(soll.eintraege.length).toBe(1);
+    const markiert = document.querySelectorAll(".lm-einheiten .lm-soll").length;
+    const vorbehalt = document.querySelector(".lm-r3 .lm-veraltet");
+    // Beides gehört zusammen: ohne Sollstärke weder Marke noch Vorbehalt.
+    expect(vorbehalt != null).toBe(markiert > 0);
+    if (vorbehalt) expect(vorbehalt.textContent).toMatch(/Sollstärke \(S\)/);
+    expect(document.querySelectorAll(".lm-stand .lm-veraltet").length).toBeLessThanOrEqual(1);
   });
 });

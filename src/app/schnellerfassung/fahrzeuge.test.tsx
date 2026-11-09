@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/schritte/fahrzeuge.test.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/schritte/fahrzeuge.test.tsx` (Commit 1d7ed5f).
  *
  * Schritt 4 — Fahrzeuge: Anlegen, Kennzeichen, Funkrufname mit Kennzahlen und
  * die StAN-Vorbelegung aus dem Einheitstyp.
@@ -24,7 +24,9 @@ function stanTyp() {
   const typ = vokabularFuer(OrganisationsTyp.THW, "einheitstyp").find(
     (e) => stanFahrzeugVorbelegung(OrganisationsTyp.THW, { code: e.code }).length > 0,
   )!;
-  return { typ, vorlage: stanFahrzeugVorbelegung(OrganisationsTyp.THW, { code: typ.code }) };
+  // Wie die App: ohne „Ausstattung nach StAN: ja" des Bausteins — das hat niemand angegeben (R15-N1).
+  const vorlage = stanFahrzeugVorbelegung(OrganisationsTyp.THW, { code: typ.code }).map(({ stanKonform: _s, ...f }) => f);
+  return { typ, vorlage };
 }
 
 describe("Schritt Fahrzeuge", () => {
@@ -129,6 +131,23 @@ describe("Schritt Fahrzeuge", () => {
     expect(kennzahlen().value).toBe("71/25");
   });
 
+  // Audit Runde 10, R10-D2/E2: Der Merker hält auch über Schrittwechsel und Neuladen (Sitzungsspeicher dieses Tabs).
+  it("holt Kennwort und Kennzahlen nach Schrittwechsel und Neuladen zurück (R10-D2)", async () => {
+    sessionStorage.clear();
+    const nutzer = userEvent.setup();
+    const start = neuerBogen();
+    start.fahrzeuge = [{ typ: { code: 3 }, funkrufname: { kennwort: { code: 1 }, eigenerStandort: true, teile: [71, 25] } }];
+    const erste = render(<AbschnittBuehne komponente={AbschnittFahrzeuge} bogen={start} />);
+    await nutzer.click(screen.getByLabelText("Funkrufname")); // aus
+    erste.unmount(); // Schritt verlassen
+    const ohne = neuerBogen();
+    ohne.fahrzeuge = [{ typ: { code: 3 } }];
+    render(<AbschnittBuehne komponente={AbschnittFahrzeuge} bogen={ohne} />);
+    await nutzer.click(screen.getByLabelText("Funkrufname")); // wieder an
+    expect((screen.getByLabelText("Kennzahlen (z. B. 18/13)") as HTMLInputElement).value).toBe("71/25");
+    sessionStorage.clear();
+  });
+
   it("nimmt bei Sitzplätzen Komma und Minus nicht still an (R9-E1)", async () => {
     const nutzer = userEvent.setup();
     const start = neuerBogen();
@@ -176,7 +195,7 @@ describe("Schritt Fahrzeuge", () => {
     // Der Richtwert des Typs steht als Platzhalter drin, nicht als Wert — sonst
     // wäre nicht mehr zu erkennen, was die Einheit selbst geprüft hat.
     expect(feld.value).toBe("");
-    expect(feld.placeholder).toBe("3 (Richtwert)");
+    expect(feld.placeholder).toBe("3 (Richtw.)");
     expect(screen.getByText(/Sitzplätze:/).textContent).toMatch(/3 für 2 Personen/);
 
     await nutzer.type(feld, "1");
@@ -212,7 +231,7 @@ describe("Schritt Fahrzeuge", () => {
     // brach „eigener Standort" in einer schmalen Spalte um (R3-N6).
     const kaestchen = screen.getByLabelText("eigener Standort");
     expect(kaestchen.closest("label")!.textContent).toBe("eigener Standort");
-    expect(kaestchen.closest("label")!.nextElementSibling!.textContent).toMatch(/Ort im Funkrufnamen = Standort der Einheit/);
+    expect(kaestchen.closest("label")!.nextElementSibling!.textContent).toMatch(/Ort im Funkrufnamen = Ort der Einheit/);
   });
 
   it("lädt die StAN-Vorbelegung des Einheitstyps", async () => {

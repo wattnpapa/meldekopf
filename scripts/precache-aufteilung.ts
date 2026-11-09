@@ -39,6 +39,19 @@ export const ZUSATZ_CACHE = "eeb-zusatz";
 /** Seiten, die die App selbst verlinkt oder die offline zur Hand sein müssen. */
 const KERN_SEITEN = new Set(["index.html", "anleitung.html", "datenschutz.html", "impressum.html", "404.html"]);
 
+/**
+ * Gar nicht vorab laden: die rund 3.500 Bögen „alle Einheiten aller
+ * Ortsverbände" (examples/thw/ortsverbaende/, Dateinamen „ov-…"). Zusammen gut
+ * 9 MB — das lädt kein Gerät für eine Liste, aus der es ein paar Bögen braucht.
+ * Ein Bogen kommt beim ersten Öffnen aus dem Netz und bleibt danach im
+ * eigenen Laufzeit-Cache (`eeb-ov-beispiele`, CacheFirst, vite.config.ts) —
+ * getrennt von `eeb-zusatz`, damit viele geöffnete OV-Bögen dort nichts
+ * verdrängen (Prüfrunde Beispielbögen, BB-O2).
+ */
+export function istNurAufAbruf(url: string): boolean {
+  return /^assets\/ov-[^/]+\.json$/.test(url);
+}
+
 /** Gehört die Datei (Pfad wie im Precache-Manifest) in die zweite Stufe? */
 export function istZusatz(url: string): boolean {
   // Per Glob als URL eingebundene JSON-Dateien (im Erfassungsbogen die Beispielbögen).
@@ -53,7 +66,10 @@ export function istZusatz(url: string): boolean {
 export function vorratAufteilen(eintraege: VorratEintrag[]): { kern: VorratEintrag[]; umfang: OfflineUmfang } {
   const kern: VorratEintrag[] = [];
   const zusatz: VorratEintrag[] = [];
-  for (const e of eintraege) (istZusatz(e.url) ? zusatz : kern).push(e);
+  for (const e of eintraege) {
+    if (istNurAufAbruf(e.url)) continue;
+    (istZusatz(e.url) ? zusatz : kern).push(e);
+  }
   return {
     kern,
     umfang: {

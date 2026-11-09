@@ -5,13 +5,14 @@
  */
 /* „main.lm" schlägt die allgemeine main-Regel der App (60rem breit, mittig). */
 main.lm {
+  /* Stufe „Dunkel" (Grundstufe): gedämpftes Weiß, hellster Bildpunkt 201 statt 255 (R10-L4). */
   --lm-grund: #000;
-  --lm-text: #fff;
-  /* Linien heller als das reine Blau (2,4:1 auf Schwarz, R6-L4): 6:1. */
-  --lm-rahmen: #5b8cff;
-  --lm-zeit: #ff0000;
+  --lm-text: #c9c2b8;
+  /* Linien heller als das reine Blau (2,4:1 auf Schwarz, R6-L4). */
+  --lm-rahmen: #4a64b0;
+  --lm-zeit: #d85a5a; /* 5,5:1 auf Schwarz auch für Kleinschrift (R8-L3) */
   /* Warnung „Datenstand alt": eigene Farbe (Bernstein), nicht das Rot der Zeit; Zeichen und Fettschrift kommen dazu (R9-K6). */
-  --lm-warn: #ffc233;
+  --lm-warn: #d9a441;
   /* Kleinste Schrift: am Fernseher 14 px, am Telefon folgt sie der Systemschrift (R8-L5, unten). */
   --lm-min: 14px;
   width: 100%;
@@ -28,12 +29,13 @@ main.lm {
   background: var(--lm-grund);
   color: var(--lm-text);
 }
-/* Gedimmt: für abgedunkelte Fahrzeuge — gedämpftes Weiß und Rot statt Vollblendung (R6-L4). */
+/* Gedimmt: die dunkelste Stufe, für abgedunkelte Fahrzeuge (R6-L4). Leuchtdichte Gedimmt < Dunkel < Hell, die Namen folgen ihr (R10-L4);
+   Text 7,5:1, Linien 3,2:1, Rot und Bernstein je über 4,5:1 auf Schwarz. */
 main.lm.lm-gedimmt {
-  --lm-text: #c9c2b8;
-  --lm-rahmen: #4a64b0;
-  --lm-zeit: #d85a5a; /* 5,5:1 auf Schwarz auch für Kleinschrift (R8-L3) */
-  --lm-warn: #d9a441;
+  --lm-text: #a39b8f;
+  --lm-rahmen: #405aa0;
+  --lm-zeit: #c85353;
+  --lm-warn: #b88a35;
 }
 main.lm.lm-hell {
   --lm-grund: #fff;
@@ -59,7 +61,7 @@ main.lm.lm-hell {
 .lm-dtg {
   position: relative;
   flex: 0 1 auto;
-  min-height: 14vh;
+  min-height: 11vh;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -70,14 +72,28 @@ main.lm.lm-hell {
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
-.lm-dtg-text { display: flex; align-items: baseline; gap: 0.25em; }
+/* Uhrzeit groß mit Doppelpunkt, Datum daneben kleiner und ausgeschrieben („10:28" „25. Okt. 2026", R10-H3). */
+.lm-dtg-text { display: flex; align-items: baseline; gap: 0.4em; }
+.lm-dtg-text > span { font-size: 0.55em; }
 /* Beschriftung der Zeitgruppe, damit „1807" als Uhrzeit erkennbar ist (R7-N5). */
 .lm-dtg-label { position: absolute; top: 0.15em; left: 0.5em; font-size: max(var(--lm-min), 0.2em); color: var(--lm-text); }
 .lm-dtg strong { font-size: 1.5em; line-height: 1; }
 .lm-klapp { text-align: left; font-size: max(var(--lm-min), min(2.9vh, 2.2vw)); flex: none; }
 .lm-fuss { display: flex; gap: 8px; align-items: flex-start; flex: none; }
 .lm-fuss > .lm-klapp { flex: 1 1 0; min-width: 0; }
-.lm-klapp > summary { cursor: pointer; padding: 0.15em 0.3em; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; }
+.lm-klapp > summary { cursor: pointer; padding: 0.15em 0.3em; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; list-style: none; }
+.lm-klapp > summary::-webkit-details-marker { display: none; }
+/* Aufklappzeichen, damit „Optionen" und „Einsatzdaten" als Tasten erkennbar sind (R10-L3). */
+.lm-klapp > summary::before { content: "\25B8"; display: inline-block; width: 1.2em; flex: none; }
+.lm-klapp[open] > summary::before { content: "\25BE"; }
+/* Helligkeit: eigene Leiste neben „Optionen" (Fernseher) bzw. ganz oben (Telefon). */
+.lm-stufenleiste { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0.15em 0.4em; text-align: left; font-size: max(var(--lm-min), min(2.9vh, 2.2vw)); }
+.lm-stufenleiste .lm-stufe { flex: 1 1 auto; }
+.lm-stufenleiste .lm-knopf { font-size: inherit; min-height: 44px; }
+.lm-soll { text-decoration: none; font-weight: 700; color: var(--lm-warn); border: 1px solid var(--lm-warn); border-radius: 0.2em; padding: 0 0.25em; margin-left: 0.25em; }
+/* Dauer und Bedarf teilen sich eine Zeile, etwas kleiner als die übrigen r2-Zeilen (R10-K5). */
+.lm-dauer { font-size: min(3.2vh, 3.6vw); }
+.lm-dauer .lm-bedarf { font-weight: 700; }
 .lm-klapp[open] > summary { border-bottom: 1px solid var(--lm-rahmen); }
 .lm-klapp h2 { margin: 0 0 0.3em; font-size: 1.1em; }
 /* Einheitentabelle: nimmt den Rest des Bildes; Zellen brechen nur an Leerstellen, nie im Wort (R7-K7, R7-N5). */
@@ -121,6 +137,8 @@ main.lm h1, main.lm h2, main.lm th, main.lm summary, main.lm dt { color: var(--l
 .lm-bewegungen { flex: none; padding: 0.05em 0.2em; font-size: min(2.9vh, 3.6vw); }
 .lm-bewegung { text-align: center; }
 .lm-weitere-bewegungen { opacity: 0.9; }
+/* Angaben der Lagezeile bleiben ungeteilt; umbrochen wird nur zwischen ihnen (R17-K11). */
+.lm-nb { white-space: nowrap; }
 /* Liste bleibt im Bild: ab dieser Höhe rollt sie in sich (kein Überlauf der Seite, R6-L2). */
 
 /* Knöpfe in der Schrift des Monitors, nicht als weiße App-Knöpfe (R6-L6). */
@@ -148,8 +166,12 @@ main.lm h1, main.lm h2, main.lm th, main.lm summary, main.lm dt { color: var(--l
   .lm-einheiten-block { flex: none; min-height: 0; }
   .lm-tabelle { flex: none; overflow-x: auto; }
   .lm-einheiten { font-size: 1em; }
-  .lm-fuss { flex-direction: column; gap: 8px; }
-  .lm-fuss > .lm-klapp { width: 100%; }
+  /* Die Lage steht im ersten Bild (Funkrufname, Stärke, Einheiten); die Leiste „Stufe / Dunkler / Heller" folgt ganz am Ende (R17-K11).
+     Der Fuß löst sich dafür in die Spalte des Monitors auf. */
+  .lm-fuss { display: contents; }
+  .lm-fuss > .lm-klapp { width: 100%; box-sizing: border-box; margin-top: 8px; }
+  .lm-fuss > .lm-klapp:first-child { margin-top: 0; }
+  .lm-stufenleiste { order: 99; margin-top: 8px; }
   .lm-knopf { padding: 0.2em 1em; }
   .lm-r1 { font-size: calc(var(--lm-b) * 1.3); }
   .lm-r2 { font-size: var(--lm-b); }

@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/vorbelegung-rueckweg.ts` (Commit 441811c), unverändert.
+ * Herkunft: Erfassungsbogen `src/app/vorbelegung-rueckweg.ts` (Commit 1d7ed5f), unverändert.
  *
  * Rückweg von „Vorbelegung entfernen" über das Neuladen hinaus (Audit Runde 5,
  * R5-D5).
@@ -29,6 +29,8 @@ export interface VorbelegungWeg {
    */
   danach?: string;
   kopf: string;
+  /** Wohin „Rückgängig“ führt, wenn das nicht der Schritt davor ist (R12-N2), z. B. „Rückgängig stellt „THW“ wieder her.“ */
+  ziel?: string;
   vor: number;
   personal: Person[];
   fahrzeuge: Fahrzeug[];

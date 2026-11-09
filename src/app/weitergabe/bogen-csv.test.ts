@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/bogen-csv.test.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/bogen-csv.test.ts` (Commit 1d7ed5f).
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -130,7 +130,8 @@ describe("bogenCsvInhalt()", () => {
     const csv = bogenCsvInhalt(bogen());
     expect(spalte(csv, 1, "Organisation")).toBe("THW");
     expect(spalte(csv, 1, "Standort")).toBe("Oldenburg");
-    expect(spalte(csv, 1, "Telefon Einheit")).toBe("044112345");
+    // R11-E7: als Text, damit Excel die führende Null nicht streicht.
+    expect(spalte(csv, 1, "Telefon Einheit")).toBe("Tel. 044112345");
     expect(spalte(csv, 1, "Ort/Auftrag (Bogen)")).toBe("Deichverteidigung");
     expect(spalte(csv, 1, "Zeitraum von")).toBe("10.04.2020");
     expect(spalte(csv, 1, "Personalerfassung")).toBe("Vollständig");
@@ -169,6 +170,15 @@ describe("bogenCsvInhalt()", () => {
       }),
     );
     expect(spalte(csv, 2, "Fahrerlaubnis")).toBe("B, A");
+  });
+
+  it("trennt Berufe von den Zusatzqualifikationen in eine eigene Spalte, ohne Präfix", () => {
+    const b = bogen();
+    b.personal[0]!.zusatzqualifikationen = [{ freitext: "Beruf: Elektroniker/in" }, { freitext: "Motorsägenschein" }, { freitext: "Beruf: Zimmerer/in" }];
+    const csv = bogenCsvInhalt(b);
+    expect(spalte(csv, 2, "Zusatzqualifikationen")).toBe("Motorsägenschein");
+    expect(spalte(csv, 2, "Berufe")).toBe("Elektroniker/in, Zimmerer/in");
+    expect(spalte(csv, 3, "Berufe")).toBe("");
   });
 
   it("schreibt Kontakte einer Person in ein Feld", () => {
@@ -329,7 +339,7 @@ describe("einsatzDetailCsvInhalt()", () => {
     expect(spalte(csv, 1, "Signatur")).toBe("gültig (AB12-CD34)");
   });
 
-  it("liefert bei leerer Sammlung nur die Kopfzeile", () => {
-    expect(zeilen(einsatzDetailCsvInhalt(sammlung([])))).toHaveLength(1);
+  it("liefert bei leerer Sammlung nur die Kopfzeile und die Kennzeile (R16-A1)", () => {
+    expect(zeilen(einsatzDetailCsvInhalt(sammlung([])))).toHaveLength(2);
   });
 });

@@ -15,6 +15,16 @@ import { dialogeZuruecksetzen, prellschutzSetzen } from "@bos/oberflaeche/dialog
 import { speicherVerdrahten } from "../app/speicher-browser";
 import { leseSchreibFehlerZuruecksetzen } from "../app/speicher-schonend";
 import { einsaetzeLesenZuruecksetzen } from "../app/einsaetze-lesen";
+import { ausgabeSperreSetzen } from "../app/ausgabe-sperre";
+// Der Inhalt des Fensters „Namen einfügen…" lädt im Browser nach (React.lazy). Im Test liegt er schon im Modulspeicher, damit das
+// Fenster nach einem Klick ohne Wartezeit steht — wie im Browser, wo der Schritt das Nachladen beim Öffnen anstößt.
+import "../app/schnellerfassung/namen-dialog";
+// Ebenso die Einsatzansicht und die taktischen Zeichen (nachgeladene Brocken, siehe zeichen-bild.tsx). Der Erfassungsbogen
+// lädt die Einsatzansicht über einsaetze-lazy.tsx; der Meldekopf braucht diese Hülle nicht und lädt das Modul direkt.
+import { zeichenLaden } from "../app/zeichen-bild";
+await Promise.all([import("../app/einsaetze-ui"), zeichenLaden()]);
+// Dasselbe für die Tipp-Sperre der Ausgaben der Einsatzansicht (R12-G2); ihr eigener Test schaltet sie ein.
+ausgabeSperreSetzen(0);
 // Testing Library klickt schneller als jeder Finger: der Prellschutz der
 // Rückfragen (dialoge.tsx, R2-G1) ist hier aus; sein eigener Test schaltet ihn ein.
 prellschutzSetzen(0);

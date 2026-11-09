@@ -2,7 +2,7 @@
  * Bundle-Budget: misst den gebauten Stand byteweise und vergleicht ihn mit
  * `scripts/bundle-budget.json`.
  *
- * Herkunft: Erfassungsbogen `scripts/bundle-budget.ts` (Commit f2b77f1), unverändert.
+ * Herkunft: Erfassungsbogen `scripts/bundle-budget.ts` (Commit 1d7ed5f), unverändert.
  *
  * Hintergrund ist Aufnahmeregel 5 aus ADR-003: der geteilte Kern darf die PWA
  * nicht schwerer machen. Ohne feste Messung merkt das niemand — ein Submodul
@@ -81,6 +81,23 @@ export function messen(dist = DIST): Messung {
   };
 }
 
+/**
+ * Nachgeladene Chunks nennen in ihrer Vorladeliste die Stilvorlagen, die sie brauchen. Fehlt eine davon im Bau (die
+ * Einbettung der Schrift-CSS löscht die Datei), scheitert die Vorladung mit „Unable to preload CSS“ und die Ansicht
+ * öffnet nicht (R21-O1: Einsatzansicht ohne Netz). Liefert die Namen genannter, aber fehlender .css-Dateien.
+ */
+export function fehlendeStilvorlagen(dist = DIST): string[] {
+  const dateien = dateienRekursiv(dist);
+  const vorhanden = new Set(dateien.filter((p) => p.endsWith(".css")).map((p) => p.split("/").pop()!));
+  const fehlen = new Set<string>();
+  for (const datei of dateien.filter((p) => p.endsWith(".js"))) {
+    for (const treffer of readFileSync(datei, "utf8").matchAll(/"(?:\.\/|assets\/)?([A-Za-z0-9_.-]+\.css)"/g)) {
+      if (!vorhanden.has(treffer[1]!)) fehlen.add(treffer[1]!);
+    }
+  }
+  return [...fehlen];
+}
+
 function zahl(n: number): string {
   return n.toLocaleString("de-DE");
 }
@@ -111,6 +128,10 @@ function main(): void {
   }
   if (messung.startJs > grenzen.startJs) {
     verstoesse.push(`Startbündel ${zahl(messung.startJs)} > ${zahl(grenzen.startJs)}`);
+  }
+  const fehlendeCss = fehlendeStilvorlagen();
+  if (fehlendeCss.length > 0) {
+    verstoesse.push(`Chunks verweisen auf fehlende Stilvorlagen: ${fehlendeCss.join(", ")} (Vorladung scheitert, R21-O1)`);
   }
   if (verstoesse.length > 0) {
     console.error(`\nBundle-Budget überschritten (ADR-003, Aufnahmeregel 5):\n  ${verstoesse.join("\n  ")}`);

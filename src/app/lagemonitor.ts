@@ -9,14 +9,15 @@
  * Bildschirm im Fahrzeug sieht jeder, der vorbeikommt.
  */
 
-import { staerke } from "@bos/eeb-format/model";
+import { staerke, type EebZeitpunkt } from "@bos/eeb-format/model";
+import { angabenAlterWort, angabenZeit, type AngabenSeit } from "./angaben-alter";
 import { einheitOrt } from "@bos/meldekopf/darstellung";
-import { EinsatzArt, MeldeStatus, revisionen, type Einsatzsammlung } from "@bos/meldekopf/einsaetze";
-import { aggregiere, aggregiereNachZug, aktuelleMeldungen, type EinsatzSummen } from "./auswertung";
+import { EinsatzArt, MeldeStatus, revisionen, type Einsatzsammlung, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
+import { aggregiere, aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage, type EinsatzSummen } from "./auswertung";
 import { eintreffzeit } from "./eintrag-zeiten";
-import { bedarfMarken, sollstaerkeAnteil } from "./einheiten-tabelle";
+import { letzteMeldung, sollstaerkeAnteil } from "./einheiten-tabelle";
 import { geltendeJeEinheit } from "./fassung-vorrang";
-import { einheitAnzeigename, funkrufText, natoZeitstempel, orgLabel, vokabText, vokabularFuer } from "./hilfen";
+import { einheitAnzeigename, funkrufText, nurSollstaerke, natoZeitstempel, orgLabel, vokabText, vokabularFuer } from "./hilfen";
 
 /** Datum-Zeit-Gruppe in ihren Teilen: „17" „1806" „feb" „24" (Tag, Uhrzeit, Monat, Jahr). */
 export function dtgTeile(d: Date): { tag: string; zeit: string; monat: string; jahr: string } {
@@ -25,6 +26,54 @@ export function dtgTeile(d: Date): { tag: string; zeit: string; monat: string; j
 }
 
 const zwei = (n: number) => String(n).padStart(2, "0");
+
+const MONATE_KURZ = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez."];
+
+/** Uhrzeit und Datum lesbar getrennt: „10:28" und „25. Okt. 2026" (R10-H3; statt der Funk-Gruppe „25 1028 okt 26"). */
+export function uhrTeile(d: Date): { zeit: string; datum: string } {
+  return { zeit: `${zwei(d.getHours())}:${zwei(d.getMinutes())}`, datum: `${d.getDate()}. ${MONATE_KURZ[d.getMonth()]} ${d.getFullYear()}` };
+}
+
+/** „27 Personen" / „1 Person": Zahl und Wort mit Leerzeichen (R12-K4/R12-H1). */
+export function personenText(n: number): string {
+  return `${n} ${n === 1 ? "Person" : "Personen"}`;
+}
+
+/**
+ * Sofortbedarf als eine Zeile für den Monitor, nur mit dem, was da ist:
+ * „Bedarf: Diesel 120 l · Unterbringung 24 · Ruhezeit 3×" (R10-K5). Wie in der Kopfzeile der
+ * Einsatzansicht (`sum.kraftstoff.dieselLiter`, `unterbringungAngefordert.personen`, `ruhezeitErforderlich`);
+ * Benzin und Gemisch stehen dort nur im Aufklappteil und hier gar nicht.
+ */
+export function bedarfText(s: EinsatzSummen): string | null {
+  const teile: string[] = [];
+  // Reihenfolge wie die Kopfzeile der Einsatzansicht; Verpflegung und „Personen" wie dort (R12-K4).
+  if ((s.verpflegungAngefordert ?? 0) > 0) teile.push(`Verpflegung ${s.verpflegungAngefordert}`);
+  if (s.unterbringungBenoetigt > 0) teile.push(`Unterbringung ${personenText(s.unterbringungAngefordert.personen)}`);
+  teile.push(...kraftstoffTeile(s.kraftstoff));
+  if (s.ruhezeitErforderlich > 0) teile.push(`Ruhezeit ${s.ruhezeitErforderlich} ${s.ruhezeitErforderlich === 1 ? "Einheit" : "Einheiten"}`);
+  // Schnell erfasste Einheiten haben keinen Bedarf angegeben: Das ist keine Aussage „nichts nötig" (R14-W1).
+  const ohne = s.bedarfOhneAngabe ?? 0;
+  if (ohne > 0) teile.push(bedarfOhneAngabeText(ohne));
+  return teile.length > 0 ? `Bedarf: ${teile.join(" · ")}` : null;
+}
+
+/** „bei 1 Einheit nicht erfasst" / „bei 3 Einheiten nicht erfasst" — für Monitor, Einsatzansicht und Lageblatt (R14-W1). */
+export function bedarfOhneAngabeText(n: number): string {
+  return `bei ${n} ${n === 1 ? "Einheit" : "Einheiten"} nicht erfasst`;
+}
+
+/**
+ * Kraftstoffe mit Menge größer 0 in der Schreibweise des Lageblatts: „Diesel 580 l", „Benzin 160 l",
+ * „Gemisch 10 l" (R13-K1). Kurzzeile der Einsatzansicht und Lagemonitor nennen damit alle angeforderten Sorten.
+ */
+export function kraftstoffTeile(k: { dieselLiter: number; benzinLiter: number; gemischLiter: number }): string[] {
+  const teile: string[] = [];
+  if (k.dieselLiter > 0) teile.push(`Diesel ${k.dieselLiter} l`);
+  if (k.benzinLiter > 0) teile.push(`Benzin ${k.benzinLiter} l`);
+  if (k.gemischLiter > 0) teile.push(`Gemisch ${k.gemischLiter} l`);
+  return teile;
+}
 
 /**
  * Einsatzdauer ausgeschrieben: „1 Tag, 6 Stunden, 6 Minuten". Tage fehlen unter
@@ -37,9 +86,10 @@ export function dauerText(beginn: number | null, jetzt: number): string | null {
   const stunden = Math.floor((minuten % 1440) / 60);
   const rest = minuten % 60;
   const teil = (n: number, eins: string, viele: string) => `${n} ${n === 1 ? eins : viele}`;
+  // R19-K11: Unter einer Stunde nur die Minuten („9 Minuten" statt „0 Stunden, 9 Minuten").
   return [
     ...(tage > 0 ? [teil(tage, "Tag", "Tage")] : []),
-    teil(stunden, "Stunde", "Stunden"),
+    ...(tage > 0 || stunden > 0 ? [teil(stunden, "Stunde", "Stunden")] : []),
     teil(rest, "Minute", "Minuten"),
   ].join(", ");
 }
@@ -62,6 +112,14 @@ export interface EinheitZeile {
   zug: string;
   /** Eintreffzeit (vom Zettel, sonst Empfang) — danach ist die Tabelle geordnet. */
   eingetroffen: number;
+  /** Niemand hat gezählt: die Zahlen sind nur die Sollstärke der Vorbelegung (in der Tabelle mit „S" markiert, R10-K4). */
+  soll: boolean;
+  /** Alter der Meldung in Minuten, nur ab {@link VERALTET_ALTER_MIN} (knappe Altersmarke je Zeile, R11-K1). */
+  alterMin?: number;
+  /** Der Stand im Bogen liegt weit vor dem Eingang: die Altersmarke meint den Stand, nicht das Eintreffen (R14-K1). */
+  standAlt?: boolean;
+  /** Auftrag/Notiz des Meldekopfs, auf eine Zeile gekürzt (R14-K3). */
+  auftrag?: string;
 }
 
 /** Zwischensumme eines Zugs für die Zugzeile des Monitors. */
@@ -84,6 +142,104 @@ export interface BedarfZeile {
   unterbringungPersonen: number;
   /** Einheiten, deren gemeldete Verpflegung von ihrer Stärke abweicht. */
   verpflegungAbweichend: number;
+}
+
+/** Satz unter dem Bedarf der Einsatzansicht (R14-W1). */
+export function bedarfOhneAngabeHinweis(n: number): string {
+  return `Der Bedarf ist ${bedarfOhneAngabeText(n)} — „keine" bei Unterbringung, Ruhezeit und Betriebsstoff heißt dort nicht „nichts nötig".`;
+}
+
+/** Alter einer Zeile mit Minuten: „6 Std 40 Min", ab einem Tag „2 T" (R14-K3: abgerundete Stunden verwischten 1:30 und 1:59). */
+export function alterKurz(min: number): string {
+  // Ausgeschrieben: Auf dem Fernseher liest sich „103 T" nicht als „Tage" (R18-K5).
+  if (min >= 1440) return `${Math.floor(min / 1440)} ${Math.floor(min / 1440) === 1 ? "Tag" : "Tage"}`;
+  return `${Math.floor(min / 60)} Std ${min % 60} Min`;
+}
+
+/** Auftrag für die Monitorzeile: eine Zeile, höchstens 48 Zeichen. */
+export function auftragKurz(t: string): string {
+  const eine = t.replace(/\s+/g, " ").trim();
+  return eine.length > 48 ? `${eine.slice(0, 47).trimEnd()}…` : eine;
+}
+
+/** Ab diesem Alter einer Meldung warnen Kopfzeile, Kachel und Monitor (R10-K1, R11-K1). */
+export const VERALTET_ALTER_MIN = 60;
+
+/** Alter der Meldungen der anwesenden (zählenden) Einheiten — nicht der abgerückten, die die Lage nicht mehr tragen (R11-K1). */
+export interface AnwesendenAlter {
+  /** Eingang der ältesten Meldung unter den Anwesenden (ms). */
+  aeltesteMs: number;
+  anwesend: number;
+  /** Davon älter als {@link VERALTET_ALTER_MIN} Minuten. */
+  aelter: number;
+}
+
+/**
+ * Wie alt sind die Meldungen, auf denen die Stärke beruht? „Letzte Meldung vor 1 Min" sagte nichts, wenn
+ * eine frische abgerückte Einheit die jüngste war und die anwesenden Stunden alt waren (R11-K1).
+ * `null` ohne anwesende Einheit.
+ */
+export function anwesendenAlter(anwesende: readonly { empfangenAm: number; bogen?: { stand: EebZeitpunkt }; angaben?: AngabenSeit }[], jetzt: number): AnwesendenAlter | null {
+  if (anwesende.length === 0) return null;
+  const grenze = VERALTET_ALTER_MIN * 60_000;
+  // Alter der Angaben (Stand), nicht des Eintreffens (R14-K1); ohne Bogen gilt der Eingang.
+  const zeit = (e: { empfangenAm: number; bogen?: { stand: EebZeitpunkt }; angaben?: AngabenSeit }) =>
+    e.bogen ? angabenZeit({ empfangenAm: e.empfangenAm, bogen: e.bogen, angaben: e.angaben }) : e.empfangenAm;
+  return {
+    aeltesteMs: Math.min(...anwesende.map(zeit)),
+    anwesend: anwesende.length,
+    aelter: anwesende.filter((e) => jetzt - zeit(e) >= grenze).length,
+  };
+}
+
+/**
+ * „älteste Meldung vor 8 Std 20 Min, 5 von 6 älter als 1 Std" — nur, wenn mindestens eine anwesende Einheit
+ * älter als eine Stunde ist, sonst `null`.
+ */
+export function anwesendenAlterText(a: AnwesendenAlter | null, jetzt: number): string | null {
+  if (!a || a.aelter === 0) return null;
+  return `älteste Meldung ${alterText(a.aeltesteMs, jetzt)}, ${a.aelter} von ${a.anwesend} älter als 1 Std`;
+}
+
+/**
+ * Altersaussage für Papier: „⚠ älteste Meldung vor 5 Std 0 Min, 4 von 6 älter als 1 Std", gerechnet zum Druckzeitpunkt
+ * `jetzt`; `null`, wenn keine anwesende Meldung eine Stunde alt ist (R12-K3).
+ */
+export function lageblattAlterText(empfangenAm: readonly number[], jetzt: number): string | null {
+  const t = anwesendenAlterText(anwesendenAlter(empfangenAm.map((z) => ({ empfangenAm: z })), jetzt), jetzt);
+  return t ? `⚠ ${t}` : null;
+}
+
+/**
+ * Zeile des Lageblatts, deren Meldung zum Druckzeitpunkt eine Stunde alt oder älter ist: „⚠ Meldung vor 6 Std 41 Min".
+ * Der Kopf nennt „4 von 7 älter als 1 Std"; die Zeile sagt, welche (R13-K2). `null` darunter oder ohne Eingang.
+ */
+export function lageblattZeilenAlter(empfangenAm: number | undefined, jetzt: number, wort: "Meldung" | "Stand" = "Stand"): string | null {
+  if (empfangenAm == null || jetzt - empfangenAm < VERALTET_ALTER_MIN * 60_000) return null;
+  return `⚠ ${wort} ${alterText(empfangenAm, jetzt)}`;
+}
+
+/**
+ * Stärke „F / U / M // G" der Summenzeile: Mit dreistelligen Werten bräche die schmale Spalte um, und die
+ * Gesamtstärke stünde allein in der zweiten Zeile (R13-A5). Dann ohne Leerzeichen um die Schrägstriche.
+ */
+export function staerkeSummenText(f: number, u: number, m: number, g: number, kompakt?: boolean): string {
+  const breit = `${f} / ${u} / ${m} // ${g}`;
+  return (kompakt ?? breit.length > 15) ? `${f}/${u}/${m}//${g}` : breit;
+}
+
+/**
+ * Eine Schreibweise für die ganze Spalte „Stärke F / U / M // G" (R18-W5): Sobald eine Zeile oder die Summe zu breit
+ * wird, stehen alle Zeilen kompakt — vorher wechselte die Schreibweise von Zeile zu Zeile.
+ */
+export function staerkeSpalteKompakt(zeilen: readonly [number, number, number, number][]): boolean {
+  return zeilen.some(([f, u, m, g]) => `${f} / ${u} / ${m} // ${g}`.length > 15);
+}
+
+/** Zwischensumme je Zug: „älteste Meldung vor 5 Std 0 Min" — nur ab einer Stunde, sonst `null` (R12-K3). */
+export function zugAlterText(aeltesteMeldungAm: number | undefined, jetzt: number): string | null {
+  if (aeltesteMeldungAm == null || jetzt - aeltesteMeldungAm < VERALTET_ALTER_MIN * 60_000) return null;
+  return `⚠ älteste Meldung ${alterText(aeltesteMeldungAm, jetzt)}`;
 }
 
 /** Was sich zuletzt in der Lage bewegt hat — der Fernseher soll nicht nur Zahlen ändern, sondern sagen, warum (Audit Runde 6, R6-K1). */
@@ -135,6 +291,10 @@ export interface Lagebild {
   zeitenPruefen: boolean;
   /** Einheiten, für die niemand gezählt hat (reine Sollstärke), und ihre Personen: stecken in der Gesamtstärke (R9-K1). */
   sollstaerke: { einheiten: number; personen: number };
+  /** Alter der Meldungen der anwesenden Einheiten (R11-K1); `null` ohne Anwesende. */
+  anwesendenAlter: AnwesendenAlter | null;
+  /** Anwesende Übungsmeldungen, die in dieser Lage nicht zählen (R19-L1): Der Monitor nennt sie, statt „Noch nichts gemeldet" zu zeigen. */
+  uebungenDaneben: number;
 }
 
 export function lagebildArt(art: EinsatzArt): string {
@@ -144,13 +304,16 @@ export function lagebildArt(art: EinsatzArt): string {
 function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
   const aus: Bewegung[] = [];
   for (const k of geltendeJeEinheit(einsatz.eintraege)) {
+    // R20-L4: Eine Übungsmeldung, die in dieser Lage nicht zählt, bewegt die Lage nicht: Sonst steht „Eingetroffen: …" neben
+    // „Noch keine Einheit gemeldet".
+    if (!zaehltInLage(einsatz.art, k.bogen)) continue;
     const name = einheitAnzeigename(k.bogen.einheit);
     for (const v of k.vermerke ?? []) {
       if (jetzt - v.zeit > BEWEGUNG_FENSTER_MS) continue;
       if (v.text === "Abgerückt") aus.push({ id: `${k.id}-a-${v.zeit}`, name, art: "Abgerückt", zeit: v.zeit });
       else if (/^Wieder als anwesend/.test(v.text)) aus.push({ id: `${k.id}-w-${v.zeit}`, name, art: "Wieder da", zeit: v.zeit });
     }
-    if (jetzt - k.empfangenAm <= BEWEGUNG_FENSTER_MS) {
+    if (jetzt - k.empfangenAm <= BEWEGUNG_FENSTER_MS && !k.angaben?.kennzeichnung) {
       const revs = revisionen(einsatz.eintraege, k.einheitSchluessel);
       if (revs.length > 1) {
         const davor = revs.find((r) => r.id !== k.id);
@@ -183,13 +346,16 @@ function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
 
 export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): Lagebild {
   const geltend = geltendeJeEinheit(einsatz.eintraege);
-  const aktuell = aktuelleMeldungen(einsatz.eintraege, einsatz.art);
-  // Zuletzt eingetroffen zuerst (R8-K5). Vorher nach Empfang: Ein Nachtrag vom Meldeblock und jede Folgemeldung
-  // sprangen an die Spitze, als wären sie gerade gekommen (Audit Meldekopf R1, F3). Bei gleicher Zeit bleibt die
-  // Reihenfolge der Meldungen.
-  const einheiten = aktuell
+  const einheiten = aktuelleMeldungen(einsatz.eintraege, einsatz.art)
     .map((m) => ({ m, da: eintreffzeit(m) }))
-    .sort((a, b) => b.da - a.da)
+    // Erst die mit ⚠ (Angaben älter als eine Stunde), älteste zuerst: Bei knappem Platz werden die unauffälligen Zeilen
+    // gekürzt, nicht die gewarnten (Erfassungsbogen R15-K2). Danach zuletzt eingetroffen zuerst (R8-K5); vorher nach
+    // Empfang: Ein Nachtrag vom Meldeblock und jede Folgemeldung sprangen an die Spitze, als wären sie gerade gekommen
+    // (Audit Meldekopf R1, F3). Bei gleicher Zeit bleibt die Reihenfolge der Meldungen.
+    .sort((a, b) => {
+      const alt = (m: MeldeEintrag) => jetzt - angabenZeit(m) >= VERALTET_ALTER_MIN * 60_000;
+      return Number(alt(b.m)) - Number(alt(a.m)) || (alt(a.m) ? angabenZeit(a.m) - angabenZeit(b.m) : b.da - a.da);
+    })
     .map(({ m, da }): EinheitZeile => {
       const e = m.bogen.einheit;
       const st = staerke(m.bogen);
@@ -205,6 +371,10 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
         gesamt: st.gesamt,
         zug: m.zugEtikett?.trim() ?? "",
         eingetroffen: da,
+        soll: nurSollstaerke(m.bogen),
+        ...(jetzt - angabenZeit(m) >= VERALTET_ALTER_MIN * 60_000 ? { alterMin: Math.floor((jetzt - angabenZeit(m)) / 60_000) } : {}),
+        ...(m.notiz?.trim() ? { auftrag: auftragKurz(m.notiz) } : {}),
+        ...(angabenAlterWort(m) === "Stand" ? { standAlt: true } : {}),
       };
     });
   const summen = aggregiere(einsatz.eintraege, einsatz.art);
@@ -229,10 +399,13 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
     zuege,
     bedarf,
     abgerueckt: geltend.filter((e) => e.status === MeldeStatus.ABGERUECKT).length,
-    letzteMeldung: einsatz.eintraege.length > 0 ? Math.max(...einsatz.eintraege.map((e) => e.empfangenAm)) : null,
+    // Dieselbe Zählweise wie Kopf, Startseite und Import (R18-K2).
+    letzteMeldung: letzteMeldung(einsatz.eintraege),
     ersteMeldung: geltend.length > 0 ? Math.min(...geltend.map(eintreffzeit)) : null,
     bewegungen: bewegungenSeit(einsatz, jetzt),
     sollstaerke: sollstaerkeAnteil(einsatz.eintraege, einsatz.art),
+    anwesendenAlter: anwesendenAlter(aktuelleMeldungen(einsatz.eintraege, einsatz.art), jetzt),
+    uebungenDaneben: uebungenAusserhalbDerLage(einsatz.eintraege, einsatz.art).length,
     zeitenPruefen: einsatz.eintraege.some((e) => e.empfangenAm - jetzt > ZUKUNFT_TOLERANZ_MS) ||
       geltend.some((e) => eintreffzeit(e) - jetzt > ZUKUNFT_TOLERANZ_MS),
   };

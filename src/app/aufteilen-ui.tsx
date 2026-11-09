@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/aufteilen-ui.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/aufteilen-ui.tsx` (Commit 1d7ed5f).
  *
  * Auswahlfeld „Bogen aufteilen" — klappt in der Einheitenkarte des Einsatzes
  * auf (wie Details und Historie), statt ein Fenster zu öffnen: Ankreuzlisten
@@ -10,18 +10,32 @@
  * einsaetze.ts.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PersonalErfassung, staerke, type Erfassungsbogen } from "@bos/eeb-format/model";
 import { aufteilungFehler, teileBogen, type AufteilungsWahl, type TeilStaerke } from "@bos/meldekopf/aufteilen";
 import { MeldeStatus, type AufteilungOptionen, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
+import { frageJaNein } from "@bos/oberflaeche/dialoge";
 import { funktionsText, kennzeichenText, vokabText, vokabularFuer } from "./hilfen";
 import { Auswahl, useZahlEingabe, ZahlMeldung } from "@bos/oberflaeche/bausteine";
 
 /** Kurzfassung „0 / 1 / 8 / 9 · 2 Fzg" für die Vorschau beider Hälften. */
 function bilanz(b: Erfassungsbogen): string {
   const s = staerke(b);
-  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} / ${s.gesamt} · ${b.fahrzeuge.length} Fzg`;
+  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} // ${s.gesamt} · ${b.fahrzeuge.length} Fzg`;
 }
+
+/**
+ * Bleibt in der Restmeldung niemand übrig (Stärke 0)? Bleiben nur Fahrzeuge, ist der Rest ohne Personen — auch das ist
+ * eine Meldung „Stärke 0" (R13-D3). Sind weder Personen noch Fahrzeuge übrig, lässt der Kern die Auswahl gar nicht zu.
+ */
+export function restLeer(rest: Erfassungsbogen): boolean {
+  return staerke(rest).gesamt === 0;
+}
+
+export const REST_LEER_TITEL = "Es bleibt niemand übrig";
+export const REST_LEER_TEXT =
+  "Alle Personen gehen in den abgeteilten Teil. Die bisherige Meldung bliebe mit Stärke 0 stehen, zählt als Einheit mit, " +
+  "und ein Bedarf bliebe bei ihr. Zum Umbenennen oder Verlagern nicht alle auswählen.";
 
 /** Zahl, die mitgeht: Komma gerundet, Minus abgelehnt, Obergrenze genannt (R9-E1). */
 function StaerkeFeld(props: { label: string; wert: number; hoechstens: number; setzen: (n: number) => void }) {
@@ -61,6 +75,13 @@ export function AufteilenPanel(props: {
   const nurStaerke = bogen.personalErfassung === PersonalErfassung.NUR_STAERKE;
   const ganz = staerke(bogen);
 
+  const kopf = useRef<HTMLHeadingElement>(null);
+  // Das Formular öffnet unter dem Knopf — am Telefon unterhalb des Bildes, ein zweiter Tipp schloss es wieder (R15-E4):
+  // Überschrift an den oberen Bildrand rollen, damit das erste Feld im Bild steht.
+  useEffect(() => {
+    kopf.current?.focus({ preventScroll: true });
+    kopf.current?.scrollIntoView?.({ block: "start" });
+  }, []);
   const [teilEtikett, setTeilEtikett] = useState("");
   const [personal, setPersonal] = useState<number[]>([]);
   const [fahrzeuge, setFahrzeuge] = useState<number[]>([]);
@@ -95,7 +116,8 @@ export function AufteilenPanel(props: {
 
   return (
     <div className="aufteilen-panel">
-      <h4>Aufteilen</h4>
+      {/* Fokus auf die Überschrift statt ins Textfeld: keine Bildschirmtastatur vor der Personenliste (R11-G2). */}
+      <h4 tabIndex={-1} ref={kopf}>Aufteilen</h4>
       <p className="hinweis">
         Wer und was geht weg? Der Rest bleibt als diese Einheit bestehen und bekommt eine neue Meldung;
         der abgeteilte Teil zählt ab sofort getrennt in den Summen.
@@ -107,7 +129,6 @@ export function AufteilenPanel(props: {
           type="text"
           value={teilEtikett}
           placeholder="z. B. Fachberater"
-          autoFocus
           onChange={(e) => setTeilEtikett(e.target.value)}
         />
       </label>
@@ -242,12 +263,23 @@ export function AufteilenPanel(props: {
           type="button"
           className="primaer"
           disabled={fehler != null}
-          onClick={() =>
+          onClick={async () => {
+            // R13-D3: Wer alles auswählt, will meist umbenennen oder verlagern — der Rest bliebe leer stehen.
+            if (vorschau && restLeer(vorschau.rest)) {
+              const weiter = await frageJaNein({
+                titel: REST_LEER_TITEL,
+                text: REST_LEER_TEXT,
+                ok: "Trotzdem aufteilen",
+                abbruch: "Zurück zur Auswahl",
+                fokus: "abbruch",
+              });
+              if (!weiter) return;
+            }
             onAufteilen(wahl, {
               status: abgerueckt ? MeldeStatus.ABGERUECKT : MeldeStatus.ANWESEND,
               zugEtikett: zug,
-            })
-          }
+            });
+          }}
         >
           Aufteilen
         </button>{" "}

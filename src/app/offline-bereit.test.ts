@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./nativ", () => ({ istNativ: () => false }));
 
-const { offlineText, installationAnstossen } = await import("./offline-bereit");
+const { offlineText, offlineRuhig, offlineFortschritt, installationAnstossen } = await import("./offline-bereit");
 
 describe("offlineText", () => {
   it("verspricht den Offline-Betrieb nur im Stand „bereit“", () => {
@@ -41,10 +41,15 @@ describe("offlineText mit Fortschritt", () => {
 
   it("meldet den Kern bereit, solange die zweite Stufe nachlädt", () => {
     const t = offlineText({ stand: "bereit", frischBereit: true, online: true, zusatz: { fertig: 120, gesamt: 474 } });
-    expect(t).toMatch(/^✓ Jetzt offline bereit für Sammlung, Eingänge und Ausgabe\. Begleitseiten werden nachgeladen \(120 von 474\)/);
-    expect(t).not.toMatch(/komplett offline/);
+    // R20-N7: kein „Jetzt offline bereit", solange der Rest lädt – Kern und Rest stehen getrennt.
+    expect(t).toMatch(/^✓ Sammlung, Eingänge und Ausgabe gehen offline\. Rest lädt noch \(Begleitseiten\): 120 von 474/);
+    expect(t).not.toMatch(/komplett offline|Jetzt offline bereit/);
     expect(offlineText({ stand: "bereit", frischBereit: false, online: false, zusatz: { fertig: 120, gesamt: 474 } })).toMatch(
-      /folgen beim nächsten Netz/,
+      /folgt beim nächsten Netz/,
+    );
+    // Erst wenn alles da ist, steht „Jetzt offline bereit".
+    expect(offlineText({ stand: "bereit", frischBereit: true, online: true, zusatz: { fertig: 474, gesamt: 474 } })).toMatch(
+      /^✓ Jetzt offline bereit\. Funktioniert komplett offline/,
     );
     expect(offlineText({ stand: "bereit", frischBereit: false, online: true, zusatz: { fertig: 474, gesamt: 474 } })).toMatch(
       /^✓ Funktioniert komplett offline/,
@@ -56,7 +61,8 @@ describe("offlineText mit Fortschritt", () => {
   // Netz auch dann, wenn noch kein einziger Beispielbogen im Gerät lag.
   it("verspricht „komplett offline“ erst, wenn die zweite Stufe gezählt ist", () => {
     const frisch = offlineText({ stand: "bereit", frischBereit: true, online: true, zweiStufen: true });
-    expect(frisch).toMatch(/^✓ Jetzt offline bereit für Sammlung, Eingänge und Ausgabe — /);
+    expect(frisch).toMatch(/^✓ Sammlung, Eingänge und Ausgabe gehen offline\. Der Rest \(Begleitseiten\) wird noch gezählt — /);
+    expect(frisch).not.toMatch(/Jetzt offline bereit/);
     expect(frisch).not.toMatch(/komplett offline/);
     expect(offlineText({ stand: "bereit", frischBereit: false, online: false, zweiStufen: true, zusatz: null })).not.toMatch(
       /komplett offline/,
@@ -131,6 +137,7 @@ describe("offlineText — hakt und gesperrter Speicher (Runde 5)", () => {
   it("sagt, dass das Nachladen hakt, statt weiter „werden nachgeladen“ zu behaupten (R5-O2)", () => {
     const t = offlineText({ stand: "bereit", frischBereit: false, online: true, zusatz: { fertig: 25, gesamt: 474 }, zusatzHakt: true });
     expect(t).toMatch(/25 von 474 da, das Netz hakt — der nächste Versuch läuft von selbst/);
+    expect(t).not.toMatch(/Rest lädt noch/);
     expect(t).not.toMatch(/werden nachgeladen/);
   });
 
@@ -156,3 +163,22 @@ describe("offlineText(): Netz hakt beim Kern (R6-O4)", () => {
   });
 });
 
+
+/** Kasten auf der Startseite nur, solange er etwas verlangt; sonst Fußzeile und Balken. */
+describe("offlineRuhig und offlineFortschritt", () => {
+  it("lässt den Kasten weg, sobald der Kern im Gerät liegt", () => {
+    expect(offlineRuhig({ stand: "bereit", frischBereit: false, online: true, zusatz: { fertig: 502, gesamt: 549 } })).toBe(true);
+    expect(offlineRuhig({ stand: "bereit", frischBereit: false, online: true })).toBe(true);
+    expect(offlineRuhig({ stand: "laedt", frischBereit: false, online: true })).toBe(false);
+    expect(offlineRuhig({ stand: "ohne", frischBereit: false, online: true })).toBe(false);
+    expect(offlineRuhig({ stand: "bereit", frischBereit: false, online: true, speicherGesperrt: true })).toBe(false);
+  });
+
+  it("misst erst den Kern, dann die Zusatzstufe, und endet mit dem Laden", () => {
+    expect(offlineFortschritt({ stand: "laedt", frischBereit: false, online: true, kern: { geladen: 1, gesamt: 4 } })).toBe(0.25);
+    expect(offlineFortschritt({ stand: "laedt", frischBereit: false, online: true })).toBeNull();
+    expect(offlineFortschritt({ stand: "bereit", frischBereit: false, online: true, zusatz: { fertig: 274, gesamt: 548 } })).toBe(0.5);
+    expect(offlineFortschritt({ stand: "bereit", frischBereit: false, online: true, zusatz: { fertig: 548, gesamt: 548 } })).toBeNull();
+    expect(offlineFortschritt({ stand: "ohne", frischBereit: false, online: true })).toBeNull();
+  });
+});

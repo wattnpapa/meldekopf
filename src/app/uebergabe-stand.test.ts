@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/uebergabe-stand.test.ts` (Commit 441811c). Im Meldekopf nur
+ * Herkunft: Erfassungsbogen `src/app/uebergabe-stand.test.ts` (Commit 1d7ed5f). Im Meldekopf nur
  * als Datenmodul: Die Datensicherung zählt, prüft und erhält Vorlagen und
  * Übergabe-Stand eines eingespielten Erfassungsbogen-Bestands, damit nichts
  * verloren geht; eine Oberfläche dafür gibt es hier nicht (ADR-007).
@@ -21,7 +21,7 @@ describe("uebergabeText", () => {
     const neu = { ...b, personal: [neuePerson()] };
     const t = uebergabeText(neu, stand)!;
     expect(t.geaendert).toBe(true);
-    expect(t.text).toMatch(/Stärke 0 \/ 0 \/ 2 \/ 2 → 0 \/ 0 \/ 1 \/ 1/);
+    expect(t.text).toMatch(/Stärke 0 \/ 0 \/ 2 \/\/ 2 → 0 \/ 0 \/ 1 \/\/ 1/);
     expect(t.text).toMatch(/neu übergeben/);
   });
 

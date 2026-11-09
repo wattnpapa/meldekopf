@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/rueckweg-sitzung.ts` (Commit 441811c), unverändert.
+ * Herkunft: Erfassungsbogen `src/app/rueckweg-sitzung.ts` (Commit 1d7ed5f), unverändert.
  *
  * Rückwege nach „Entfernen“ im Assistenten, die den Schrittwechsel und das Neuladen überleben
  * (Audit Runde 9, R9-D3): „Person entfernen“ konnte es schon (schritte/personal.tsx), „Fahrzeug
@@ -23,6 +23,8 @@ interface Gemerkt<T> {
 
 export const FAHRZEUG_WEG_SCHLUESSEL = "eeb.fahrzeug.rueckweg";
 export const EBENE_WEG_SCHLUESSEL = "eeb.ebene.rueckweg";
+/** „Für neuen Einsatz vorbereiten“: Zeitraum, Ort/Auftrag und Sofortbedarf davor (R16-E2). */
+export const EINSATZ_WEG_SCHLUESSEL = "eeb.einsatz.rueckweg";
 
 function sitzung(): Storage | null {
   try {
@@ -58,9 +60,30 @@ export function rueckwegHolen<T>(schluessel: string, aktuell: string, jetzt = Da
   }
 }
 
+/** Präfix der Merker für ausgeschaltete Funkrufnamen je Fahrzeugkarte (R10-D2). */
+export const FUNKRUF_MERKER_PRAEFIX = "eeb.funkruf.merker.";
+
+/** Ausgeschalteten Funkrufnamen der Karte `index` merken (`null` = vergessen); `fp` benennt die Karte (Fahrzeugtyp). */
+export function funkrufMerken<T>(index: number, wert: T | null, fp: string, jetzt = Date.now()): void {
+  rueckwegMerken(FUNKRUF_MERKER_PRAEFIX + index, wert, fp, jetzt);
+}
+
+/** Der gemerkte Funkrufname der Karte `index`, solange er jung ist und die Karte noch dasselbe Fahrzeug zeigt. */
+export function funkrufHolen<T>(index: number, fp: string, jetzt = Date.now()): T | null {
+  return rueckwegHolen<T>(FUNKRUF_MERKER_PRAEFIX + index, fp, jetzt);
+}
+
 /** Wenn der Bogen weg ist (verworfen, geschlossen, übergeben), bleibt nichts im Tab zurück. */
 export function rueckwegeVergessen(): void {
-  for (const k of [FAHRZEUG_WEG_SCHLUESSEL, EBENE_WEG_SCHLUESSEL]) {
+  try {
+    const s = sitzung();
+    if (s) {
+      for (const k of Object.keys(s)) if (k.startsWith(FUNKRUF_MERKER_PRAEFIX)) s.removeItem(k);
+    }
+  } catch {
+    /* nichts zu tun */
+  }
+  for (const k of [FAHRZEUG_WEG_SCHLUESSEL, EBENE_WEG_SCHLUESSEL, EINSATZ_WEG_SCHLUESSEL]) {
     try {
       sitzung()?.removeItem(k);
     } catch {

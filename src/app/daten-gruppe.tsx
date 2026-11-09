@@ -13,7 +13,7 @@
  * erhalten, auch wenn diese App sie nicht anzeigt.
  */
 
-import { useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from "react";
 import { frageWahl, zeigeHinweis } from "@bos/oberflaeche/dialoge";
 import { istNativ, textTeilen } from "./nativ";
 import { blobAlsDownload } from "./hilfen";
@@ -26,6 +26,9 @@ import {
   geraetBestand,
   letzteSicherung,
   sicherungErstellen,
+  sicherungQuittungText,
+  sicherungVermerkFehlte,
+  sicherungStandText,
   sicherungFaellig,
   sicherungErstelltAm,
   sicherungEinspielen,
@@ -34,11 +37,15 @@ import {
   type DatenUmfang,
 } from "./sicherung";
 import { dateiFehlerMeldung } from "./eingang/datei-fehler";
+import { schluesselFrage } from "./schluessel-frage";
 import { geraeteKurzform, geraeteSchluesselLoeschen, geraeteSchluesselPrivat, geraeteSchluesselSicherstellen, kurzformAusPrivatHex } from "./geraete-schluessel";
 import { speicherBelegung, speicherText } from "./eintrag-zeiten";
 import { groessteText, istVoll } from "./speicher-warnung";
 import { dauerhaftenSpeicherAnfragen, speicherDauerhaft } from "./speicher-browser";
 import { folgenText } from "./uhr-folgen";
+
+/** Schmales Telefon (R19-M15): Lange Dialoge klappen ihre Erklärungen ein. */
+const engeAnzeige = () => typeof window.matchMedia === "function" && window.matchMedia("(max-width: 30rem)").matches;
 
 /** Der Dialograhmen der Fußzeile (fusszeile.tsx), hier hineingereicht. */
 export type DialogRahmen = (p: {
@@ -75,6 +82,18 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
   const [zuletztGesichert, setZuletztGesichert] = useState(() => letzteSicherung());
   const [erinnerung, setErinnerung] = useState(() => sicherungFaellig());
   const [dauerhaft, setDauerhaft] = useState<boolean | null>(null);
+  const [dauerhaftAbgelehnt, setDauerhaftAbgelehnt] = useState(false);
+  // Quittung der letzten Sicherung (Dateiname, Ablage) und Datenstand (R12-O4).
+  const [sicherungQuittung, setSicherungQuittung] = useState("");
+  const sicherungQuittungRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (!sicherungQuittung) return;
+    try {
+      sicherungQuittungRef.current?.scrollIntoView?.({ block: "nearest" });
+    } catch {
+      /* Testumgebung ohne Layout */
+    }
+  }, [sicherungQuittung]);
   const loeschen = useRef<HTMLDialogElement>(null);
   // Stand beim Öffnen des Löschen-Dialogs — die Rückfrage nennt Zahlen, damit
   // niemand „alles löschen" blind bestätigt.
@@ -89,16 +108,20 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
   // selbst, weil der Weg ohne eigenen Dialog auskommt (nur Rückfrage + Hinweis).
   const [schluesselFehler, setSchluesselFehler] = useState("");
 
+  /** Alle lokalen App-Daten als Datei anbieten — App: Share-Sheet, Browser: Download. */
   async function sicherungExportieren() {
+    setSicherungFehler(""); // eine frühere Fehlerzeile gilt nicht mehr (R14-H4)
     const inhalt = sicherungErstellen();
     setZuletztGesichert(letzteSicherung());
     setErinnerung(null);
     const name = `eeb-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
     if (istNativ()) {
       await textTeilen(name, inhalt);
+      setSicherungQuittung(sicherungQuittungText(name, true, sicherungVermerkFehlte()));
       return;
     }
     blobAlsDownload(name, new Blob([inhalt], { type: "application/json" }));
+    setSicherungQuittung(sicherungQuittungText(name, false, sicherungVermerkFehlte()));
   }
 
   async function sicherungImportieren(e: ChangeEvent<HTMLInputElement>) {
@@ -106,6 +129,7 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
     e.target.value = "";
     if (!datei) return;
     setSicherungFehler("");
+    setSicherungQuittung(""); // die Quittung einer früheren Sicherung steht nicht neben dem Ergebnis dieser Datei (R14-H4)
     // Erst prüfen, dann fragen: Eine kaputte oder falsche Datei soll nicht
     // zuerst „alles ersetzen?" auslösen und danach Parser-Text zeigen
     // (Audit Runde 2, R2-E5).
@@ -142,11 +166,12 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
       const anzahl = sicherungEinspielen(text);
       await zeigeHinweis({
         titel: "Sicherung eingespielt",
-        text: `${anzahl} Einträge übernommen. Die App lädt jetzt neu.`,
+        text: `${anzahl} Einträge übernommen. Zum Abschluss „Neu laden“ tippen.`,
         ok: "Neu laden",
       });
       window.location.reload();
     } catch (err) {
+      setSicherungQuittung("");
       setSicherungFehler(err instanceof Error ? err.message : String(err));
     }
   }
@@ -159,7 +184,10 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
   }
 
   async function dauerhaftAnfragen() {
-    setDauerhaft(await dauerhaftenSpeicherAnfragen());
+    const antwort = await dauerhaftenSpeicherAnfragen();
+    setDauerhaft(antwort);
+    // Der Tipp muss eine sichtbare Folge haben, auch wenn der Browser ablehnt (R12-O3).
+    setDauerhaftAbgelehnt(antwort === false);
   }
 
   /** Löschen-Dialog öffnen: Stand frisch erheben, Bestätigung zurücksetzen. */
@@ -202,24 +230,21 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
     // Ohne vorhandenen Schlüssel wird nichts gelöscht — der Text sagt, was wirklich geschieht (R7-D6).
     const hatSchluessel = geraeteSchluesselPrivat() != null;
     let sicher = false;
+    // Ohne Schlüssel: nur der erste Satz und ein neutraler Knopf, keine Warnung vor einem alten Schlüssel (R12-D3).
+    const frage = schluesselFrage(hatSchluessel);
     for (let runde = 0; runde < 5 && !sicher; runde++) {
       const wahl = await frageWahl({
-        titel: "Geräteschlüssel neu erzeugen?",
+        titel: frage.titel,
         text: (
           <>
-            <p>
-              {hatSchluessel
-                ? "Der bisherige Signaturschlüssel dieses Geräts wird gelöscht und durch ein neues Schlüsselpaar ersetzt."
-                : "Auf diesem Gerät liegt noch kein Signaturschlüssel; es wird ein neues Schlüsselpaar erzeugt, gelöscht wird nichts."}{" "}
-              Sinnvoll ist das bei Verdacht, dass der private Schlüssel in fremde Hände geraten ist —
-              etwa nach Verlust oder Weitergabe des Geräts.
-            </p>
-            <p>
-              <strong>Empfänger müssen die Kurzform danach neu abgleichen:</strong> Bögen von
-              diesem Gerät tragen ab sofort eine andere Kurzform. Bereits verschickte Bögen
-              bleiben gültig und prüfbar — aber nur gegen den alten öffentlichen Schlüssel,
-              und der lässt sich danach nur aus einer früheren Sicherungsdatei wiederherstellen.
-            </p>
+            {/* Die Folge steht vor der Erläuterung: Die feste Knopfleiste deckt bei 360 × 640 den Rest (R18-D4). */}
+            {frage.folgen && (
+              <p>
+                <strong>{frage.folgen.fett}</strong>
+                {frage.folgen.rest}
+              </p>
+            )}
+            <p>{frage.erster}</p>
           </>
         ),
         wege: [
@@ -232,7 +257,7 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
                 },
               ]
             : []),
-          { wert: "neu", label: "Neu erzeugen", gefahr: true },
+          { wert: "neu", label: frage.neuLabel, gefahr: frage.gefahr },
         ],
       });
       if (wahl === "sichern") {
@@ -250,8 +275,8 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
       await zeigeHinweis({
         titel: "Geräteschlüssel neu erzeugt",
         text: kurz
-          ? `Die neue Kurzform lautet ${kurz}. Sie muss den Empfängern bekannt gemacht werden. Die App lädt jetzt neu.`
-          : "Der neue Schlüssel steht. Die App lädt jetzt neu.",
+          ? `Die neue Kurzform lautet ${kurz}. Sie muss den Empfängern bekannt gemacht werden. Zum Abschluss „Neu laden“ tippen.`
+          : "Der neue Schlüssel steht. Zum Abschluss „Neu laden“ tippen.",
         kopiertext: kurz ?? undefined,
         ok: "Neu laden",
       });
@@ -271,7 +296,7 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
           {erinnerung && (
             <p className="hinweis sicherung-erinnerung">
               {erinnerung.seit
-                ? `Letzte Sicherung vor ${Math.floor((Date.now() - erinnerung.seit) / 86_400_000)} Tagen.`
+                ? `Letzte Sicherung vor ${Math.floor((Date.now() - erinnerung.seit) / 86_400_000)} Tagen. ${sicherungStandText()}`.trim()
                 : "Noch keine Datensicherung erstellt."}{" "}
               Alles liegt nur auf diesem Gerät.{" "}
               <button type="button" className="link" onClick={sicherungOeffnen}>Jetzt sichern…</button>
@@ -282,7 +307,7 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
           {schluesselFehler && <p className="fehler">{schluesselFehler}</p>}
         </nav>
 
-      <Dialog titel="Datensicherung" dialogRef={sicherung}>
+      <Dialog titel="Datensicherung" dialogRef={sicherung} klasse="rollhinweis">
         <p>
           Alle lokalen Daten dieser App — Vorlagen, Einsatz-Sammlungen, der aktuelle
           Entwurf, Einstellungen und der Signatur-Geräteschlüssel — lassen sich als
@@ -300,22 +325,15 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
             <input type="file" accept=".json,application/json" className="nur-sr" onChange={(e) => void sicherungImportieren(e)} />
           </label>
         </div>
-        {sicherungFehler && <p className="fehler" role="alert">{sicherungFehler}</p>}
-        <p className="hinweis">
-          Einspielen ersetzt die vorhandenen App-Daten auf diesem Gerät vollständig.
-        </p>
-        {/* Wie sicher liegt es hier, und wann gab es zuletzt eine Kopie?
-            (Audit Runde 2, R2-O6) */}
-        <p className="hinweis" role="status">
-          {zuletztGesichert
-            ? `Letzte Sicherung auf diesem Gerät erstellt: ${new Date(zuletztGesichert).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} Uhr.`
-            : "Auf diesem Gerät wurde noch keine Sicherung erstellt."}
-        </p>
-        {dauerhaft === true && (
-          <p className="hinweis">
-            Der Browser hält den Speicher dieser App dauerhaft vor und räumt ihn nicht von sich aus.
+        {/* Das Ergebnis des letzten Tipps steht direkt unter den Knöpfen und ist die einzige Meldung: eine frühere
+            Fehlerzeile oder Quittung wird mit dem nächsten Vorgang entfernt (R14-H4). */}
+        {sicherungQuittung && (
+          <p className="hinweis sicherung-quittung" role="status" ref={sicherungQuittungRef}>
+            {sicherungQuittung}
           </p>
         )}
+        {sicherungFehler && <p className="fehler" role="alert">{sicherungFehler}</p>}
+        {/* R19-M15: Am kleinen Telefon steht das Übrige hinter „Mehr dazu": Der Dialog war 1 309 px hoch, „Sicherung erstellen…" lag unter dem Bildrand. */}
         {dauerhaft === false && (
           <p className="warnung">
             Der Speicher ist nicht dauerhaft: Der Browser darf ihn bei Platzmangel oder nach
@@ -326,11 +344,35 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
             </button>
           </p>
         )}
+        {dauerhaft === false && dauerhaftAbgelehnt && (
+          <p className="hinweis" role="status">
+            Der Browser hat den dauerhaften Speicher abgelehnt — regelmäßig sichern; auf iPhone und iPad die App
+            über „Zum Home-Bildschirm“ ablegen.
+          </p>
+        )}
+        <details className="dialog-mehr" open={!engeAnzeige()}>
+        <summary>Mehr dazu</summary>
+        <p className="hinweis">
+          Einspielen ersetzt die vorhandenen App-Daten auf diesem Gerät vollständig.
+        </p>
+        {/* Wie sicher liegt es hier, und wann gab es zuletzt eine Kopie?
+            (Audit Runde 2, R2-O6) */}
+        <p className="hinweis" role="status">
+          {zuletztGesichert
+            ? `Letzte Sicherung auf diesem Gerät erstellt: ${new Date(zuletztGesichert).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} Uhr. ${sicherungStandText()}`.trim()
+            : "Auf diesem Gerät wurde noch keine Sicherung erstellt."}
+        </p>
+        {dauerhaft === true && (
+          <p className="hinweis">
+            Der Browser hält den Speicher dieser App dauerhaft vor und räumt ihn nicht von sich aus.
+          </p>
+        )}
         {/* Der Speicherstand gehört dorthin, wo aufgeräumt wird: Ein voller
             Speicher trifft sonst ohne Vorwarnung (Audit „Offline und
             Speicher", O4). Die Grenze ist eine Schätzung — Browser nennen
             ihr Limit nicht, üblich sind rund 5 MB. */}
         <SpeicherStand />
+        </details>
       </Dialog>
 
       {/* Rückfrage vor dem Einspielen: nennt, was auf dem Gerät verschwindet
@@ -421,17 +463,35 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
       {/* Restlos löschen — z. B. bevor ein geteiltes Tablet weitergegeben wird
           oder nach einer Übung. Bewusst mit Zahlen, Sicherungs-Ausweg und
           eigenem Haken: rückgängig gibt es hier nicht. */}
-      <Dialog titel="Alle lokalen Daten löschen" dialogRef={loeschen}>
+      <Dialog titel="Alle lokalen Daten löschen" dialogRef={loeschen} klasse="rollhinweis">
         <p>
           Entfernt <strong>alle</strong> Daten dieser App von diesem Gerät — auch die
           Einträge im Papierkorb. Es gibt keine Kopie in einer Cloud: was hier weg
           ist, ist weg.
         </p>
-        {/* Die Sicherung steht vor der langen Aufzählung: Bei 200 % Schrift lag sie
-            sieben Bildschirme tiefer, am Ende des Dialogs (R7-D7). */}
-        <div className="aktionen">
+        {/* R20-L2: Der sichere Weg steht über der Folge-Zeile und damit am kleinen Telefon über der festen Leiste: Bei 360 × 640 lag
+            „Vorher Sicherung erstellen…" sonst zur Hälfte unter ihr, der Tipp traf die Leiste. */}
+        <div className="aktionen loesch-sicherung">
           <button type="button" onClick={() => void sicherungExportieren()}>Vorher Sicherung erstellen…</button>
         </div>
+        {/* Die Folge in einer Zeile ganz oben (R18-D4): Die feste Leiste mit Haken und Knöpfen deckt bei 360 × 640 sonst die
+            Aufzählung, und „noch kein Export …" blieb ungelesen. Wo es keine Kopie gibt, ist das hier die einzige (R4-D5). */}
+        {loeschUmfang && loeschUmfang.eintraege > 0 && loeschUmfang.einsaetze > 0 && (
+          <p className="loesch-kurz">
+            <strong>
+              {loeschUmfang.einsaetze} {loeschUmfang.einsaetze === 1 ? "Einsatz-Sammlung" : "Einsatz-Sammlungen"} mit {loeschUmfang.meldungen}{" "}
+              {loeschUmfang.meldungen === 1 ? "gemeldeten Bogen" : "gemeldeten Bögen"}
+            </strong>
+            {loeschUmfang.ohneExport.length > 0
+              ? ` — noch kein Export, kein Lageblatt und keine Weitergabe von: ${loeschUmfang.ohneExport.map((n) => `„${n}"`).join(", ")}`
+              : ""}
+            .
+          </p>
+        )}
+        {/* Die Sicherung steht vor der langen Aufzählung (R7-D7), seit R20-L2 vor der Folge-Zeile. */}
+        {/* R19-M15, D7: Die Aufzählung liegt am kleinen Telefon hinter „Was genau gelöscht wird"; Sicherung, Haken und Knöpfe stehen im Bild. */}
+        <details className="dialog-mehr" open={!engeAnzeige()}>
+        <summary>Was genau gelöscht wird</summary>
         {loeschUmfang && (
           loeschUmfang.eintraege === 0 ? (
             <p>Auf diesem Gerät sind derzeit keine App-Daten gespeichert.</p>
@@ -446,13 +506,7 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
                 <li>
                   {loeschUmfang.einsaetze} {loeschUmfang.einsaetze === 1 ? "Einsatz-Sammlung" : "Einsatz-Sammlungen"}
                   {" mit "}{loeschUmfang.meldungen} {loeschUmfang.meldungen === 1 ? "gemeldeten Bogen" : "gemeldeten Bögen"}
-                  {/* Wo es keine Kopie gibt, ist das hier die einzige (R4-D5). */}
-                  {loeschUmfang.ohneExport.length > 0 && (
-                    <strong className="warnung-text">
-                      {" "}— noch kein Export, kein Lageblatt und keine Weitergabe von:{" "}
-                      {loeschUmfang.ohneExport.map((n) => `„${n}"`).join(", ")}
-                    </strong>
-                  )}
+                  {/* „Noch kein Export …" steht jetzt oben in der Kurzzeile (R18-D4). */}
                 </li>
                 <li>{loeschUmfang.entwurf ? "der aktuelle Bogen-Entwurf" : "kein offener Bogen-Entwurf"}</li>
                 {loeschUmfang.rueckholplatz != null && (
@@ -481,25 +535,32 @@ export function DatenGruppe({ Dialog }: { Dialog: DialogRahmen }) {
         )}
         <p className="warnung">
           Bereits erzeugte PDFs, QR-Codes und Sicherungsdateien bleiben unberührt —
-          nur der Speicher dieser App wird geleert. Der Widerspruch zur
-          Reichweitenmessung bleibt bestehen.
+          nur der Speicher dieser App wird geleert. Die Einstellung „Nicht
+          mitzählen“ aus dem Datenschutzhinweis bleibt erhalten.
         </p>
-        <label className="inline">
-          <input
-            type="checkbox"
-            checked={loeschVerstanden}
-            onChange={(e) => setLoeschVerstanden(e.target.checked)}
-          />
-          Ja, alle lokalen Daten dieser App endgültig löschen
-        </label>
-        <div className="aktionen">
-          <button type="button" className="gefahr" disabled={!loeschVerstanden} onClick={alleDatenLoeschenJetzt}>
-            Endgültig löschen
-          </button>
-          <button type="button" onClick={() => loeschen.current?.close()}>Abbrechen</button>
+        </details>
+        {/* R16-M2: Haken und Entscheidung kleben am Dialogfuß, auch wenn die Aufzählung darüber lang ist. */}
+        <div className="dialog-entscheidung">
+          <label className="inline">
+            <input
+              type="checkbox"
+              checked={loeschVerstanden}
+              onChange={(e) => setLoeschVerstanden(e.target.checked)}
+            />
+            Ja, alle lokalen Daten dieser App endgültig löschen
+          </label>
+          {/* R17-L1: Der gesperrte Knopf sagt, was fehlt. */}
+          {!loeschVerstanden && <p className="hinweis dialog-fehlt" role="status">„Endgültig löschen“ geht erst, wenn der Haken gesetzt ist.</p>}
+          <div className="aktionen">
+            <button type="button" className="gefahr" disabled={!loeschVerstanden} onClick={alleDatenLoeschenJetzt}>
+              Endgültig löschen
+            </button>
+            <button type="button" onClick={() => loeschen.current?.close()}>Abbrechen</button>
+          </div>
+          {loeschFehler && <p className="fehler">{loeschFehler}</p>}
         </div>
-        {loeschFehler && <p className="fehler">{loeschFehler}</p>}
       </Dialog>
+
 
     </>
   );

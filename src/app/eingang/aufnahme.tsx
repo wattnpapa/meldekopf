@@ -50,7 +50,8 @@ import {
   type Einsatzsammlung,
   type MeldeEintrag,
 } from "@bos/meldekopf/einsaetze";
-import { bogenDiff, diffKurzfassung } from "@bos/meldekopf/meldung-diff";
+import { diffKurzfassung } from "@bos/meldekopf/meldung-diff";
+import { bogenDiff } from "../weitergabe/diff-lage";
 import { einheitOrt } from "@bos/meldekopf/darstellung";
 import { frageJaNein, frageWahl, type Antwortweg } from "@bos/oberflaeche/dialoge";
 import { ART_LABEL, type Eingang } from "../einsaetze-ui";
@@ -65,7 +66,7 @@ import {
   zeitLang,
 } from "../eintrag-zeiten";
 import { fassungGiltSetzen, fassungInHistorieLegen, fassungPruefen, fassungenJeEinheit, geltendeJeEinheit, type FassungsPruefung } from "../fassung-vorrang";
-import { anzahlEinheiten, letzteMeldung, nummernWechsel, nummernWechselText, rueckkehrText } from "../einheiten-tabelle";
+import { anzahlEinheiten, einheitenZahl, letzteMeldung, nummernWechsel, nummernWechselText, rueckkehrText } from "../einheiten-tabelle";
 import { aktuelleMeldungen } from "../auswertung";
 import { browserKompressor, einheitAnzeigename, nurSollstaerke, zeitpunktDeutsch } from "../hilfen";
 import { datenschutzZeitpunkt } from "../datenschutz-uhr";
@@ -76,7 +77,7 @@ import { fehlerText } from "../nachladen";
 import { bogenLinksEmpfangen, istNativ, qrScannen } from "../nativ";
 import { aehnlicherOrt, andererEinheitstyp } from "../schnellerfassung/nacherfassung";
 import { istNurStaerke, nurStaerkeUebernehmen, wasWegfiele } from "../schnellerfassung/nur-staerke";
-import { abgleichGliederung, abgleichText, einsatzAbgleichen, sammlungFuerZiel, type Einzelheit } from "../weitergabe/einsatz-abgleich";
+import { NICHTS_UEBERNOMMEN_SATZ, abgleichGliederung, abgleichText, einsatzAbgleichen, importUebernahm, sammlungFuerZiel, widerspruecheZumMerken, type Einzelheit } from "../weitergabe/einsatz-abgleich";
 import {
   ablehnungsSatz,
   abgelehnteBoegen,
@@ -90,6 +91,16 @@ import {
 import { exportStaendeUebernehmen, weitergabeUmImportErgaenzen } from "../weitergabe/export-stand";
 import { lageAngabenUebernehmen } from "../weitergabe/lage-angaben";
 import { dateiFehlerMeldung } from "./datei-fehler";
+import { istWordDatei } from "./word-bogen-fehler";
+import { widerspruchMerken } from "./widerspruch-merker";
+import type { DateiFehler } from "../fehler-buendeln";
+import { leseausgabeMeldung } from "../weitergabe/pdf-titel";
+import { eintreffzeitStapelHinweis } from "../angaben-alter";
+import { nummernHinweisMerken } from "../weitergabe/nummern-hinweis";
+import { anonymQuittung } from "../weitergabe/anonym-hinweis";
+import { standNachEintreffenQuittung } from "../weitergabe/stand-uhr";
+import { uebersprungenText } from "../uebersprungen-text";
+import { abgeteiltDoppelt, abgeteiltDoppeltImStapel, abgeteiltDoppeltText, doppeltHerausnehmbar, ohneAbgeteilte } from "../abgeteilt-doppelt";
 import { qrAusBild } from "./qr-bild";
 import type { QrBogen } from "./qr-boegen";
 import {
@@ -102,7 +113,7 @@ import {
   teileMerker,
   type DateiAnteil,
 } from "./qr-stapel";
-import { fehlendeTeile, fehltNochSatz } from "./teil-quittung";
+import { fehlendeTeile, fehltNochSatz, teilGelesenSatz, verworfeneTeileSatz } from "./teil-quittung";
 import { entwirreScanText } from "./tastaturbelegung";
 import { wartendenLinkErledigt, wartendenLinkLesen, wartendenLinkMerken } from "./wartender-link";
 import {
@@ -254,10 +265,12 @@ function piep(erfolg: boolean): void {
 /** „1 / 1 / 2 / 4" — die Stärke in der Kurzform des Bogens. */
 function staerkeKurz(b: Erfassungsbogen): string {
   const s = staerke(b);
-  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} / ${s.gesamt}`;
+  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} // ${s.gesamt}`;
 }
 
 
+/** Wo eine nur abgelegte ältere Fassung doch gelten kann (R15-E2). */
+const HISTORIE_WEG = ". Ändern: Historie › „Diese Fassung gilt…“";
 /**
  * Quittung im Kiosk-Stapel, wenn eine Fassung nicht nach dem Zeitstempel
  * gelten soll (R4-W1): keine Rückfrage beim Dauerscannen, aber ein Satz,
@@ -265,7 +278,7 @@ function staerkeKurz(b: Erfassungsbogen): string {
  */
 function vorrangKioskText(p: FassungsPruefung): string {
   const bisher = zeitpunktDeutsch(p.bisher.bogen.stand);
-  if (p.lage === "aelter") return `älterer Stand als der vorhandene (${bisher}) — nur in die Historie gelegt`;
+  if (p.lage === "aelter") return `älterer Stand (${zeitpunktDeutsch(p.neu.bogen.stand)}) als der vorhandene (${bisher}) — nur in die Historie gelegt${HISTORIE_WEG}`;
   if (p.lage === "gleiche-minute") return `gleicher Stand wie die bisherige Fassung (${bisher}) — die eben gescannte gilt, an der Karte unter „Historie" änderbar`;
   return `älterer Stand als die Schnellerfassung (${bisher}) — an der Karte „Bogen übernehmen" tippen`;
 }
@@ -277,11 +290,19 @@ function vorrangKioskText(p: FassungsPruefung): string {
  * und kein Fahrzeug gemeinsam haben. Steht im `<p>` der Rückfrage, darum nur
  * Inline-Elemente.
  */
-function MeldungsGegenueberstellung({ vergleich, warAbgerueckt = false }: { vergleich: MeldungsVergleich; warAbgerueckt?: boolean }) {
+export function MeldungsGegenueberstellung({ vergleich, warAbgerueckt = false }: { vergleich: MeldungsVergleich; warAbgerueckt?: boolean }) {
   return (
     <>
       <br />
       <span className="meldungs-vergleich">
+        {/* Was die Wahl für den Anwesenheitsstand bedeutet, steht vor dem Vergleich und nicht dahinter, wo bei
+            360 × 640 der Rollbereich es verbirgt (R12-W4). */}
+        {warAbgerueckt && (
+          <>
+            <strong className="rueckkehr-hinweis">⚠ Die Einheit war abgerückt – mit der neuen Fassung zählt sie wieder mit.</strong>
+            <br />
+          </>
+        )}
         <strong>Bisher:</strong> {steckbriefZeile(vergleich.bisher)}
         <br />
         <strong>Neu:</strong> {steckbriefZeile(vergleich.neu)}
@@ -289,12 +310,6 @@ function MeldungsGegenueberstellung({ vergleich, warAbgerueckt = false }: { verg
           <>
             <br />
             <strong>Geändert:</strong> {vergleich.geaendert}
-          </>
-        )}
-        {warAbgerueckt && (
-          <>
-            <br />
-            <strong className="rueckkehr-hinweis">⚠ Die Einheit war abgerückt – mit der neuen Fassung zählt sie wieder mit.</strong>
           </>
         )}
       </span>
@@ -359,8 +374,11 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
   // Der Knopf im Bericht öffnet den Abgleich vom Papier (R4-A6).
   const [abgleichAnstoss, setAbgleichAnstoss] = useState(0);
   // Rückmeldung von „Bögen einlesen…" unter den Aufnahme-Knöpfen (R3-L1, R3-E4).
-  const [einlese, setEinlese] = useState<{ fehler: string; meldung: string; einzelheiten?: Einzelheit[] } | null>(null);
+  const [einlese, setEinlese] = useState<{ fehler: string; meldung: string; einzelheiten?: Einzelheit[]; zurueck?: { label: string; aktion: () => void } } | null>(null);
   const stapelAbbruchRef = useRef(false);
+  // Der Stapel, der gerade eingelesen wird (Name, Größe, Änderungszeit): derselbe Stapel ein zweites Mal, solange der erste
+  // läuft, ist ein doppeltes Ereignis des Dateifelds und würde seine Bögen als „bereits vorhanden" zählen (R19-K10).
+  const stapelLaeuft = useRef<string | null>(null);
   // Kiosk-Scan: Zähler der in diesem Durchgang aufgenommenen Bögen.
   const kioskZaehlerRef = useRef(0);
   // Segmentierung: gesammelte Teile eines großen Bogens (Ref für den laufenden
@@ -377,9 +395,9 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
   const scanFehlerRef = useRef<string | null>(null);
 
   /** Merkt die Zeile zum gerade aufgenommenen Bogen vor (siehe `eingang`). */
-  function markiereEingang(schluessel: string) {
+  function markiereEingang(schluessel: string, uebersprungen?: string) {
     eingangZaehler.current += 1;
-    setEingang({ schluessel, nonce: eingangZaehler.current });
+    setEingang({ schluessel, nonce: eingangZaehler.current, ...(uebersprungen ? { uebersprungen } : {}) });
   }
 
 
@@ -434,6 +452,21 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     // Meldung scheinbar normal in der Liste und der Meldekopf rechnet mit ihr.
     const uebungDaneben = einsatz != null && !!b.uebung && einsatz.art !== EinsatzArt.UEBUNG;
     const uebungZusatz = uebungDaneben ? " Achtung: als ÜBUNG gekennzeichnet — zählt nicht in die Lage." : "";
+    // Prüfrunde Beispielbögen (BB-D3, BB-W7): Ein Übungsbogen ging mit einem Tipp
+    // in eine echte Sammlung und bekam dort eine Nummer. Jetzt fragt die App
+    // vorher; im Kiosk-Scan genügt die Quittung (kein Dialog im Scanstapel).
+    if (uebungDaneben && !kiosk && !schonDa) {
+      const ja = await frageJaNein({
+        titel: "Übungsbogen in diese Sammlung?",
+        text: `„${einheitAnzeigename(b.einheit)}" ist als ÜBUNG gekennzeichnet. In „${einsatz!.name}" zählt er nicht in die Lage, bekommt aber eine Nummer. Für Übungen gibt es Sammlungen der Art „Übung“.`,
+        ok: "Trotzdem ablegen",
+        fokus: "abbruch",
+      });
+      if (!ja) {
+        setMeldung(`„${einheitAnzeigename(b.einheit)}" nicht aufgenommen.`);
+        return false;
+      }
+    }
     let override: string | undefined;
     const bekannt = einsatz?.eintraege.some((e) => e.einheitSchluessel === schl) ?? false;
     // Im Kiosk-Stapel keine Fachfrage: Eine veränderte Fassung derselben
@@ -469,6 +502,10 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     // im Bogen (R4-W1). "neu" = die eingehende gilt, "bisher" = sie liegt nur
     // in der Historie.
     let entschieden: "neu" | "bisher" | null = null;
+    // Steht ein Teil dieser Einheit schon als abgeteilter Trupp in der Lage, würden seine Personen mit der
+    // Folgemeldung doppelt zählen (R13-W1). Auch im Kiosk-Stapel ohne Frage: die Quittung nennt es dann.
+    const doppeltBefund = bekannt && !schonDa && einsatz ? abgeteiltDoppelt(einsatz.eintraege, schl, b) : null;
+    let doppeltHerausgenommen = false;
     if (bekannt && !schonDa && !kiosk) {
       const bisherKopf = einsatz ? fassungenJeEinheit(einsatz.eintraege, schl)[0] : undefined;
       const bisher = bisherKopf?.bogen;
@@ -487,9 +524,20 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
         hinweis:
           (nichtJuenger && bisher
             ? `Der Bogen trägt ${b.stand < bisher.stand ? "einen älteren Stand" : "denselben Stand"} (${zeitpunktDeutsch(b.stand)}) ${b.stand < bisher.stand ? "als" : "wie"} die bisherige Meldung (${zeitpunktDeutsch(bisher.stand)}${platzhalterBisher ? ", von Hand erfasst" : ""}) — er gilt trotzdem, die bisherige wandert in die Historie.`
-            : "Der Normalfall bei einer Nachmeldung derselben Einheit: die bisherige Meldung wandert in die Historie, die neue gilt.") +
+            : "Normalfall bei einer Nachmeldung: die bisherige wandert in die Historie, die neue gilt.") +
           (bisher ? wegfallHinweis(bisher) : ""),
       };
+      // Die Folgemeldung enthält Personen, die hier schon als eigener Trupp stehen: der sichere Weg nimmt sie heraus.
+      const ohneTeileWeg: Antwortweg[] =
+        doppeltBefund && doppeltHerausnehmbar(b)
+          ? [
+              {
+                wert: "fassung-ohne",
+                label: `Als neue Fassung anhängen, ohne ${doppeltBefund.teile.map((t) => t.etikett).join(", ")}`,
+                hinweis: `Die abgeteilten Personen bleiben beim Trupp und zählen nicht doppelt: ${staerkeKurz(ohneAbgeteilte(b, doppeltBefund))} statt ${staerkeKurz(b)}.`,
+              },
+            ]
+          : [];
       const historieWeg: Antwortweg[] = nichtJuenger
         ? [{ wert: "historie", label: "Nur in die Historie legen", hinweis: "Die bisherige Meldung gilt weiter." }]
         : [];
@@ -506,14 +554,22 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
           <>
             „{einheitAnzeigename(b.einheit)}" steht in diesem Einsatz schon. Wie soll der neue Bogen dazu stehen?
             {vergleich && <MeldungsGegenueberstellung vergleich={vergleich} warAbgerueckt={bisherKopf?.status === MeldeStatus.ABGERUECKT} />}
+            {doppeltBefund && (
+              <>
+                <br />
+                <span className="warnung-text">
+                  ⚠ {abgeteiltDoppeltText(doppeltBefund)} Als gewöhnliche neue Fassung zählten sie doppelt.
+                </span>
+              </>
+            )}
           </>
         ),
         wege: vergleich?.keineUeberschneidung
-          ? [eigeneWeg, ...(bisher ? nurStaerkeWeg(bisher) : []), fassungWeg, ...historieWeg]
+          ? [eigeneWeg, ...(bisher ? nurStaerkeWeg(bisher) : []), ...ohneTeileWeg, fassungWeg, ...historieWeg]
           : nichtJuenger && !platzhalterBisher && b.stand < (bisher?.stand ?? 0)
             ? // Älterer Bogen nach einem echten jüngeren: Historie zuerst.
-              [...historieWeg, ...(bisher ? nurStaerkeWeg(bisher) : []), fassungWeg, eigeneWeg]
-            : [...(bisher ? nurStaerkeWeg(bisher) : []), fassungWeg, ...historieWeg, eigeneWeg],
+              [...historieWeg, ...(bisher ? nurStaerkeWeg(bisher) : []), ...ohneTeileWeg, fassungWeg, eigeneWeg]
+            : [...(bisher ? nurStaerkeWeg(bisher) : []), ...ohneTeileWeg, fassungWeg, ...historieWeg, eigeneWeg],
       });
       if (!wahl) {
         // Abgebrochen: der Bogen bleibt draußen. Im Kiosk-Scan steht die
@@ -525,7 +581,11 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       }
       if (wahl === "eigene") override = `${schl}#${Date.now()}`;
       if (wahl === "staerke" && bisher) aufzunehmen = nurStaerkeUebernehmen(bisher, staerke(b), b.stand);
-      if (wahl === "fassung" || wahl === "staerke") entschieden = "neu";
+      if (wahl === "fassung-ohne" && doppeltBefund) {
+        aufzunehmen = ohneAbgeteilte(b, doppeltBefund);
+        doppeltHerausgenommen = true;
+      }
+      if (wahl === "fassung" || wahl === "fassung-ohne" || wahl === "staerke") entschieden = "neu";
       if (wahl === "historie") entschieden = "bisher";
     }
     // Ähnliche Einheit schon da (gleiche Organisation und gleicher Ort, aber
@@ -646,8 +706,17 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     }
     // Holt die Folgemeldung eine abgerückte Einheit zurück, sagt die Quittung es ausdrücklich (R5-K1).
     const rueckkehrZusatz = r.neu && r.rueckkehr ? `; ⚠ ${rueckkehrText(r.rueckkehr)}, zählt wieder mit` : "";
+    // Abgeteilte Trupps (R13-W1): herausgenommen oder, im Stapel ohne Frage, als Warnung genannt.
+    const teileZusatz =
+      r.neu && doppeltBefund
+        ? doppeltHerausgenommen
+          ? `; ohne ${doppeltBefund.teile.map((t) => t.etikett).join(", ")} (${doppeltBefund.personen.length} ${doppeltBefund.personen.length === 1 ? "Person" : "Personen"} stehen dort)`
+          : `; ⚠ ${abgeteiltDoppeltText(doppeltBefund)} Sie zählen doppelt`
+        : "";
     const folgeText =
-      r.neu && vorige ? `Folgemeldung: ${diffKurzfassung(bogenDiff(vorige.bogen, aufzunehmen)) || "inhaltlich unverändert"}${rueckkehrZusatz}` : "";
+      r.neu && vorige
+        ? `Folgemeldung: ${diffKurzfassung(bogenDiff(vorige.bogen, aufzunehmen)) || "inhaltlich unverändert"}${rueckkehrZusatz}${teileZusatz}`
+        : "";
     const folge =
       (vorrang && folgeText && pruefung?.lage === "gleiche-minute"
         ? ` (${folgeText}; ${vorrang.text})`
@@ -683,7 +752,18 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     // Auch beim übersprungenen Bogen: die Frage nach dem Scan lautet „welche
     // Zeile ist gemeint?", und darauf gibt es hier eine Antwort — die Zeile,
     // die den Inhalt schon trägt. Die Rückmeldezeile sagt, ob er neu war.
-    markiereEingang(r.eintrag.einheitSchluessel);
+    // Übersprungen: eigene, sichtbare Quittung in der Ansicht (R15-W1), mit beiden Stärken, wenn eine andere Fassung gilt.
+    const geltendJetzt = r.neu ? undefined : geltendeJeEinheit(einsaetzeLaden().find((x) => x.id === zielId)?.eintraege ?? []).find((e) => e.einheitSchluessel === r.eintrag.einheitSchluessel);
+    markiereEingang(
+      r.eintrag.einheitSchluessel,
+      r.neu
+        ? undefined
+        : uebersprungenText(
+            einheitAnzeigename(b.einheit),
+            staerke(b).gesamt,
+            geltendJetzt && geltendJetzt.id !== r.eintrag.id ? staerke(geltendJetzt.bogen).gesamt : null,
+          ),
+    );
     setZusammenlegung(
       zusammengelegtMit && r.neu
         ? {
@@ -717,7 +797,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     const stand = (e: MeldeEintrag) => `Stand ${zeitpunktDeutsch(e.bogen.stand)}, Stärke ${staerkeKurz(e.bogen)}`;
     if (p.lage === "aelter") {
       await vorrangSetzen(zielId, p.bisher.id, p.neu.id);
-      return { text: `älterer Stand als der vorhandene (${zeitpunktDeutsch(p.bisher.bogen.stand)}) — nur in die Historie gelegt, die Lage bleibt unverändert` };
+      // R20-W4: Beide Stände stehen da; der Satz behauptet nur, was die Zeitstempel hergeben (gleicher Stand fragt eigens).
+      return { text: `älterer Stand (${zeitpunktDeutsch(p.neu.bogen.stand)}) als der vorhandene (${zeitpunktDeutsch(p.bisher.bogen.stand)}) — nur in die Historie gelegt, die Lage bleibt unverändert${HISTORIE_WEG}` };
     }
     const vergleich = meldungenVergleichen(p.bisher.bogen, p.neu.bogen);
     if (p.lage === "ersetzt-platzhalter") {
@@ -782,6 +863,20 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     return { text: `gleicher Stand wie die bisherige Fassung — die bisherige gilt weiter, die eben eingelesene liegt in der Historie` };
   }
 
+
+  /**
+   * „Zusammenführen rückgängig" (R20-D3): Die Sammlung steht wieder so da wie vor dem Einlesen der Datei, samt ihren Nummern; der
+   * Hinweis auf geänderte Nummern entfällt. Scheitert das Schreiben (Speicher voll), bleibt der zusammengeführte Stand und die Quittung sagt es.
+   */
+  async function zusammenfuehrenRueckgaengig(vorher: Einsatzsammlung) {
+    const r = (await import("../einsatz-zusammenfuehren")).zusammenfuehrenZurueck(vorher); // nachgeladen: selten
+    if (!r.ok) {
+      setEinlese((alt) => ({ fehler: r.text, meldung: alt?.meldung ?? "", einzelheiten: alt?.einzelheiten, zurueck: alt?.zurueck }));
+      return;
+    }
+    einsaetzeNeuLaden();
+    setEinlese({ fehler: "", meldung: r.text });
+  }
 
   /** Vorrang schreiben; ein voller Speicher wird gemeldet, die Aufnahme bleibt. */
   async function vorrangSetzen(zielId: string, eintragId: string, inHistorie?: string): Promise<void> {
@@ -885,7 +980,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     const wege: { wert: string; label: string; hinweis: string }[] = sortiert.slice(0, 4).map((s) => ({
       wert: s.id,
       label: `In „${s.name}“ aufnehmen`,
-      hinweis: `${ART_LABEL[s.art]}${s.ort ? ` · ${s.ort}` : ""} · ${aktuelleMeldungen(s.eintraege, s.art).length} Einheit(en) anwesend`,
+      // R15-W1: Liegt genau dieser Inhalt dort schon, sagt es die Zeile vor dem Tipp.
+      hinweis: `${s.eintraege.some((e) => e.id === bogenInhaltsId(b)) ? "Schon dort, würde übersprungen · " : ""}${ART_LABEL[s.art]}${s.ort ? ` · ${s.ort}` : ""} · ${einheitenZahl(aktuelleMeldungen(s.eintraege, s.art).length)} anwesend`,
     }));
     wege.push({
       wert: NEUE_SAMMLUNG,
@@ -936,10 +1032,18 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     opt: { ohneKiosk?: boolean } = {},
   ): Promise<boolean> {
     const ziel = sammelZielRef.current;
+    const ungueltig = signatur.zustand === "ungueltig";
     if (ziel && (!opt.ohneKiosk || scannerOffenRef.current)) {
-      // Abwarten: steckt in der Aufnahme eine Rückfrage, darf der Scan-Loop
-      // nicht schon den nächsten Code lesen. Die Datenschutzfrist wendet die
-      // Sammlung selbst an (meldungHinzufuegen).
+      // Handscanner im Reihentakt: Wer auf Fenster und Haken schaut, soll bei veränderten Daten nicht grün durchgehen.
+      // Es wird nichts aufgenommen; nochmal scannen oder beim Absender neu anfordern (R15-E1). Gleicher Inhalt zählt nicht.
+      if (ungueltig) {
+        piep(false);
+        setScanFortschritt((await import("./signatur-warnung")).signaturUngueltigScan(einheitAnzeigename(b.einheit)));
+        return false;
+      }
+      // Abwarten: steckt in der Aufnahme eine Rückfrage (Einheit schon
+      // gemeldet), darf der Scan-Loop nicht schon den nächsten Code lesen.
+      // Die Datenschutzfrist wendet die Sammlung selbst an (meldungHinzufuegen).
       await bogenInSammlung(ziel, b, "scan", { signatur: alsEintragSignatur(signatur), herkunft: payload }, true);
       return false; // Kiosk: weiter scannen, bis abgebrochen wird
     }
@@ -947,6 +1051,10 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     if (wohin == null) return true; // abgebrochen — nichts verändert
     if (wohin === ERFASSUNGSBOGEN) {
       imErfassungsbogenOeffnen(b, payload);
+      return true;
+    }
+    // Ablegen eines veränderten Bogens nur nach ausdrücklichem Ja; im Erfassungsbogen zeigt er die Signatur ohnehin an (R15-E1).
+    if (ungueltig && !(await (await import("./signatur-warnung")).signaturUngueltigAufnehmen(einheitAnzeigename(b.einheit)))) {
       return true;
     }
     let zielId = wohin;
@@ -1002,7 +1110,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     if (istSegmentNutzlast(text)) {
       try {
         const teil = parseSegmentUrl(text);
-        const r = segmentSammeln(segmentTeileRef.current, teil);
+        const vorherTeile = segmentTeileRef.current;
+        const r = segmentSammeln(vorherTeile, teil);
         setzeSegmentTeile(r.teile);
         if (r.status === "vollständig") {
           // Signatur über den zusammengesetzten Payload prüfen (auch signierte
@@ -1018,13 +1127,12 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
         // Die fehlenden Teile ausdrücklich benennen, statt sie ausrechnen zu
         // lassen: „es fehlt noch Teil 4" ist im Feld die Anweisung, „3 von 5"
         // nur ein Zwischenstand. Die Kästchenzeile zeigt dasselbe fürs Auge.
+        // Der Satz nennt die Nummer des gelesenen Teils und, was ein anderer Bogen wegwirft (R15-E3).
         const fehlt = fehltNochSatz(r.teile);
         setScanFortschritt(
           r.status === "duplikat"
             ? `Teil ${teil.teilNr} war schon dabei — ${fehlt}.`
-            : r.status === "fremd"
-              ? `Anderer Bogen erkannt — neu begonnen (Teil ${teil.teilNr} von ${r.anzahl}); ${fehlt}.`
-              : `Teil ${r.haben} von ${r.anzahl} gescannt — ${fehlt}.`,
+            : (r.status === "fremd" ? `Anderer Bogen erkannt — ${verworfeneTeileSatz(vorherTeile)}; neu begonnen. ` : "") + teilGelesenSatz(teil.teilNr, r.teile),
         );
         return false;
       } catch {
@@ -1055,9 +1163,9 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
    * einer Fehlermeldung an die Scanner-Konfiguration zu schicken. Der
    * Fehlertext zeigt weiterhin, was TATSÄCHLICH ankam.
    */
-  async function uebernehmeQrText(rohText: string): Promise<boolean> {
+  async function uebernehmeQrText(rohText: string, opt: { ohneKiosk?: boolean } = {}): Promise<boolean> {
     const text = entwirreScanText(rohText, istLesbarerScan);
-    const fertig = await uebernehmeText(text, scanFehlertext(rohText));
+    const fertig = await uebernehmeText(text, scanFehlertext(rohText), opt);
     // Nach der Übernahme melden: Sie setzt ihrerseits Meldungen, die den
     // Hinweis sonst gleich wieder überschrieben.
     if (text !== rohText) setMeldung(BELEGUNG_HINWEIS);
@@ -1088,13 +1196,15 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
   function scanAbbrechen(auchSammelZiel: boolean) {
     setScannerOffen(false);
     if (auchSammelZiel) setSammelZiel(null);
+    // Ein angefangener mehrteiliger Bogen geht mit „Abbrechen" verloren — das Fenster sagt es (R15-E3).
+    const verworfen = verworfeneTeileSatz(segmentTeileRef.current);
     setzeSegmentTeile([]);
     setScanFortschritt("");
     // Kiosk-Bilanz beim Schließen kurz bestätigen (der Zähler stand im Overlay).
-    if (kioskZaehlerRef.current > 0) {
-      setMeldung(`${kioskZaehlerRef.current} ${kioskZaehlerRef.current === 1 ? "Bogen" : "Bögen"} in diesem Durchgang aufgenommen.`);
-      kioskZaehlerRef.current = 0;
-    }
+    const n = kioskZaehlerRef.current;
+    kioskZaehlerRef.current = 0;
+    const bilanz = [n > 0 && `${n} ${n === 1 ? "Bogen" : "Bögen"} in diesem Durchgang aufgenommen.`, verworfen && `${verworfen}.`].filter(Boolean).join(" ");
+    if (bilanz) setMeldung(bilanz);
   }
 
 
@@ -1116,7 +1226,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
         const fehlen = fehlendeTeile(teile);
         const anweisung =
           teile.length > 0 && fehlen.length > 0
-            ? `Teil ${teile.length} von ${teile[0]!.anzahl} gescannt — jetzt Teil ${fehlen[0]} in den Rahmen halten`
+            ? `${teile.length} von ${teile[0]!.anzahl} Teilen gelesen — jetzt Teil ${fehlen[0]} in den Rahmen halten`
             : "QR-Code des Erfassungsbogens in den Rahmen halten";
         const text = await qrScannen(anweisung);
         if (!text) {
@@ -1153,9 +1263,16 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
    * reist beim QR-Weg mit, damit der Meldekopf die fremde Meldung später mit
    * erhaltener Original-Signatur weiterreichen kann.
    */
-  async function boegenAusDatei(datei: File, abgelehnt?: string[]): Promise<QrBogen[]> {
+  async function boegenAusDatei(datei: File, abgelehnt?: string[], quittung?: string[]): Promise<QrBogen[]> {
     const ohneNachweis = (boegen: Erfassungsbogen[]): QrBogen[] =>
       boegen.map((bogen) => ({ bogen, signatur: { zustand: "unsigniert" } as SignaturStatus, herkunft: null }));
+    if (istWordDatei(datei)) {
+      // THW-Word-Bogen (.docx): Formularfelder lesen; die Quittung nennt, was übernommen und was verworfen wurde.
+      const { bogenAusWordBytes } = await import("./word-bogen");
+      const w = bogenAusWordBytes(new Uint8Array(await datei.arrayBuffer()));
+      quittung?.push(`${datei.name}: ${w.quittung.join(" ")}`);
+      return ohneNachweis([w.bogen]);
+    }
     if (!istPdfDatei(datei)) {
       // Nur echte Bögen weiterreichen: Vorher wanderte jedes JSON-Objekt als
       // „Bogen" weiter — eine Sicherung fragte dann „1 Bogen gefunden, Einsatz
@@ -1280,33 +1397,78 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
    * Fehlerzeile verdrängte die Erfolgsmeldung.
    */
   async function importiereStapel(zielId: string, daten: File[], bilder: File[]) {
+    const kennung = [zielId, ...[...daten, ...bilder].map((f) => `${f.name}:${f.size}:${f.lastModified}`)].join("|");
+    if (stapelLaeuft.current === kennung) return; // R19-K10: derselbe Stapel läuft schon
+    stapelLaeuft.current = kennung;
+    try {
+      await importiereStapelAusfuehren(zielId, daten, bilder);
+    } finally {
+      stapelLaeuft.current = null;
+    }
+  }
+  async function importiereStapelAusfuehren(zielId: string, daten: File[], bilder: File[]) {
     setEinlese(null);
     setStapelBericht([]);
     setFehler("");
     setMeldung("");
-    const d = daten.length > 0 ? await importiereBoegen(zielId, daten, bilder.length > 0) : undefined;
-    if (bilder.length > 0) {
-      await importiereQrBilder(zielId, bilder, d);
-      return;
+    // Spur für den Fall, dass die Seite mitten im Stapel neu lädt: Der Einsatz sagt es beim Wiederöffnen (R15-S1).
+    const spur = await import("./import-unterbrochen");
+    spur.importBeginnt(zielId, daten.length + bilder.length, einsaetzeLaden().find((x) => x.id === zielId)?.eintraege.length ?? 0);
+    try {
+      const d = daten.length > 0 ? await importiereBoegen(zielId, daten, bilder.length > 0) : undefined;
+      if (bilder.length > 0) {
+        await importiereQrBilder(zielId, bilder, d);
+        return;
+      }
+      setEinlese(d ? { fehler: d.fehler, meldung: d.meldung } : { fehler: "In der Auswahl sind keine Bilddateien.", meldung: "" });
+    } finally {
+      spur.importEndet();
     }
-    setEinlese(d ? { fehler: d.fehler, meldung: d.meldung } : { fehler: "In der Auswahl sind keine Bilddateien.", meldung: "" });
   }
+
+  /** Folgemeldungen aufgeteilter Einheiten im Stapel: die abgeteilten Personen stehen doppelt (R14-D2). */
+  function doppeltImStapel(zielId: string, vorher: MeldeEintrag[], neueIds: string[]): string[] {
+    return abgeteiltDoppeltImStapel(vorher, einsaetzeLaden().find((x) => x.id === zielId)?.eintraege ?? [], neueIds);
+  }
+
+  /** Satz zu den eben aufgenommenen Bögen, die wegen der Datenschutzfrist ohne Namen ankamen (R11-A1); sonst leer. */
+  function anonymImStapel(zielId: string, neueIds: string[]): string[] {
+    if (neueIds.length === 0) return [];
+    const ids = new Set(neueIds);
+    const eintraege = (einsaetzeLaden().find((x) => x.id === zielId)?.eintraege ?? []).filter((e) => ids.has(e.id));
+    const satz = anonymQuittung(eintraege, datenschutzZeitpunkt());
+    // Stand nach dem Eingang: eine falsche Geräteuhr schreibt alle Zeiten falsch (R13-A3). Gleiche Stelle der Quittung.
+    const uhr = standNachEintreffenQuittung(eintraege);
+    // Daten und Signatur passen nicht zusammen: nicht still mit Haken durch den Stapel (R15-E1).
+    const ungueltig = eintraege.filter((e) => e.signatur?.zustand === "ungueltig");
+    const sig = ungueltig.length ? `⚠ Signatur ungültig: ${ungueltig.map((e) => `„${einheitAnzeigename(e.bogen.einheit)}"`).join(", ")} — beim Absender prüfen.` : "";
+    return [...(satz ? [satz] : []), ...(uhr ? [uhr] : []), ...(sig ? [sig] : [])];
+  }
+
 
 
   async function importiereBoegen(zielId: string, dateien: File[], mitBildern = false): Promise<DateiAnteil & { fehler: string; meldung: string }> {
     let neu = 0;
     let uebersprungen = 0;
     let speicherVoll = 0;
-    const kaputt: string[] = [];
+    // Dateiname und Satz je Fehler: gleiche Sätze erscheinen gebündelt mit Zahl und Namen (R17-G13).
+    const kaputt: DateiFehler[] = [];
     const zusatz = { sammlungInPdf: false, lage: false }; // R2-A1
     const sammlungenUebernommen: string[] = []; // R3-W3
     // Stand vor dem Stapel und die neu abgelegten Bögen — für die Frage,
     // welche Fassung gilt (R4-W1).
     const vorher = einsaetzeLaden().find((x) => x.id === zielId)?.eintraege ?? [];
     const neueIds: string[] = [];
+    const wordQuittungen: string[] = [];
     for (const datei of dateien) {
       try {
         const bytes = istPdfDatei(datei) ? new Uint8Array(await datei.arrayBuffer()) : null;
+        // Lageblatt oder Blanko als PDF: kein Bogen darin, sagt es und nennt den Weg über die Sammel-PDF (R11-A3).
+        const nurLesen = bytes ? leseausgabeMeldung(bytes, datei.name) : null;
+        if (nurLesen) {
+          kaputt.push({ datei: datei.name, text: nurLesen });
+          continue;
+        }
         const art = bytes ? pdfInhaltArt(bytes) : null;
         if (art === "sammlung" && bytes) {
           // Sammel-PDF (z. B. vom Zugführer): als Paket mit Zeiten, Zug und
@@ -1322,8 +1484,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
         }
         if (art === "nur-qr") zusatz.lage = true;
         const abgelehnt: string[] = [];
-        const r = boegenAufnehmen(zielId, await boegenAusDatei(datei, abgelehnt), art === "nur-qr");
-        for (const satz of abgelehnt) kaputt.push(`„${datei.name}“: ${satz}`);
+        const r = boegenAufnehmen(zielId, await boegenAusDatei(datei, abgelehnt, wordQuittungen), art === "nur-qr");
+        for (const satz of abgelehnt) kaputt.push({ datei: datei.name, text: satz, nameVorn: true });
         neu += r.neu;
         uebersprungen += r.uebersprungen;
         speicherVoll += r.speicherVoll;
@@ -1331,12 +1493,14 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       } catch (e) {
         // Je Datei ein ganzer Satz mit Ursache und nächstem Schritt statt
         // Parser-Text in Klammern (Audit Runde 2, R2-E5).
-        kaputt.push(await dateiFehlerMeldung(datei, e, "boegen"));
+        kaputt.push({ datei: datei.name, text: await dateiFehlerMeldung(datei, e, "boegen") });
       }
     }
     einsaetzeNeuLaden();
     const vorrang = await vorrangImStapel(zielId, vorher, neueIds);
-    const fehlerZeilen = [speicherVollMeldung(speicherVoll), ...kaputt].filter(Boolean);
+    // Nur im Fehlerfall nachgeladen: Das Bündeln gehört nicht ins Startbündel.
+    const gebuendelt = kaputt.length > 0 ? (await import("../fehler-buendeln")).fehlerZeilenBuendeln(kaputt) : [];
+    const fehlerZeilen = [speicherVollMeldung(speicherVoll), ...gebuendelt].filter(Boolean);
     const bogenMeldung =
       neu + uebersprungen === 0
         ? kaputt.length > 0 || sammlungenUebernommen.length > 0 || speicherVoll > 0
@@ -1345,10 +1509,18 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
         : dateiImportMeldung(neu, uebersprungen, zusatz);
     // Für den gemeinsamen Bericht mit Bildern: nur, was die Zahl nicht sagt.
     const aehnlich = aehnlichImStapel(zielId, vorher, neueIds);
+    // Bögen mit Stand über der Datenschutzfrist: ohne Namen angekommen, das Papier trägt sie (R11-A1).
+    const anonym = anonymImStapel(zielId, neueIds);
+    // Folgemeldung einer aufgeteilten Einheit: abgeteilte Personen stehen doppelt (R14-D2).
+    const doppelt = doppeltImStapel(zielId, vorher, neueIds);
     const hinweise = [
       ...sammlungenUebernommen,
+      ...wordQuittungen,
       ...vorrang,
       ...aehnlich,
+      ...anonym,
+      ...doppelt,
+      eintreffzeitStapelHinweis(neu),
       zusatz.sammlungInPdf ? SAMMLUNG_IN_PDF_HINWEIS : zusatz.lage && neu > 0 ? LAGE_NACHTRAGEN_HINWEIS : "",
     ].filter(Boolean);
     return {
@@ -1358,7 +1530,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       zeilen: [...fehlerZeilen, ...hinweise],
       fehler: fehlerZeilen.join(" "),
       // Die mögliche Doppelung gehört in die sichtbare Quittung, nicht nur in die Zeilen des Berichts (R7-N1).
-      meldung: [...sammlungenUebernommen, bogenMeldung, ...vorrang, ...(mitBildern ? [] : aehnlich)].filter(Boolean).join(" "),
+      meldung: [...sammlungenUebernommen, bogenMeldung, ...wordQuittungen, ...anonym, ...doppelt, eintreffzeitStapelHinweis(neu), ...vorrang, ...(mitBildern ? [] : aehnlich)].filter(Boolean).join(" "),
     };
   }
 
@@ -1545,7 +1717,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       }
       einsaetzeNeuLaden();
       const vorrang = await vorrangImStapel(zielId, vorher, neueIds);
-      setStapelBericht([...stapelBerichtZeilen(erg, neu, uebersprungen, daten, neueIds.length > 0), ...vorrang, ...aehnlichImStapel(zielId, vorher, neueIds)]);
+      setStapelBericht([...stapelBerichtZeilen(erg, neu, uebersprungen, daten, neueIds.length > 0), ...anonymImStapel(zielId, neueIds), ...doppeltImStapel(zielId, vorher, neueIds), ...vorrang, ...aehnlichImStapel(zielId, vorher, neueIds), eintreffzeitStapelHinweis(neu)].filter(Boolean));
       const voll = speicherVollMeldung(speicherVoll);
       if (voll) setEinlese({ fehler: voll, meldung: "" });
     } catch (e) {
@@ -1614,11 +1786,14 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       // keine gemeinsame Kennung): Der Import fragt, ob die Datei zur vorhandenen
       // Sammlung gehört, statt still eine zweite gleichnamige anzulegen (R5-W2).
       const vorhandene = einsaetzeLaden();
+      let zusammenfuehrenVorher: Einsatzsammlung | null = null;
       if (![...vorhandene, ...einsaetzePapierkorb()].some((x) => x.id === s.id)) {
         const gleichnamig = vorhandene
           .filter((x) => x.name.trim().toLowerCase() === s.name.trim().toLowerCase())
           .sort((a, b) => b.geaendert - a.geaendert)[0];
         if (gleichnamig) {
+          // R20-D3: Die Rückfrage nennt vorab, welche vorhandenen Nummern sich ändern würden.
+          const wechselSatz = (await import("../einsatz-zusammenfuehren")).wechselSatz(gleichnamig, s);
           const wahl = await frageWahl({
             titel: `Es gibt schon eine Sammlung „${gleichnamig.name}“`,
             text:
@@ -1629,7 +1804,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
               {
                 wert: "vorhanden",
                 label: "In die vorhandene Sammlung übernehmen",
-                hinweis: "Alle Einheiten in einer Sammlung, mit Zeiten, Abrückvermerken, Auftrag und Siegel. Laufende Nummern können sich dabei ändern.",
+                hinweis: `Alle Einheiten in einer Sammlung, mit Zeiten, Abrückvermerken, Auftrag und Siegel.${wechselSatz} „Rückgängig“ danach möglich.`,
               },
               {
                 wert: "eigene",
@@ -1639,7 +1814,10 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
             ],
           });
           if (!wahl) return;
-          if (wahl === "vorhanden") s = sammlungFuerZiel(s, gleichnamig);
+          if (wahl === "vorhanden") {
+            zusammenfuehrenVorher = structuredClone(gleichnamig); // für „Rückgängig“ (R20-D3)
+            s = sammlungFuerZiel(s, gleichnamig);
+          }
         }
       }
       if (nachtragSeit != null && ![...einsaetzeLaden(), ...einsaetzePapierkorb()].some((x) => x.id === s.id)) {
@@ -1661,7 +1839,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       const eintraegeVorher = (einsaetzeLaden().find((x) => x.id === s.id)?.eintraege ?? []).map((e) => ({ ...e }));
       const r = einsatzAbgleichen(geklaert.sammlung);
       // Was von dort kam, hat das andere Gerät schon (R3-W2).
-      weitergabeUmImportErgaenzen(s.id, r.neueIds, r.neueVermerke, r.bekannt);
+      weitergabeUmImportErgaenzen(s.id, r.neueIds, r.neueVermerke, r.bekannt, Date.now(), importUebernahm(r));
       // Was der Stab laut dem anderen Gerät schon bekam, gilt hier auch (R5-W6).
       exportStaendeUebernehmen(s.id, dateiStaende, [...einsaetzeLaden(), ...einsaetzePapierkorb()].map((x) => x.id));
       const lageSatz = lageAngabenUebernehmen(s.id, dateiLage, [...einsaetzeLaden(), ...einsaetzePapierkorb()].map((x) => x.id));
@@ -1671,6 +1849,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       // Gegliedert statt ein Absatz (R5-K3): oben Einheiten, Aktualisierungen und
       // inhaltliche Widersprüche, die kleinen Abweichungen eingeklappt dahinter.
       const gliederung = abgleichGliederung(r);
+      // Widersprüche bleiben an der Einsatzansicht stehen, bis sie erledigt sind (R11-O3).
+      widerspruchMerken(s.id, widerspruecheZumMerken(r));
       // Einheiten statt Fassungen zählen, wie die Liste darunter (R4-K2).
       const jetzt = einsaetzeLaden().find((x) => x.id === s.id);
       const koepfe = geltendeJeEinheit(jetzt?.eintraege ?? []);
@@ -1695,13 +1875,20 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
           ...(r.neuerEinsatz ? [] : gliederung.kurz),
           // Wie aktuell die übernommene Lage ist (Audit Runde 3, R3-K5).
           ...(letzteImImport != null ? [`Stand der Datei: letzte Meldung ${zeitLang(letzteImImport)}.`] : []),
+          // Die Datei war nicht neuer: sagen, dass nichts übernommen wurde (R13-A4).
+          ...(!r.neuerEinsatz && !importUebernahm(r) ? [NICHTS_UEBERNOMMEN_SATZ] : []),
           ...(nummernHinweis ? [nummernHinweis] : []),
           ...(lageSatz ? [lageSatz] : []),
           ...(geklaert.hinweis ? [geklaert.hinweis.trim()] : []),
           ...(abgelehnt.length > 0 ? [ablehnungsSatz(abgelehnt, abgelehntGesamt)] : []),
         ].join(" "),
         einzelheiten: r.neuerEinsatz ? [] : gliederung.einzelheiten,
+        // R20-D3: Das Zusammenführen lässt sich zurücknehmen; der Hinweis auf geänderte Nummern bleibt in der Einsatzansicht stehen.
+        ...(zusammenfuehrenVorher && !r.neuerEinsatz
+          ? { zurueck: { label: "Zusammenführen rückgängig", aktion: () => zusammenfuehrenRueckgaengig(zusammenfuehrenVorher!) } }
+          : {}),
       });
+      if (nummernHinweis) nummernHinweisMerken(s.id, nummernHinweis);
       setOffenerEinsatzId(s.id);
     } catch (err) {
       setFehler(await dateiFehlerMeldung(datei, err, "einsatz")); // nie Parser-Text (R2-E5)

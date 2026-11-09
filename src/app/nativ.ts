@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/nativ.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/nativ.ts` (Commit 1d7ed5f).
  *
  * Native Brücke (Capacitor): In-App-QR-Scanner und Teilen von Dateien über
  * das System-Share-Sheet (AirDrop, Dateien-App, Drucken, Mail …).
@@ -140,7 +140,7 @@ async function teilen(titel: string, uri: string): Promise<boolean> {
   }
 }
 
-/** Binärdatei (Base64) in den Cache schreiben und übers Share-Sheet anbieten — PDF, XLSX, … */
+/** Binärdatei (Base64) in den Cache schreiben und übers Share-Sheet anbieten — PDF, … */
 export async function binaerTeilen(dateiname: string, base64: string): Promise<boolean> {
   const datei = await Filesystem.writeFile({
     path: dateiname,

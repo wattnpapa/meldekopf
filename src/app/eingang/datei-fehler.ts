@@ -20,6 +20,8 @@ import { SCHEMA_VERSION } from "@bos/eeb-format/model";
 import { bogenBefund } from "../bogen-pruefung";
 import { fehlerText, istNachladeFehler } from "../nachladen";
 import { SpeicherVollFehler, istSpeicherVoll } from "../eintrag-zeiten";
+import { leseausgabeMeldung } from "../weitergabe/pdf-titel";
+import { WordBogenFehler } from "./word-bogen-fehler";
 
 /** Über welchen Knopf die Datei kam — bestimmt, was „richtig" wäre und wohin eine falsche gehört. */
 export type DateiWeg =
@@ -114,7 +116,7 @@ export function dateiArt(text: string): DateiArt {
   return "fremd";
 }
 
-const NEU_ANFORDERN = "Bitte beim Absender neu anfordern oder den QR-Code des Bogens scannen.";
+const NEU_ANFORDERN_BOGEN = "Bitte beim Absender neu anfordern oder den QR-Code des Bogens scannen.";
 
 /** Wohin eine Datei gehört, die über den falschen Knopf kam. */
 const RICHTIGER_KNOPF: Partial<Record<DateiArt, string>> = {
@@ -144,6 +146,9 @@ const PASST: Record<DateiWeg, DateiArt[]> = {
 export function dateiFehlerText(name: string, art: DateiArt, weg: DateiWeg, ursache?: string | null): string | null {
   const datei = `„${name}“`;
   const ausSicherung = weg === "sicherung";
+  // „Einsatz importieren…" erwartet eine Sammel-PDF oder Einsatzsicherung, nicht den Bogen (R10-E6).
+  const NEU_ANFORDERN =
+    weg === "einsatz" ? "Bitte beim Absender die Sammel-PDF des Einsatzes oder die Einsatzsicherung neu anfordern." : NEU_ANFORDERN_BOGEN;
   switch (art) {
     case "leer":
       return (
@@ -159,17 +164,26 @@ export function dateiFehlerText(name: string, art: DateiArt, weg: DateiWeg, ursa
           : NEU_ANFORDERN)
       );
     case "tabelle":
-      return (
+    case "fremd":
+    case "json-fremd":
+      // Die eigene Auswertung dieser App (eeb-einsatz-…csv; bis 2026-11 auch …-oldenburg.xlsx): für den Stab, nicht zum Weiterarbeiten (R17-A5).
+      if (/^(\d{4}-\d{2}-\d{2}_\d{4}_)?eeb-(einsatz|lageblatt)[-_].*\.(csv|xlsx?)$/i.test(name)) {
+        return (
+          `${datei} hat diese App selbst als Auswertung für den Stab erzeugt (Tabelle) — zum Weiterarbeiten ist sie nicht gedacht. ` +
+          "Dafür die Sammel-PDF des Einsatzes („Einsatz weitergeben / sichern“) über „Einsatz importieren…“ einlesen oder die Datensicherung einspielen."
+        );
+      }
+      if (art === "tabelle") return (
         `${datei} ist eine Tabelle oder Liste, keine Datei dieser App. Eingelesen werden die PDF eines Bogens ` +
         "und Dateien, die diese App selbst gespeichert hat. Namen aus einer Liste bitte im Schritt „Personal“ eintragen."
       );
-    case "fremd":
-    case "json-fremd":
       return (
         `${datei} stammt nicht aus dieser App. ` +
         (ausSicherung
           ? "Eine Sicherung entsteht über „Sicherung erstellen…“ und heißt eeb-sicherung-….json."
-          : "Beim Absender die PDF des Bogens anfordern oder den QR-Code scannen.")
+          : weg === "einsatz"
+            ? "Beim Absender die Sammel-PDF des Einsatzes („Einsatz weitergeben / sichern“) oder die Einsatzsicherung anfordern."
+            : "Beim Absender die PDF des Bogens anfordern oder den QR-Code scannen.")
       );
     case "bogen-defekt":
       return ausSicherung
@@ -188,7 +202,7 @@ export function dateiFehlerText(name: string, art: DateiArt, weg: DateiWeg, ursa
 export function allgemeineMeldung(name: string, weg: DateiWeg): string {
   return weg === "sicherung"
     ? `„${name}“ ließ sich nicht einspielen. Die Daten auf diesem Gerät sind unverändert. Die Sicherung auf dem alten Gerät neu erstellen und erneut versuchen.`
-    : `„${name}“ ließ sich nicht lesen. ${NEU_ANFORDERN}`;
+    : `„${name}“ ließ sich nicht lesen. ${weg === "einsatz" ? "Bitte beim Absender die Sammel-PDF des Einsatzes oder die Einsatzsicherung neu anfordern." : NEU_ANFORDERN_BOGEN}`;
 }
 
 /**
@@ -199,9 +213,21 @@ export function allgemeineMeldung(name: string, weg: DateiWeg): string {
 export async function dateiFehlerMeldung(datei: File, fehler: unknown, weg: DateiWeg): Promise<string> {
   if (istNachladeFehler(fehler)) return fehlerText(fehler);
   if (fehler instanceof SpeicherVollFehler) return fehler.message;
+  // Word-Bogen (.docx): der Leser formuliert seine Sätze selbst, eine Binärdatei hat keinen Text zum Auswerten.
+  if (fehler instanceof WordBogenFehler) return fehler.message;
   if (istSpeicherVoll(fehler)) return new SpeicherVollFehler(fehler).message;
   const eigen = fehler instanceof Error ? fehler.message : "";
   if (/neueren App-Version|Lokaler Speicher ist nicht verfügbar/.test(eigen)) return eigen;
+  // Lageblatt und Blanko-Vordruck als PDF: eigener Satz mit dem Weg über die Sammel-PDF (R11-A3).
+  try {
+    const bytes = new Uint8Array(await datei.arrayBuffer());
+    if (bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+      const lese = leseausgabeMeldung(bytes, datei.name);
+      if (lese) return lese;
+    }
+  } catch {
+    /* unlesbare Datei: der Weg unten */
+  }
   let text: string;
   try {
     text = await datei.text();

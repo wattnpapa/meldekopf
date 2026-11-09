@@ -37,6 +37,8 @@ import {
   verpflegung,
 } from "@bos/eeb-format/model";
 import { bogenBefund } from "./bogen-pruefung";
+import { einsatzVorgabe, uhrzeitAus, uhrzeitZuIso } from "./zeitraum-eingabe";
+import { emailProblem, emailSatz } from "./email-pruefung";
 import {
   EEB_URL_PREFIX,
   EEB_VORLAGE_MARKER,
@@ -49,10 +51,19 @@ import {
   segmentPayloadUrls,
   type Kompressor,
 } from "@bos/eeb-format/codec";
-import { gegengezeichnetePayloadBytes, signiertePayloadBytes } from "@bos/eeb-format/signatur";
+import {
+  gegengezeichnetePayloadBytes,
+  signiertePayloadBytes,
+} from "@bos/eeb-format/signatur";
+import { absenderkarteLaden } from "./absenderkarte";
 import { geraeteSchluesselSicherstellen } from "./geraete-schluessel";
-import { binaerTeilen, istNativ, textTeilen } from "./nativ";
-import { sitzplaetzeFuer, sitzplaetzeRichtwert, sitzplatzBilanz, type SitzplatzBilanz } from "@bos/vokabulare/sitzplaetze";
+import { istNativ, textTeilen } from "./nativ";
+import {
+  sitzplaetzeFuer,
+  sitzplaetzeRichtwert,
+  sitzplatzBilanz,
+  type SitzplatzBilanz,
+} from "@bos/vokabulare/sitzplaetze";
 import {
   datumDeutsch,
   einheitOrt,
@@ -63,7 +74,10 @@ import {
   vokabularFuer,
 } from "@bos/meldekopf/darstellung";
 import { FUNKRUF_KENNWOERTER } from "@bos/vokabulare/thw";
-import { funkrufKennzahlen, funkrufOrtsverband } from "../vokabulare/thw-funkrufname-ort";
+import {
+  funkrufKennzahlen,
+  funkrufOrtsverband,
+} from "../vokabulare/thw-funkrufname-ort";
 
 // Nach ADR-003 wandert die reine Darstellung in einen eigenen Baustein. Die App
 // importiert sie weiterhin von hier, damit der Umzug an ihren Einstiegen nichts
@@ -91,6 +105,16 @@ export {
 // das Startbündel (Startbündel 1,04 → 1,58 MB, ADR-003 Aufnahmeregel 5).
 let stempelQuelle: () => EebZeitpunkt = () => jetztZeitpunkt();
 
+/** Ist die Datenschutzfrist des Bogens abgelaufen (Namen, Funktionen und Erreichbarkeiten sind entfernt)? Geprüfte Uhr, Übungen nie. */
+export function bogenAnonymisiert(
+  b: Pick<Erfassungsbogen, "uebung" | "stand">,
+): boolean {
+  // Dieselbe Rechnung wie datenschutzfristAbgelaufen() (eeb-format/datenschutzfrist.ts, 90 Tage), hier nachgebaut: Der Import
+  // aus hilfen.ts verschob das Verzeichnis der Ortsverbände (~600 KB) ins Startbündel (R12, ADR-003 Aufnahmeregel 5).
+  // Ein Test hält beide Fassungen gleich (runde12-hilfen-frist.test.ts).
+  return !b.uebung && stempelQuelle() >= b.stand + 90 * MINUTEN_JE_TAG;
+}
+
 /** Meldet die Quelle für Stempelzeiten an (main.tsx: die geprüfte Uhr). */
 export function stempelQuelleSetzen(quelle: () => EebZeitpunkt): void {
   stempelQuelle = quelle;
@@ -106,15 +130,38 @@ export function stempelQuelleSetzen(quelle: () => EebZeitpunkt): void {
  */
 export function einheitAnzeigename(e: Einheit): string {
   const org = e.organisationName?.trim() || orgLabel(e.organisation);
-  const typ = vokabText(e.einheitsTyp, vokabularFuer(e.organisation, "einheitstyp"), "name");
+  const typ = vokabText(
+    e.einheitsTyp,
+    vokabularFuer(e.organisation, "einheitstyp"),
+    "name",
+  );
   const teile: string[] = [];
   for (const teil of [org, einheitOrt(e), typ]) {
     if (!teil) continue;
-    const muster = new RegExp(`(?<![\\p{L}\\p{N}])${teil.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu");
+    const muster = new RegExp(
+      `(?<![\\p{L}\\p{N}])${teil.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`,
+      "iu",
+    );
     if (teile.some((davor) => muster.test(davor))) continue;
+    // R20-H1: Steht ein früherer Teil als ganze Wörter schon IN diesem („THW" in „THW Oldenburg", der Ort,
+    // wie er auf dem Zettel steht), trägt der längere beide — der frühere entfällt statt doppelt zu stehen.
+    for (let i = teile.length - 1; i >= 0; i--) {
+      const davor = teile[i]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (
+        new RegExp(`(?<![\\p{L}\\p{N}])${davor}(?![\\p{L}\\p{N}])`, "iu").test(
+          teil,
+        )
+      )
+        teile.splice(i, 1);
+    }
     teile.push(teil);
   }
   return teile.join(" ");
+}
+
+/** Ort ohne den Klammerzusatz des Ortsverzeichnisses: „Oldenburg (NI)" → „Oldenburg" — so wird er gerufen (R15-H2). */
+export function ortOhneZusatz(ort: string): string {
+  return ort.replace(/\s*\([^()]*\)\s*$/, "");
 }
 
 /**
@@ -129,11 +176,14 @@ export function einheitAnzeigename(e: Einheit): string {
 export function funkrufText(f: Fahrzeug, einheit: Einheit): string {
   const fr = f.funkrufname;
   const ov = funkrufOrtsverband(einheit);
-  if (!fr || !ov || !fr.eigenerStandort) return funkrufTextEinfach(f, einheitOrt(einheit));
+  if (!fr || !ov || !fr.eigenerStandort)
+    return funkrufTextEinfach(f, ortOhneZusatz(einheitOrt(einheit)));
   const kennzahlen = funkrufKennzahlen(fr, ov)
     .map((t, i) => String(t).padStart(i === 0 ? ov.stellen : 2, "0"))
     .join("/");
-  return [vokabText(fr.kennwort, FUNKRUF_KENNWOERTER), ov.ort, kennzahlen].filter(Boolean).join(" ");
+  return [vokabText(fr.kennwort, FUNKRUF_KENNWOERTER), ov.ort, kennzahlen]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /**
@@ -155,17 +205,24 @@ export const MAX_ENTPACKT = 4 * 1024 * 1024;
  * vor dem Ende — das ist der Grund für die Streaming-Fassung statt des
  * bequemen Einzelaufrufs.
  */
-export function inflateRawBegrenzt(daten: Uint8Array, grenze = MAX_ENTPACKT): Uint8Array {
+export function inflateRawBegrenzt(
+  daten: Uint8Array,
+  grenze = MAX_ENTPACKT,
+): Uint8Array {
   const strom = new Inflate({ raw: true });
   const stuecke: Uint8Array[] = [];
   let summe = 0;
   strom.onData = (stueck: Uint8Array) => {
     summe += stueck.length;
-    if (summe > grenze) throw new RangeError(`Entpackte Daten überschreiten ${grenze} Bytes — Bogen wird nicht gelesen.`);
+    if (summe > grenze)
+      throw new RangeError(
+        `Entpackte Daten überschreiten ${grenze} Bytes — Bogen wird nicht gelesen.`,
+      );
     stuecke.push(stueck);
   };
   strom.push(daten, true);
-  if (strom.err) throw new Error(strom.msg || "Daten lassen sich nicht entpacken.");
+  if (strom.err)
+    throw new Error(strom.msg || "Daten lassen sich nicht entpacken.");
   const ergebnis = new Uint8Array(summe);
   let stelle = 0;
   for (const stueck of stuecke) {
@@ -226,6 +283,14 @@ export interface QrSatz {
    * Geräteschlüssel allein signiert (eigener oder bearbeiteter Bogen).
    */
   weitergeleitet: boolean;
+  /**
+   * Nur bei `weitergeleitet`: wie viele Codes der empfangene Payload ohne die
+   * Gegenzeichnung dieses Geräts gebraucht hätte. Die zusätzliche Stufe
+   * (Schlüssel, Signatur, Absenderkarte) kostet rund 100–150 Byte und kann den
+   * Bogen über die Grenze eines Teils schieben — beim OV Chemnitz wurden aus
+   * drei Codes nach dem Öffnen des Links vier (Rückmeldung 11/2026).
+   */
+  teileOhneGegenzeichnung?: number;
 }
 
 const QR_OPTIONEN = { errorCorrectionLevel: "M" as const };
@@ -239,10 +304,18 @@ function qrVersion(url: string): number {
   }
 }
 
-async function teilBild(url: string, teilNr: number, anzahl: number): Promise<QrTeil> {
+async function teilBild(
+  url: string,
+  teilNr: number,
+  anzahl: number,
+): Promise<QrTeil> {
   // margin 4 = volle Ruhezone (Quiet Zone) — hilft der Erkennung, den Code vom
   // Umfeld zu trennen, besonders wenn mehrere Codes auf einer Seite stehen.
-  const datenUrl = await QRCode.toDataURL(url, { ...QR_OPTIONEN, width: 520, margin: 4 });
+  const datenUrl = await QRCode.toDataURL(url, {
+    ...QR_OPTIONEN,
+    width: 520,
+    margin: 4,
+  });
   return { datenUrl, url, teilNr, anzahl, version: qrVersion(url) };
 }
 
@@ -270,7 +343,11 @@ async function teilBild(url: string, teilNr: number, anzahl: number): Promise<Qr
  * erhalten und prüfbar, das eigene Gerät bezeugt nur die Weitergabe. Sobald hier
  * bearbeitet wurde, ist es ein eigener Bogen und wird allein selbst signiert.
  */
-export async function qrErzeugen(b: Erfassungsbogen, herkunft?: Uint8Array | null): Promise<QrSatz> {
+export async function qrErzeugen(
+  b: Erfassungsbogen,
+  herkunft?: Uint8Array | null,
+): Promise<QrSatz> {
+  const karte = absenderkarteLaden();
   const privat = await geraeteSchluesselSicherstellen();
   let payload: Uint8Array | null = null;
   if (herkunft && unveraendert(herkunft, b)) {
@@ -288,21 +365,26 @@ export async function qrErzeugen(b: Erfassungsbogen, herkunft?: Uint8Array | nul
   const url = EEB_URL_PREFIX + datenKodieren(payload);
   // Textlink zum Teilen: Base64url statt Base41 (siehe QrSatz.vollUrl).
   const vollUrl = EEB_URL_PREFIX + base64UrlKodieren(payload);
+  const teileOhneGegenzeichnung = weitergeleitet && herkunft ? qrTeilzahl(herkunft) : undefined;
   const einzelVersion = qrVersion(url);
   if (einzelVersion <= QR_EINZEL_MAX_VERSION) {
     const teil = await teilBild(url, 1, 1);
-    return { teile: [teil], segmentiert: false, zeichen: url.length, version: teil.version, vollUrl, stufen, weitergeleitet };
+    return {
+      teile: [teil],
+      segmentiert: false,
+      zeichen: url.length,
+      version: teil.version,
+      vollUrl,
+      stufen,
+      weitergeleitet,
+      ...(teileOhneGegenzeichnung !== undefined ? { teileOhneGegenzeichnung } : {}),
+    };
   }
 
-  // Zu groß: kleinste Teilzahl suchen, bei der jeder Teil auf die gröbere
-  // Segment-Zielversion kommt (grobe Codes = zuverlässig scannbar).
-  const maxTeile = Math.min(20, payload.length);
-  let urls = segmentPayloadUrls(payload, Math.min(2, maxTeile));
-  for (let anzahl = 2; anzahl <= maxTeile; anzahl++) {
-    urls = segmentPayloadUrls(payload, anzahl);
-    if (urls.every((u) => qrVersion(u) <= QR_SEGMENT_ZIEL_VERSION)) break;
-  }
-  const teile = await Promise.all(urls.map((u, i) => teilBild(u, i + 1, urls.length)));
+  const urls = segmentUrls(payload);
+  const teile = await Promise.all(
+    urls.map((u, i) => teilBild(u, i + 1, urls.length)),
+  );
   return {
     teile,
     segmentiert: true,
@@ -311,7 +393,28 @@ export async function qrErzeugen(b: Erfassungsbogen, herkunft?: Uint8Array | nul
     vollUrl,
     stufen,
     weitergeleitet,
+    ...(teileOhneGegenzeichnung !== undefined ? { teileOhneGegenzeichnung } : {}),
   };
+}
+
+/**
+ * Zu groß für einen Code: kleinste Teilzahl suchen, bei der jeder Teil auf die
+ * gröbere Segment-Zielversion kommt (grobe Codes = zuverlässig scannbar).
+ */
+function segmentUrls(payload: Uint8Array): string[] {
+  const maxTeile = Math.min(20, payload.length);
+  let urls = segmentPayloadUrls(payload, Math.min(2, maxTeile));
+  for (let anzahl = 2; anzahl <= maxTeile; anzahl++) {
+    urls = segmentPayloadUrls(payload, anzahl);
+    if (urls.every((u) => qrVersion(u) <= QR_SEGMENT_ZIEL_VERSION)) break;
+  }
+  return urls;
+}
+
+/** Wie viele QR-Codes ein Payload braucht — dieselbe Regel wie {@link qrErzeugen}. */
+export function qrTeilzahl(payload: Uint8Array): number {
+  if (qrVersion(EEB_URL_PREFIX + datenKodieren(payload)) <= QR_EINZEL_MAX_VERSION) return 1;
+  return segmentUrls(payload).length;
 }
 
 /**
@@ -347,7 +450,9 @@ export interface VorlagenTransport {
  * zusammengesetzt. Passt die Vorlage nicht in einen Code, bleiben Link und
  * Datei — beide tragen sie vollständig.
  */
-export async function vorlageTransportErzeugen(b: Erfassungsbogen): Promise<VorlagenTransport> {
+export async function vorlageTransportErzeugen(
+  b: Erfassungsbogen,
+): Promise<VorlagenTransport> {
   const payload = await signiertePayloadBytes(
     b,
     browserKompressor,
@@ -356,7 +461,9 @@ export async function vorlageTransportErzeugen(b: Erfassungsbogen): Promise<Vorl
   const qrUrl = EEB_URL_PREFIX + EEB_VORLAGE_MARKER + datenKodieren(payload);
   const link = EEB_URL_PREFIX + EEB_VORLAGE_MARKER + base64UrlKodieren(payload);
   const qrDatenUrl =
-    qrVersion(qrUrl) <= QR_EINZEL_MAX_VERSION ? (await teilBild(qrUrl, 1, 1)).datenUrl : null;
+    qrVersion(qrUrl) <= QR_EINZEL_MAX_VERSION
+      ? (await teilBild(qrUrl, 1, 1)).datenUrl
+      : null;
   return { qrDatenUrl, qrUrl, link };
 }
 
@@ -371,7 +478,10 @@ export async function vorlageTransportErzeugen(b: Erfassungsbogen): Promise<Vorl
  */
 function unveraendert(herkunft: Uint8Array, b: Erfassungsbogen): boolean {
   try {
-    return JSON.stringify(decodePayload(herkunft, browserKompressor)) === JSON.stringify(b);
+    return (
+      JSON.stringify(decodePayload(herkunft, browserKompressor)) ===
+      JSON.stringify(b)
+    );
   } catch {
     return false;
   }
@@ -409,35 +519,17 @@ export function blobAlsDownload(dateiname: string, blob: Blob): void {
 }
 
 /** Text als Datei anbieten — in der App übers Share-Sheet, im Browser als Download. */
-export async function textAlsDatei(dateiname: string, inhalt: string, mime: string): Promise<void> {
+export async function textAlsDatei(
+  dateiname: string,
+  inhalt: string,
+  mime: string,
+): Promise<void> {
   if (istNativ()) {
     // In der App gibt es keinen Browser-Download: Inhalt übers Share-Sheet anbieten
     await textTeilen(dateiname, inhalt);
     return;
   }
   blobAlsDownload(dateiname, new Blob([inhalt], { type: mime }));
-}
-
-/**
- * Bytes → Base64 (Standard-Alphabet, mit Füllzeichen) für die Capacitor-Ablage.
- * Nicht das Base64url aus dem Codec: dort ersetzen `-_` die Zeichen `+/`, was
- * beim Schreiben der Datei einen Byte-Salat ergäbe. In Blöcken, weil
- * `String.fromCharCode(...)` mit einem sehr großen Array den Stack sprengt.
- */
-function base64Aus(bytes: Uint8Array): string {
-  let s = "";
-  const block = 0x8000;
-  for (let i = 0; i < bytes.length; i += block) {
-    s += String.fromCharCode(...bytes.subarray(i, i + block));
-  }
-  return btoa(s);
-}
-
-/** Binärdatei anbieten — in der App übers Share-Sheet, im Browser als Download. */
-export async function bytesAlsDatei(dateiname: string, bytes: Uint8Array<ArrayBuffer>, mime: string): Promise<boolean> {
-  if (istNativ()) return binaerTeilen(dateiname, base64Aus(bytes));
-  blobAlsDownload(dateiname, new Blob([bytes], { type: mime }));
-  return true;
 }
 
 /**
@@ -454,7 +546,9 @@ export async function bytesAlsDatei(dateiname: string, bytes: Uint8Array<ArrayBu
  * übersieht, lässt den Knopf nur aktiv — der harmlose Ausgang.
  */
 export function vorbelegungGeladen<T>(liste: T[], vorlage: T[]): boolean {
-  return vorlage.length > 0 && JSON.stringify(liste) === JSON.stringify(vorlage);
+  return (
+    vorlage.length > 0 && JSON.stringify(liste) === JSON.stringify(vorlage)
+  );
 }
 
 /**
@@ -466,9 +560,20 @@ export function vorbelegungGeladen<T>(liste: T[], vorlage: T[]): boolean {
  * Indizes außerhalb der Liste geben sie unverändert zurück: die Knöpfe am
  * Rand sind zwar gesperrt, ein Tastaturweg darf daran aber nicht scheitern.
  */
-export function verschoben<T>(liste: readonly T[], von: number, nach: number): T[] {
+export function verschoben<T>(
+  liste: readonly T[],
+  von: number,
+  nach: number,
+): T[] {
   const kopie = [...liste];
-  if (von === nach || von < 0 || nach < 0 || von >= kopie.length || nach >= kopie.length) return kopie;
+  if (
+    von === nach ||
+    von < 0 ||
+    nach < 0 ||
+    von >= kopie.length ||
+    nach >= kopie.length
+  )
+    return kopie;
   const [eintrag] = kopie.splice(von, 1);
   kopie.splice(nach, 0, eintrag!);
   return kopie;
@@ -480,7 +585,20 @@ export function verschoben<T>(liste: readonly T[], von: number, nach: number): T
  * Steht in Dateinamen vor dem Einheitsnamen, damit mehrere Ausgaben derselben
  * Einheit sich nicht überschreiben und die Meldezeit am Namen ablesbar ist.
  */
-const NATO_MONATE = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "dez"];
+const NATO_MONATE = [
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "mai",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "okt",
+  "nov",
+  "dez",
+];
 
 export function natoZeitstempel(d: Date = new Date()): string {
   const zwei = (n: number) => String(n).padStart(2, "0");
@@ -493,13 +611,45 @@ export function natoZeitstempel(d: Date = new Date()): string {
   );
 }
 
+/** Zeitstempel für Dateinamen, lesbar und nach Namen zeitlich sortierbar: „2026-10-27_2237" (R18-W6/H9/N10). */
+export function dateiZeitstempel(d: Date = new Date()): string {
+  const zwei = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}_${zwei(d.getHours())}${zwei(d.getMinutes())}`;
+}
+
+/**
+ * Dateiname einer Ausgabe: `<Datum>_<Uhrzeit>_eeb-<Art>_<Rumpf>.<Endung>` — der Zeitpunkt steht einmal und vorn,
+ * die Art (lageblatt, einsatz-nachtrag …) dahinter, der Einheits- oder Einsatzname zuletzt.
+ */
+export function ausgabeDateiname(
+  art: string,
+  rumpf: string,
+  endung: string,
+  d: Date = new Date(),
+): string {
+  return `${dateiZeitstempel(d)}_eeb${art ? `-${art}` : ""}_${rumpf}.${endung}`;
+}
+
+/** Art einer Ausgabe mit dem Namensteil der Lieferung („einsatz" + „nachtrag" → „einsatz-nachtrag"; ohne Marke unverändert). */
+export function artMitMarke(art: string, marke: string): string {
+  return marke ? `${art}-${marke}` : art;
+}
+
 /** Dateinamens-Rumpf aus dem Anzeigenamen der Einheit („THW_Oldenburg_NI_FGr_K_A"). */
 /** Freitext (Einheits-, Vorlagenname) → unbedenklicher Teil eines Dateinamens. */
 export function dateinameTeil(text: string): string {
   return ascii(text).replace(/[^\w-]+/g, "_");
 }
 
-const UMLAUT: Record<string, string> = { ä: "ae", ö: "oe", ü: "ue", Ä: "Ae", Ö: "Oe", Ü: "Ue", ß: "ss" };
+const UMLAUT: Record<string, string> = {
+  ä: "ae",
+  ö: "oe",
+  ü: "ue",
+  Ä: "Ae",
+  Ö: "Oe",
+  Ü: "Ue",
+  ß: "ss",
+};
 
 /**
  * Umlaute und Akzente in Dateinamen umschreiben (ä → ae, ß → ss, é → e; Audit Runde 9, R9-A5). Ein
@@ -519,7 +669,9 @@ function ascii(text: string): string {
  * Sonderzeichen außer Punkt, Unterstrich und Bindestrich zu „_". Die Endung bleibt unberührt.
  */
 export function dateinameSicher(name: string): string {
-  const roh = ascii(name).replace(/[^\w.-]+/g, "_").replace(/^\.+/, "");
+  const roh = ascii(name)
+    .replace(/[^\w.-]+/g, "_")
+    .replace(/^\.+/, "");
   return roh || "datei";
 }
 
@@ -541,9 +693,15 @@ export function migriereBogen(b: Erfassungsbogen): Erfassungsbogen {
     for (const p of b.personal) {
       if (p.ernaehrung == null) p.ernaehrung = Ernaehrung.FLEISCH;
     }
-    const sb = b.sofortbedarf as (Sofortbedarf & { davonVegetarisch?: number }) | undefined;
+    const sb = b.sofortbedarf as
+      | (Sofortbedarf & { davonVegetarisch?: number })
+      | undefined;
     if (sb) {
-      if (sb.davonVegetarisch && sb.davonVegetarisch > 0 && !b.verpflegungManuell) {
+      if (
+        sb.davonVegetarisch &&
+        sb.davonVegetarisch > 0 &&
+        !b.verpflegungManuell
+      ) {
         b.verpflegungManuell = { vegetarisch: sb.davonVegetarisch, vegan: 0 };
       }
       delete sb.davonVegetarisch;
@@ -551,10 +709,15 @@ export function migriereBogen(b: Erfassungsbogen): Erfassungsbogen {
   }
   if (b.schemaVersion < 4) {
     // Getrennte Kennzeichenfelder zusammengeführt: THW-Nummer wird zum String.
-    for (const f of b.fahrzeuge as (Fahrzeug & { thwKennzeichen?: number; kennzeichenFreitext?: string })[]) {
+    for (const f of b.fahrzeuge as (Fahrzeug & {
+      thwKennzeichen?: number;
+      kennzeichenFreitext?: string;
+    })[]) {
       if (f.kennzeichen == null) {
         f.kennzeichen =
-          f.thwKennzeichen != null ? `THW-${String(f.thwKennzeichen).padStart(5, "0")}` : f.kennzeichenFreitext;
+          f.thwKennzeichen != null
+            ? `THW-${String(f.thwKennzeichen).padStart(5, "0")}`
+            : f.kennzeichenFreitext;
       }
       delete f.thwKennzeichen;
       delete f.kennzeichenFreitext;
@@ -564,7 +727,8 @@ export function migriereBogen(b: Erfassungsbogen): Erfassungsbogen {
     // Bis Schema 4 war „Name der Einheit" ein eigenes Freitextfeld neben einer
     // optionalen Hierarchie — faktisch eine Doppeleingabe zur untersten Ebene.
     const e = b.einheit as Einheit & { name?: string };
-    if (e.name && e.hierarchie.length === 0) e.hierarchie.push({ bezeichnung: {}, name: e.name });
+    if (e.name && e.hierarchie.length === 0)
+      e.hierarchie.push({ bezeichnung: {}, name: e.name });
     delete e.name;
   }
   if (b.schemaVersion < 7) {
@@ -585,12 +749,23 @@ export async function bogenLaden(datei: File): Promise<Erfassungsbogen> {
   // „Als Datei sichern" am beiseitegelegten Entwurf schreibt die Hülle des
   // Entwurfs; der Bogen steckt darin (Audit Runde 6, R6-E3).
   const huelle = daten as { schemaVersion?: unknown; bogen?: unknown } | null;
-  if (huelle && typeof huelle === "object" && huelle.schemaVersion === undefined && huelle.bogen && typeof huelle.bogen === "object") {
+  if (
+    huelle &&
+    typeof huelle === "object" &&
+    huelle.schemaVersion === undefined &&
+    huelle.bogen &&
+    typeof huelle.bogen === "object"
+  ) {
     try {
       return bogenPruefen(huelle.bogen);
     } catch (e) {
-      const grund = e instanceof Error ? e.message.replace(/ Beim Absender neu anfordern.*$/, "") : "";
-      throw new Error(`Der gesicherte Entwurf lässt sich nicht öffnen. ${grund} In der App lässt sich das Fehlende nicht nachtragen; die Datei braucht dann, wer die App betreut.`);
+      const grund =
+        e instanceof Error
+          ? e.message.replace(/ Beim Absender neu anfordern.*$/, "")
+          : "";
+      throw new Error(
+        `Der gesicherte Entwurf lässt sich nicht öffnen. ${grund} In der App lässt sich das Fehlende nicht nachtragen; die Datei braucht dann, wer die App betreut.`,
+      );
     }
   }
   return bogenPruefen(daten);
@@ -605,13 +780,22 @@ export function bogenPruefen(daten: unknown): Erfassungsbogen {
   const b = daten as Erfassungsbogen;
   // Nur eine fehlende oder fremde Schema-Version heißt „keine Bogen-Datei"; ein defektes Feld bei gültiger
   // Version nennt `bogenBefund` mit dem Feld (R8-E3) — vorher hieß es „Schema-Version 2–9 erwartet" bei Version 8.
-  if (typeof b?.schemaVersion !== "number" || b.schemaVersion < 2 || b.schemaVersion > SCHEMA_VERSION) {
-    throw new Error(`Keine gültige Erfassungsbogen-Datei (Schema-Version 2–${SCHEMA_VERSION} erwartet).`);
+  if (
+    typeof b?.schemaVersion !== "number" ||
+    b.schemaVersion < 2 ||
+    b.schemaVersion > SCHEMA_VERSION
+  ) {
+    throw new Error(
+      `Keine gültige Erfassungsbogen-Datei (Schema-Version 2–${SCHEMA_VERSION} erwartet).`,
+    );
   }
   // Pflichtfelder: Ein Bogen ohne Einheitstyp ließ die Ansicht weiß werden
   // (Audit Runde 5, R5-E1). Harmloses wird ergänzt, sonst nennt die Meldung die Ursache.
   const befund = bogenBefund(b);
-  if (!befund.ok) throw new Error(`Der Bogen ist unvollständig: ${befund.ursache}. Beim Absender neu anfordern oder den QR-Code des Bogens scannen.`);
+  if (!befund.ok)
+    throw new Error(
+      `Der Bogen ist unvollständig: ${befund.ursache}. Beim Absender neu anfordern oder den QR-Code des Bogens scannen.`,
+    );
   return migriereBogen(befund.bogen);
 }
 
@@ -621,7 +805,10 @@ export function bogenPruefen(daten: unknown): Erfassungsbogen {
  * Sitzplätze eines Fahrzeugs im Kontext des Bogens: die am Fahrzeug erfasste
  * Zahl, sonst der Richtwert des Typs. `undefined` = unbekannt.
  */
-export function fahrzeugSitzplaetze(f: Fahrzeug, org: OrganisationsTyp): number | undefined {
+export function fahrzeugSitzplaetze(
+  f: Fahrzeug,
+  org: OrganisationsTyp,
+): number | undefined {
   return sitzplaetzeFuer(f, vokabularFuer(org, "fahrzeug"));
 }
 
@@ -646,7 +833,9 @@ export function fahrzeugHinweise(b: Erfassungsbogen): string[] {
   const org = b.einheit.organisation;
   b.fahrzeuge.forEach((f, i) => {
     // Vorgabe nach Einheitstyp in der Schnellerfassung zählt nicht und braucht kein Kennzeichen (R9-H2).
-    const nurVorgabe = b.personalErfassung === PersonalErfassung.NUR_STAERKE && fahrzeugUnbenannt(f);
+    const nurVorgabe =
+      b.personalErfassung === PersonalErfassung.NUR_STAERKE &&
+      fahrzeugUnbenannt(f);
     if (!nurVorgabe && !kennzeichenText(f).trim()) {
       hinweise.push(`Fahrzeug ${i + 1} hat noch kein Kennzeichen.`);
     }
@@ -668,11 +857,18 @@ export function fahrzeugHinweise(b: Erfassungsbogen): string[] {
   // zweimal gingen still durch (R2-E4).
   b.fahrzeuge.forEach((f, i) => {
     const richtwert = sitzplaetzeRichtwert(f, vokabularFuer(org, "fahrzeug"));
-    if (f.sitzplaetze != null && f.sitzplaetze > 9 && f.sitzplaetze > 2 * Math.max(richtwert ?? 0, 1)) {
-      hinweise.push(`${fahrzeugBezeichnung(f, i, org)}: ${f.sitzplaetze} Sitzplätze${richtwert != null ? ` (Richtwert ${richtwert})` : ""} — stimmt das?`);
+    if (
+      f.sitzplaetze != null &&
+      f.sitzplaetze > 9 &&
+      f.sitzplaetze > 2 * Math.max(richtwert ?? 0, 1)
+    ) {
+      hinweise.push(
+        `${fahrzeugBezeichnung(f, i, org)}: ${f.sitzplaetze} Sitzplätze${richtwert != null ? ` (Richtwert ${richtwert})` : ""} — stimmt das?`,
+      );
     }
   });
-  const kennzeichenNorm = (f: Fahrzeug) => kennzeichenText(f).toUpperCase().replace(/[\s-]/g, "");
+  const kennzeichenNorm = (f: Fahrzeug) =>
+    kennzeichenText(f).toUpperCase().replace(/[\s-]/g, "");
   const doppelt = new Set(
     b.fahrzeuge
       .map(kennzeichenNorm)
@@ -680,7 +876,9 @@ export function fahrzeugHinweise(b: Erfassungsbogen): string[] {
   );
   for (const k of doppelt) {
     const f = b.fahrzeuge.find((x) => kennzeichenNorm(x) === k)!;
-    hinweise.push(`Kennzeichen ${kennzeichenText(f)} steht mehrfach in der Fahrzeugliste — stimmt das?`);
+    hinweise.push(
+      `Kennzeichen ${kennzeichenText(f)} steht mehrfach in der Fahrzeugliste — stimmt das?`,
+    );
   }
   // Ohne Fahrzeuge reist die Einheit erklärtermaßen anders an — das ist kein
   // offener Punkt, sondern eine Aussage. Erst wenn Fahrzeuge dastehen, muss
@@ -729,7 +927,11 @@ const S_SOFORTBEDARF = 4;
  * standardmäßig mit an (für die Gesamtübersicht); auf der Personalseite
  * werden sie über `mitFahrzeugen = false` weggelassen.
  */
-export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: EebDatum): Pruefpunkt[] {
+export function pruefpunkte(
+  b: Erfassungsbogen,
+  mitFahrzeugen = true,
+  heute?: EebDatum,
+): Pruefpunkt[] {
   const hinweise: Pruefpunkt[] = [];
   // Nur wo `heute` hereinkommt (eigener Bogen vor der Übergabe): ein alter
   // Entwurf ging sonst mit „✓ vollständig und plausibel" in den QR-Code —
@@ -737,7 +939,19 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
   // Ein Tippfehler, ein Hinweis (Audit Runde 3, R3-E7): Liegt „bis" vor
   // „von", sagt der eine Hinweis dazu unten auch, welches Datum verdächtig ist
   // — „ist vorbei" für ein Datum im Jahr 2062 lenkte auf die falsche Fährte.
-  const bisVorVon = b.einsatz.zeitraumBis < b.einsatz.zeitraumVon;
+  // Ab Schema 11 zählt am selben Tag auch die Uhrzeit: 18:00 bis 08:00 ist derselbe Dreher.
+  // Verglichen wird die Wandzeit, wie sie angezeigt wird (Offset bleibt außen vor).
+  const ez = b.einsatz;
+  const [uVon, uBis] = [
+    uhrzeitAus(ez.zeitraumVonIso),
+    uhrzeitAus(ez.zeitraumBisIso),
+  ];
+  const bisVorVon =
+    ez.zeitraumBis < ez.zeitraumVon ||
+    (ez.zeitraumBis === ez.zeitraumVon &&
+      uVon != null &&
+      uBis != null &&
+      uBis < uVon);
   if (heute != null && !bisVorVon && b.einsatz.zeitraumBis < heute) {
     hinweise.push({
       text: `Einsatzzeitraum ${zeitraumDeutsch(b)} ist vorbei — gilt dieser Bogen noch für den aktuellen Einsatz? Sonst Zeitraum und Ort/Auftrag neu eintragen.`,
@@ -750,13 +964,20 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
   // Ohne den Namen der untersten Ebene bleibt die Einheit auf dem Bogen
   // namenlos (nur Organisation + Einheitstyp) und der Funkrufname ortlos.
   if (!einheitOrt(b.einheit) && b.einheit.standortRef == null) {
-    hinweise.push({ text: "Zugehörigkeit: Der Name der eigenen Einheit (unterste Ebene) fehlt.", schritt: S_EINHEIT });
+    hinweise.push({
+      text: "Zugehörigkeit: Der Ort der Einheit (unterste Ebene) fehlt.",
+      schritt: S_EINHEIT,
+      feld: "feld-einheit-name",
+    });
   }
   // Ein ausgeschriebener Einheitstyp ohne Typ-Code (Freitext) sieht in Schritt 1
   // wie eine Wahl aus, hat aber kein taktisches Zeichen und keinen Soll-Vergleich
   // (Audit Runde 4, R4-H1). Nur, wo es eine Liste gibt; in der Schnellerfassung
   // reicht der Name.
-  const typFrei = b.einheit.einheitsTyp.code == null ? (b.einheit.einheitsTyp.freitext ?? "").trim() : "";
+  const typFrei =
+    b.einheit.einheitsTyp.code == null
+      ? (b.einheit.einheitsTyp.freitext ?? "").trim()
+      : "";
   if (
     typFrei &&
     b.personalErfassung !== PersonalErfassung.NUR_STAERKE &&
@@ -767,8 +988,24 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
       schritt: S_EINHEIT,
     });
   }
+  // Die Schrittleiste zeigt „1 Einheit — offen", solange kein Typ gewählt ist; die Liste nannte den Grund nicht
+  // (R12-S2). Ohne Typ fehlen taktisches Zeichen und Soll-Vergleich beim Meldekopf.
+  const typFehlt =
+    b.einheit.einheitsTyp.code == null &&
+    !(b.einheit.einheitsTyp.freitext ?? "").trim() &&
+    b.personalErfassung !== PersonalErfassung.NUR_STAERKE &&
+    vokabularFuer(b.einheit.organisation, "einheitstyp").length > 0;
+  if (typFehlt) {
+    hinweise.push({
+      text: "Einheitstyp fehlt — ohne Typ fehlen taktisches Zeichen und Soll-Vergleich.",
+      schritt: S_EINHEIT,
+    });
+  }
   if (s.gesamt === 0) {
-    hinweise.push({ text: "Stärke ist 0 — es ist noch kein Personal erfasst.", schritt: S_PERSONAL });
+    hinweise.push({
+      text: "Stärke ist 0 — es ist noch kein Personal erfasst.",
+      schritt: S_PERSONAL,
+    });
   }
   if (s.gesamt !== s.fuehrer + s.unterfuehrer + s.mannschaft) {
     hinweise.push({
@@ -779,14 +1016,22 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
   // Unterbringung nur prüfen, wenn sie belastbar ist: bei vollständiger
   // Personalerfassung abgeleitet, im Meldekopf-Modus nur wenn manuell erfasst.
   const mwdBelastbar =
-    b.personalErfassung === PersonalErfassung.VOLLSTAENDIG || b.unterbringungManuell != null;
+    b.personalErfassung === PersonalErfassung.VOLLSTAENDIG ||
+    b.unterbringungManuell != null;
   const mwdSumme = mwd.m + mwd.w + mwd.d;
   // Schnellerfassung („Nur Stärke") mit den Karten und Fahrzeugen der Vorbelegung nach Einheitstyp: Sie
   // zählen nicht (Schritt 3 sagt es), und Hinweise zu ihnen widersprachen dem Satz — „9 Ansprechpartner
   // erfasst, Gesamtstärke nur 6" (R9-H2). Gewertet wird nur, was jemand eingetragen hat.
   const nurVorgabe = b.personalErfassung === PersonalErfassung.NUR_STAERKE;
-  const eingetragenePersonen = nurVorgabe ? b.personal.filter((p) => !personUnbenannt(p)) : b.personal;
-  if (mwdBelastbar && s.gesamt > 0 && mwdSumme !== s.gesamt && !(nurVorgabe && eingetragenePersonen.length === 0)) {
+  const eingetragenePersonen = nurVorgabe
+    ? b.personal.filter((p) => !personUnbenannt(p))
+    : b.personal;
+  if (
+    mwdBelastbar &&
+    s.gesamt > 0 &&
+    mwdSumme !== s.gesamt &&
+    !(nurVorgabe && eingetragenePersonen.length === 0)
+  ) {
     hinweise.push({
       text: `Aufteilung nach Geschlecht: ${mwd.m} männl. + ${mwd.w} weibl. + ${mwd.d} div. = ${mwdSumme} weicht von der Gesamtstärke ${s.gesamt} ab.`,
       schritt: S_PERSONAL,
@@ -808,8 +1053,14 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
   if (b.personalErfassung === PersonalErfassung.VOLLSTAENDIG) {
     const leere = b.personal.filter(personLeer).length;
     if (leere > 0) {
+      // Dieselbe Zahl wie der Knopf „Vorbelegung entfernen (n Personen ohne Namen)": Der nimmt auch Plätze mit Funktion, aber
+      // ohne Namen mit (R14-N1).
+      const ohneNamen = b.personal.filter(personUnbenannt).length;
       hinweise.push({
-        text: `${leere} Personenkarte${leere === 1 ? " ohne Angaben zählt" : "n ohne Angaben zählen"} in die Stärke — ausfüllen oder entfernen.`,
+        text:
+          ohneNamen > leere
+            ? `${ohneNamen} Personenkarten ohne Namen zählen in die Stärke (${leere} davon ganz leer) — ausfüllen oder entfernen.`
+            : `${leere} Personenkarte${leere === 1 ? " ohne Angaben zählt" : "n ohne Angaben zählen"} in die Stärke — ausfüllen oder entfernen.`,
         schritt: S_PERSONAL,
       });
     }
@@ -831,11 +1082,16 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
     });
   }
   if (bisVorVon) {
-    const fern = heute == null ? [] : [b.einsatz.zeitraumVon, b.einsatz.zeitraumBis].filter((d) => Math.abs(d - heute) > 365);
-    const verdaechtig = fern.length === 1 ? datumZuIso(fern[0]!) : null;
+    const fern =
+      heute == null
+        ? []
+        : [b.einsatz.zeitraumVon, b.einsatz.zeitraumBis].filter(
+            (d) => Math.abs(d - heute) > 365,
+          );
+    const verdaechtig = fern.length === 1 ? datumAnzeige(fern[0]!) : null;
     hinweise.push({
       text: verdaechtig
-        ? `Einsatzzeitraum: „bis“ liegt vor „von“ — ${datumDeutsch(verdaechtig)} liegt mehr als ein Jahr entfernt, Tippfehler im Jahr ${verdaechtig.slice(0, 4)}?`
+        ? `Einsatzzeitraum: „bis“ liegt vor „von“ — ${verdaechtig} liegt mehr als ein Jahr entfernt, Tippfehler im Jahr${/\d{4}$/.test(verdaechtig) ? ` ${verdaechtig.slice(-4)}` : ""}?`
         : "Einsatzzeitraum: „bis“ liegt vor „von“.",
       schritt: S_EINSATZ,
     });
@@ -856,23 +1112,42 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
   // Weitere Tippfehler, die bisher ohne Hinweis durchgingen (Audit Runde 2,
   // R2-E4). Alle als Frage, nichts sperrt.
   const ohneZiffer = (t?: string) => !!t?.trim() && !/\d/.test(t);
-  const ohneAt = (t?: string) => !!t?.trim() && !t.includes("@");
-  const nurZiffern = (t?: string) => !!t?.trim() && /^[\d\s./-]+$/.test(t.trim());
+  const nurZiffern = (t?: string) =>
+    !!t?.trim() && /^[\d\s./-]+$/.test(t.trim());
   b.einheit.hierarchie.forEach((h) => {
     const wo = h.name.trim() || "Zugehörigkeit";
-    if (ohneZiffer(h.telefon)) hinweise.push({ text: `${wo}: Rufnummer „${h.telefon}" enthält keine Ziffer — stimmt das?`, schritt: S_EINHEIT });
-    if (ohneAt(h.email)) hinweise.push({ text: `${wo}: E-Mail „${h.email}" ohne „@" — stimmt das?`, schritt: S_EINHEIT });
-    if (nurZiffern(h.name)) hinweise.push({ text: `Zugehörigkeit „${h.name}" besteht nur aus Ziffern — stimmt der Name?`, schritt: S_EINHEIT });
+    if (ohneZiffer(h.telefon))
+      hinweise.push({
+        text: `${wo}: Rufnummer „${h.telefon}" enthält keine Ziffer — stimmt das?`,
+        schritt: S_EINHEIT,
+      });
+    if (emailProblem(h.email))
+      hinweise.push({
+        text: `${wo}: ${emailSatz(h.email)} — stimmt das?`,
+        schritt: S_EINHEIT,
+      });
+    if (nurZiffern(h.name))
+      hinweise.push({
+        text: `Zugehörigkeit „${h.name}" besteht nur aus Ziffern — stimmt der Name?`,
+        schritt: S_EINHEIT,
+      });
   });
   b.personal.forEach((p, i) => {
     const wer = personBezeichnung(p, i);
     if (nurZiffern(p.vorname) || nurZiffern(p.nachname)) {
-      hinweise.push({ text: `${wer}: Der Name besteht nur aus Ziffern — stimmt das?`, schritt: S_PERSONAL });
+      hinweise.push({
+        text: `${wer}: Der Name besteht nur aus Ziffern — stimmt das?`,
+        schritt: S_PERSONAL,
+      });
     }
     for (const k of p.kontakte) {
-      if (k.art === KontaktArt.EMAIL ? ohneAt(k.wert) : ohneZiffer(k.wert)) {
+      // Ein Funkrufname („Heros Oldenburg 18/13-1") folgt weder der Nummern- noch der Adressregel.
+      if (k.art === KontaktArt.FUNK) continue;
+      if (
+        k.art === KontaktArt.EMAIL ? emailProblem(k.wert) : ohneZiffer(k.wert)
+      ) {
         hinweise.push({
-          text: `${wer}: ${k.art === KontaktArt.EMAIL ? `E-Mail „${k.wert}" ohne „@"` : `Rufnummer „${k.wert}" ohne Ziffer`} — stimmt das?`,
+          text: `${wer}: ${k.art === KontaktArt.EMAIL ? emailSatz(k.wert) : `Rufnummer „${k.wert}" ohne Ziffer`} — stimmt das?`,
           schritt: S_PERSONAL,
         });
       }
@@ -887,16 +1162,30 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
       });
     }
   }
-  if (heute != null && !bisVorVon && (Math.abs(b.einsatz.zeitraumVon - heute) > 365 || b.einsatz.zeitraumBis - heute > 365)) {
-    hinweise.push({ text: `Einsatzzeitraum ${zeitraumDeutsch(b)} liegt mehr als ein Jahr entfernt — Tippfehler im Jahr?`, schritt: S_EINSATZ });
+  if (
+    heute != null &&
+    !bisVorVon &&
+    (Math.abs(b.einsatz.zeitraumVon - heute) > 365 ||
+      b.einsatz.zeitraumBis - heute > 365)
+  ) {
+    hinweise.push({
+      text: `Einsatzzeitraum ${zeitraumDeutsch(b)} liegt mehr als ein Jahr entfernt — Tippfehler im Jahr?`,
+      schritt: S_EINSATZ,
+    });
   }
   // Zahlendreher in der Stärke: 99 statt 9 fällt beim Tippen nicht auf, am
   // Meldekopf zählt die Einheit dann mit 100 in die Lage. Zwei Muster, die
   // fast nie stimmen: ein Einzelwert über 50 und mehr Führer als Mannschaft
   // (ab vier Personen — ein Trupp aus Führer und Unterführer ist normal).
   // Bewusst als Frage formuliert: ein Führungsstab kann so aussehen.
-  hinweise.push(...staerkePlausibilitaet(s).map((text) => ({ text, schritt: S_PERSONAL })));
-  if (b.sofortbedarf && s.gesamt > 0 && b.sofortbedarf.verpflegungPersonen > s.gesamt) {
+  hinweise.push(
+    ...staerkePlausibilitaet(s).map((text) => ({ text, schritt: S_PERSONAL })),
+  );
+  if (
+    b.sofortbedarf &&
+    s.gesamt > 0 &&
+    b.sofortbedarf.verpflegungPersonen > s.gesamt
+  ) {
     hinweise.push({
       text: `Verpflegung für ${b.sofortbedarf.verpflegungPersonen} Personen angefordert, die Gesamtstärke ist aber ${s.gesamt}.`,
       schritt: S_SOFORTBEDARF,
@@ -904,13 +1193,23 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
   }
   if (b.sofortbedarf) {
     const vp = verpflegung(b);
-    if (vp.vegetarisch + vp.vegan > b.sofortbedarf.verpflegungPersonen) {
+    // Nur bei angeforderter Verpflegung: Wer bewusst 0 Portionen meldet (Selbstversorger), wird nicht nach der
+    // Zusammensetzung der nicht bestellten Portionen gefragt (R12-W2).
+    if (
+      b.sofortbedarf.verpflegungPersonen > 0 &&
+      vp.vegetarisch + vp.vegan > b.sofortbedarf.verpflegungPersonen
+    ) {
       hinweise.push({
         text: "Sofortbedarf: mehr Vegetarier/Veganer erfasst als Personen mit Verpflegungsbedarf.",
         schritt: S_SOFORTBEDARF,
       });
     }
-    hinweise.push(...betriebsstoffPlausibilitaet(b).map((text) => ({ text, schritt: S_SOFORTBEDARF })));
+    hinweise.push(
+      ...betriebsstoffPlausibilitaet(b).map((text) => ({
+        text,
+        schritt: S_SOFORTBEDARF,
+      })),
+    );
   }
   // Manuell erfasste Verpflegungs-Aufteilung (Meldekopf): veg + vegan dürfen die
   // Gesamtstärke nicht übersteigen — Hinweis schon bei der Stärkeerfassung.
@@ -929,13 +1228,34 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
   // Nicht bei der Schnellerfassung: deren Schritt 1 sagt ausdrücklich
   // „Einsatzdaten … können offen bleiben", die Übersicht zählte das leere
   // Feld trotzdem als offenen Punkt für die Weitergabe (Audit Runde 2, R2-H9).
-  if (!b.einsatz.ortAuftrag.trim() && b.personalErfassung !== PersonalErfassung.NUR_STAERKE) {
-    hinweise.push({ text: "Ort/Auftrag ist noch leer.", schritt: S_EINSATZ, feld: "feld-ort-auftrag" });
+  if (
+    !b.einsatz.ortAuftrag.trim() &&
+    b.personalErfassung !== PersonalErfassung.NUR_STAERKE
+  ) {
+    hinweise.push({
+      text: "Ort/Auftrag ist noch leer.",
+      schritt: S_EINSATZ,
+      feld: "feld-ort-auftrag",
+    });
   }
+  // Nur Rufnummern zählen: über E-Mail oder Funk allein ruft der Meldekopf nicht zurück.
   const telefonErfasst = b.personal.some((p) =>
-    p.kontakte.some((k) => k.art !== KontaktArt.EMAIL && (k.wert ?? "").trim() !== ""),
+    p.kontakte.some(
+      (k) =>
+        k.art !== KontaktArt.EMAIL &&
+        k.art !== KontaktArt.FUNK &&
+        (k.wert ?? "").trim() !== "",
+    ),
   );
-  if (s.gesamt > 0 && !telefonErfasst && !(nurVorgabe && eingetragenePersonen.length === 0)) {
+  // Anonymisierte Bögen (Datenschutzfrist abgelaufen) tragen keine Rufnummern und Fahrerlaubnisse mehr, weil das Gerät sie
+  // gelöscht hat, nicht weil die Einheit sie nicht hat: weder Bildschirm noch Papier melden das als Mangel (R12-A1).
+  const anonymisiert = bogenAnonymisiert(b);
+  if (
+    s.gesamt > 0 &&
+    !telefonErfasst &&
+    !anonymisiert &&
+    !(nurVorgabe && eingetragenePersonen.length === 0)
+  ) {
     hinweise.push({
       text: "Keine telefonische Erreichbarkeit erfasst — mindestens eine Führungskraft sollte eine Nummer angeben.",
       schritt: S_PERSONAL,
@@ -946,7 +1266,11 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
       ...fahrzeugHinweise(b).map((text) => {
         const kz = /^Fahrzeug (\d+) hat noch kein Kennzeichen/.exec(text);
         // Die Sitzplatz-Bilanz springt zum Sitzplatz-Feld des ersten Fahrzeugs (R6-N7).
-        const feld = kz ? `feld-kennzeichen-${Number(kz[1]) - 1}` : /^Sitzplätze: /.test(text) ? "feld-sitzplaetze-0" : null;
+        const feld = kz
+          ? `feld-kennzeichen-${Number(kz[1]) - 1}`
+          : /^Sitzplätze: /.test(text)
+            ? "feld-sitzplaetze-0"
+            : null;
         return { text, schritt: S_FAHRZEUGE, ...(feld ? { feld } : {}) };
       }),
     );
@@ -955,12 +1279,15 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
     // findet der Kraftfahrer-Filter am Meldekopf die Einheit nicht. Nur bei
     // vollständiger Personalerfassung belastbar: die Stärke-Schnellerfassung
     // kennt keine Klassen je Person.
-    const kraftfahrerErfasst = b.personal.some((p) => alleFahrerlaubnisse(p).length > 0);
+    const kraftfahrerErfasst = b.personal.some(
+      (p) => alleFahrerlaubnisse(p).length > 0,
+    );
     if (
       b.fahrzeuge.length > 0 &&
       b.personal.length > 0 &&
       b.personalErfassung === PersonalErfassung.VOLLSTAENDIG &&
-      !kraftfahrerErfasst
+      !kraftfahrerErfasst &&
+      !anonymisiert
     ) {
       hinweise.push({
         text: "Fahrzeuge erfasst, aber kein Kraftfahrer: Bei keiner Person ist eine Fahrerlaubnisklasse eingetragen.",
@@ -972,7 +1299,10 @@ export function pruefpunkte(b: Erfassungsbogen, mitFahrzeugen = true, heute?: Ee
 }
 
 /** Nur die Hinweistexte — für Stellen, die keinen Sprung zum Schritt brauchen. */
-export function plausibilitaet(b: Erfassungsbogen, mitFahrzeugen = true): string[] {
+export function plausibilitaet(
+  b: Erfassungsbogen,
+  mitFahrzeugen = true,
+): string[] {
   return pruefpunkte(b, mitFahrzeugen).map((p) => p.text);
 }
 
@@ -996,11 +1326,12 @@ export function staerkePlausibilitaet(s: {
     [s.mannschaft, "Mannschaft"],
   ];
   for (const [wert, name] of einzel) {
-    if (wert > STAERKE_EINZELWERT_GRENZE) hinweise.push(`Stärke: ${wert} ${name} — stimmt das?`);
+    if (wert > STAERKE_EINZELWERT_GRENZE)
+      hinweise.push(`Stärke: ${wert} ${name} — stimmt das?`);
   }
   if (s.gesamt >= 4 && s.fuehrer > s.mannschaft) {
     hinweise.push(
-      `Stärke ${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} / ${s.gesamt}: mehr Führer als Mannschaft — stimmt das?`,
+      `Stärke ${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} // ${s.gesamt}: mehr Führer als Mannschaft — stimmt das?`,
     );
   }
   return hinweise;
@@ -1015,7 +1346,9 @@ const BETRIEBSSTOFF_JE_FAHRZEUG_GRENZE = 1000;
  * großzügig genug für Aggregate und Reservekanister, aber nicht für einen
  * Zahlendreher. Nicht sperrend: wer wirklich einen Tankwagen füllt, lässt es stehen.
  */
-export function betriebsstoffPlausibilitaet(b: Pick<Erfassungsbogen, "sofortbedarf" | "fahrzeuge">): string[] {
+export function betriebsstoffPlausibilitaet(
+  b: Pick<Erfassungsbogen, "sofortbedarf" | "fahrzeuge">,
+): string[] {
   const s = b.sofortbedarf;
   if (!s) return [];
   const fahrzeuge = Math.max(1, b.fahrzeuge.length);
@@ -1030,7 +1363,9 @@ export function betriebsstoffPlausibilitaet(b: Pick<Erfassungsbogen, "sofortbeda
     .map(
       ([liter, name]) =>
         `Sofortbedarf: ${literText(liter)} ${name}` +
-        (b.fahrzeuge.length > 0 ? ` für ${b.fahrzeuge.length} ${b.fahrzeuge.length === 1 ? "Fahrzeug" : "Fahrzeuge"}` : "") +
+        (b.fahrzeuge.length > 0
+          ? ` für ${b.fahrzeuge.length} ${b.fahrzeuge.length === 1 ? "Fahrzeug" : "Fahrzeuge"}`
+          : "") +
         ` — mehr als ${literText(BETRIEBSSTOFF_JE_FAHRZEUG_GRENZE)} je Fahrzeug. Stimmt das?`,
     );
 }
@@ -1051,11 +1386,53 @@ export function heuteDatum(): EebDatum {
   return Math.floor(jetztZeitpunkt() / MINUTEN_JE_TAG);
 }
 
-/** Einsatzzeitraum lesbar: „18.07.2026 – 22.07.2026" bzw. ein Tag. */
-export function zeitraumDeutsch(b: Erfassungsbogen): string {
-  const von = datumDeutsch(datumZuIso(b.einsatz.zeitraumVon));
-  const bis = datumDeutsch(datumZuIso(b.einsatz.zeitraumBis));
-  return von === bis ? von : `${von} – ${bis}`;
+/**
+ * Einsatzzeitraum lesbar: „18.07.2026 – 22.07.2026" bzw. ein Tag; mit Uhrzeit (ab Schema 11)
+ * „18.07.2026, 08:00 – 22.07.2026, 18:00" bzw. „18.07.2026, 08:00–18:00 Uhr".
+ */
+export function zeitraumDeutsch(b: Pick<Erfassungsbogen, "einsatz">): string {
+  const ez = b.einsatz;
+  const von = datumAnzeige(ez.zeitraumVon);
+  const bis = datumAnzeige(ez.zeitraumBis);
+  const [uVon, uBis] = [
+    uhrzeitAus(ez.zeitraumVonIso),
+    uhrzeitAus(ez.zeitraumBisIso),
+  ];
+  if (von === bis && uVon != null && uBis != null)
+    return `${von}, ${uhrzeitZuIso(uVon)}–${uhrzeitZuIso(uBis)} Uhr`;
+  if (von === bis && uVon == null && uBis == null) return von;
+  return `${zeitraumGrenze(ez.zeitraumVon, uVon)} – ${zeitraumGrenze(ez.zeitraumBis, uBis)}`;
+}
+
+/** Ein Ende des Zeitraums: „18.07.2026" bzw. mit Uhrzeit „18.07.2026, 08:00". */
+export function zeitraumGrenze(
+  tag: EebDatum,
+  uhrzeit: number | undefined,
+): string {
+  return uhrzeit == null
+    ? datumAnzeige(tag)
+    : `${datumAnzeige(tag)}, ${uhrzeitZuIso(uhrzeit)}`;
+}
+
+/** „von – bis" immer mit beiden Enden (Übersicht, PDF, Sammlung), mit Uhrzeit, wo gesetzt. */
+export function zeitraumVonBis(b: Pick<Erfassungsbogen, "einsatz">): string {
+  const ez = b.einsatz;
+  return `${zeitraumGrenze(ez.zeitraumVon, uhrzeitAus(ez.zeitraumVonIso))} – ${zeitraumGrenze(ez.zeitraumBis, uhrzeitAus(ez.zeitraumBisIso))}`;
+}
+
+/**
+ * Tag (Tage seit der Epoche) als „14.05.2026“. Liegt der Wert außerhalb dessen, was ein Datum mit vierstelligem Jahr darstellt
+ * (beschädigte oder von Hand bearbeitete Datei), steht „ungültiges Datum“ — nicht „undefined.07.+011842“ (R17-A6).
+ */
+export function datumAnzeige(tage: number): string {
+  try {
+    const iso = datumZuIso(tage);
+    return /^\d{4}-\d{2}-\d{2}$/.test(iso)
+      ? datumDeutsch(iso)
+      : "ungültiges Datum";
+  } catch {
+    return "ungültiges Datum";
+  }
 }
 
 export function zeitpunktDeutsch(z: EebZeitpunkt): string {
@@ -1076,14 +1453,18 @@ export function zeitpunktDeutsch(z: EebZeitpunkt): string {
  * Nimmt den Bogen vor der Änderung und den Patch, gibt den Patch zurück —
  * ergänzt um den nachgezogenen Sofortbedarf, wenn nötig.
  */
-export function verpflegungMitziehen(vorher: Erfassungsbogen, patch: Partial<Erfassungsbogen>): Partial<Erfassungsbogen> {
+export function verpflegungMitziehen(
+  vorher: Erfassungsbogen,
+  patch: Partial<Erfassungsbogen>,
+): Partial<Erfassungsbogen> {
   const nachher = { ...vorher, ...patch };
   const sb = nachher.sofortbedarf;
   if (!sb) return patch;
   const alt = staerke(vorher).gesamt;
   const neu = staerke(nachher).gesamt;
   if (alt === neu) return patch;
-  if (sb.verpflegungPersonen !== alt && sb.verpflegungPersonen !== 0) return patch;
+  if (sb.verpflegungPersonen !== alt && sb.verpflegungPersonen !== 0)
+    return patch;
   return { ...patch, sofortbedarf: { ...sb, verpflegungPersonen: neu } };
 }
 
@@ -1113,11 +1494,21 @@ export const SCHRITT_STATUS_TITEL: Record<SchrittStatus, string> = {
 export function schrittStatus(b: Erfassungsbogen): SchrittStatus[] {
   const e = b.einheit;
   const schnell = b.personalErfassung === PersonalErfassung.NUR_STAERKE;
-  const typGesetzt = e.einheitsTyp.code != null || !!e.einheitsTyp.freitext?.trim();
+  const typGesetzt =
+    e.einheitsTyp.code != null || !!e.einheitsTyp.freitext?.trim();
   // Die erste Zugehörigkeits-Ebene ist die eigene Einheit und damit Pflicht.
   const nameGesetzt = !!einheitOrt(e) || e.standortRef != null;
-  const einheitBegonnen = typGesetzt || nameGesetzt || e.hierarchie.length > 1 || !!e.organisationName;
-  const einheit: SchrittStatus = (typGesetzt || schnell) && nameGesetzt ? "ok" : einheitBegonnen ? "begonnen" : "leer";
+  const einheitBegonnen =
+    typGesetzt ||
+    nameGesetzt ||
+    e.hierarchie.length > 1 ||
+    !!e.organisationName;
+  const einheit: SchrittStatus =
+    (typGesetzt || schnell) && nameGesetzt
+      ? "ok"
+      : einheitBegonnen
+        ? "begonnen"
+        : "leer";
 
   const ez = b.einsatz;
   const einsatz: SchrittStatus = ez.ortAuftrag.trim()
@@ -1137,20 +1528,32 @@ export function schrittStatus(b: Erfassungsbogen): SchrittStatus[] {
     b.personalErfassung === PersonalErfassung.VOLLSTAENDIG &&
     b.personal.length > 0 &&
     b.personal.every((p) => personLeer(p) || personUnbenannt(p));
+  // Auch die unveränderten Zahlen der Schnellerfassung sind nur die Vorbelegung, nicht gezählt: kein Haken (R16-S2).
   const personal: SchrittStatus =
-    staerkeGemeldet && !nurLeereKarten ? "ok" : b.personal.length > 0 || staerkeGemeldet ? "begonnen" : "leer";
+    staerkeGemeldet && !nurLeereKarten && !nurSollstaerke(b)
+      ? "ok"
+      : b.personal.length > 0 || staerkeGemeldet
+        ? "begonnen"
+        : "leer";
 
   // Vorbelegte Fahrzeuge ohne ein einziges Kennzeichen sind begonnen, nicht fertig (R2-N3).
   const fahrzeuge: SchrittStatus =
-    b.fahrzeuge.length === 0 ? "leer" : b.fahrzeuge.every(fahrzeugUnbenannt) ? "begonnen" : "ok";
+    b.fahrzeuge.length === 0
+      ? "leer"
+      : b.fahrzeuge.every(fahrzeugUnbenannt)
+        ? "begonnen"
+        : "ok";
 
   // Sofortbedarf/Sonstiges ist durchweg optional: „ok", sobald etwas erfasst ist, sonst neutral „leer".
-  const sofortbedarf: SchrittStatus = b.sofortbedarf != null || !!b.sonstiges?.trim() ? "ok" : "leer";
+  const sofortbedarf: SchrittStatus =
+    b.sofortbedarf != null || !!b.sonstiges?.trim() ? "ok" : "leer";
 
   // Eigene Prüfpunkte eines Schritts nehmen ihm den Haken (R3-N4). Die
   // Fahrzeugpunkte nur, wo die App sie auch zeigt (nicht in der Schnellerfassung).
   const mitPunkten = new Set(pruefpunkte(b, !schnell).map((p) => p.schritt));
-  return [einheit, einsatz, personal, fahrzeuge, sofortbedarf].map((st, i) => (st === "ok" && mitPunkten.has(i) ? "begonnen" : st));
+  return [einheit, einsatz, personal, fahrzeuge, sofortbedarf].map((st, i) =>
+    st === "ok" && mitPunkten.has(i) ? "begonnen" : st,
+  );
 }
 
 /**
@@ -1174,14 +1577,19 @@ export function bogenHatInhalt(b: Erfassungsbogen): boolean {
  * sonst ist die Zahl die Angabe.
  */
 export function nurSollstaerke(b: Erfassungsbogen): boolean {
-  if (b.personal.length === 0 || !b.personal.every(personUnbenannt)) return false;
+  if (b.personal.length === 0 || !b.personal.every(personUnbenannt))
+    return false;
   if (b.personalErfassung !== PersonalErfassung.NUR_STAERKE) return true;
   // Schnellerfassung: Die Zahl ist die Angabe — aber nur, wenn sie angefasst wurde.
   // Gleicht sie noch der Vorbelegung nach Einheitstyp, hat niemand gezählt (R7-A1).
   const m = b.staerkeManuell;
   if (!m) return true;
   const soll = staerke({ personal: b.personal });
-  return soll.fuehrer === m.fuehrer && soll.unterfuehrer === m.unterfuehrer && soll.mannschaft === m.mannschaft;
+  return (
+    soll.fuehrer === m.fuehrer &&
+    soll.unterfuehrer === m.unterfuehrer &&
+    soll.mannschaft === m.mannschaft
+  );
 }
 
 // ------------------------------------------------------------- Neuer Bogen
@@ -1205,7 +1613,7 @@ export function neuerBogen(): Erfassungsbogen {
       einheitsTyp: {},
       hierarchie: [ersteEbene(OrganisationsTyp.THW)],
     },
-    einsatz: { zeitraumVon: heute, zeitraumBis: heute, ortAuftrag: "" },
+    einsatz: einsatzVorgabe(heute),
     personalErfassung: PersonalErfassung.VOLLSTAENDIG,
     personal: [],
     fahrzeuge: [],
@@ -1236,12 +1644,19 @@ export function neuesFahrzeug(): Fahrzeug {
  * damit die Rückfrage und der Bogen dieselbe Person gleich nennen.
  */
 export function personBezeichnung(p: Person, index: number): string {
-  const name = [p.nachname, p.vorname].map((s) => s.trim()).filter(Boolean).join(", ");
+  const name = [p.nachname, p.vorname]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(", ");
   return name || `Person ${index + 1}`;
 }
 
 /** Wie `personBezeichnung`, für ein Fahrzeug: Typ und Kennzeichen, sonst die Stelle. */
-export function fahrzeugBezeichnung(f: Fahrzeug, index: number, org: OrganisationsTyp): string {
+export function fahrzeugBezeichnung(
+  f: Fahrzeug,
+  index: number,
+  org: OrganisationsTyp,
+): string {
   const typ = vokabText(f.typ, vokabularFuer(org, "fahrzeug"), "kurz");
   const teile = [typ, f.kennzeichen?.trim()].filter(Boolean);
   return teile.length > 0 ? teile.join(" ") : `Fahrzeug ${index + 1}`;
@@ -1298,7 +1713,9 @@ export function personUnbenannt(p: Person): boolean {
  * Runde 3, R3-N2), ebenso der Wechsel des Einheitstyps.
  */
 export function fahrzeugUnbenannt(f: Fahrzeug): boolean {
-  return !f.kennzeichen?.trim() && !f.aenderungen?.trim() && f.sitzplaetze == null;
+  return (
+    !f.kennzeichen?.trim() && !f.aenderungen?.trim() && f.sitzplaetze == null
+  );
 }
 
 /** Wie `personLeer`, für ein Fahrzeug. */

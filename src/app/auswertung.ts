@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/auswertung.ts` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/auswertung.ts` (Commit 1d7ed5f).
  *
  * Auswertung einer Einsatz-Sammlung: Summen über die aktuell anwesenden
  * Einheiten. „Aktuell" heißt: pro Einheit nur die neueste Revision, und nur
@@ -12,6 +12,7 @@
  */
 
 import {
+  PersonalErfassung,
   staerke,
   unterbringungMWD,
   verpflegung,
@@ -21,12 +22,19 @@ import {
 } from "@bos/eeb-format/model";
 import { EinsatzArt, MeldeStatus, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { geltendeJeEinheit } from "./fassung-vorrang";
+import { angabenZeit } from "./angaben-alter";
 
 export interface EinsatzSummen {
   /** Anzahl anwesender Einheiten (nicht Personen). */
   einheiten: number;
   staerke: Staerke;
   verpflegung: VerpflegungSplit;
+  /**
+   * Personen, für die Verpflegung ausdrücklich angefordert ist (Schritt 5 angehakt, R11-W1).
+   * `verpflegung.gesamt` ist die Kopfstärke nach Bogen und bleibt davon getrennt: Wer nichts
+   * angekreuzt hat, will nicht mitbestellt werden.
+   */
+  verpflegungAngefordert: number;
   unterbringung: { m: number; w: number; d: number };
   /**
    * Personen, deren M/W/D-Aufteilung niemand angegeben hat (Schnellerfassung
@@ -47,6 +55,24 @@ export interface EinsatzSummen {
   /** Einheiten, die Ruhezeit angemeldet haben. */
   ruhezeitErforderlich: number;
   fahrzeuge: number;
+  /**
+   * Einheiten, deren Bedarf (Unterbringung, Ruhezeit, Betriebsstoff, Fahrzeuge) niemand erfasst hat — Schnellerfassung
+   * „nur Stärke". „Keine Unterbringung angefordert" wäre für sie eine falsche Aussage (R14-W1).
+   */
+  bedarfOhneAngabe: number;
+}
+
+/**
+ * Hat bei dieser Meldung niemand den Bedarf erfasst? Schnellerfassung (nur Stärke) ohne Fahrzeuge, Unterbringung,
+ * Ruhezeit und Betriebsstoff: leer heißt dort „nicht gefragt", nicht „nicht nötig" (R14-W1).
+ */
+export function bedarfNichtErfasst(b: Erfassungsbogen): boolean {
+  const sb = b.sofortbedarf;
+  return (
+    b.personalErfassung === PersonalErfassung.NUR_STAERKE &&
+    b.fahrzeuge.length === 0 &&
+    (!sb || (!sb.dieselLiter && !sb.benzinLiter && !sb.gemischLiter && !sb.unterbringung && !sb.ruhezeitErforderlich))
+  );
 }
 
 /**
@@ -89,6 +115,7 @@ function leereSummen(): EinsatzSummen {
     einheiten: 0,
     staerke: { fuehrer: 0, unterfuehrer: 0, mannschaft: 0, gesamt: 0 },
     verpflegung: { gesamt: 0, fleisch: 0, vegetarisch: 0, vegan: 0 },
+    verpflegungAngefordert: 0,
     unterbringung: { m: 0, w: 0, d: 0 },
     unterbringungOhneAngabe: 0,
     unterbringungBenoetigt: 0,
@@ -96,6 +123,7 @@ function leereSummen(): EinsatzSummen {
     kraftstoff: { dieselLiter: 0, benzinLiter: 0, gemischLiter: 0 },
     ruhezeitErforderlich: 0,
     fahrzeuge: 0,
+    bedarfOhneAngabe: 0,
   };
 }
 
@@ -116,6 +144,26 @@ export function verpflegungLage(b: Erfassungsbogen): VerpflegungSplit {
     return { gesamt, fleisch: gesamt, vegetarisch: 0, vegan: 0 };
   }
   return verpflegung(b);
+}
+
+/**
+ * Personen, für die dieser Bogen Verpflegung anfordert: nur mit angehaktem Schritt 5 (Sofortbedarf),
+ * dann die dort eingetragene Zahl. Ohne Sofortbedarf 0 — die Kopfstärke ist keine Bestellung (R11-W1).
+ */
+export function verpflegungAngefordertLage(b: Erfassungsbogen): number {
+  return b.sofortbedarf ? Math.max(0, b.sofortbedarf.verpflegungPersonen) : 0;
+}
+
+/**
+ * Verpflegung für Kopfzeile und Lageblatt: Stimmen angefordert und Stärke überein, steht eine Zahl
+ * („Verpflegung 9"); sonst beide benannt („Verpflegung angefordert 0 (Stärke 9)", R11-W1).
+ */
+export function verpflegungText(s: Pick<EinsatzSummen, "verpflegung" | "verpflegungAngefordert">): string {
+  if (s.verpflegungAngefordert === s.verpflegung.gesamt) return `Verpflegung ${s.verpflegung.gesamt}`;
+  // R20-N5: ein Satz, kein „angefordert 0 … nicht erfasst": was angefordert ist, gegen die Zahl der Personen vor Ort.
+  return s.verpflegungAngefordert === 0
+    ? `Verpflegung: kein Bedarf gemeldet (${s.verpflegung.gesamt} Personen vor Ort)` // R21-N6: „keine angefordert" klang nach „nichts nötig"
+    : `Verpflegung: ${s.verpflegungAngefordert} angefordert (${s.verpflegung.gesamt} Personen vor Ort)`;
 }
 
 /**
@@ -149,6 +197,7 @@ export function summiereBoegen(boegen: Erfassungsbogen[]): EinsatzSummen {
     s.verpflegung.fleisch += vp.fleisch;
     s.verpflegung.vegetarisch += vp.vegetarisch;
     s.verpflegung.vegan += vp.vegan;
+    s.verpflegungAngefordert += verpflegungAngefordertLage(b);
 
     const u = unterbringungLage(b);
     s.unterbringung.m += u.m;
@@ -174,6 +223,7 @@ export function summiereBoegen(boegen: Erfassungsbogen[]): EinsatzSummen {
 
     s.fahrzeuge += b.fahrzeuge.length;
     s.einheiten++;
+    if (bedarfNichtErfasst(b)) s.bedarfOhneAngabe++;
   }
   return s;
 }
@@ -191,6 +241,36 @@ export function summiereBoegen(boegen: Erfassungsbogen[]): EinsatzSummen {
  */
 export function mwdText(x: { m: number; w: number; d: number; ohneAngabe?: number }): string {
   return `${x.m} männl. / ${x.w} weibl. / ${x.d} div.${x.ohneAngabe ? ` · ${x.ohneAngabe} ohne Angabe zum Geschlecht` : ""}`;
+}
+
+/**
+ * Verpflegung eines Bogens als Satz: „11 Personen, davon 3 vegetarisch, 1 vegan". Bei 0 Portionen steht „nicht
+ * angefordert" und die Ernährung der Personen getrennt — „0 Personen, davon 3 vegetarisch" widersprach sich
+ * (R13-W4). Ohne Angabe zur Aufteilung (Schnellerfassung): „· Aufteilung vegetarisch/vegan: keine Angabe".
+ */
+export function verpflegungBogenText(personen: number, vp: { vegetarisch: number; vegan: number }, aufteilungAngegeben = true): string {
+  if (personen <= 0) {
+    return aufteilungAngegeben && (vp.vegetarisch > 0 || vp.vegan > 0)
+      ? `nicht angefordert (Ernährung der Personen: ${vp.vegetarisch} vegetarisch, ${vp.vegan} vegan)`
+      : "nicht angefordert";
+  }
+  return `${personen} Personen` + (aufteilungAngegeben ? `, davon ${vp.vegetarisch} vegetarisch, ${vp.vegan} vegan` : " · Aufteilung vegetarisch/vegan: keine Angabe");
+}
+
+/**
+ * Betriebsstoff ohne Nullwerte: „40 l Diesel / 10 l Gemisch", leer ohne Bedarf.
+ * „0 l Diesel / 0 l Benzin / 0 l Gemisch" las sich wie eine Anforderung
+ * (Rückmeldung OV Chemnitz, 11/2026).
+ */
+export function betriebsstoffText(sb: { dieselLiter: number; benzinLiter: number; gemischLiter: number }): string {
+  return [
+    [sb.dieselLiter, "Diesel"],
+    [sb.benzinLiter, "Benzin"],
+    [sb.gemischLiter, "Gemisch"],
+  ]
+    .filter(([l]) => (l as number) > 0)
+    .map(([l, art]) => `${l} l ${art}`)
+    .join(" / ");
 }
 
 /**
@@ -217,6 +297,8 @@ export interface ZugGruppe {
   /** Zug-/Verbands-Etikett; undefined = Einheiten ohne Etikett („Einzeln"). */
   zugEtikett?: string;
   summen: EinsatzSummen;
+  /** Eingang der ältesten geltenden Meldung dieser Gruppe (ms) — Altersaussage je Zug (R12-K3). */
+  aeltesteMeldungAm?: number;
 }
 
 /**
@@ -236,5 +318,9 @@ export function aggregiereNachZug(eintraege: MeldeEintrag[], art?: EinsatzArt): 
       if (b === "") return -1;
       return a.localeCompare(b, "de");
     })
-    .map(([k, ms]) => ({ zugEtikett: k || undefined, summen: summiere(ms) }));
+    .map(([k, ms]) => ({
+      zugEtikett: k || undefined,
+      summen: summiere(ms),
+      aeltesteMeldungAm: Math.min(...ms.map(angabenZeit)),
+    }));
 }

@@ -43,6 +43,7 @@ import {
 import { staerke } from "@bos/eeb-format/model";
 import { geltendeJeEinheit, istPlatzhalterFassung } from "../fassung-vorrang";
 import { einheitAnzeigename, zeitpunktDeutsch } from "../hilfen";
+import { zugNormalisiert } from "../zug-name";
 import { sammlungenSchreiben, zeitKurz, type FuehrungsVermerk } from "../eintrag-zeiten";
 
 export type Feld = "status" | "zug" | "notiz" | "eintreffzeit";
@@ -271,6 +272,17 @@ export interface AbgleichErgebnis {
   bekannt: Record<string, Partial<Record<StandFeld, string>>>;
 }
 
+/**
+ * Hat das Einspielen einer Datei etwas verändert? Neue Meldungen oder aktualisierte Werte ja; eine ältere Datei,
+ * deren Inhalt hier schon steht (oder überholt ist), nicht (R13-A4).
+ */
+export function importUebernahm(r: Pick<AbgleichErgebnis, "neuerEinsatz" | "hinzugefuegt" | "aktualisiert">): boolean {
+  return r.neuerEinsatz || r.hinzugefuegt > 0 || r.aktualisiert.length > 0;
+}
+
+/** Satz der Quittung, wenn die Datei nichts Neueres enthielt. */
+export const NICHTS_UEBERNOMMEN_SATZ = "Datei war älter oder gleich: keine Änderung übernommen, dieser Stand bleibt.";
+
 function kurzname(e: MeldeEintrag): string {
   const ort = e.bogen.einheit.hierarchie[0]?.name?.trim();
   const basis = ort || einheitAnzeigename(e.bogen.einheit);
@@ -378,7 +390,9 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
       const hierWert = wert(feld, hier.kopf).text;
       const dateiWert = wert(feld, datei.kopf).text;
       if (ent.von === "datei") was.push(dateiWert);
-      if (ent.widerspruch) {
+      // Dieselbe Anzeige auf beiden Seiten (nur die Sekunden unterscheiden sich): kein Widerspruch, den jemand prüfen
+      // könnte — „hier 08:39, dort 08:39" lehrte, die Hinweise zu übergehen (R14-W2).
+      if (ent.widerspruch && hierWert !== dateiWert) {
         ergebnis.widersprueche.push({
           einheitSchluessel: schl,
           einheit: kurzname(ziel),
@@ -455,6 +469,19 @@ export interface Einzelheit {
  * beim Empfang je selbst vergeben. Vorher war es ein Absatz von 14 Widersprüchen,
  * in dem „Cottbus abgerückt" unterging.
  */
+/** Eine Zeile zum Widerspruch; auch für die Merkliste an der Einsatzansicht (R11-O3). */
+export function widerspruchZeile(w: AbgleichWiderspruch): string {
+  return (
+    `${w.einheit} ${w.feld} — hier ${w.hier}, in der Datei ${w.datei}; ` +
+    (w.gilt === "datei" ? "der jüngere Stand aus der Datei gilt" : "der Stand dieses Geräts bleibt")
+  );
+}
+
+/** Die Widersprüche, die gemerkt werden: ohne die kleinen Eintreffzeit-Abweichungen. */
+export function widerspruecheZumMerken(r: Pick<AbgleichErgebnis, "widersprueche">): string[] {
+  return r.widersprueche.filter((w) => w.feld !== FELD_NAME.eintreffzeit).map(widerspruchZeile);
+}
+
 export function abgleichGliederung(r: Pick<AbgleichErgebnis, "aktualisiert" | "widersprueche">): { kurz: string[]; einzelheiten: Einzelheit[] } {
   const kurz: string[] = [];
   const einzelheiten: Einzelheit[] = [];
@@ -465,9 +492,7 @@ export function abgleichGliederung(r: Pick<AbgleichErgebnis, "aktualisiert" | "w
     kurz.push(`${n === 1 ? "1 Meldung" : `${n} Meldungen`} aktualisiert: ${r.aktualisiert.slice(0, BIS).map(zeile).join("; ")}${n > BIS ? ` und ${n - BIS} weitere` : ""}.`);
     if (n > BIS) einzelheiten.push({ titel: `Alle ${n} aktualisierten Meldungen`, zeilen: r.aktualisiert.map(zeile) });
   }
-  const wid = (w: AbgleichWiderspruch) =>
-    `${w.einheit} ${w.feld} — hier ${w.hier}, in der Datei ${w.datei}; ` +
-    (w.gilt === "datei" ? "der jüngere Stand aus der Datei gilt" : "der Stand dieses Geräts bleibt");
+  const wid = widerspruchZeile;
   const wichtig = r.widersprueche.filter((w) => w.feld !== FELD_NAME.eintreffzeit);
   const klein = r.widersprueche.filter((w) => w.feld === FELD_NAME.eintreffzeit);
   if (wichtig.length > 0) {
@@ -501,7 +526,8 @@ export function sammlungFuerZiel(
 ): Einsatzsammlung {
   const bekannt = new Set(ziel.eintraege.map((e) => e.einheitSchluessel));
   const eintraege: MeldeEintrag[] = JSON.parse(JSON.stringify(quelle.eintraege));
-  const wert = zug.trim();
+  // Eine Schreibweise je Zug, auch für den vorgeschlagenen Zug aus der Quell-Sammlung (R10-S1).
+  const wert = zugNormalisiert(zug, [...ziel.eintraege, ...eintraege].map((e) => e.zugEtikett));
   if (wert) {
     const neueEinheiten = new Set(
       eintraege.filter((e) => !bekannt.has(e.einheitSchluessel) && !e.zugEtikett).map((e) => e.einheitSchluessel),
