@@ -26,6 +26,11 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > der Einsatz-Sammlung im Erfassungsbogen (Phase 7 der Übernahme) wandert
 > dieser Teil der Risiken von dort hierher (ADR-001).
 >
+> **Nachgezogen 2026-11-09 — Schema 10 bis 12:** Die Submodule stehen auf dem
+> Stand des Erfassungsbogens vom 2026-11-09. Je Person kommen die Dienststelle
+> (wenn abweichend) und der Funkrufname als Erreichbarkeit hinzu (5.4); der
+> Einsatzzeitraum trägt Uhrzeiten.
+>
 > **Wächst mit dem Code.** Die Eingänge (Scan, Datei, Bilderstapel, Link)
 > sind seit Phase 3 live, die Schnellerfassung seit Phase 4, die Android-Hülle
 > seit Phase 5. Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem sie im Code
@@ -248,9 +253,9 @@ Datenschutzbeauftragte/n zu bestätigen.
 | Kategorie | Felder | Pflicht/optional | Fundstelle |
 | --- | --- | --- | --- |
 | Identität | Vorname, Nachname | Im Bogen je Personaleintrag; eine Nur-Stärke-Meldung aus der Schnellerfassung trägt höchstens die Führungskraft (Name, Telefon) | `Person` (`@bos/eeb-format/model`) |
-| Funktion/Qualifikation | Funktionen, Zusatzqualifikationen, Fahrerlaubnisse, Zählrolle | Teils Pflicht, teils optional | `Person` |
+| Funktion/Qualifikation | Funktionen, Zusatzqualifikationen, Fahrerlaubnisse, Zählrolle; Dienststelle der Person, wenn sie von der der Einheit abweicht (ab Schema 10) | Teils Pflicht, teils optional | `Person` |
 | Unterbringungs-/Verpflegungsangaben | Geschlecht (M/W/D), Ernährungsform | Je Person | `Person` — kein Gesundheitsdatum nach Art. 9 |
-| Kontaktdaten | Telefon, E-Mail (i. d. R. Führungskräfte und Ebenen) | Optional | `Kontakt` |
+| Kontaktdaten | Telefon, E-Mail, Funkrufname der Person (ab Schema 12, stets dienstlich; i. d. R. Führungskräfte und Ebenen) | Optional | `Kontakt` |
 | Fahrzeugbezogen | Kennzeichen, Funkrufname | Optional | `Fahrzeug` |
 | Absenderangabe fremder Geräte | Name, E-Mail, Telefon | Freiwillig beim Sender | Signaturnachweis am `MeldeEintrag` (`signatur`), Rohpayload (`herkunft`) |
 | Einsatzkontext, Anwesenheit | Einsatz, Ort, Zeitraum des Bogens; **Eintreff- und Abrückzeit, Status, Zug je Einheit**; Bewegungen | Teils Pflicht | `Einsatz`, Zusatzfelder `eingetroffenAm`, `abgerueckAm` (`eintrag-zeiten.ts`) — ergibt mit den Personaldaten, wer wann wo im Einsatz war |

@@ -9,7 +9,18 @@ import {
   encodeVorlagePayloadUrl,
   segmentPayloadUrls,
 } from "@bos/eeb-format/codec";
-import { OrganisationsTyp, PersonalErfassung, SCHEMA_VERSION, type Erfassungsbogen } from "@bos/eeb-format/model";
+import {
+  Ernaehrung,
+  Fahrerlaubnis,
+  Geschlecht,
+  KontaktArt,
+  OrganisationsTyp,
+  PersonalErfassung,
+  SCHEMA_VERSION,
+  StaerkeRolle,
+  transportSchemaVersion,
+  type Erfassungsbogen,
+} from "@bos/eeb-format/model";
 import { browserKompressor } from "../hilfen";
 import { boegenAusQrTexten } from "./qr-boegen";
 
@@ -93,5 +104,28 @@ describe("boegenAusQrTexten()", () => {
     const [gefunden] = await boegenAusQrTexten([encodePayloadUrl(bogen("OV Herkunft"), browserKompressor)]);
     expect(gefunden!.herkunft).toBeInstanceOf(Uint8Array);
     expect(gefunden!.signatur.zustand).toBe("unsigniert"); // hier unsigniert erzeugt
+  });
+
+  it("liest Bögen des aktuellen Erfassungsbogens (Schema 10 bis 12: Dienststelle, Zeitraum mit Uhrzeit, Funkrufname)", async () => {
+    const b = bogen("OV Neu");
+    b.einsatz.zeitraumVonIso = "2026-11-09T08:00:00+01:00";
+    b.einsatz.zeitraumBisIso = "2026-11-09T18:00:00+01:00";
+    b.personal.push({
+      nachname: "Muster",
+      vorname: "Erika",
+      staerkeRolle: StaerkeRolle.UNTERFUEHRER,
+      funktionen: [],
+      fahrerlaubnis: Fahrerlaubnis.NONE,
+      dienststelle: "OV Hoya",
+      geschlecht: Geschlecht.W,
+      ernaehrung: Ernaehrung.FLEISCH,
+      kontakte: [{ art: KontaktArt.FUNK, dienstlich: true, wert: "Heros Oldenburg 18/13-1" }],
+      zusatzqualifikationen: [],
+    });
+    expect(transportSchemaVersion(b)).toBe(12);
+    const [gefunden] = await boegenAusQrTexten([encodePayloadUrl(b, browserKompressor)]);
+    expect(gefunden!.bogen.einsatz.zeitraumVonIso).toMatch(/T08:00:00\+01:00$/);
+    expect(gefunden!.bogen.personal[0]!.dienststelle).toBe("OV Hoya");
+    expect(gefunden!.bogen.personal[0]!.kontakte[0]).toMatchObject({ art: KontaktArt.FUNK, wert: "Heros Oldenburg 18/13-1" });
   });
 });

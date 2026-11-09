@@ -19,12 +19,18 @@ Kopfkommentar festhalten).
 
 ## A. Bleibt im Kern, wird nur eingebunden
 
-| Submodul | Pin (Erfassungsbogen 2026-10-25) | Nutzung hier |
+| Submodul | Pin (Erfassungsbogen 2026-10-25 → 2026-11-09) | Nutzung hier |
 | --- | --- | --- |
-| `vendor/eeb-format` | `eb58ad6` | Modell, Codec, Signatur, Datenschutzfrist |
-| `vendor/bos-meldekopf` | `59a986c` | Einsätze, Aufteilen, Zusammenführen, Diff, Papierkorb, Darstellung |
-| `vendor/bos-vokabulare` | `2f94a46` | StAN-Vorbelegung, Funkrufnamen, Ebenen, Sitzplätze, Qualifikationen |
-| `vendor/bos-taktische-zeichen` | `cb9c227` | Zeichen auf Karten, Tabelle, Monitor, PDF |
+| `vendor/eeb-format` | `eb58ad6` → `7ce601f` | Modell, Codec, Signatur, Datenschutzfrist |
+| `vendor/bos-meldekopf` | `59a986c` → `63429e6` | Einsätze, Aufteilen, Zusammenführen, Diff, Papierkorb, Darstellung |
+| `vendor/bos-vokabulare` | `2f94a46` → `c725bf9` | StAN-Vorbelegung, Funkrufnamen, Ebenen, Sitzplätze, Qualifikationen |
+| `vendor/bos-taktische-zeichen` | `cb9c227` → `a54364a` | Zeichen auf Karten, Tabelle, Monitor, PDF |
+
+Am 2026-11-09 auf den Stand des Erfassungsbogens `1d7ed5f` gehoben: Schema 10
+(Dienststelle je Person), 11 (Einsatzzeitraum mit Uhrzeit) und 12 (Funkrufname
+als Erreichbarkeit), Stärke als F / U / M // G, Fachzug Logistik nach StAN mit
+Trupps und Ladungsträgern samt Zeichen. Vorher lehnte die App jeden Bogen ab
+Schema 10 ab („nicht unterstützte Schema-Version“).
 
 ## B. Geht neu in den Kern (`@bos/eeb-satz`, ADR-005)
 

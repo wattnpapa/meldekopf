@@ -494,7 +494,10 @@ die Pakete kommen mit den Phasen, die sie brauchen (Phase 0: React,
 `electron-updater`). SBOM und `npm audit` im CI. Submodul-Pins beim Start auf
 den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
-`bos-taktische-zeichen` `cb9c227`. Seit Phase 1 dazu `bos-eeb-satz`
+`bos-taktische-zeichen` `cb9c227`; am 2026-11-09 auf den Stand des
+Erfassungsbogens `1d7ed5f` gehoben: `eeb-format` `7ce601f` (Schema 12),
+`bos-meldekopf` `63429e6`, `bos-vokabulare` `c725bf9`,
+`bos-taktische-zeichen` `a54364a`. Seit Phase 1 dazu `bos-eeb-satz`
 und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
 `441811c`); `bos-eeb-satz` steht seit Phase 3 auf `c937411` (vorher
 `c9ae5b2`): `pdf-stroeme` liest die Stromlänge aus `/Length`, statt ein
