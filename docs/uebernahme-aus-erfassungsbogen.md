@@ -1,6 +1,6 @@
 # Übernahme aus dem Erfassungsbogen
 
-Stand: 2026-10-25, Phase 2 (Sammlung lesen und zeigen) umgesetzt gegen den
+Stand: 2026-11-09, abgeglichen mit dem Erfassungsbogen `1d7ed5f` (Abschnitt G0). Ursprünglich umgesetzt gegen den
 Erfassungsbogen auf Commit `441811c` (Phase 0: `f2b77f1`; Herkunfts-Commit
 jeweils in den Kopfkommentaren). Zwischen beiden liegt „Runde 9: 53 Befunde
 behoben“ mit Änderungen an `dialoge.tsx`, `tastatur.ts`, `tipp-schutz.ts`,
@@ -136,6 +136,44 @@ und Logo (`KopfnavQuelle`), die Werkzeugliste, die Wege des Fehlerfängers
 `uebergabe-stand.ts`, `src/vokabulare/landesvorlagen`, `examples/`,
 Beispielbogen-Generatoren unter `scripts/`, die Organisations-Landingpages.
 Dazu die kommende Zug-aus-Teileinheiten-Funktion.
+
+## G0. Abgleich vom 2026-11-09 (Erfassungsbogen `441811c` → `1d7ed5f`)
+
+Der Erfassungsbogen hat nach der Übernahme die Prüfrunden 10 bis 21, den
+Probelauf am Meldekopf und die Erprobungsrückmeldungen vom November
+eingearbeitet; die Meldekopf-App stand seit dem 2026-10-28 still. Der
+Abgleich hat beides zusammengeführt (Drei-Wege-Merge je Datei, Basis
+`441811c`):
+
+- Kern-Submodule auf den Stand des Erfassungsbogens (Abschnitt A), damit
+  Bögen ab Schema 10 lesbar sind.
+- Alle übernommenen Dateien aus D und E auf `1d7ed5f`, Herkunfts-Commit im
+  Kopfkommentar. Wo beide Seiten dieselbe Stelle geändert hatten, blieb das
+  Meldekopf-Verhalten aus Audit Runde 1 und die Verbesserung des
+  Erfassungsbogens kam daneben (Lagemonitor: Zug-Spalte, Gesamt, Bedarfszeile
+  und Nachträge bleiben, Altersmarken, Auftrag und gewarnte Zeilen zuerst
+  kommen dazu; Schnellerfassung: Abschnitte statt Schritte, eine Seite).
+- Rund 50 neue Module aus dem Erfassungsbogen, die die Sammlung betreffen
+  (u. a. `einsatz-abschluss`, `meldungs-papierkorb`, `eingang/word-bogen`,
+  `eingang/handscanner`, `eingang/widerspruch-merker`,
+  `eingang/import-unterbrochen`, `einsatz-notweg`, `einsatz-zusammenfuehren`,
+  `ort-aendern`, `angaben-alter`, `weitergabe/pdf-logos`).
+- `@bos/oberflaeche`: Dialoge, Quittungen, Tipp-Schutz, Feld-Bausteine,
+  Fehlerfänger, `zahl-eingabe` auf den neuen Stand, `schreibweise` neu.
+  `@bos/eeb-satz`: `csv` mit Nachtrag-Spalte, `typografie` (reiner Teil) neu.
+- Die Excel-Liste „Oldenburg" entfällt wie im Erfassungsbogen.
+- Stylesheet: die Regeln der Runden 10 bis 21, deren Klassen die übernommenen
+  Komponenten benutzen (`index.html`, Block „Abgleich mit dem
+  Erfassungsbogen").
+- Von den Rundentests des Erfassungsbogens laufen elf Dateien unverändert
+  gegen den Meldekopf und liegen unter `src/app/abgleich/`; die übrigen
+  setzen den Assistenten, Vorlagen oder Beispielbögen voraus.
+
+Nicht übernommen, weil nicht Teil der Sammlung: Beispielbögen samt
+Übungs-Sammlung, Erklärfilm, „Was ist neu", Assistent, Vorlagen, Musterung,
+`einsatz-vorbereiten`, die Personen-Namensliste (`namen-dialog`,
+`personal-schnell`). Offen bleibt aus Phase 7 der Rückweg „An Meldekopf
+geben" und der Rücksprung `rueck=meldekopf` im Erfassungsbogen.
 
 ## G. Reihenfolge
 

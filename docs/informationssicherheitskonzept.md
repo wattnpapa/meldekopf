@@ -20,6 +20,15 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > zwischen Begleitdokumenten und Code sind als *Prüfvermerk* gekennzeichnet;
 > wo Doku und Code sich widersprechen, gilt der Code.
 >
+> **Nachgezogen 2026-11-09 — Abgleich mit dem Erfassungsbogen `1d7ed5f`:**
+> Kern-Submodule auf Schema 12, Prüfrunden 10 bis 21 des Erfassungsbogens
+> übernommen. Neu für dieses Dokument: der Word-Import als Eingang (5.4a),
+> neue Speicherschlüssel (D2-Tabelle in Architektur 8.2, darunter der
+> Papierkorb entfernter Meldungen mit Personendaten, 7 Tage), die
+> Excel-Liste „Oldenburg" entfällt. Die Vorladeliste der nachgeladenen Teile
+> zeigt nicht mehr auf die eingebettete Stilvorlage (R21-O1, `vite.config.ts`;
+> das Bundle-Budget prüft das).
+>
 > **Wächst mit dem Code.** Die Eingänge (Kamera-Scan, USB-Handscanner,
 > Bilderstapel, Datei/PDF, Link) sind seit Phase 3 live, die Schnellerfassung
 > seit Phase 4, die Android-Hülle seit Phase 5 (signiertes Release ausstehend; Reihenfolge in
@@ -245,7 +254,7 @@ des Erfassungsbogens.
 
 | # | Zielobjekt | Ziel | Zweck | Absicherung | Stand |
 | --- | --- | --- | --- | --- | --- |
-| K1 | Geräte-zu-Geräte-Übergabe | Kein Netzwerk — ausgehend: Sammel-PDF, Einsatz-Datei, CSV, Excel, Ausdruck; eingehend: Datensicherung, Kamera-Scan, USB-Handscanner, Bilderstapel, Datei/PDF, Link (AirDrop, Quick Share, Messenger), Einsatz-Import vom zweiten Meldekopf-Gerät | Aufnahme von Bögen, Weitergabe der Lage an Stab, Ablösung und S1-Control | Physisch/lokal begrenzter Kanal; Ed25519-Signatur und Gegenzeichnung der QR-Codes | live (eingehend seit Phase 3) |
+| K1 | Geräte-zu-Geräte-Übergabe | Kein Netzwerk — ausgehend: Sammel-PDF, Einsatz-Datei, CSV, Excel, Ausdruck; eingehend: Datensicherung, Kamera-Scan, USB-Handscanner, Bilderstapel, Datei/PDF, Word-Bogen (`.docx`, seit 2026-11-09), Link (AirDrop, Quick Share, Messenger), Einsatz-Import vom zweiten Meldekopf-Gerät | Aufnahme von Bögen, Weitergabe der Lage an Stab, Ablösung und S1-Control | Physisch/lokal begrenzter Kanal; Ed25519-Signatur und Gegenzeichnung der QR-Codes | live (eingehend seit Phase 3) |
 | K2 | GoatCounter-Reichweitenmessung | `https://meldekopf.goatcounter.com/count` (eigene Site dieser App, Host in `src/app/adressen.ts`) | Anonyme Nutzungsstatistik, ein Treffer je Start | Cookielos, kein Fremdcode (kein `count.js` von `gc.zgo.at`), nur Pfad (Nutzungskanal), Titel und im Browser Referrer; nie `location.search` oder Fragment (`statistik.ts`); Widerspruch per Kästchen im Datenschutzdialog (`skipgc`) | live |
 | K3 | GitHub-Releases-Abfrage | GitHub-Release-Assets dieses Repositorys | Prüfung auf neue Version (nur Electron, `electron-updater`) | HTTPS; Pakete unsigniert (siehe 6.4) | live (Desktop) |
 | K4 | Lagemonitor-Fenster | Zweites Fenster derselben Herkunft am selben Gerät | Anzeige der Lage auf einem zweiten Bildschirm | Kein Netz; `window.open` bzw. in Electron eigenes Fenster mit denselben Härtungen; Datenweg `localStorage` + `storage`-Ereignis | live |
@@ -468,6 +477,23 @@ keinen Einfluss (DSFA 5.8, 6.3).
 > Erfassungsbogen. Das Einzel-PDF einer *empfangenen* Meldung („Bogen
 > anzeigen") gibt es hier weiterhin (`meldungPdfAnzeigen`).
 
+### 5.4a Import THW-Word-Bogen (seit 2026-11-09)
+
+Übernommen aus dem Erfassungsbogen (`eingang/word-bogen.ts`): ausgefüllte
+Word-Bögen aus den THW-Vorlagen `06-*_Erfassungsbogen.dotx` (`.docx`) lassen
+sich über „Bögen einlesen…" in eine Sammlung übernehmen. Die Datei wird nur
+lokal gelesen, ohne Netz und ohne neue Abhängigkeit. Schutz gegen präparierte
+Dateien: Dateigröße höchstens 25 MiB (`MAX_WORD_DATEI`); ein eigener
+ZIP-Leser holt ausschließlich `word/document.xml` (nur „stored" und
+„deflate", kein ZIP64, verschlüsselte Einträge werden abgelehnt) und entpackt
+sie über `inflateRawBegrenzt` mit Deckel 8 MiB (`MAX_DOCUMENT_XML`). Das XML
+liest `DOMParser` als `application/xml`; nichts wird ausgeführt oder
+nachgeladen, Makros, eingebettete Objekte und Verknüpfungen werden nie
+angefasst. Übernommen werden nur Textwerte der bekannten Formularfelder; sie
+durchlaufen danach dieselben Wege wie jeder andere Bogen (`bogenBefund`,
+CSV-Formel-Abwehr, `winAnsiText` im PDF). Ein Word-Bogen trägt keine
+Signatur und kommt als „unsigniert" in die Sammlung (5.2 gilt unverändert).
+
 ### 5.5 Datensparsamkeit und Löschung
 
 - **Datenschutzfrist** (`@bos/eeb-format/datenschutzfrist`,
@@ -582,7 +608,7 @@ dieses Dokuments.
 | --- | --- | --- |
 | Content-Security-Policy | Erfüllt (Skript) / bewusster Rest (Style) | 5.3 |
 | Eingabevalidierung / Schutz vor Injection | Erfüllt (Ausgabewege) | CSV-Formel-Abwehr, XLSX-Escaping (5.4) |
-| Robustheit gegenüber fehlerhaften/böswilligen Eingabedaten | Erfüllt | QR-Payload über `inflateRawBegrenzt` (`MAX_ENTPACKT = 4 MiB`, `src/app/hilfen.ts`, als `browserKompressor` in allen Eingängen); PDF-Ströme mit Deckel 32 MiB je Strom und 64 MiB je PDF, Bilder höchstens 2000 × 2000 Punkte (`@bos/eeb-satz` `pdf-stroeme`, `pdf-bilder`, seit `42ddbea`/`c937411`; im Erfassungsbogen ohne diesen Deckel); `sicherungParsen` prüft Format und Version; `einsaetze-lesen.ts`, `bogen-pruefung.ts`, `eingang/unlesbar.ts` prüfen beim Lesen und legen Unlesbares beiseite |
+| Robustheit gegenüber fehlerhaften/böswilligen Eingabedaten | Erfüllt | QR-Payload über `inflateRawBegrenzt` (`MAX_ENTPACKT = 4 MiB`, `src/app/hilfen.ts`, als `browserKompressor` in allen Eingängen); PDF-Ströme mit Deckel 32 MiB je Strom und 64 MiB je PDF, Bilder höchstens 2000 × 2000 Punkte (`@bos/eeb-satz` `pdf-stroeme`, `pdf-bilder`, seit `42ddbea`/`c937411`; im Erfassungsbogen ohne diesen Deckel); Word-Bogen höchstens 25 MiB, `document.xml` entpackt höchstens 8 MiB (5.4a); `sicherungParsen` prüft Format und Version; `einsaetze-lesen.ts`, `bogen-pruefung.ts`, `eingang/unlesbar.ts` prüfen beim Lesen und legen Unlesbares beiseite |
 | Fangnetz bei Abstürzen der Ansicht | Erfüllt | Fehlerfänger aus `@bos/oberflaeche` mit Sichern und Löschen |
 | Kontextisolation bei hybriden Apps | Erfüllt | `contextIsolation`, `sandbox`, kein Preload; Lagemonitor-Fenster gleich gehärtet |
 
@@ -633,7 +659,7 @@ mindern.
 | # | Bezug | Maßnahme | Art | Verantwortlich | Priorität |
 | --- | --- | --- | --- | --- | --- |
 | M1 | R1 | Verbindliche Bildschirmsperre (PIN/Biometrie) am Meldekopf-Gerät; Geräteverschlüsselung (BitLocker/FileVault/Android); Meldekopf-Gerät nicht unbeaufsichtigt entsperrt lassen; nach dem Einsatz Sammlungen exportieren und auf dem Gerät löschen | Organisatorisch/technisch | `[Organisation/IT-Verantwortliche/r]` | Hoch |
-| M2 | R2 | Erledigt (Phase 3 geprüft): QR-Eingänge über `inflateRawBegrenzt`; die PDF-Ströme liefen ungedeckelt über `pako.inflate` und haben seitdem einen eigenen Deckel in `@bos/eeb-satz`. Bei jedem neuen Eingang erneut prüfen | Technisch | `[Projektbetreiber/Maintainer]` | Erledigt |
+| M2 | R2 | Erledigt (Phase 3 geprüft, Word-Import 2026-11-09 geprüft): QR-Eingänge und Word-Import über `inflateRawBegrenzt`; die PDF-Ströme liefen ungedeckelt über `pako.inflate` und haben seitdem einen eigenen Deckel in `@bos/eeb-satz`. Bei jedem neuen Eingang erneut prüfen | Technisch | `[Projektbetreiber/Maintainer]` | Erledigt |
 | M3 | R3 | Bis zu einer verschlüsselten Ablage: Geräteabsicherung (M1); Sicherungsdateien wie Schlüssel behandeln (M10); bei Verdacht „Geräteschlüssel neu erzeugen…" und neue Kurzform an Stab und Ablösung geben; Zuständigkeit festlegen | Organisatorisch (technische Grundlage vorhanden) | `[Organisation]` | Mittel |
 | M4 | R4 | `style-src 'unsafe-inline'` bewusst belassen; `pdfmake`-Updates gegen die CSP prüfen (5.3) | Technisch | `[Projektbetreiber/Maintainer]` | Niedrig |
 | M5 | R5 | Nur Pakete aus dem offiziellen GitHub-Release dieses Repositorys einsetzen, Prüfsummen dokumentieren; bevorzugt die PWA von meldekopf.erfassungsbogen.app; Signierung der Windows-Pakete als Projektziel | Organisatorisch/technisch | `[Organisation]` / `[Projektbetreiber]` | Hoch |

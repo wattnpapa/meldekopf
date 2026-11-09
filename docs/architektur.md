@@ -503,7 +503,10 @@ den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-taktische-zeichen` `cb9c227`; am 2026-11-09 auf den Stand des
 Erfassungsbogens `1d7ed5f` gehoben: `eeb-format` `7ce601f` (Schema 12),
 `bos-meldekopf` `63429e6`, `bos-vokabulare` `c725bf9`,
-`bos-taktische-zeichen` `a54364a`. Seit Phase 1 dazu `bos-eeb-satz`
+`bos-taktische-zeichen` `a54364a`; `bos-eeb-satz` steht seit dem Abgleich
+auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`), `bos-oberflaeche`
+auf dem Stand `1d7ed5f` des Erfassungsbogens (Dialoge, Quittungen,
+Tipp-Schutz, Bausteine, `schreibweise`). Seit Phase 1 dazu `bos-eeb-satz`
 und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
 `441811c`); `bos-eeb-satz` steht seit Phase 3 auf `c937411` (vorher
 `c9ae5b2`): `pdf-stroeme` liest die Stromlänge aus `/Length`, statt ein

@@ -245,13 +245,17 @@ function inlineCssMinify(): Plugin {
  * zahlt nur der Kaltbesuch, App-Nutzer haben die index.html im SW-Precache.
  */
 function fontCssInline(): Plugin {
+  let eingebettetesCss: string | undefined;
   return {
     name: "eeb-font-css-inline",
     apply: "build",
     enforce: "post",
     generateBundle(_optionen, bundle) {
       const html = bundle["index.html"];
-      const cssName = Object.keys(bundle).find((n) => n.endsWith(".css"));
+      // Die Stilvorlage des Einstiegs (index-*.css), nicht die eines nachgeladenen Chunks (lagemonitor-ui-*.css): Mit dem
+      // ersten Treffer auf „.css“ lief die Einbettung ins Leere, sobald ein nachgeladener Chunk eigene Stile trug
+      // (Erfassungsbogen 1d7ed5f, R21-O1).
+      const cssName = Object.keys(bundle).find((n) => /(^|\/)index-[^/]*\.css$/.test(n)) ?? Object.keys(bundle).find((n) => n.endsWith(".css"));
       if (!html || html.type !== "asset" || !cssName) return;
       const css = bundle[cssName];
       if (!css || css.type !== "asset") return;
@@ -275,6 +279,25 @@ function fontCssInline(): Plugin {
       if (!link.test(String(html.source))) return;
       html.source = String(html.source).replace(link, `<style>${regeln}</style>`);
       delete bundle[cssName];
+      // Nachgeladene Chunks (Einsatzansicht, Lagemonitor) führen die Stilvorlage des Einstiegs in ihrer Vorladeliste.
+      // Die Datei gibt es nach dem Einbetten nicht mehr: Die Vorladung scheiterte mit „Unable to preload CSS“, die
+      // Einsatzansicht ließ sich ohne Netz nicht öffnen (R21-O1). Die Liste entsteht erst nach diesem Hook; ersetzt wird
+      // deshalb in writeBundle, noch bevor der Service Worker seine Prüfsummen bildet.
+      eingebettetesCss = cssName.split("/").pop()!;
+    },
+    writeBundle(optionen) {
+      if (!eingebettetesCss || !optionen.dir) return;
+      const ordner = join(optionen.dir, "assets");
+      const helfer = readdirSync(ordner).find((n) => /^preload-helper-[^/]+\.js$/.test(n));
+      if (!helfer) return;
+      const muster = new RegExp(`"([^"]*/)?${eingebettetesCss.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "g");
+      for (const name of readdirSync(ordner)) {
+        if (!name.endsWith(".js")) continue;
+        const datei = join(ordner, name);
+        const inhalt = readFileSync(datei, "utf8");
+        if (!inhalt.includes(eingebettetesCss)) continue;
+        writeFileSync(datei, inhalt.replace(muster, (_t, vor: string | undefined) => `"${vor ?? ""}${helfer}"`));
+      }
     },
   };
 }

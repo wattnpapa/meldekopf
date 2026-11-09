@@ -31,6 +31,16 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > (wenn abweichend) und der Funkrufname als Erreichbarkeit hinzu (5.4); der
 > Einsatzzeitraum trägt Uhrzeiten.
 >
+> **Nachgezogen 2026-11-09 — Abgleich mit dem Erfassungsbogen `1d7ed5f`:**
+> Neuer Eingangsweg Word-Bogen (`.docx` aus den THW-Vorlagen), lokal gelesen,
+> dieselben Datenkategorien wie Papier- und App-Bogen (5.4); was keinem Feld
+> zuzuordnen ist, steht im Freitext „Sonstiges", die Quittung nennt es. Die
+> Datei selbst wird nicht gespeichert. Neu ist der Papierkorb entfernter
+> Meldungen (`eeb.meldungen-papierkorb.v1`): Er hält vollständige Meldungen
+> samt Namen 7 Tage zum Zurückholen, danach fallen sie weg; „Alle Daten
+> löschen" leert ihn. Die Excel-Liste „Oldenburg" entfällt als
+> Übermittlungsweg.
+>
 > **Wächst mit dem Code.** Die Eingänge (Scan, Datei, Bilderstapel, Link)
 > sind seit Phase 3 live, die Schnellerfassung seit Phase 4, die Android-Hülle
 > seit Phase 5. Was noch fehlt, ist hier als **geplant** beschrieben, mit dem Ort, an dem sie im Code
