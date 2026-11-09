@@ -1,5 +1,5 @@
 /**
- * Herkunft: Erfassungsbogen `src/app/nacherfassung.test.tsx` (Commit 441811c).
+ * Herkunft: Erfassungsbogen `src/app/nacherfassung.test.tsx` (Commit 1d7ed5f).
  *
  * Nacherfassung vom Papier (Audit Runde 2, R2-A5): Namensvarianten wie
  * „OV Albstadt" lösen die Ähnlichkeitsrückfrage aus, die Uhrzeit vom
@@ -7,7 +7,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { EintreffzeitFeld, aehnlicherOrt, andererEinheitstyp, eintreffzeitPruefen, ortWoerter } from "./nacherfassung";
+import { EintreffzeitFeld, abrueckzeitVomZettel, aehnlicherOrt, andererEinheitstyp, eintreffzeitPruefen, ortWoerter } from "./nacherfassung";
+import { zettelPruefen } from "../entwurf";
 
 describe("aehnlicherOrt", () => {
   it("erkennt den Runde-1-Prüffall „OV Albstadt“ ~ „Albstadt“", () => {
@@ -97,5 +98,27 @@ describe("EintreffzeitFeld", () => {
     render(<EintreffzeitFeld wert="" onAendern={(w) => (wert = w)} />);
     fireEvent.change(screen.getByLabelText("Eingetroffen um (vom Meldeblock)"), { target: { value: "09:40" } });
     expect(wert).toBe("09:40");
+  });
+});
+
+// Erfassungsbogen `src/app/runde13-inhalte.test.tsx` (Commit 1d7ed5f), R13-A1.
+describe("„Abgerückt um“ vom Meldeblock (R13-A1)", () => {
+  const jetzt = new Date(2026, 9, 26, 10, 0).getTime();
+  const an = new Date(2026, 9, 26, 5, 10).getTime();
+  it("leer heißt: noch da", () => {
+    expect(abrueckzeitVomZettel("", an, jetzt)).toEqual({ art: "keine" });
+  });
+  it("eine Zeit nach dem Eintreffen gilt", () => {
+    expect(abrueckzeitVomZettel("06:00", an, jetzt)).toEqual({ art: "zeit", zeit: new Date(2026, 9, 26, 6, 0).getTime() });
+  });
+  it("vor dem Eintreffen, in der Zukunft, ohne Eintreffzeit oder unlesbar: Fehler mit Grund statt falscher Zeit", () => {
+    expect(abrueckzeitVomZettel("04:00", an, jetzt)).toMatchObject({ art: "fehler", text: expect.stringContaining("vor „Eingetroffen um“") });
+    expect(abrueckzeitVomZettel("23:30", an, jetzt)).toMatchObject({ art: "fehler", text: expect.stringContaining("Zukunft") });
+    expect(abrueckzeitVomZettel("06:00", null, jetzt)).toMatchObject({ art: "fehler", text: expect.stringContaining("braucht „Eingetroffen um“") });
+    expect(abrueckzeitVomZettel("abc", an, jetzt)).toMatchObject({ art: "fehler" });
+  });
+  it("der Entwurf trägt „ab“ mit durch das Neuladen", () => {
+    expect(zettelPruefen({ zeit: "05:10", ab: "06:00" })).toEqual({ zeit: "05:10", ab: "06:00" });
+    expect(zettelPruefen({ ab: "6 Uhr" })).toBeUndefined();
   });
 });

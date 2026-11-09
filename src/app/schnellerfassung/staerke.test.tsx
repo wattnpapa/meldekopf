@@ -59,4 +59,13 @@ describe("Abschnitt Stärke", () => {
     await nutzer.type(screen.getByLabelText("Name"), "Weber");
     expect(stand().s?.gesamt).toBe(0);
   });
+
+  it("nimmt einen Funkrufnamen als Erreichbarkeit der Führungskraft (Schema 12, stets dienstlich)", async () => {
+    const nutzer = userEvent.setup();
+    render(<Buehne />);
+    await nutzer.type(screen.getByLabelText("Funkrufname (optional)"), "Heros Oldenburg 18/13-1");
+    const p = stand().p;
+    expect(p).toHaveLength(1);
+    expect(p[0]!.kontakte).toEqual([{ art: KontaktArt.FUNK, dienstlich: true, wert: "Heros Oldenburg 18/13-1" }]);
+  });
 });

@@ -29,7 +29,7 @@ import { frageJaNein } from "@bos/oberflaeche/dialoge";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
 import { ortOhneZusatz } from "./hilfen";
 import { sammlungenBeiseitegelegt } from "./eingang/unlesbar";
-import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, bedarfText, dauerText, lagebild, uhrTeile, zuEingabeWert, type EinheitZeile } from "./lagemonitor";
+import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, dauerText, lagebild, uhrTeile, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile, type ZugZeile } from "./lagemonitor";
 
 import { URL_PARAMETER, lagemonitorKennung } from "./lagemonitor-kennung";
 /** Gemerkte Helligkeitsstufe des Monitors („dunkel" oder „gedimmt"; „hell" wird nie gemerkt, R7-L3). */

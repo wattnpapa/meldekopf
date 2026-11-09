@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import { kaestchenZeichnen } from "./pdf-kaestchen";
-import { pdfBytes } from "../../scripts/pdf-in-node";
+import { pdfBytes } from "../../../scripts/pdf-in-node";
 
 const dd = (content: unknown): TDocumentDefinitions =>
   ({ content, defaultStyle: { fontSize: 10, font: "Helvetica" } }) as TDocumentDefinitions;

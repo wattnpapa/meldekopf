@@ -3,7 +3,7 @@
  * Seite statt eines Assistenten: Zettel-Angaben (Eintreffzeit, Nummer, Zug),
  * Einheit, Stärke mit Führungskraft, Fahrzeuge, dann „In Einsatz übernehmen".
  *
- * Herkunft: Erfassungsbogen `src/app/app.tsx` (Commit 441811c), die fremde
+ * Herkunft: Erfassungsbogen `src/app/app.tsx` (Commit 1d7ed5f), die fremde
  * Erfassung für eine Sammlung: `manuellInEinsatz`, `schnellerfassungsBogen`,
  * `staerkeFreigeben`, `erfassungUebernehmen` und der Assistenten-Rahmen
  * (Kopf mit Rückweg in den Einsatz, F2; feste Leiste mit dem Abschluss,
@@ -12,7 +12,11 @@
  * Schritten (ADR-006), sondern die Abschnitte untereinander; die Stärke ist
  * immer „nur Stärke"; „Stärke eintragen" springt zum Abschnitt Stärke statt
  * zu Schritt 3. Die Sollstärken-Rückfrage (R2-E2, R7-A1) entfällt, weil die
- * Schnellerfassung keine unbenannten Sollplätze vorbelegt.
+ * Schnellerfassung keine unbenannten Sollplätze vorbelegt. Seit dem Abgleich
+ * mit 1d7ed5f: Organisation aus der letzten Wahl (R21-W2), „Abgerückt um" vom
+ * Meldeblock (R13-A1), Nr.-Prüfung vor den Stärke-Fragen (R10-E4), sichere
+ * Wege in den Rückfragen hervorgehoben (R5-E5, R19-S15), Stärke als
+ * F / U / M // G, die Einsatzansicht öffnet danach oben (R10-N5).
  */
 import { useEffect, useRef, useState } from "react";
 import { PersonalErfassung, staerke, type Erfassungsbogen } from "@bos/eeb-format/model";
@@ -21,16 +25,18 @@ import { einheitOrt } from "@bos/meldekopf/darstellung";
 import { frageJaNein, frageWahl, zeigeHinweis } from "@bos/oberflaeche/dialoge";
 import { SeitenKopf } from "@bos/oberflaeche/seiten-kopf";
 import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
-import { browserKompressor, einheitAnzeigename, neuerBogen, staerkePlausibilitaet } from "../hilfen";
+import { browserKompressor, einheitAnzeigename, ersteEbene, neuerBogen, staerkePlausibilitaet } from "../hilfen";
 import { EEB_URL_PREFIX, base64UrlKodieren, encodePayload } from "@bos/eeb-format/codec";
 import { stempelZeitpunkt } from "../datenschutz-uhr";
 import { einsaetzeLaden } from "../einsaetze-lesen";
-import { eintreffzeitSetzen, nummerUndZugSetzen, zeitKurz, zeitLang } from "../eintrag-zeiten";
+import { eintreffzeitSetzen, nummerUndZugSetzen, statusMitZeitSetzen, zeitKurz, zeitLang } from "../eintrag-zeiten";
+import { MeldeStatus } from "@bos/meldekopf/einsaetze";
+import { schnellOrganisationLaden } from "../schnell-organisation";
 import { meldungsNummern } from "../einheiten-tabelle";
 import { entwurfSpeichern, entwurfVerwerfen } from "../entwurf";
 import { erfassungFuer } from "./angefangen";
 import type { Aufnahme } from "../eingang/aufnahme";
-import { EintreffzeitFeld, eintreffzeitPruefen } from "./nacherfassung";
+import { EintreffzeitFeld, abrueckzeitVomZettel, eintreffzeitPruefen } from "./nacherfassung";
 import { AbschnittEinheit } from "./einheit";
 import { AbschnittStaerke } from "./staerke";
 import { AbschnittFahrzeuge } from "./fahrzeuge";
@@ -41,17 +47,21 @@ export const ERFASSUNG_PAUSE_MS = 5 * 60_000;
 
 /** Leerer Bogen für die Schnellerfassung (nur Stärke). */
 export function schnellerfassungsBogen(): Erfassungsbogen {
+  // R21-W2, H2: Die Organisation beginnt mit der letzten Wahl dieses Geräts und steht im ersten Bild sichtbar zur Wahl.
+  const organisation = schnellOrganisationLaden();
+  const grund = neuerBogen();
   return {
-    ...neuerBogen(),
+    ...grund,
+    einheit: { ...grund.einheit, organisation, hierarchie: [ersteEbene(organisation)] },
     personalErfassung: PersonalErfassung.NUR_STAERKE,
     staerkeManuell: { fuehrer: 0, unterfuehrer: 0, mannschaft: 0, gesamt: 0 },
   };
 }
 
-/** „0 / 2 / 6 / 8" */
+/** „0 / 2 / 6 // 8" */
 function staerkeKurz(b: Erfassungsbogen): string {
   const s = staerke(b);
-  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} / ${s.gesamt}`;
+  return `${s.fuehrer} / ${s.unterfuehrer} / ${s.mannschaft} // ${s.gesamt}`;
 }
 
 export function Schnellerfassung({
@@ -71,6 +81,7 @@ export function Schnellerfassung({
   const [bogen, setBogen] = useState<Erfassungsbogen>(() => start?.bogen ?? schnellerfassungsBogen());
   const [beginn] = useState<number>(() => start?.fremd?.beginn ?? Date.now());
   const [zeit, setZeit] = useState(start?.fremd?.zettel?.zeit ?? "");
+  const [abgerueckt, setAbgerueckt] = useState(start?.fremd?.zettel?.ab ?? "");
   const [nummer, setNummer] = useState(start?.fremd?.zettel?.nr ?? "");
   const [zug, setZug] = useState(start?.fremd?.zettel?.zug ?? "");
   const [gespeichert, setGespeichert] = useState(true);
@@ -90,10 +101,10 @@ export function Schnellerfassung({
     if (beendet.current) return;
     setGespeichert(
       entwurfSpeichern(bogen, {
-        fremd: { einsatzId: einsatz.id, beginn, zettel: { zeit: zeit || undefined, nr: nummer || undefined, zug: zug || undefined } },
+        fremd: { einsatzId: einsatz.id, beginn, zettel: { zeit: zeit || undefined, ab: abgerueckt || undefined, nr: nummer || undefined, zug: zug || undefined } },
       }),
     );
-  }, [bogen, zeit, nummer, zug, einsatz.id, beginn, fenster.runde]);
+  }, [bogen, zeit, abgerueckt, nummer, zug, einsatz.id, beginn, fenster.runde]);
 
   // Jede Bearbeitung datiert den Stand neu — Zeitgruppe im PDF und Reihenfolge der Fassungen.
   const aendern = (patch: Partial<Erfassungsbogen>) => setBogen((b) => ({ ...b, ...patch, stand: stempelZeitpunkt() }));
@@ -112,7 +123,7 @@ export function Schnellerfassung({
   function zurueckInDenEinsatz() {
     beendet.current = true;
     entwurfSpeichern(bogen, {
-      fremd: { einsatzId: einsatz.id, beginn, startseite: true, zettel: { zeit: zeit || undefined, nr: nummer || undefined, zug: zug || undefined } },
+      fremd: { einsatzId: einsatz.id, beginn, startseite: true, zettel: { zeit: zeit || undefined, ab: abgerueckt || undefined, nr: nummer || undefined, zug: zug || undefined } },
     });
     onEnde();
   }
@@ -134,8 +145,9 @@ export function Schnellerfassung({
       titel: "Stärke fehlt",
       text: `„${einheitAnzeigename(b.einheit)}" hat noch keine Stärke (0 Personen). In der Lage zählte sie als Einheit ohne Leute.`,
       wege: [
-        { wert: "eintragen", label: "Stärke eintragen", hinweis: "Springt zu den Zählern — die Zahl genügt." },
-        { wert: "null", label: "Trotzdem mit Stärke 0 übernehmen", hinweis: "Die Karte trägt die Marke „Stärke fehlt“; nachtragen als Folgemeldung.", gefahr: true },
+        // R19-S15: Die Folge steht als Satz unter dem Knopf („kurz"), nicht als Liste im Text davor.
+        { wert: "eintragen", label: "Stärke eintragen", kurz: "Springt zu den Zählern — die Zahl genügt.", sicher: true },
+        { wert: "null", label: "Trotzdem mit Stärke 0 übernehmen", kurz: "Marke „Stärke fehlt“; nachtragen als Folgemeldung.", gefahr: true },
       ],
     });
     if (wahl === "eintragen") zurStaerke();
@@ -170,6 +182,26 @@ export function Schnellerfassung({
       feld?.scrollIntoView?.({ block: "center" });
       feld?.focus({ preventScroll: true });
       return;
+    }
+    let zettelNr: number | undefined;
+    // „Nr. laut Zettel": eine ganze Zahl ab 1, nicht schon an eine andere Einheit vergeben (R5-A4). Vor allen Rückfragen zur Stärke: Die Übernahme scheiterte sonst nach einer schon beschlossenen Stärke trotzdem (R10-E4).
+    if (nummer.trim() !== "") {
+      const n = Number(nummer.trim());
+      if (!Number.isInteger(n) || n < 1) {
+        await zeigeHinweis({ titel: "Nr. laut Zettel", text: "Bitte eine ganze Zahl ab 1 eintragen oder das Feld leer lassen — dann vergibt die App die Nummer." });
+        return;
+      }
+      const sammlung = einsaetzeLaden().find((s) => s.id === einsatz.id);
+      const belegt = sammlung ? [...meldungsNummern(sammlung.eintraege)].find(([schl, nr]) => nr === n && schl !== einheitSchluessel(b.einheit)) : undefined;
+      if (belegt) {
+        const wer = sammlung!.eintraege.find((e) => e.einheitSchluessel === belegt[0]);
+        await zeigeHinweis({
+          titel: "Nr. schon vergeben",
+          text: `Nr. ${n} gehört schon ${wer ? `„${einheitAnzeigename(wer.bogen.einheit)}“` : "einer anderen Einheit"}. Eine andere Nummer eintragen oder das Feld leer lassen.`,
+        });
+        return;
+      }
+      zettelNr = n;
     }
     if (!(await staerkeFreigeben(b))) return;
     // Zahlendreher („99" statt „9"), bevor die Einheit in die Lage zählt (Audit Runde 6, R6-E6).
@@ -206,7 +238,7 @@ export function Schnellerfassung({
         titel: "Stimmt die Zeit?",
         text: `„Eingetroffen um" ${zeit} liegt in der Zukunft — Stunde oder Tag vertauscht? Jetzt ist es ${zeitKurz(Date.now())} Uhr.`,
         wege: [
-          { wert: "korrigieren", label: "Zeit korrigieren", hinweis: "Das Feld „Eingetroffen um“ bleibt offen, der Wert steht zum Ändern darin." },
+          { wert: "korrigieren", label: "Zeit korrigieren", hinweis: "Das Feld „Eingetroffen um“ bleibt offen, der Wert steht zum Ändern darin.", sicher: true },
           { wert: "heute", label: `Trotzdem heute ${zeitLang(gelesen.heute)}` },
           { wert: "gestern", label: `Gestern ${zeitLang(gelesen.gestern)}` },
         ],
@@ -228,25 +260,11 @@ export function Schnellerfassung({
       if (!wahl) return;
       if (wahl === "beginn") eintreffzeit = beginn;
     }
-    // „Nr. laut Zettel": eine ganze Zahl ab 1, nicht schon an eine andere Einheit vergeben (R5-A4).
-    let zettelNr: number | undefined;
-    if (nummer.trim() !== "") {
-      const n = Number(nummer.trim());
-      if (!Number.isInteger(n) || n < 1) {
-        await zeigeHinweis({ titel: "Nr. laut Zettel", text: "Bitte eine ganze Zahl ab 1 eintragen oder das Feld leer lassen — dann vergibt die App die Nummer." });
-        return;
-      }
-      const sammlung = einsaetzeLaden().find((s) => s.id === einsatz.id);
-      const belegt = sammlung ? [...meldungsNummern(sammlung.eintraege)].find(([schl, nr]) => nr === n && schl !== einheitSchluessel(b.einheit)) : undefined;
-      if (belegt) {
-        const wer = sammlung!.eintraege.find((e) => e.einheitSchluessel === belegt[0]);
-        await zeigeHinweis({
-          titel: "Nr. schon vergeben",
-          text: `Nr. ${n} gehört schon ${wer ? `„${einheitAnzeigename(wer.bogen.einheit)}“` : "einer anderen Einheit"}. Eine andere Nummer eintragen oder das Feld leer lassen.`,
-        });
-        return;
-      }
-      zettelNr = n;
+    // „Abgerückt um“ vom Meldeblock: prüfen, bevor etwas abgelegt wird (R13-A1).
+    const abWahl = abrueckzeitVomZettel(abgerueckt, eintreffzeit);
+    if (abWahl.art === "fehler") {
+      await zeigeHinweis({ titel: "Abgerückt um", text: abWahl.text });
+      return;
     }
     setMeldung("");
     const vorherDa = new Set(einsaetzeLaden().find((s) => s.id === einsatz.id)?.eintraege.map((e) => e.id));
@@ -282,6 +300,8 @@ export function Schnellerfassung({
     if (neu && eintraege.filter((e) => e.einheitSchluessel === neu.einheitSchluessel).length === 1) {
       if (eintreffzeit != null) eintreffzeitSetzen(einsatz.id, neu.id, eintreffzeit);
       if (zettelNr != null || zug.trim() !== "") nummerUndZugSetzen(einsatz.id, neu.id, { nummer: zettelNr, zug });
+      // Auf dem Meldeblock schon abgerückt: gleich mit dieser Zeit abgerückt anlegen, nicht in die Summen (R13-A1).
+      if (abWahl.art === "zeit") statusMitZeitSetzen(einsatz.id, neu.id, MeldeStatus.ABGERUECKT, abWahl.zeit, abWahl.zeit);
       // Ohne Nr. vom Zettel: sagen, welche die App vergeben hat — sie gehört auf
       // den Zettel, sonst laufen Papier und Gerät in zwei Nummernreihen (R5-A4).
       if (zettelNr == null) {
@@ -291,6 +311,14 @@ export function Schnellerfassung({
     }
     if (nrSatz) setMeldung(nrSatz);
     beenden();
+    // Die Sammlung öffnet oben (Name, Kacheln), nicht dort, wo der Knopf der Erfassung stand (R10-N5).
+    setTimeout(() => {
+      try {
+        window.scrollTo(0, 0);
+      } catch {
+        /* Testumgebung ohne Layout */
+      }
+    }, 0);
   }
 
   /**
@@ -348,7 +376,7 @@ export function Schnellerfassung({
           {!gespeichert && !fenster.konflikt && <strong> Nicht gespeichert — der Gerätespeicher nimmt nichts an. Bitte zügig übernehmen.</strong>}
         </p>
         {/* Die Uhrzeit vom Meldeblock gleich oben mitnehmen, statt sie danach je Karte über „ändern" (R2-A5). */}
-        <EintreffzeitFeld wert={zeit} onAendern={setZeit} nummer={nummer} onNummer={setNummer} zug={zug} onZug={setZug} zuege={zuege} />
+        <EintreffzeitFeld wert={zeit} onAendern={setZeit} abgerueckt={abgerueckt} onAbgerueckt={setAbgerueckt} nummer={nummer} onNummer={setNummer} zug={zug} onZug={setZug} zuege={zuege} />
         <AbschnittEinheit bogen={bogen} aendern={aendern} kompakt />
         <div ref={staerkeAbschnitt} id="abschnitt-staerke">
           <AbschnittStaerke bogen={bogen} aendern={aendern} />

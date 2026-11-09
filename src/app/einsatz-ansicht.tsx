@@ -1,9 +1,9 @@
 /**
  * Die offene Einsatz-Sammlung: Einsatzansicht samt Ausgabewegen (Sammel-PDF,
- * Lageblatt, Blanko, CSV, Excel „Oldenburg", Einsatz-Datei) und den Warnungen
+ * Lageblatt, Blanko, CSV, Einsatz-Datei) und den Warnungen
  * zu Uhr und Speicher.
  *
- * Herkunft: Erfassungsbogen `src/app/app.tsx` (Commit 441811c), der Zweig
+ * Herkunft: Erfassungsbogen `src/app/app.tsx` (Commit 441811c, abgeglichen mit 1d7ed5f), der Zweig
  * „Offener Einsatz" mit `dateiAnbieten`, `einsatzDateiname`, `exportVerbuchen`,
  * `exportiereEinsatz*`, `nachtragMarke`, `sammelPdf`, `blankoVordruck`,
  * `lageblatt` und dem Export-Stand je Format (R4-W2, R4-W4, R5-L4, R5-O3,
@@ -27,13 +27,13 @@ import { LAGE_ABGLEICH_KURZ, teileMerker } from "./eingang/qr-stapel";
 import { StapelQuittung } from "./eingang/stapel-quittung";
 import { einsaetzeLaden, einsaetzePapierkorb } from "./einsaetze-lesen";
 import { meldungsNummern } from "./einheiten-tabelle";
-import { blobAlsDownload, bytesAlsDatei, dateinameTeil } from "./hilfen";
+import { artMitMarke, ausgabeDateiname, blobAlsDownload, dateinameTeil } from "./hilfen";
+import { LEERER_EINSATZ_TEXT, LEERE_DATEI_TEXT, einsatzLeer } from "./ausgabe-sperre";
 import { istNativ, textTeilen } from "./nativ";
 import { fehlerText } from "./nachladen";
 import { SpeicherWarnung } from "./speicher-warnung";
 import { UhrWarnung } from "./uhr-warnung";
 import { einsatzDetailCsvInhalt } from "./weitergabe/bogen-csv";
-import { einsatzCsvInhalt } from "./weitergabe/einsatz-csv";
 import { einsatzDateiInhalt } from "./weitergabe/einsatz-transport";
 import {
   exportSammlung,
@@ -41,6 +41,8 @@ import {
   exportStandAusWeitergabe,
   exportVermerken,
   lieferungsMarke,
+  vermerkFehltZusatz,
+  vermerkNeuBeginnen,
   type ExportStand,
   type ExportUmfang,
   type ExportZiel,
@@ -57,6 +59,7 @@ export function EinsatzAnsicht({
   onGeaendert,
   onGeloescht,
   onManuell,
+  angefangeneErfassung,
   exportUmfang,
   setExportUmfang,
   offlineWarnung,
@@ -74,6 +77,8 @@ export function EinsatzAnsicht({
   onGeloescht: () => void;
   /** „Einheit manuell erfassen…": die Schnellerfassung für diesen Einsatz (app.tsx). */
   onManuell: () => void;
+  /** Name einer angefangenen Schnellerfassung dieses Einsatzes — die Löschrückfrage nennt sie. */
+  angefangeneErfassung?: string;
   /**
    * Alle Bögen oder nur die neuen. Liegt in app.tsx, weil die Ansicht während
    * der Schnellerfassung nicht eingehängt ist und die Wahl sonst verlöre
@@ -139,13 +144,29 @@ export function EinsatzAnsicht({
     return lieferungsMarke(umfang, exportStaende[ziel]);
   }
 
+  /**
+   * Ein Einsatz ohne Einheit liefert nur leere Dateien. Die Weitergabe meldete dann „Seit dem letzten Sammel-PDF …
+   * nichts geändert", als gäbe es ein früheres PDF (R12-E5); jetzt sagen alle Ausgaben, was Sache ist.
+   */
+  function leererEinsatz(s: Einsatzsammlung, blockieren = false): boolean {
+    if (!einsatzLeer(s)) return false;
+    // Die Weitergabe hat ohne Einheit nichts zu sichern; die Tabellenformate liefern weiter (leere) Dateien, sagen es aber.
+    setAusgabeQuittung(blockieren ? LEERER_EINSATZ_TEXT : LEERE_DATEI_TEXT);
+    return blockieren;
+  }
+
+  /** Quittung einer Tabellendatei: Name und Ablageort, damit am Telefon klar ist, welche Datei an den Stab geht (R18-A4). */
+  function dateiQuittungText(name: string, s: Einsatzsammlung): string {
+    return `✓ Gespeichert: ${name} — im Download-Ordner bzw. über das Teilen-Menü abgelegt.${einsatzLeer(s) ? ` ${LEERE_DATEI_TEXT}` : ""}${vermerkFehltZusatz()}`;
+  }
+
   async function exportiereEinsatzCsv(s: Einsatzsammlung, umfang: ExportUmfang) {
     setAusgabeQuittung(null);
     leererEinsatz(s);
     const teil = exportSammlung(s, umfang, exportStaende.csv ?? null);
     const marke = nachtragMarke(umfang, "csv");
     // Erst beim Klick geladen: der CSV-Schreiber gehört nicht ins Startbündel.
-    const { einsatzCsvInhalt } = await import("./einsatz-csv");
+    const { einsatzCsvInhalt } = await import("./weitergabe/einsatz-csv");
     const { entfernteNummernText } = await import("./meldungs-papierkorb"); // R19-A2: Lücke in den Nummern benennen
     const name = ausgabeDateiname(artMitMarke("einsatz-uebersicht", marke), einsatzDateiname(s), "csv"); // R20-N8
     const ok = await dateiAnbieten(name, einsatzCsvInhalt(teil, meldungsNummern(s.eintraege), undefined, s.eintraege, undefined, entfernteNummernText(s.id)), "text/csv;charset=utf-8");
@@ -164,21 +185,6 @@ export function EinsatzAnsicht({
     if (ok) {
       exportVerbuchen(s, "csv-detail");
       setAusgabeQuittung(dateiQuittungText(name, s));
-    }
-  }
-
-  /**
-   * Einheitenliste im Fremdformat der Führungsstelle. Dynamisch geladen: der
-   * XLSX-Schreiber samt Stiltabelle wird nur beim Klick gebraucht (wie die PDF).
-   */
-  async function exportiereEinsatzOldenburg(s: Einsatzsammlung, umfang: ExportUmfang) {
-    const teil = exportSammlung(s, umfang, exportStaende.xlsx ?? null);
-    try {
-      const { XLSX_MIME, einsatzOldenburgXlsx } = await import("./weitergabe/oldenburg-xlsx");
-      const ok = await bytesAlsDatei(`eeb-einsatz-${nachtragMarke(umfang, "xlsx")}${einsatzDateiname(s)}-oldenburg.xlsx`, einsatzOldenburgXlsx(teil), XLSX_MIME);
-      if (ok) exportVerbuchen(s, "xlsx");
-    } catch (e) {
-      setFehler(`Excel-Liste: ${fehlerText(e)}`);
     }
   }
 
@@ -216,19 +222,13 @@ export function EinsatzAnsicht({
         if (!weitergabe) exportVerbuchen(s, "pdf");
         // Die Bestätigung steht direkt unter den Knöpfen (R5-L4), nicht am Seitenende.
         setAusgabeQuittung(
-<<<<<<< ours
-          umfang === "neue"
-            ? `✓ Neue Bögen aus „${s.name}" als PDF erzeugt — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt. Übergeben ist sie erst, wenn sie gedruckt oder verschickt ist.`
+          (umfang === "neue"
+            ? `✓ Neue Bögen aus „${s.name}" als PDF gespeichert (Download-Ordner bzw. Teilen-Menü). Ob sie angekommen ist, weiß das Gerät nicht.`
             : // Die Übergabe-PDF ist Druckstück und Datenträger zugleich; „sichern" meinte daneben auch die
               // Datensicherung des Geräts (Audit Meldekopf R1, Arbeitsablauf P2-1). Die Quittung sagt beides.
               `✓ Übergabe-PDF „${s.name}" erzeugt: zum Drucken und mit allen Meldungen, Zeiten und Historie zum Einlesen — auf dem neuen Gerät über „Einsatz importieren…“. ` +
               "Sie ersetzt dort nichts, sie fügt diese Sammlung hinzu; die Datensicherung des ganzen Geräts ist ein anderer Weg (Fußzeile). " +
-              "Liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt; übergeben ist sie erst, wenn sie bei der Ablösung oder im Archiv angekommen ist.",
-=======
-          (umfang === "neue"
-            ? `✓ Neue Bögen aus „${s.name}" als PDF gespeichert (Download-Ordner bzw. Teilen-Menü). Ob sie angekommen ist, weiß das Gerät nicht.`
-            : `✓ Einsatz „${s.name}" als PDF gespeichert (Download-Ordner bzw. Teilen-Menü). Ob sie angekommen ist, weiß das Gerät nicht.`) + vermerkFehltZusatz(),
->>>>>>> theirs
+              "Liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt; übergeben ist sie erst, wenn sie bei der Ablösung oder im Archiv angekommen ist.") + vermerkFehltZusatz(),
         );
       } catch (e) {
         setFehler(`Einsatz übergeben: ${fehlerText(e)}`);
@@ -261,17 +261,12 @@ export function EinsatzAnsicht({
     vermerkNeuBeginnen();
     await arbeiten("lageblatt", async () => {
       try {
-<<<<<<< ours
         const { einsatzLageblattErzeugen } = await import("./weitergabe/pdf");
-        if (await einsatzLageblattErzeugen(s)) setAusgabeQuittung("✓ Lageblatt erzeugt (A4 quer) — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt.");
-=======
-        const { einsatzLageblattErzeugen } = await import("./pdf");
         if (await einsatzLageblattErzeugen(s)) {
           setAusgabeQuittung(
             `✓ Lageblatt erzeugt (A4 quer) — liegt im Download-Ordner bzw. wurde über das Teilen-Menü abgelegt.${leer ? ` ${LEERE_DATEI_TEXT}` : ""}${vermerkFehltZusatz()}`,
           );
         }
->>>>>>> theirs
       } catch (e) {
         setFehler(`Lageblatt: ${fehlerText(e)}`);
       }
@@ -289,14 +284,20 @@ export function EinsatzAnsicht({
         onGeaendert={onGeaendert}
         onScannen={() => aufnahme.scanneInEinsatz(einsatz.id)}
         onManuell={onManuell}
+        angefangeneErfassung={angefangeneErfassung}
         onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
         onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}
         onEinlesen={(daten, bilder) => void aufnahme.importiereStapel(einsatz.id, daten, bilder)}
         abgleichAnstoss={aufnahme.abgleichAnstoss}
+        onKenntnisGenommen={() => {
+          // R19-N6: Die Aufnahme-Meldung ist gelesen; sie bleibt nicht bis zum nächsten Einlesen stehen.
+          aufnahme.setEinlese(null);
+          aufnahme.setStapelBericht([]);
+        }}
         abgleichKnopfImBericht={aufnahme.stapelBericht.includes(LAGE_ABGLEICH_KURZ)}
         einleseQuittung={
           <>
-            <EinleseQuittung fehler={aufnahme.einlese?.fehler ?? ""} meldung={aufnahme.einlese?.meldung ?? ""} einzelheiten={aufnahme.einlese?.einzelheiten} />
+            <EinleseQuittung fehler={aufnahme.einlese?.fehler ?? ""} meldung={aufnahme.einlese?.meldung ?? ""} einzelheiten={aufnahme.einlese?.einzelheiten} zurueck={aufnahme.einlese?.zurueck} />
             {/* Stapel-Fortschritt und -Bericht holen sich selbst ins Bild (R2-A2). */}
             <StapelQuittung
               stand={aufnahme.stapelStand}
@@ -313,7 +314,6 @@ export function EinsatzAnsicht({
         onExport={() => void exportiereEinsatz(einsatz)}
         onCsvExport={(umfang) => void exportiereEinsatzCsv(einsatz, umfang)}
         onCsvDetailExport={(umfang) => void exportiereEinsatzCsvDetail(einsatz, umfang)}
-        onOldenburgExport={(umfang) => void exportiereEinsatzOldenburg(einsatz, umfang)}
         onSammelPdf={(umfang) => void sammelPdf(einsatz, umfang)}
         exportStaende={exportStaende}
         onStandAusWeitergabe={(ziel) => {

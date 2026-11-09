@@ -107,7 +107,6 @@ flowchart LR
   Papier["Papier: Sammel-PDF,<br/>Lageblatt, Blanko"]
   Stab["S1-Control<br/>(Stab)"]
   MK2["Zweites Meldekopf-Gerät<br/>(Ablösung)"]
-  Oldenburg["Einheitenliste Oldenburg<br/>(Excel der Führungsstelle)"]
 
   Einheit -->|"QR-Code, Link, Datei, PDF,<br/>Foto, Handscanner"| MK
   MK -->|"„Vollständig erfassen"<br/>Link mit Payload"| Einheit
@@ -116,7 +115,6 @@ flowchart LR
   Papier -->|"Scan + Lage vom Papier abgleichen"| MK
   MK -->|"Einsatz-Datei, CSV"| Stab
   MK <-->|"Einsatz-Datei, Sammel-PDF"| MK2
-  MK -->|"XLSX"| Oldenburg
 ```
 
 | Partner | Schnittstelle | Beschreibung |
@@ -128,7 +126,7 @@ flowchart LR
 | Zweites Meldekopf-Gerät | Einsatz-Datei, Sammel-PDF | Ablösung und Rückimport mit Abgleich je Feld (`einsatz-abgleich`). |
 | Papier | Sammel-PDF, Lageblatt, Blanko | Referenzformat und Rückfallebene nach Geräteausfall. |
 | USB-Handscanner | Tastatur-Emulation | Wie im Erfassungsbogen. |
-| Excel-Vorlage „Oldenburg" | XLSX, 38 Spalten | Fest vorgegebenes Format einer Führungsstelle. |
+| Excel-Vorlage „Oldenburg" | entfällt seit 2026-11-09 | Wie im Erfassungsbogen (2026-11-03) gestrichen; für Tabellen bleibt die CSV, die Gegenstelle übernimmt Bögen über Link oder PDF. |
 
 ### 3.2 Technischer Kontext
 
@@ -239,8 +237,8 @@ Startseite mit der Weiche „Bögen sammeln" (laufende Sammlungen öffnen, neue
 anlegen), die Einsatzliste und die zuletzt offene Sammlung
 (`letzter-einsatz.ts`, 12 h). Die offene Sammlung zeigt `einsatz-ansicht.tsx`:
 `EinsatzDetail` aus `einsaetze-ui.tsx` mit den Ausgabewegen (Sammel-PDF,
-Lageblatt, Blanko, CSV, Alle-Daten-CSV, Excel „Oldenburg", Export-Stand je
-Format). Übernommen ist der ganze Abhängigkeitsbaum von `einsaetze-ui`
+Lageblatt, Blanko, CSV, Alle-Daten-CSV, Export-Stand je
+Format; die Excel-Liste „Oldenburg" ist seit 2026-11-09 entfallen). Übernommen ist der ganze Abhängigkeitsbaum von `einsaetze-ui`
 (rund 20.000 Zeilen aus `441811c`, mit Tests): Persistenz-Anbindung,
 Auswertung, Einheitenliste und -tabelle, Fassungs-Vorrang, Fristen und Uhr,
 Datensicherung, Aufteilen/Zusammenführen, Lagemonitor, Papier-Abgleich,
@@ -405,7 +403,7 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | Schlüssel | Inhalt | Herkunft |
 | --- | --- | --- |
 | `eeb.einsaetze.v1` | Alle Einsatz-Sammlungen (Kern) | `@bos/meldekopf` |
-| `eeb.export-stand.v2` | Export-Stand je Einsatz und Format | `export-stand.ts` |
+| `eeb.export-stand.v2` | Export-Stand je Einsatz und Format (das Ziel `xlsx` der Oldenburg-Liste entfällt seit 2026-11-09, alte Stände werden nur gelesen) | `export-stand.ts` |
 | `eeb.lageblatt-stand.v1`, `eeb.weitergabe-stand.v1`, `eeb.kenntnis-stand.v1` | Lageblatt-, Weitergabe-, Kenntnis-Stand | `export-stand.ts` |
 | `eeb.entfernt.v1` | Vor Ort entfernte Meldungen je Sammlung | `entfernte-meldungen.ts` |
 | `eeb.aufgeraeumt.v1` | Nachricht über automatisch gelöschte Sammlungen | `aufraeum-hinweis.ts` |
@@ -421,6 +419,14 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.export-stand.v1` | Vorgängerfassung des Export-Stands, nur lesend für Bestände | `export-stand.ts` |
 | `sessionStorage`: `eeb.papierabgleich.v1.<Einsatz>`, `eeb.wartet.fragment` | Zwischenstand Papier-Abgleich; wartender Link | `papier-abgleich-entwurf.ts`, `wartender-link.ts` |
 | `sessionStorage`: `eeb.vorbelegung.rueckweg`, `eeb.fahrzeug.rueckweg`, `eeb.ebene.rueckweg` | Rückweg nach „Vorbelegung entfernen“, „Fahrzeug entfernen“, „Ebene entfernen“ in der Schnellerfassung, 15 Minuten | `schnellerfassung/vorbelegung-rueckweg.ts`, `schnellerfassung/rueckweg-sitzung.ts` |
+| `eeb.meldungen-papierkorb.v1` | Entfernte Meldungen, 7 Tage zum Zurückholen; vollständige Einträge samt Personennamen (seit Abgleich 2026-11-09) | `meldungs-papierkorb.ts` |
+| `eeb.abschluss.v1` | Je Einsatz „beendet“ und Übergabevermerk mit frei getipptem Empfänger | `einsatz-abschluss.ts` |
+| `eeb.widersprueche.v1` | Widersprüche aus einem Einsatz-Import je Sammlung, bis „Erledigt“; Einheitsnamen und Feldwerte, keine Personennamen | `eingang/widerspruch-merker.ts` |
+| `eeb.nummernhinweis.v1` | Hinweis auf geänderte Meldungsnummern je Sammlung, bis zum nächsten Lageblatt | `weitergabe/nummern-hinweis.ts` |
+| `eeb.sicherung.stand.v1` | Zahl der Sammlungen und Meldungen bei der letzten Datensicherung | `sicherung.ts` |
+| `eeb.schnellOrganisation.v1` | Zuletzt gewählte Organisation der Schnellerfassung (nur die Zahl) | `schnell-organisation.ts` |
+| `eeb.einheiten-tabelle-alle-spalten` | Tabelle mit allen Spalten oder nur Kernspalten (Gerätewert) | `einsaetze-ui.tsx` |
+| `sessionStorage`: `eeb.import-laeuft.v1`, `eeb.karte-offen.v1`, `eeb.ansicht-stelle.v1`, `eeb.einsatz.rueckweg`, `eeb.funkruf.merker.<Index>`, `eeb.abgleich.fortsetzen` | Unterbrochener Import; offene Einheitenkarten (Kennungen); Bildlaufstelle; Rückweg nach „Einsatz bearbeiten“; ausgeschaltete Funkrufnamen je Fahrzeug, 15 Minuten; Merker nach dem Fensterabgleich | `eingang/import-unterbrochen.ts`, `einsaetze-ui.tsx`, `ansicht-stelle.ts`, `einsatz-notweg.ts`, `schnellerfassung/fahrzeuge.tsx`, `fenster-abgleich.tsx` |
 
 **Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen; eine
 eingespielte Sicherung aus dem Erfassungsbogen bringt sie mit, die

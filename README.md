@@ -46,7 +46,7 @@ Tage oder Aufträge braucht, ist S1-Control.
   Einsatzdauer, Stärke, Bedarf, Stärke je Zug, Einheitentabelle mit Zug und
   Gesamt, ohne Personennamen.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
-  Daten, Excel-Liste im Format „Oldenburg", Einsatz-Datei für S1-Control.
+  Daten, Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.
 - Papierkorb, Datenschutzfristen, Datensicherung; Feld- und Nacht-Modus.
 - Kein Server, keine Anmeldung, keine Cloud. Alles bleibt auf dem Gerät.

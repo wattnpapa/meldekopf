@@ -196,7 +196,7 @@ des Erfassungsbogens.
 | D3 | Absenderkarte | **Als Sender entfällt sie** (keine Oberfläche zum Anlegen). Empfangene Absenderkarten anderer Geräte stehen im Signaturnachweis der Meldungen (D2). Eine **eigene** Karte kann nur aus einer eingespielten Erfassungsbogen-Sicherung stammen; beim Signieren wird sie seit 2026-10-25 nicht mehr verwendet (Prüfvermerk unten) | `eeb.absenderkarte.v1` | D3 (reduziert) |
 | D4 | Privater Geräteschlüssel | Ed25519-Schlüssel zum Signieren und Gegenzeichnen der QR-Codes in Einzel- und Sammel-PDF; wird beim ersten PDF erzeugt (`geraete-schluessel.ts`); **unverschlüsselt als Hex**; lässt er sich nicht speichern, nur im Arbeitsspeicher der Sitzung | `eeb.geraeteschluessel.v1` | D4 |
 | D5 | Transportdaten | **Ausgehend (live):** QR-Codes je Bogen in Einzel- und Sammel-PDF (signiert bzw. gegengezeichnet). **Eingehend (live seit Phase 3):** QR-Payload aus Kamera, Handscanner, Bild, Link-Fragment, JSON-Datei, PDF, Einsatz-Datei (`src/app/eingang/`, Weiche in `eingang/aufnahme.tsx`) | transient bzw. Datei | D5 |
-| D6 | Ausgaben | Sammel-PDF (mit eingebettetem Bogen-JSON und eingebetteter Sammlung samt Export-Ständen und Lage-Angaben), Lageblatt (A4 quer, Aushang), Blanko-Vordruck (ohne Gerätedaten), Übersichts-CSV, CSV mit allen Daten, Excel-Liste „Oldenburg", Einsatz-Datei (JSON-Umschlag) | außerhalb der App (Papier, Dateisystem, Empfänger) | D6 |
+| D6 | Ausgaben | Sammel-PDF (mit eingebettetem Bogen-JSON und eingebetteter Sammlung samt Export-Ständen und Lage-Angaben), Lageblatt (A4 quer, Aushang), Blanko-Vordruck (ohne Gerätedaten), Übersichts-CSV, CSV mit allen Daten, Einsatz-Datei (JSON-Umschlag) | außerhalb der App (Papier, Dateisystem, Empfänger) | D6 |
 | D7 | Datensicherungsdatei | **Neu als eigenes Zielobjekt.** Alle `eeb.*`-Einträge des Geräts als eine JSON-Datei (`eeb-sicherung-JJJJ-MM-TT.json`): alle Sammlungen samt Papierkorb, D2p, D3 und **der private Geräteschlüssel D4** (`sicherung.ts`, `sicherung-datei.ts`, `daten-gruppe.tsx`). Die Oberfläche weist darauf hin („enthält den privaten Signaturschlüssel und ggf. Personendaten") | Datei, Ablage durch den Nutzer | (in der Vorlage nur in DSFA 5.7) |
 
 > *Prüfvermerk zu D4:* Bestätigt — `src/app/geraete-schluessel.ts` legt den
@@ -437,10 +437,8 @@ Umschrift, Nr., Kopfzeilen).
   Bemerkung der Einheit, Hinweisen) und die **CSV mit allen Daten**
   (`weitergabe/bogen-csv.ts`, Langformat mit je einer Zeile je Person und
   Fahrzeug, also allen Namen und Erreichbarkeiten).
-- **XLSX-Schreiber** (`@bos/eeb-satz/xlsx`): `&`/`<`-Escaping; die
-  **Excel-Liste „Oldenburg"** (`weitergabe/oldenburg-xlsx.ts`) schreibt
-  Freitexte als `inlineStr` (nie als Formel ausgewertet); Summen nur über die
-  in die Lage zählenden Einheiten.
+- Die **Excel-Liste „Oldenburg"** ist seit 2026-11-09 entfallen (wie im
+  Erfassungsbogen); `@bos/eeb-satz/xlsx` hat in der App keinen Aufrufer mehr.
 - **Sammel-PDF** (`weitergabe/pdf.ts`, `weitergabe/pdf-dokument.ts`): Lageblatt
   als Seite 1, dahinter jeder Bogen mit Kasten „Stand am Meldekopf" und
   QR-Code (gegengezeichnet, 5.2); eingebettet sind alle Bögen als JSON **und

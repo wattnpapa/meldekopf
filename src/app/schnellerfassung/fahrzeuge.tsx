@@ -2,7 +2,7 @@
  * Abschnitt Fahrzeuge der Schnellerfassung: Typ, Kennzeichen, Funkrufname und
  * StAN-Vorbelegung.
  *
- * Herkunft: Erfassungsbogen `src/app/schritte/fahrzeuge.tsx` (Commit 441811c),
+ * Herkunft: Erfassungsbogen `src/app/schritte/fahrzeuge.tsx` (Commit 1d7ed5f),
  * mit den Befunden der Audit-Runden (Sitzplätze R9-E1, Funkrufname R9-D1,
  * Fahrzeug entfernen mit Rückweg R9-D3). Geändert: `KennzahlenFeld` liegt in
  * `kennzahlen-feld.tsx`, die Auswahllisten sortiert die App (`vokabSortiert`).

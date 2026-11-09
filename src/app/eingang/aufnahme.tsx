@@ -115,6 +115,7 @@ import {
 } from "./qr-stapel";
 import { fehlendeTeile, fehltNochSatz, teilGelesenSatz, verworfeneTeileSatz } from "./teil-quittung";
 import { entwirreScanText } from "./tastaturbelegung";
+import { handscannerLauscher, tastaturGehoertElement } from "./handscanner";
 import { wartendenLinkErledigt, wartendenLinkLesen, wartendenLinkMerken } from "./wartender-link";
 import {
   istSegmentNutzlast,
@@ -1941,6 +1942,32 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
 
   // Universal Link (iOS) / App Link (Android) öffnet die native App.
   useEffect(() => bogenLinksEmpfangen((url) => linkEmpfangenRef.current(url)), []);
+
+  // USB-Handscanner auf der ganzen Seite, nicht nur im Scanner-Fenster (Probelauf
+  // Meldekopf, Erfassungsbogen aa9a8370): Helfer lösten den Scanner aus, ohne
+  // vorher „Bogen scannen…" zu drücken — wie an jeder Kasse. Dann passierte
+  // nichts, oder der Browser öffnete auf das „/" der Adresse seine Schnellsuche.
+  // Jetzt ist ein Scan ohne offenes Fenster dasselbe wie ein angetippter
+  // Bogen-Link: „Wohin damit?"; ein Teil eines mehrteiligen Bogens öffnet das
+  // Scanner-Fenster, damit die übrigen Teile folgen können. Offen ist das
+  // Fenster, übernimmt dessen eigener Lauscher; in Eingabefeldern (auch Zeit,
+  // Datum, Zahl, Auswahl) und bei offenen Fenstern (Rückfragen) bleibt die
+  // Tastatur der Seite.
+  const handscannerRef = useRef<(text: string) => void>(() => {});
+  handscannerRef.current = (text: string) => {
+    void uebernehmeQrText(text, { ohneKiosk: true }).then((fertig) => {
+      if (!fertig && segmentTeileRef.current.length > 0) void scanneQr();
+    });
+  };
+  useEffect(
+    () =>
+      handscannerLauscher(window, {
+        onScan: (text) => handscannerRef.current(text),
+        zustaendig: () =>
+          !scannerOffenRef.current && !tastaturGehoertElement(document.activeElement) && !document.querySelector("dialog[open]"),
+      }),
+    [],
+  );
 
   return {
     eingang,

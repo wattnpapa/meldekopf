@@ -124,4 +124,4 @@ Funktionalität: Einheitenliste durchsuchen, filtern und sortieren
     Angenommen das Fenster 390 × 844 Pixel groß ist
     Wenn ich auf "Tabelle" klicke
     Dann steht die Tabellenspalte "Stärke gesamt" ohne Wischen im Bild
-    Und sehe ich die Schaltfläche "Alle 22 Spalten zeigen"
+    Und sehe ich die Schaltfläche "Alle Spalten zeigen"

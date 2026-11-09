@@ -13,9 +13,9 @@ import { staerke, type EebZeitpunkt } from "@bos/eeb-format/model";
 import { angabenAlterWort, angabenZeit, type AngabenSeit } from "./angaben-alter";
 import { einheitOrt } from "@bos/meldekopf/darstellung";
 import { EinsatzArt, MeldeStatus, revisionen, type Einsatzsammlung, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
-import { aggregiere, aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage, type EinsatzSummen } from "./auswertung";
+import { aggregiere, aggregiereNachZug, aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage, type EinsatzSummen } from "./auswertung";
 import { eintreffzeit } from "./eintrag-zeiten";
-import { letzteMeldung, sollstaerkeAnteil } from "./einheiten-tabelle";
+import { bedarfMarken, letzteMeldung, sollstaerkeAnteil } from "./einheiten-tabelle";
 import { geltendeJeEinheit } from "./fassung-vorrang";
 import { einheitAnzeigename, funkrufText, nurSollstaerke, natoZeitstempel, orgLabel, vokabText, vokabularFuer } from "./hilfen";
 
@@ -346,7 +346,8 @@ function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
 
 export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): Lagebild {
   const geltend = geltendeJeEinheit(einsatz.eintraege);
-  const einheiten = aktuelleMeldungen(einsatz.eintraege, einsatz.art)
+  const aktuell = aktuelleMeldungen(einsatz.eintraege, einsatz.art);
+  const einheiten = aktuell
     .map((m) => ({ m, da: eintreffzeit(m) }))
     // Erst die mit ⚠ (Angaben älter als eine Stunde), älteste zuerst: Bei knappem Platz werden die unauffälligen Zeilen
     // gekürzt, nicht die gewarnten (Erfassungsbogen R15-K2). Danach zuletzt eingetroffen zuerst (R8-K5); vorher nach

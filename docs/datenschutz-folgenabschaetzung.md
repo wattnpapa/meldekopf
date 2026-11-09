@@ -134,8 +134,8 @@ die für die DSFA relevante Kurzfassung:
   des Erfassungsbogens). **Schnellerfassung** einer Einheit ohne Bogen
   (live seit Phase 4; `src/app/schnellerfassung/`).
 - **Ausgang** (live): Sammel-PDF mit eingebetteter Sammlung, Lageblatt,
-  Blanko-Vordruck, Übersichts-CSV, CSV mit allen Daten, Excel-Liste
-  „Oldenburg", Einsatz-Datei, Datensicherung.
+  Blanko-Vordruck, Übersichts-CSV, CSV mit allen Daten, Einsatz-Datei,
+  Datensicherung (die Excel-Liste „Oldenburg" entfällt seit 2026-11-09).
 - **Lagemonitor:** zweites Fenster derselben App für einen Fernseher am
   Gerät, ohne Personennamen.
 - **Signatur:** Ed25519; der Meldekopf zeichnet die QR-Codes empfangener,
@@ -203,7 +203,7 @@ Datenschutzbeauftragte/n zu bestätigen.
 - Anzeige der Lage auf einem zweiten Bildschirm ohne Personennamen.
 - Weitergabe an die nächste Führungsstelle, an S1-Control und an die Ablösung:
   Sammel-PDF (Papier ist die Rückfallebene), Lageblatt (Aushang,
-  Klemmbrett), CSV, Excel-Liste „Oldenburg", Einsatz-Datei; „nur neue seit
+  Klemmbrett), CSV, Einsatz-Datei; „nur neue seit
   dem letzten Export".
 - Rückfallebene Papier: Blanko-Vordruck, Lageblatt mit Nachtragszeilen,
   Abgleich der Lage vom Papier nach Geräteausfall.
@@ -226,7 +226,7 @@ Datenschutzbeauftragte/n zu bestätigen.
 | Auftragsverarbeiter (Art. 28 DSGVO) | Keiner für den Kern-Anwendungsfall | Kein Server verarbeitet im Auftrag |
 | Externer Dienst (Reichweitenmessung) | GoatCounter (`meldekopf.goatcounter.com`) | Cookielos, ohne Bezug zu den Sammlungsdaten (5.8) |
 | Quellen der Daten | Die eintreffenden Einheiten (Erfassungsbogen-App oder Papier) | Erheben die Daten ihres Personals selbst; der Meldekopf erhält sie im Meldeweg |
-| Empfänger | Übergeordnete Führungsstelle, Stab (S1-Control), Ablösung am Meldekopf, Führungsstelle mit Excel-Vorlage „Oldenburg" | Erhalten Vollkopien oder Ausschnitte (5.8) |
+| Empfänger | Übergeordnete Führungsstelle, Stab (S1-Control), Ablösung am Meldekopf | Erhalten Vollkopien oder Ausschnitte (5.8) |
 
 ### 5.3 Betroffene Personen
 
@@ -308,8 +308,7 @@ versehentlich in Freitexten, M7), biometrische Daten, strafrechtliche Daten.
   Lage-Angaben), Lageblatt allein (mit Funkrufname und **Rückrufnummer der
   Führungskraft** je Einheit — Aushang), Übersichts-CSV (eine Zeile je Einheit
   mit Notiz, Bemerkung, Hinweisen), CSV mit allen Daten (je Person eine
-  Zeile, mit Namen und Erreichbarkeiten), Excel-Liste „Oldenburg" (mit
-  Erreichbarkeit der Führungskraft, Notiz), Einsatz-Datei (JSON-Umschlag
+  Zeile, mit Namen und Erreichbarkeiten),  Einsatz-Datei (JSON-Umschlag
   der Sammlung). „Nur neue seit dem letzten Export" je Format. Im QR-Code
   steckt nur der Bogen der Einheit, nie die Notiz der Führungsstelle.
 - **Gegenzeichnen:** Ist ein Bogen seit dem Empfang unverändert, behält sein
@@ -368,6 +367,11 @@ fällig macht, schon.
 | `eeb.aufgeraeumt.v1` | Name, Zeitraum, Zahlen einer aufgeräumten Sammlung | Nein (Sammlungsname als Freitext) | bis „Verstanden"; „Alle Daten löschen" |
 | `eeb.letzterEinsatz.v1` | Zuletzt offene Sammlung | Nein | 12 Stunden gültig |
 | `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1` | Lagemonitor: Beginn, Funkrufname der Führungsstelle, Helligkeit | Nein vorgesehen | Einträge zu gelöschten Einsätzen fallen beim Schreiben weg; „Alle Daten löschen" |
+| `eeb.meldungen-papierkorb.v1` | Entfernte Meldungen zum Zurückholen | Ja, vollständige Meldungen samt Namen | 7 Tage, danach beim nächsten Schreiben verworfen; „Endgültig löschen“; „Alle Daten löschen" |
+| `eeb.abschluss.v1` | „Einsatz beendet“ und Übergabevermerk je Einsatz | Möglich (frei getippter Empfänger der Übergabe) | Fällt mit dem Einsatz weg; „Alle Daten löschen" |
+| `eeb.widersprueche.v1` | Widersprüche aus einem Einsatz-Import | Nein vorgesehen (Einheitsnamen, Feldwerte) | Bis „Erledigt“ oder mit dem Einsatz; „Alle Daten löschen" |
+| `eeb.nummernhinweis.v1`, `eeb.sicherung.stand.v1`, `eeb.schnellOrganisation.v1`, `eeb.einheiten-tabelle-alle-spalten` | Komfortvermerke (Nummernhinweis, Stand der letzten Sicherung, letzte Organisation, Tabellenspalten) | Nein | „Alle Daten löschen" |
+| `sessionStorage`: `eeb.import-laeuft.v1`, `eeb.karte-offen.v1`, `eeb.ansicht-stelle.v1`, `eeb.einsatz.rueckweg`, `eeb.funkruf.merker.<Index>` | Unterbrochener Import, offene Karten, Bildlaufstelle, Rückweg „Einsatz bearbeiten“ (Name, Ort/Auftrag), ausgeschaltete Funkrufnamen | Nein vorgesehen | Tab-Ende bzw. 15 Minuten; „Alle Daten löschen" |
 | `eeb.uhr.v1`, `eeb.sicherung.zuletzt.v1`, `eeb.anzeigemodus.v1`, `eeb.einheiten-ansicht` | Uhrstand, letzte Sicherung, Anzeige | Nein | „Alle Daten löschen" |
 | `skipgc` | Widerspruch gegen die Reichweitenmessung | Nein | Bleibt bei „Alle Daten löschen" bewusst stehen; Löschen der Websitedaten |
 | `sessionStorage`: `eeb.papierabgleich.v1.<Einsatz>` | Eingaben des Papier-Abgleichs (Nummer, Zeiten, Status, Zug, Notiz) | Möglich (Notiz) | Tab-Ende, Übernehmen, Verwerfen, „Alle Daten löschen"; nicht in der Sicherung |
@@ -437,7 +441,6 @@ Ergänzend:
 | Lageblatt | Aushang an der Wand, Klemmbrett, Ablösung | Ja — Einheiten mit Funkrufname, **Rückrufnummer mit Initial und Nachname der Führungskraft**, Notiz, gekürzte Bemerkung | Aushangort festlegen (M9) |
 | Übersichts-CSV | Lagekarte, Stab | Ja (Notiz, Bemerkung, Hinweise; keine Personenliste) | Zweckgemäß |
 | CSV mit allen Daten | Stab, Auswertung | **Ja — jede Person mit Namen, Funktionen, Erreichbarkeiten** | Nur wo erforderlich (M7) |
-| Excel-Liste „Oldenburg" | Führungsstelle mit dieser Vorlage | Ja (Einheit, Führungskraft mit Kontakt, Zeiten, Notiz) | Zweckgemäß |
 | Einsatz-Datei | S1-Control, zweites Meldekopf-Gerät | **Ja — Vollkopie** der Sammlung | Zweckgemäß; unverschlüsselt, unsigniert |
 | Datensicherungsdatei | Vom Nutzer gewählt (zweites Gerät, Speichermedium) | **Ja — Vollkopie des Geräts** einschließlich privatem Schlüssel und ggf. Fremdbestand | Kein Empfänger im Meldeweg; Ablage regeln (M3) |
 | QR-Codes in den PDFs | Wer die PDF bzw. den Ausdruck erhält | Ja — der Bogen der Einheit, Signaturkette, ggf. Absenderkarte (R13) | wie Sammel-PDF |

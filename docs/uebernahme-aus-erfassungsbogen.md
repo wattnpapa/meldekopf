@@ -56,7 +56,7 @@ den Kern geht oder hineingereicht wird; spätestens mit der Weitergabe
 | `pdf-dokument.ts` | 2.258 | pdfmake-Dokumentdefinition: Einzel-PDF, Sammel-PDF, Lageblatt, Probesatz, WinAnsi. Braucht pdfmake zum Messen im Test; im Erfassungsbogen laufen diese Tests schon unter `node` (Projekt `logik`), im Baustein müssen sie zusätzlich unter `jsdom` laufen. | offen (hängt an App-Modulen, s. oben) |
 | `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts` | 225 | QR aus PDF-Bildobjekten lesen, ohne Renderer. | `pdf-bilder`, `pdf-stroeme` übernommen (Phase 1); `pdf-qr` offen (braucht den QR-Decoder der App, wird hineingereicht) |
 | `bogen-csv.ts`, `einsatz-csv.ts`, `csv.ts` | 764 | CSV-Langformat, Übersichts-CSV, Formatgrundlagen. | `csv` übernommen (Phase 1); `bogen-csv`, `einsatz-csv` offen (hängen an App-Modulen, s. oben) |
-| `oldenburg-xlsx.ts`, `xlsx.ts` | 934 | Oldenburg-Spalten, minimaler XLSX-Writer. | `xlsx` übernommen (Phase 1); `oldenburg-xlsx` offen (s. oben) |
+| `oldenburg-xlsx.ts`, `xlsx.ts` | 934 | Oldenburg-Spalten, minimaler XLSX-Writer. | `xlsx` übernommen (Phase 1); `oldenburg-xlsx` entfällt (im Erfassungsbogen seit 2026-11-03 gestrichen, hier am 2026-11-09 mit der Kopie entfernt) |
 | `qr-boegen.ts` | 48 | QR-Texte zu vollständigen Bögen gruppieren. | offen (hängt an `qr-stapel` der App) |
 | `taktische-zeichen-bogen.ts` | 67 | Zeichen aus einem konkreten Bogen auflösen. | übernommen (Phase 1) |
 | `uebung-wasserzeichen.ts` | 20 | | übernommen (Phase 1) |

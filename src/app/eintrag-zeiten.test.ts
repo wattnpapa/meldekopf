@@ -48,7 +48,6 @@ import {
   zeitKurz,
   zeitLang,
   zugSetzen,
-  nummerUndZugSetzen,
   speicherText,
   HERKUNFT_TEXT,
   speicherVollMeldung,

@@ -1,2 +1,0 @@
-{ "extends": "./tsconfig.json", "compilerOptions": {"noEmit": true}, "include": [], "files": [
-"./src/app/schnellerfassung/schnellerfassung.tsx","./src/app/schnellerfassung/einheit.tsx","./src/app/schnellerfassung/einheit.test.tsx","./src/app/schnellerfassung/fahrzeuge.tsx","./src/app/schnellerfassung/fahrzeuge.test.tsx","./src/app/schnellerfassung/staerke.tsx","./src/app/schnellerfassung/nacherfassung.tsx","./src/app/schnellerfassung/angefangen.ts","./src/app/umgebung.d.ts"] }
