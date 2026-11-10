@@ -172,8 +172,9 @@ Abgleich hat beides zusammengeführt (Drei-Wege-Merge je Datei, Basis
 Nicht übernommen, weil nicht Teil der Sammlung: Beispielbögen samt
 Übungs-Sammlung, Erklärfilm, „Was ist neu", Assistent, Vorlagen, Musterung,
 `einsatz-vorbereiten`, die Personen-Namensliste (`namen-dialog`,
-`personal-schnell`). Offen bleibt aus Phase 7 der Rückweg „An Meldekopf
-geben" und der Rücksprung `rueck=meldekopf` im Erfassungsbogen.
+`personal-schnell`). Der Rückweg „An Meldekopf geben" und der Rücksprung `rueck=meldekopf` sind
+seit 2026-11-10 gebaut (Phase 7); der Erfassungsbogen hat die Sammlung am
+2026-11-09 abgegeben und verweist auf diese App.
 
 ## G. Reihenfolge
 

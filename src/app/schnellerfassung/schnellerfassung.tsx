@@ -18,6 +18,7 @@
  * Wege in den Rückfragen hervorgehoben (R5-E5, R19-S15), Stärke als
  * F / U / M // G, die Einsatzansicht öffnet danach oben (R10-N5).
  */
+import { erfassungsbogenMitRueckweg } from "../adressen";
 import { useEffect, useRef, useState } from "react";
 import { PersonalErfassung, staerke, type Erfassungsbogen } from "@bos/eeb-format/model";
 import { einheitSchluessel, bogenInhaltsId, type Einsatzsammlung } from "@bos/meldekopf/einsaetze";
@@ -26,7 +27,7 @@ import { frageJaNein, frageWahl, zeigeHinweis } from "@bos/oberflaeche/dialoge";
 import { SeitenKopf } from "@bos/oberflaeche/seiten-kopf";
 import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
 import { browserKompressor, einheitAnzeigename, ersteEbene, neuerBogen, staerkePlausibilitaet } from "../hilfen";
-import { EEB_URL_PREFIX, base64UrlKodieren, encodePayload } from "@bos/eeb-format/codec";
+import { base64UrlKodieren, encodePayload } from "@bos/eeb-format/codec";
 import { stempelZeitpunkt } from "../datenschutz-uhr";
 import { einsaetzeLaden } from "../einsaetze-lesen";
 import { eintreffzeitSetzen, nummerUndZugSetzen, statusMitZeitSetzen, zeitKurz, zeitLang } from "../eintrag-zeiten";
@@ -333,11 +334,11 @@ export function Schnellerfassung({
       titel: "Im Erfassungsbogen vollständig erfassen?",
       text:
         "Der Erfassungsbogen öffnet sich in einem neuen Tab mit dem, was hier schon steht. Dort Personal, Fahrzeuge und Bedarf ergänzen " +
-        "und den fertigen Bogen als QR-Code oder Link zurückgeben; hier mit „Bogen scannen…“ einlesen. Diese Erfassung bleibt bis dahin als Entwurf stehen.",
+        "und den fertigen Bogen mit „An Meldekopf-App geben“ zurückschicken (auf einem anderen Gerät als QR-Code oder Link; hier mit „Bogen scannen…“ einlesen). Diese Erfassung bleibt bis dahin als Entwurf stehen.",
       ok: "Erfassungsbogen öffnen",
     });
     if (!ja) return;
-    window.open(EEB_URL_PREFIX + base64UrlKodieren(encodePayload(bogen, browserKompressor)), "_blank", "noopener");
+    window.open(erfassungsbogenMitRueckweg(base64UrlKodieren(encodePayload(bogen, browserKompressor))), "_blank", "noopener");
   }
 
   async function verwerfen() {

@@ -27,10 +27,10 @@
  * (Übernahme-Doku, Abschnitt E).
  */
 
+import { erfassungsbogenMitRueckweg } from "../adressen";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { staerke, type Erfassungsbogen } from "@bos/eeb-format/model";
 import {
-  EEB_URL_PREFIX,
   base64UrlKodieren,
   decodePayloadUrl,
   decodeVorlagePayloadUrl,
@@ -1084,7 +1084,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
   function imErfassungsbogenOeffnen(b: Erfassungsbogen, payload?: Uint8Array | null) {
     const { bogen: frei, anonymisiert } = bogenNachFrist(b);
     const bytes = payload && !anonymisiert ? payload : encodePayload(frei, browserKompressor);
-    window.open(EEB_URL_PREFIX + base64UrlKodieren(bytes), "_blank", "noopener");
+    window.open(erfassungsbogenMitRueckweg(base64UrlKodieren(bytes)), "_blank", "noopener");
   }
 
 

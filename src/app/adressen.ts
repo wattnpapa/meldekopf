@@ -33,3 +33,12 @@ export const REPO_URL = "https://github.com/wattnpapa/meldekopf";
  * `connect-src` und `img-src` der Content-Security-Policy.
  */
 export const STATISTIK_HOST = "meldekopf.goatcounter.com";
+
+/**
+ * Bogen im Erfassungsbogen öffnen, mit Rücksprung: `?rueck=meldekopf` hebt dort in der Übergabe
+ * „An Meldekopf-App geben“ an die erste Stelle (Erfassungsbogen `meldekopf-app.ts`). Der Bogen steht
+ * im Fragment und geht nicht an den Server.
+ */
+export function erfassungsbogenMitRueckweg(bogenDaten: string): string {
+  return `${ERFASSUNGSBOGEN_URL}?rueck=meldekopf#${bogenDaten}`;
+}
