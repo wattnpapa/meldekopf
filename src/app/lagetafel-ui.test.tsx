@@ -184,6 +184,7 @@ describe("Lagetafel", () => {
     const bedarf = Array.from(rand.querySelectorAll(".lt-bedarf li"));
     expect(bedarf.map((b) => b.textContent)).toEqual(["Verpflegung 9", "Ruhezeit 1×"]);
     expect(bedarf[1]!.className).toBe("lt-dringend");
+    expect(within(rand).getByRole("heading", { name: /^Zuletzt/ }).textContent).toBe("Zuletzt 2 in 15 Min");
     const bewegungen = Array.from(rand.querySelectorAll(".lt-bewegung")).map((b) => b.textContent!);
     expect(bewegungen.some((b) => /^\d\d:\d\dAbgerücktTHW Fort$/.test(b))).toBe(true);
     expect(bewegungen.some((b) => /^\d\d:\d\dEingetroffenTHW Müde B$/.test(b))).toBe(true);

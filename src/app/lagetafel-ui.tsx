@@ -27,7 +27,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import "./lagetafel.css";
 import type { Einheit, Staerke } from "@bos/eeb-format/model";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
-import { alterText, anwesendenAlterText, dtgTeile, uhrTeile, uhrzeitText, type Bewegung } from "./lagemonitor";
+import { BEWEGUNG_FENSTER_MS, alterText, anwesendenAlterText, dtgTeile, uhrTeile, uhrzeitText, type Bewegung } from "./lagemonitor";
 import { bedarfTeile } from "./lagemonitor-ui";
 import {
   SATZ,
@@ -457,7 +457,10 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
 
         {bild.bewegungen.length > 0 && (
           <section className="lt-block lt-block-zuletzt" aria-labelledby="lt-zuletzt-titel">
-            <h2 id="lt-zuletzt-titel">Zuletzt</h2>
+            {/* Die Zahl steht dabei, weil nur so viele Einträge zu sehen sind, wie in die Spalte passen. */}
+            <h2 id="lt-zuletzt-titel">
+              Zuletzt <span className="lt-block-zusatz">{bild.bewegungen.length} in {BEWEGUNG_FENSTER_MS / 60_000} Min</span>
+            </h2>
             {/* Was nicht mehr in die Spalte passt, bricht in eine zweite um, die nicht zu sehen ist: Es stehen nur ganze Einträge da. */}
             <ul className="lt-bewegungen">
               {bild.bewegungen.map((b) => (

@@ -369,6 +369,7 @@ main.lt .lt-dauer { flex: none; margin-top: calc(var(--lt-e) * -1.1); font-size:
 
 .lt-block { flex: none; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--lt-e) * 0.6); padding-top: calc(var(--lt-e) * 1.2); border-top: 1px solid var(--lt-linie); }
 main.lt .lt-block h2 { font-size: calc(var(--lt-e) * 2.1); font-weight: 600; color: var(--lt-text-2); }
+.lt-block-zusatz { margin-left: 0.5em; font-weight: 400; }
 .lt-bedarf { display: grid; gap: calc(var(--lt-e) * 0.3); }
 main.lt .lt-bedarf li { font-size: calc(var(--lt-e) * 2.35); line-height: 1.18; }
 /* Dringender Bedarf: Warnfarbe, Fettschrift und Zeichen, nicht nur Farbe (R9-K6). */

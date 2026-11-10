@@ -69,12 +69,16 @@ Then("zeigt der Lagemonitor die Zeilen", async function (this: EebWelt) {
   if ((await monitor(this).locator("main.lt").count()) > 0) throw new Error("Der Lagemonitor zeigt noch die Tafel.");
 });
 
-/** Das Zeichen kommt aus einem nachgeladenen Brocken: Geprüft wird, dass es im gebauten Stand ankommt. */
+/**
+ * Das Zeichen kommt aus einem nachgeladenen Brocken und steht als data:-Adresse im Bild: Geprüft wird, dass es im
+ * gebauten Stand ankommt und der Browser es unter der CSP auch zeichnet (Bildbreite größer null).
+ */
 Then("trägt jede Einheit der Tafel ihr taktisches Zeichen", async function (this: EebWelt) {
   const seite = monitor(this);
   await seite.waitForFunction(() => {
     const karten = document.querySelectorAll("main.lt .lt-karte");
-    return karten.length > 0 && document.querySelectorAll('main.lt .lt-karte .lt-zeichen img[data-zeichen="geladen"]').length === karten.length;
+    const bilder = Array.from(document.querySelectorAll<HTMLImageElement>('main.lt .lt-karte .lt-zeichen img[data-zeichen="geladen"]'));
+    return karten.length > 0 && bilder.length === karten.length && bilder.every((b) => b.complete && b.naturalWidth > 0);
   });
 });
 
