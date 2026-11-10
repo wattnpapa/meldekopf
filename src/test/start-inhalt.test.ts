@@ -36,9 +36,10 @@ describe("Startseiten-Text", () => {
     expect(INDEX).toContain(`<p class="offline-badge">${OFFLINE_ZUSAGE}</p>`);
   });
 
-  it("nennt die drei Glieder der Produktfamilie und den Stand der Übernahme", () => {
+  it("nennt die drei Glieder der Produktfamilie und dass die Übernahme abgeschlossen ist", () => {
     const text = JSON.stringify(START_ABSCHNITTE);
-    for (const wort of ["Erfassungsbogen", "S1-Control", "Meldekopf", "im Aufbau"]) expect(text).toContain(wort);
+    for (const wort of ["Erfassungsbogen", "S1-Control", "Meldekopf", "vollständig"]) expect(text).toContain(wort);
+    expect(text).not.toContain("im Aufbau");
     expect(START_ABSCHNITTE.map((a) => a.titel)).toContain("Stand");
   });
 

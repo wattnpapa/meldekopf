@@ -16,7 +16,6 @@
 import { Fragment, Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { einsatzErfragen } from "./einsatz-erfragen";
-import { ERFASSUNGSBOGEN_URL } from "./adressen";
 import { bogenHatInhalt, einheitAnzeigename } from "./hilfen";
 import { Aktualisierungshinweise } from "./aktualisierung";
 import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
@@ -88,29 +87,6 @@ export function StartInhalt() {
           )}
         </Fragment>
       ))}
-    </section>
-  );
-}
-
-/**
- * Stand der App — sagt ehrlich, was hier schon geht und wo Bögen bis zum
- * Ende der Übernahme entstehen (ADR-007: Übergangszeit im Erfassungsbogen).
- * Dieselbe Karte steht im statischen Gerüst der index.html.
- */
-export function StandKarte() {
-  return (
-    <section className="karte start-stand" aria-labelledby="stand-titel">
-      <h2 id="stand-titel">Im Aufbau</h2>
-      <p>
-        Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute: Bögen
-        aufnehmen (Scan, Handscanner, Fotos, Dateien, Link), Einheiten ohne Bogen schnell erfassen (Stärke,
-        Führungskraft, Fahrzeuge), Sammlungen führen, Summen und Lage lesen, ausgeben als PDF und CSV,
-        Datensicherung einspielen.
-      </p>
-      <p>
-        Den vollständigen Bogen mit allen Namen erfasst die Einheit im{" "}
-        <a href={ERFASSUNGSBOGEN_URL}>Erfassungsbogen</a>; hier wird ihr QR-Code eingelesen.
-      </p>
     </section>
   );
 }
@@ -451,7 +427,6 @@ export function App() {
           </section>
         </div>
         {(meldung || fehler) && <p className={fehler ? "fehler" : "meldung"} role="status">{fehler || meldung}</p>}
-        <StandKarte />
         {/* Die Überschrift bleibt wörtlich wie im Erfassungsbogen: Szenarien
             und Anleitung verweisen auf sie. */}
         <section className="start-vorlagen">

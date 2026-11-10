@@ -142,9 +142,9 @@ export const START_ABSCHNITTE: Abschnitt[] = [
       {
         art: "absatz",
         teile: [
-          "Die App ist im Aufbau. Die Einsatz-Sammlung wird Schritt für Schritt aus dem Erfassungsbogen hierher übernommen, wo sie seit 2026 in acht Prüfrunden auf Feldtauglichkeit geprüft wurde. Bis die Übernahme abgeschlossen ist, steht die Sammlung im ",
+          "Die Einsatz-Sammlung ist seit November 2026 vollständig aus dem Erfassungsbogen hierher umgezogen, samt der Prüfrunden, in denen sie dort auf Feldtauglichkeit geprüft wurde. Der ",
           { text: "Erfassungsbogen", ziel: ERFASSUNGSBOGEN_URL },
-          " weiter zur Verfügung.",
+          " bleibt das Werkzeug der Einheit: Dort entsteht der vollständige Bogen mit allen Namen, hier wird sein QR-Code eingelesen. Sammlungen, die noch im Erfassungsbogen auf einem Gerät liegen, kommen per Datensicherung hierher.",
         ],
       },
     ],

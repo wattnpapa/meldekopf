@@ -11,10 +11,10 @@ import { browserKompressor, neuerBogen } from "./hilfen";
 import { App } from "./app";
 
 describe("Startseite", () => {
-  it("zeigt Titel, Einleitung, Stand und den erklärenden Text", () => {
+  it("zeigt Titel, Einleitung und den erklärenden Text, ohne den Hinweis „Im Aufbau“", () => {
     render(<App />);
     expect(screen.getByRole("heading", { level: 1, name: "Meldekopf" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Im Aufbau" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Im Aufbau" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Die Produktfamilie" })).toBeTruthy();
     // Die Offline-Zeile nennt den echten Stand (offline-bereit.ts); jsdom hat keinen Service Worker.
     expect(screen.getByText(/Offline-Vorrat ist in diesem Browser nicht möglich.*Alle Daten bleiben auf diesem Gerät/)).toBeTruthy();

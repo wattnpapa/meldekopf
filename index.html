@@ -408,11 +408,6 @@
     /* Die Stand-Karte der Startseite trägt die schwere Deckzeile eines
        gedruckten Formularabschnitts (Deckzeilen-Regel, DESIGN.md des
        Erfassungsbogens): 4 px in Textfarbe, nicht in der Kennfarbe. */
-    .start > .karte.start-stand { margin-top: var(--r-5); max-width: 44rem; border-top: 4px solid var(--text); }
-    .start > .karte.start-stand > h2 { margin-bottom: var(--r-2); }
-    .start > .karte.start-stand > p { margin: 0 0 var(--r-2); }
-    .start > .karte.start-stand > p:last-child { margin-bottom: 0; }
-    .start > .karte.start-stand a { color: var(--akzent-hell); }
     /* Beschriftungen dunkel und halbfett statt hellgrau — im Feld muss ein
        Feldname genauso sicher lesbar sein wie sein Inhalt. */
     label.feld { display: block; margin: var(--r-3) 0 0; font-size: var(--t-xs); font-weight: 600; color: var(--text-2); }
@@ -4567,12 +4562,6 @@
     <main id="inhalt" tabindex="-1" class="start">
       <p class="start-intro">Für Meldeköpfe, Bereitstellungsräume und kleine Führungsstellen im ELW: eintreffende Einheiten erfassen, Stärke und Sofortbedarf laufend zählen, die Lage geschlossen weitergeben.</p>
       <p class="offline-badge">Alle Daten bleiben auf diesem Gerät. Nach dem ersten Laden funktioniert die App auch ohne Netz.</p>
-      <!-- Dieselbe Karte wie StandKarte in app.tsx. -->
-      <section class="karte start-stand" aria-labelledby="stand-titel">
-        <h2 id="stand-titel">Im Aufbau</h2>
-        <p>Diese App übernimmt die Einsatz-Sammlung des Erfassungsbogens Schritt für Schritt. Heute: Bögen aufnehmen (Scan, Handscanner, Fotos, Dateien, Link), Einheiten ohne Bogen schnell erfassen (Stärke, Führungskraft, Fahrzeuge), Sammlungen führen, Summen und Lage lesen, ausgeben als PDF, CSV und Excel, Datensicherung einspielen.</p>
-        <p>Den vollständigen Bogen mit allen Namen erfasst die Einheit im <a href="https://erfassungsbogen.app/">Erfassungsbogen</a>; hier wird ihr QR-Code eingelesen.</p>
-      </section>
       <!-- Derselbe Text, den die React-Startseite unten zeigt — erzeugt aus
            src/app/start-inhalt.ts, damit beide Pfade nicht auseinanderlaufen
            (Prüfung: src/test/start-inhalt.test.ts). -->
@@ -4603,7 +4592,7 @@
         <p>Alle Daten bleiben auf dem Gerät. Es gibt keinen Server, an den eine Meldung geschickt würde, keine Anmeldung und kein Konto. Nach dem ersten Aufruf läuft die Seite ohne Netz und lässt sich auf dem Startbildschirm ablegen. Wie gezählt wird, wer die Seite aufruft, steht im <a href="./datenschutz.html">Datenschutzhinweis</a>.</p>
         <p>Die App ist kostenlos und quelloffen unter der EUPL-1.2; der Quellcode liegt auf <a href="https://github.com/wattnpapa/meldekopf">GitHub</a>.</p>
         <h2>Stand</h2>
-        <p>Die App ist im Aufbau. Die Einsatz-Sammlung wird Schritt für Schritt aus dem Erfassungsbogen hierher übernommen, wo sie seit 2026 in acht Prüfrunden auf Feldtauglichkeit geprüft wurde. Bis die Übernahme abgeschlossen ist, steht die Sammlung im <a href="https://erfassungsbogen.app/">Erfassungsbogen</a> weiter zur Verfügung.</p>
+        <p>Die Einsatz-Sammlung ist seit November 2026 vollständig aus dem Erfassungsbogen hierher umgezogen, samt der Prüfrunden, in denen sie dort auf Feldtauglichkeit geprüft wurde. Der <a href="https://erfassungsbogen.app/">Erfassungsbogen</a> bleibt das Werkzeug der Einheit: Dort entsteht der vollständige Bogen mit allen Namen, hier wird sein QR-Code eingelesen. Sammlungen, die noch im Erfassungsbogen auf einem Gerät liegen, kommen per Datensicherung hierher.</p>
       </section>
       <!-- start-inhalt:ende -->
     </main>

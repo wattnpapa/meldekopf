@@ -47,7 +47,7 @@ Funktionalität: Darstellung, Offline-Start und Auskunft
     Wenn ich die App vom Netz trenne
     Und ich die Seite neu lade
     Dann sehe ich die Überschrift "Meldekopf"
-    Und sehe ich die Überschrift "Im Aufbau"
+    Und sehe ich die Überschrift "Bögen sammeln"
     Und sehe ich den Hinweis "Funktioniert komplett offline"
 
   Szenario: Pflichtangaben sind aus der Fußzeile erreichbar
