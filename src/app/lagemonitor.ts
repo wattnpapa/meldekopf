@@ -245,6 +245,8 @@ export function zugAlterText(aeltesteMeldungAm: number | undefined, jetzt: numbe
 /** Was sich zuletzt in der Lage bewegt hat — der Fernseher soll nicht nur Zahlen ändern, sondern sagen, warum (Audit Runde 6, R6-K1). */
 export interface Bewegung {
   id: string;
+  /** Kennung der geltenden Meldung der Einheit: Die Tafel markiert damit die Einheit an ihrem Platz (lagetafel.ts). */
+  eintrag: string;
   name: string;
   art: "Eingetroffen" | "Abgerückt" | "Wieder da" | "Folgemeldung";
   zeit: number;
@@ -310,8 +312,8 @@ function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
     const name = einheitAnzeigename(k.bogen.einheit);
     for (const v of k.vermerke ?? []) {
       if (jetzt - v.zeit > BEWEGUNG_FENSTER_MS) continue;
-      if (v.text === "Abgerückt") aus.push({ id: `${k.id}-a-${v.zeit}`, name, art: "Abgerückt", zeit: v.zeit });
-      else if (/^Wieder als anwesend/.test(v.text)) aus.push({ id: `${k.id}-w-${v.zeit}`, name, art: "Wieder da", zeit: v.zeit });
+      if (v.text === "Abgerückt") aus.push({ id: `${k.id}-a-${v.zeit}`, eintrag: k.id, name, art: "Abgerückt", zeit: v.zeit });
+      else if (/^Wieder als anwesend/.test(v.text)) aus.push({ id: `${k.id}-w-${v.zeit}`, eintrag: k.id, name, art: "Wieder da", zeit: v.zeit });
     }
     if (jetzt - k.empfangenAm <= BEWEGUNG_FENSTER_MS && !k.angaben?.kennzeichnung) {
       const revs = revisionen(einsatz.eintraege, k.einheitSchluessel);
@@ -322,6 +324,7 @@ function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
         const diff = alt != null && alt !== neu ? ` (${neu - alt > 0 ? "+" : "−"}${Math.abs(neu - alt)})` : "";
         aus.push({
           id: `${k.id}-f`,
+          eintrag: k.id,
           name,
           art: "Folgemeldung",
           zeit: k.empfangenAm,
@@ -333,6 +336,7 @@ function bewegungenSeit(einsatz: Einsatzsammlung, jetzt: number): Bewegung[] {
         const da = eintreffzeit(k);
         aus.push({
           id: `${k.id}-e`,
+          eintrag: k.id,
           name,
           art: "Eingetroffen",
           zeit: k.empfangenAm,

@@ -286,7 +286,7 @@ Kennfarbe), liegen unter `src/test/`.
 | Bogen aufnehmen | `eingang/*`, `@bos/eeb-format/codec`, `@bos/meldekopf/einsaetze`, `eintrag-zeiten.ts` |
 | Einheit ohne Bogen erfassen | `schnellerfassung/*`, `@bos/vokabulare`, `@bos/oberflaeche` (Bausteine) |
 | Lage lesen | `einsaetze-ui.tsx`, `auswertung.ts`, `einheiten-liste.ts`, `einheiten-tabelle.ts` |
-| Lagemonitor | `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lage-angaben.ts` |
+| Lagemonitor | `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lage-angaben.ts`; Tafel-Ansicht `lagetafel-ui.tsx`, `lagetafel.ts`, Wahl der Ansicht `lagemonitor-ansicht.ts` |
 | Weitergabe | `weitergabe/*`, `@bos/eeb-satz`, `export-stand.ts`, `einsatz-transport.ts` |
 | Ablösung und Rückimport | `einsatz-abgleich.ts`, `entfernte-meldungen.ts` |
 | Papier-Rückfallebene | `papier-abgleich-ui.tsx`, `papier-abgleich-entwurf.ts` |
@@ -335,6 +335,22 @@ Zweites Fenster derselben Herkunft (`?lagemonitor=<Einsatz-ID>`), liest
 `eeb.einsaetze.v1` und die Lage-Schlüssel, hört auf `storage`, hält den
 Bildschirm wach (Wake Lock, wo verfügbar). In Electron öffnet der Hauptprozess
 dafür ein eigenes Fenster; die Berechtigungsregel lässt genau diese Adresse zu.
+
+Der Monitor hat zwei Ansichten. `Lagemonitor` (`lagemonitor-ui.tsx`) verwaltet
+für beide Daten, Takt, Helligkeitsstufe und Fenster und zeigt entweder die
+übernommenen **Zeilen** oder die **Tafel** (`lagetafel-ui.tsx`, neu im
+Meldekopf, als eigener Brocken nachgeladen). Die Wahl liegt geräteweit unter
+`eeb.lageansicht.v1` und wandert wie die Lage selbst über das
+`storage`-Ereignis: Die Einsatzansicht stellt den offenen Fernseher um. Die
+Adresse des Fensters bleibt dieselbe, die Regel der Electron-Hülle auch.
+
+Die Tafel rechnet ihren Satz selbst (`tafelSatz` in `lagetafel.ts`, reine
+Rechnung ohne Browser): aus Zahl und Gliederung der Einheiten und der
+gemessenen Fläche die größte Schrift, bei der alles auf eine Seite passt, in
+einer von drei Fassungen der Einheitenkarte. Die Stilvorlage bekommt dieselben
+Maße als CSS-Eigenschaften hineingereicht, es gibt eine Quelle für Rechnung
+und Satz. Die Summen kommen unverändert aus `lagebild` (`lagemonitor.ts`);
+beide Ansichten zeigen dieselben Zahlen.
 
 ### 6.5 Offline-Start, Auto-Update
 
@@ -409,6 +425,7 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.aufgeraeumt.v1` | Nachricht über automatisch gelöschte Sammlungen | `aufraeum-hinweis.ts` |
 | `eeb.letzterEinsatz.v1` | Zuletzt offene Sammlung, 12 h | `app.tsx` |
 | `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1` | Lagemonitor: Beginn, Funkrufname, Helligkeit | `lagemonitor-*.ts` |
+| `eeb.lageansicht.v1` | Lagemonitor: gewählte Ansicht (`tafel`; ohne Eintrag die Zeilen), geräteweit. Neu im Meldekopf; der Erfassungsbogen wertet den Schlüssel nicht aus | `lagemonitor-ansicht.ts` |
 | `eeb.uhr.v1` | Zuletzt akzeptierter Uhrstand | `datenschutz-uhr.ts` |
 | `eeb.entwurf.v1` | Angefangene Schnellerfassung (`Entwurf.fremd`) | `entwurf.ts`, reduziert |
 | `eeb.anzeigemodus.v1` | Anzeigemodus | `@bos/oberflaeche/anzeige-modus` |
@@ -542,6 +559,12 @@ Startbündel +8 KB: Lagemonitor mit Zug, Gesamt und Bedarf, Verlauf der
 Ansichten (`ansicht-verlauf.ts`), Zähler-Fenster für „Stärke ändern“
 (`staerke-dialog.tsx`) und die Spaltenwahl der Tabelle am Telefon laufen alle
 im Startbündel.
+**Tafel-Ansicht des Lagemonitors (2026-11-10):** 4.356.694 / 596.874 Byte.
+Die Tafel liegt als eigener Brocken hinter dem Monitor (`lagetafel-ui`, rund
+20 KB JavaScript und 17 KB Stilvorlage) und wird erst geladen, wenn sie
+gewählt ist; das Startbündel wächst um 0,4 KB (Kennung der Meldung an jeder
+Bewegung, Verweis auf den neuen Brocken). Die taktischen Zeichen kommen aus
+dem schon vorhandenen Brocken `taktische-zeichen-bogen`.
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

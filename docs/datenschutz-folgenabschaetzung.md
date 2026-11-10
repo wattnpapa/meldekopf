@@ -312,7 +312,10 @@ versehentlich in Freitexten, M7), biometrische Daten, strafrechtliche Daten.
   Vermerk mit Uhrzeit.
 - **Lagemonitor:** liest denselben Speicher und zeigt Summen, Einheitsnamen,
   Organisation, Heimatort, Funkrufname, Stärke und Bewegungen — keine
-  Personennamen.
+  Personennamen. Die Ansicht „Tafel" (seit 2026-11-10) zeigt alle Einheiten
+  auf einmal, je Einheit zusätzlich taktisches Zeichen, Auftrag, Stand der
+  Angaben und Sofortbedarf als Marke, dazu die abgerückten Einheiten mit
+  Uhrzeit; ebenfalls ohne Personen.
 - **Ausgabe:** Sammel-PDF (Lageblatt + jeder Bogen mit QR, eingebettet alle
   Bögen als JSON und die ganze Sammlung samt Export-Ständen und
   Lage-Angaben), Lageblatt allein (mit Funkrufname und **Rückrufnummer der
@@ -376,7 +379,7 @@ fällig macht, schon.
 | `eeb.export-stand.v2`, `eeb.lageblatt-stand.v1`, `eeb.weitergabe-stand.v1`, `eeb.kenntnis-stand.v1`, `eeb.entfernt.v1` | Kennungen, Prüfsummen, Zeitpunkte | Nein | Bereinigt um gelöschte Sammlungen; „Alle Daten löschen" |
 | `eeb.aufgeraeumt.v1` | Name, Zeitraum, Zahlen einer aufgeräumten Sammlung | Nein (Sammlungsname als Freitext) | bis „Verstanden"; „Alle Daten löschen" |
 | `eeb.letzterEinsatz.v1` | Zuletzt offene Sammlung | Nein | 12 Stunden gültig |
-| `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1` | Lagemonitor: Beginn, Funkrufname der Führungsstelle, Helligkeit | Nein vorgesehen | Einträge zu gelöschten Einsätzen fallen beim Schreiben weg; „Alle Daten löschen" |
+| `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1`, `eeb.lageansicht.v1` | Lagemonitor: Beginn, Funkrufname der Führungsstelle, Helligkeit, gewählte Ansicht (Zeilen oder Tafel, seit 2026-11-10) | Nein vorgesehen | Einträge zu gelöschten Einsätzen fallen beim Schreiben weg; „Alle Daten löschen" |
 | `eeb.meldungen-papierkorb.v1` | Entfernte Meldungen zum Zurückholen | Ja, vollständige Meldungen samt Namen | 7 Tage, danach beim nächsten Schreiben verworfen; „Endgültig löschen“; „Alle Daten löschen" |
 | `eeb.abschluss.v1` | „Einsatz beendet“ und Übergabevermerk je Einsatz | Möglich (frei getippter Empfänger der Übergabe) | Fällt mit dem Einsatz weg; „Alle Daten löschen" |
 | `eeb.widersprueche.v1` | Widersprüche aus einem Einsatz-Import | Nein vorgesehen (Einheitsnamen, Feldwerte) | Bis „Erledigt“ oder mit dem Einsatz; „Alle Daten löschen" |
@@ -454,7 +457,7 @@ Ergänzend:
 | Einsatz-Datei | S1-Control, zweites Meldekopf-Gerät | **Ja — Vollkopie** der Sammlung | Zweckgemäß; unverschlüsselt, unsigniert |
 | Datensicherungsdatei | Vom Nutzer gewählt (zweites Gerät, Speichermedium) | **Ja — Vollkopie des Geräts** einschließlich privatem Schlüssel und ggf. Fremdbestand | Kein Empfänger im Meldeweg; Ablage regeln (M3) |
 | QR-Codes in den PDFs | Wer die PDF bzw. den Ausdruck erhält | Ja — der Bogen der Einheit, Signaturkette, ggf. Absenderkarte (R13) | wie Sammel-PDF |
-| Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
+| Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke; in der Ansicht „Tafel" je Einheit auch Auftrag, Sofortbedarf und Stand) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
 | GoatCounter-Zählimpuls | `meldekopf.goatcounter.com` | Nein — nur Pfad (Nutzungskanal, z. B. `/pwa/android`), Titel und im Browser der Referrer; keine Cookies, keine ID, kein Fragment, keine Sammlungsdaten; technisch unvermeidbar die IP-Adresse als Transportdatum | Art. 6 Abs. 1 lit. f DSGVO; Widerspruch per Kästchen „Nicht mitzählen" im Datenschutzdialog (`skipgc`, ab dem nächsten Start) |
 | Update-Prüfung (nur Desktop) | GitHub Releases | Nein, nur Verbindungsmetadaten | Berechtigtes Interesse an aktuellem Software-Stand |
 | Abruf der Webfassung | GitHub Pages (meldekopf.erfassungsbogen.app) | Nein, nur Verbindungsmetadaten | Auslieferung der Anwendung |

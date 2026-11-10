@@ -1,0 +1,503 @@
+/*
+ * Lagetafel: Tafel-Ansicht des Lagemonitors für den Fernseher im Führungsfahrzeug.
+ * Neu im Meldekopf. Eigene Klassen (lt-…) neben denen der Zeilenansicht (lm-…, lagemonitor.css);
+ * gemeinsam ist nur die Leiste „Stufe / Dunkler / Heller" samt Knöpfen.
+ *
+ * Zwei Maße tragen das Bild:
+ *   --lt-e  ein Hundertstel der Höhe des größten 16:9-Bildes, das ins Fenster passt. Kopf, Randspalte und
+ *           Abstände hängen daran; auf jedem Fernseher stehen sie im selben Verhältnis zum Bild.
+ *   --lt-f  die Schriftgröße der Einheiten. tafelSatz (lagetafel.ts) rechnet sie aus Zahl der Einheiten und
+ *           Fläche aus; alle Maße einer Karte sind Vielfache davon (em).
+ *
+ * Farbe steht nur für Zustand: Bernstein für „Achtung", Grün für „neu am Platz", Rot für die Übung. Jede Farbe
+ * trägt zusätzlich ein Wort oder Zeichen (R9-K6). Linien in aufgehelltem Petrol, der Kennfarbe des Meldekopfs.
+ */
+/* „main.lt" schlägt die allgemeine main-Regel der App (60rem breit, mittig). */
+main.lt {
+  --lt-e: min(1vh, 0.5625vw);
+  --lt-f: calc(var(--lt-e) * 3);
+  /* Randspalte: 38 Hundertstel, auf kleinen Fernsehern (1280 × 720, 1366 × 768) mindestens so breit, dass die Knöpfe hineinpassen. */
+  --lt-rand: max(calc(var(--lt-e) * 38), 19rem);
+  /* Stufe „Dunkel" (Grundstufe): warmes, gedämpftes Weiß wie in der Zeilenansicht; hellster Bildpunkt 203 statt 255 (R10-L4). */
+  --lt-grund: #000;
+  --lt-text: #cbc5ba;
+  --lt-text-2: #99938a;
+  --lt-linie: #317887;
+  --lt-flaeche: #191713;
+  --lt-achtung: #d9a441;
+  --lt-neu: #63c480;
+  --lt-uebung: #d85a5a;
+  --lt-auf-uebung: #000;
+  /* Die taktischen Zeichen sind für weißes Papier gezeichnet (schwarzes Größenzeichen, R3-L5): helle Unterlage, mitgedämpft. */
+  --lt-zeichen-filter: brightness(0.8);
+  /* Die gemeinsamen Knöpfe des Monitors (lagemonitor.css) rechnen mit diesen Namen. */
+  --lm-text: var(--lt-text);
+  --lm-rahmen: var(--lt-linie);
+  --lm-warn: var(--lt-achtung);
+  --lm-min: 14px;
+
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  /* Das Bild füllt genau den Fernseher; nichts rollt. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  box-sizing: border-box;
+  /* Rand gegen den Beschnitt älterer Fernseher. */
+  padding: calc(var(--lt-e) * 2) calc(var(--lt-e) * 3.2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--lt-rand);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "hinweise hinweise" "kopf kopf" "tafel rand";
+  background: var(--lt-grund);
+  color: var(--lt-text);
+  font-family: var(--schrift);
+  font-size: calc(var(--lt-e) * 2.4);
+  line-height: 1.2;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+/* Gedimmt: die dunkelste Stufe, für das abgedunkelte Fahrzeug. Leuchtdichte Gedimmt < Dunkel < Hell (R10-L4). */
+main.lt.lt-gedimmt {
+  --lt-text: #a39b8f;
+  --lt-text-2: #878075;
+  --lt-linie: #2a6673;
+  --lt-flaeche: #12110e;
+  --lt-achtung: #b88a35;
+  --lt-neu: #4f9d66;
+  --lt-uebung: #c85353;
+  --lt-zeichen-filter: brightness(0.62);
+}
+main.lt.lt-hell {
+  --lt-grund: #fff;
+  --lt-text: #000;
+  --lt-text-2: #454545;
+  --lt-linie: #0f4c5c;
+  --lt-flaeche: #edf0f2;
+  --lt-achtung: #8a3d00;
+  --lt-neu: #146b3a;
+  --lt-uebung: #cc0000;
+  --lt-auf-uebung: #fff;
+  --lt-zeichen-filter: none;
+}
+/* Ränder um das Bild bekommen den Grund der Tafel, nicht den der App. */
+body:has(main.lt) { background: #000; }
+body:has(main.lt.lt-hell) { background: #fff; }
+
+/* Überschriften, Absätze und Listen nehmen Maß und Farbe der Tafel, nicht die der App. Ohne „li": Karten und Gruppenköpfe sind Listenpunkte und setzen Abstand und Polster selbst, diese Regel wöge schwerer als ihre Klasse. */
+main.lt :is(h1, h2, h3, p, ul, ol, dl, dt, dd) { margin: 0; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; text-wrap: wrap; hyphens: manual; overflow-wrap: normal; }
+main.lt :is(ul, ol) { list-style: none; }
+
+/* ------------------------------------------------------------ Hinweise ganz oben */
+.lt-hinweise { grid-area: hinweise; display: grid; gap: calc(var(--lt-e) * 0.8); padding-bottom: calc(var(--lt-e) * 1.4); }
+/* Übung: als volle Zeile in Rot, mit Wortlaut. Nichts anderes auf der Tafel ist rot. */
+.lt-uebung {
+  background: var(--lt-uebung);
+  color: var(--lt-auf-uebung);
+  font-size: calc(var(--lt-e) * 2.8);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.5;
+  padding: 0 calc(var(--lt-e) * 1.2);
+}
+.lt-unlesbar {
+  border: 2px solid var(--lt-achtung);
+  color: var(--lt-achtung);
+  font-size: calc(var(--lt-e) * 2.5);
+  font-weight: 700;
+  padding: calc(var(--lt-e) * 0.5) calc(var(--lt-e) * 1.2);
+}
+.lt-unlesbar::before { content: "\26A0\FE0E\00A0"; }
+
+/* ------------------------------------------------------------ Kopf: für die Ferne */
+.lt-kopf {
+  grid-area: kopf;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto var(--lt-rand);
+  /* Stärke und Uhr stehen oben auf einer Linie, der Name des Einsatzes unten an der Kante. */
+  align-items: start;
+  padding-bottom: calc(var(--lt-e) * 1.5);
+  border-bottom: 2px solid var(--lt-linie);
+}
+.lt-wo { min-width: 0; align-self: end; padding-right: calc(var(--lt-e) * 3); }
+main.lt .lt-wo h1 {
+  font-size: calc(var(--lt-e) * 4.6);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  /* Höchstens zwei Zeilen; ein längerer Name wird gekürzt, statt die Tafel nach unten zu schieben. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+main.lt .lt-einsatz {
+  margin-top: calc(var(--lt-e) * 0.5);
+  font-size: calc(var(--lt-e) * 2.9);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lt-einsatz-name + .lt-ort::before { content: " · "; }
+.lt-ort { color: var(--lt-text-2); }
+
+/* Die Stärkemeldung: das eine laute Element der Tafel. Zahlen in der Schreibweise, in der gemeldet wird;
+   die Gesamtstärke unterstrichen, wie man sie auf dem Meldeblock schreibt. */
+.lt-staerke-gross { padding-right: calc(var(--lt-e) * 3.4); }
+.lt-meldung {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  /* Der Abstand reicht, damit „Unterführer" und „Mannschaft" auch unter einstelligen Zahlen nebeneinander passen. */
+  gap: calc(var(--lt-e) * 1.9);
+  /* Platz für die Wörter, die unter den Zahlen hängen. */
+  padding-bottom: calc(var(--lt-e) * 3.4);
+  font-size: calc(var(--lt-e) * 9.4);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.lt-m-zahl { position: relative; }
+.lt-m-strich { font-weight: 300; color: var(--lt-text-2); }
+.lt-m-gesamt { font-weight: 800; }
+.lt-m-gesamt .lt-m-ziffern { text-decoration: underline; text-decoration-thickness: 0.07em; text-underline-offset: 0.11em; text-decoration-skip-ink: none; }
+.lt-m-wort {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: calc(var(--lt-e) * 1.5);
+  font-size: calc(var(--lt-e) * 1.85);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--lt-text-2);
+}
+main.lt .lt-vorbehalt { margin-top: calc(var(--lt-e) * 0.6); font-size: calc(var(--lt-e) * 2); font-weight: 700; color: var(--lt-achtung); text-align: right; }
+.lt-vorbehalt::before { content: "\26A0\FE0E\00A0"; }
+
+.lt-uhr { display: grid; justify-items: start; padding-left: calc(var(--lt-e) * 2.4); }
+.lt-uhr strong { font-size: calc(var(--lt-e) * 9.4); font-weight: 700; line-height: 0.92; letter-spacing: -0.02em; }
+.lt-datum { margin-top: calc(var(--lt-e) * 1.4); font-size: calc(var(--lt-e) * 2.3); line-height: 1; }
+.lt-dtg { margin-top: calc(var(--lt-e) * 0.5); font-size: calc(var(--lt-e) * 1.95); line-height: 1; color: var(--lt-text-2); }
+
+/* ------------------------------------------------------------ Tafel: die Einheiten */
+.lt-tafel { grid-area: tafel; min-width: 0; min-height: 0; display: flex; padding: calc(var(--lt-e) * 1.8) calc(var(--lt-e) * 2.4) 0 0; }
+/* Die Fläche, die der Satz ausmisst. */
+.lt-flaeche { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.lt-seite {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--lt-spalten, 1), minmax(0, 1fr));
+  column-gap: calc(var(--lt-e) * 2);
+  align-items: start;
+  font-size: var(--lt-f);
+}
+.lt-spalte { min-width: 0; display: flex; flex-direction: column; }
+main.lt .lt-leer { font-size: calc(var(--lt-e) * 3.6); padding: calc(var(--lt-e) * 1) 0 0; }
+main.lt .lt-leer-zusatz { font-size: calc(var(--lt-e) * 2.5); color: var(--lt-text-2); padding: calc(var(--lt-e) * 0.6) 0 calc(var(--lt-e) * 2); }
+
+/* Gruppenkopf: Zug oder Organisation mit Zahl der Einheiten und Stärke. */
+.lt-gruppe {
+  box-sizing: border-box;
+  height: calc(var(--lt-kopf-h) * 1em);
+  margin-top: calc(var(--lt-absatz) * 1em);
+  padding: 0.43em 0.5em 0.16em 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  border-bottom: 2px solid var(--lt-linie);
+  white-space: nowrap;
+  overflow: hidden;
+}
+main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; font-size: 0.96em; font-weight: 700; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
+.lt-fortsetzung { font-weight: 400; color: var(--lt-text-2); }
+.lt-gruppe-zahl { flex: 1 1 auto; font-size: 0.66em; color: var(--lt-text-2); }
+.lt-gruppe .lt-staerke { flex: none; }
+.lt-gruppe .lt-staerke b { font-size: 0.96em; }
+.lt-gruppe-ab { border-bottom-style: dashed; color: var(--lt-text-2); }
+
+/* Karte einer Einheit. Der Inhalt ist in allen Fassungen derselbe, die Anordnung folgt dem Platz (KartenFassung, lagetafel.ts). */
+.lt-karte {
+  box-sizing: border-box;
+  height: calc(var(--lt-karte-h) * 1em);
+  margin-top: calc(var(--lt-fuge) * 1em);
+  padding: 0.28em 0.5em 0.28em 0.36em;
+  display: grid;
+  align-items: center;
+  background: var(--lt-flaeche);
+  /* Zustand steht zusätzlich als Balken am linken Rand: von weitem zu sehen, bevor man die Marke lesen kann. */
+  border-left: 0.2em solid transparent;
+  overflow: hidden;
+}
+.lt-spalte > :first-child { margin-top: 0; }
+.lt-karte[data-marke] { border-left-color: var(--lt-neu); }
+.lt-karte[data-achtung] { border-left-color: var(--lt-achtung); }
+.lt-karte > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.lt-zeichen { grid-area: z; align-self: center; margin-right: 0.55em; line-height: 0; overflow: visible; }
+/* Unterlage im Format des beschnittenen Zeichens (256 × 172, lagetafel.ts); solange es lädt, bleibt der Platz leer. */
+.lt-zeichen img { display: block; width: 100%; aspect-ratio: 256 / 172; object-fit: contain; }
+.lt-zeichen img[data-zeichen="geladen"] { background: #fff; filter: var(--lt-zeichen-filter); }
+.lt-herkunft { grid-area: herkunft; font-weight: 700; line-height: 1.22; }
+.lt-typ { grid-area: typ; font-size: 0.74em; font-weight: 600; line-height: 1.3; }
+/* Langer oder kurzer Typ, je nach Platz und ohne Messung: Die Kurzform steht fest am Zeilenanfang. Der ausgeschriebene Typ
+   steht hinter einem Anker ohne Breite in derselben Zeile und deckt die Kurzform zu; passt er nicht in die Zeile, bricht er
+   hinter dem Anker in eine zweite um, die nicht zu sehen ist, und die Kurzform bleibt stehen. */
+.lt-karte > .lt-typ-wahl { position: relative; height: 1.3em; white-space: normal; text-overflow: clip; }
+.lt-typ-kurz { position: absolute; top: 0; left: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-typ-anker { display: inline-block; width: 0; }
+.lt-typ-lang { position: relative; display: inline-block; white-space: nowrap; background: var(--lt-flaeche); }
+.lt-funkruf { grid-area: funkruf; font-size: 0.74em; line-height: 1.3; color: var(--lt-text-2); }
+.lt-auftrag { grid-area: auftrag; font-size: 0.74em; line-height: 1.3; }
+/* Marken stehen in jeder Fassung in der letzten Zeile vor dem Stand: Herkunft und Auftrag behalten ihre Zeile. */
+.lt-marken { grid-area: marken; display: flex; gap: 0.3em; justify-content: flex-end; margin-left: 0.4em; overflow: visible; }
+.lt-stand { grid-area: stand; justify-self: end; margin-left: 0.6em; font-size: 0.62em; line-height: 1.3; color: var(--lt-text-2); }
+/* Leichter als die Bedarfsmarke: Nach einer Stunde trägt fast jede Einheit dieses Zeichen, der Bedarf soll darüber stehen. */
+.lt-stand-alt { color: var(--lt-achtung); }
+.lt-stand-alt::before { content: "\26A0\FE0E\00A0"; }
+
+/* Stärke in der Schreibweise der Meldung: „0/3/6//" zurückgenommen, die Gesamtstärke als die Zahl, nach der gefragt wird. */
+.lt-staerke { grid-area: staerke; justify-self: end; margin-left: 0.6em; display: inline-flex; align-items: baseline; overflow: visible; }
+.lt-fum { font-size: 0.66em; color: var(--lt-text-2); letter-spacing: 0.01em; }
+.lt-staerke b { font-size: 1.16em; font-weight: 800; line-height: 1; margin-left: 0.12em; }
+.lt-soll { align-self: center; margin-right: 0.4em; padding: 0 0.3em; font-size: 0.62em; font-weight: 700; text-decoration: none; color: var(--lt-achtung); border: 1px solid var(--lt-achtung); }
+
+.lt-marke { flex: none; padding: 0 0.32em; font-size: 0.6em; font-weight: 700; line-height: 1.45; border: 1px solid currentColor; color: var(--lt-neu); }
+.lt-marke-achtung { color: var(--lt-achtung); }
+.lt-marke-achtung::before { content: "\26A0\FE0E\00A0"; }
+
+/* Zwei Zeilen, Typ in Kurzform; der Funkrufname entfällt, wo es eng ist. */
+main.lt[data-fassung="zwei"] .lt-karte {
+  grid-template-columns: 2.95em auto minmax(0, 1fr) auto auto;
+  grid-template-rows: 1.22em 0.97em;
+  grid-template-areas: "z herkunft herkunft herkunft staerke" "z typ auftrag marken stand";
+}
+/* Trägt die Einheit eine Marke, steht die Uhrzeit des Stands ohne ihr Wort da: Der Platz gehört dem Auftrag. */
+main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-stand-wort { display: none; }
+main.lt[data-fassung="zwei"] .lt-funkruf { display: none; }
+main.lt[data-fassung="zwei"] .lt-typ { margin-right: 0.45em; }
+main.lt[data-fassung="zwei"] .lt-typ ~ .lt-auftrag::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
+
+/* Drei Zeilen: Herkunft, Typ ausgeschrieben, darunter Funkrufname und Auftrag. */
+main.lt[data-fassung="drei"] .lt-karte {
+  grid-template-columns: 2.95em auto minmax(0, 1fr) auto auto;
+  grid-template-rows: 1.22em 0.97em 0.97em;
+  grid-template-areas: "z herkunft herkunft herkunft staerke" "z typ typ typ stand" "z funkruf auftrag marken marken";
+}
+/* Ohne Marke gehört die dritte Zeile bis zum Rand dem Funkrufnamen und dem Auftrag. */
+main.lt[data-fassung="drei"] .lt-karte:not(:has(.lt-marken)) .lt-auftrag { grid-column-end: -1; }
+main.lt[data-fassung="drei"] .lt-funkruf { max-width: 15em; margin-right: 0.45em; }
+main.lt[data-fassung="drei"] .lt-funkruf ~ .lt-auftrag::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
+
+/* Breit: links wer (Herkunft, Typ), rechts was (Auftrag, Funkrufname). Der Anteil ist fest, damit die Spalten über alle Karten fluchten. */
+main.lt[data-fassung="breit"] .lt-karte {
+  grid-template-columns: 2.95em 42% minmax(0, 1fr) auto auto;
+  grid-template-rows: 1.22em 0.97em;
+  grid-template-areas: "z herkunft auftrag auftrag staerke" "z typ funkruf marken stand";
+}
+main.lt[data-fassung="breit"] :is(.lt-herkunft, .lt-typ) { padding-right: 0.8em; }
+main.lt[data-fassung="breit"] .lt-auftrag { font-size: 0.86em; line-height: 1.22; }
+
+/* Abgerückte Einheiten: eine Zeile, zurückgenommen. Sie zählen nicht, stehen aber da: „Ist die Einheit schon weg?" */
+.lt-abgang {
+  box-sizing: border-box;
+  height: calc(var(--lt-abgang-h) * 1em);
+  margin-top: calc(var(--lt-fuge) * 1em);
+  padding: 0 0.5em 0 0.56em;
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  color: var(--lt-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.lt-abgang > * { font-size: 0.78em; }
+.lt-abgang-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* Blättern: Seitenzahl und ein Balken, der bis zum Umblättern durchläuft. */
+main.lt .lt-seitenzeile {
+  position: relative;
+  flex: none;
+  height: calc(var(--lt-e) * var(--lt-seitenzeile));
+  box-sizing: border-box;
+  padding-top: calc(var(--lt-e) * 0.9);
+  font-size: calc(var(--lt-e) * 2);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.lt-seitenhinweis { font-weight: 400; color: var(--lt-text-2); }
+.lt-seitenlauf {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--lt-linie);
+  transform-origin: left center;
+  animation: lt-seitenlauf linear both;
+}
+@keyframes lt-seitenlauf { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .lt-seitenlauf { animation: none; }
+}
+
+/* ------------------------------------------------------------ Randspalte: für die Nähe */
+.lt-rand {
+  grid-area: rand;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lt-e) * 1.6);
+  padding: calc(var(--lt-e) * 1.8) 0 0 calc(var(--lt-e) * 2.4);
+  border-left: 2px solid var(--lt-linie);
+  overflow: hidden;
+}
+/* Einheiten, Fahrzeuge, abgerückt: eine Zeile, die Zahl vor ihrem Wort. Für Vorlesesoftware bleibt das Wort die Benennung (dt). */
+.lt-zaehler { flex: none; display: flex; flex-wrap: wrap; column-gap: calc(var(--lt-e) * 2); row-gap: calc(var(--lt-e) * 0.2); }
+.lt-zaehler > div { display: flex; align-items: baseline; gap: calc(var(--lt-e) * 0.7); white-space: nowrap; }
+main.lt .lt-zaehler dd { order: -1; font-size: calc(var(--lt-e) * 2.9); font-weight: 700; line-height: 1.1; }
+main.lt .lt-zaehler dt { font-size: calc(var(--lt-e) * 2.3); }
+.lt-zaehler-ab { color: var(--lt-text-2); }
+main.lt .lt-dauer { flex: none; margin-top: calc(var(--lt-e) * -1.1); font-size: calc(var(--lt-e) * 2.3); color: var(--lt-text-2); }
+
+.lt-block { flex: none; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--lt-e) * 0.6); padding-top: calc(var(--lt-e) * 1.2); border-top: 1px solid var(--lt-linie); }
+main.lt .lt-block h2 { font-size: calc(var(--lt-e) * 2.1); font-weight: 600; color: var(--lt-text-2); }
+.lt-bedarf { display: grid; gap: calc(var(--lt-e) * 0.3); }
+main.lt .lt-bedarf li { font-size: calc(var(--lt-e) * 2.35); line-height: 1.18; }
+/* Dringender Bedarf: Warnfarbe, Fettschrift und Zeichen, nicht nur Farbe (R9-K6). */
+main.lt .lt-bedarf li.lt-dringend { color: var(--lt-achtung); font-weight: 700; padding-left: 1.25em; text-indent: -1.25em; }
+.lt-bedarf li.lt-dringend::before { content: "\26A0\FE0E\00A0"; }
+
+/* „Zuletzt" nimmt, was übrig ist. Die Liste bricht in Spalten um; zu sehen ist nur die erste, also nur ganze Einträge. */
+.lt-block-zuletzt { flex: 1 1 0; }
+.lt-bewegungen {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  column-gap: calc(var(--lt-e) * 4);
+  row-gap: calc(var(--lt-e) * 1.1);
+  overflow: hidden;
+}
+main.lt .lt-bewegung {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: calc(var(--lt-e) * 1);
+  font-size: calc(var(--lt-e) * 2.25);
+  line-height: 1.2;
+}
+.lt-bewegung-zeit { color: var(--lt-text-2); }
+.lt-bewegung-art { font-weight: 700; }
+.lt-bewegung-zusatz { grid-column: 1 / -1; color: var(--lt-text-2); }
+/* Der Name steht unter Uhrzeit und Art über die ganze Breite: „THW Oldenburg (NI) FGr WP (A)" passt so in eine Zeile. */
+.lt-bewegung-name { grid-column: 1 / -1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+
+.lt-fuss { flex: none; margin-top: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(var(--lt-e) * 0.5); padding-top: calc(var(--lt-e) * 1.2); border-top: 1px solid var(--lt-linie); }
+main.lt .lt-datenstand { font-size: calc(var(--lt-e) * 2.1); line-height: 1.2; color: var(--lt-text-2); }
+/* Alter Datenstand (ab einer Stunde) oder unplausible Zeiten: Warnfarbe, Zeichen, Fettschrift (R7-K8). */
+main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; padding-left: 1.25em; text-indent: -1.25em; }
+.lt-datenstand.lt-warnung::before { content: "\26A0\FE0E\00A0"; }
+
+/* Bedienung: dieselben Knöpfe wie in der Zeilenansicht, klein am unteren Rand. Die Helligkeit bleibt im ersten Bild (R10-L3). */
+.lt-bedienung { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: calc(var(--lt-e) * 0.6); }
+/* Im Regelfall je eine Zeile; reicht die Breite nicht, brechen die Knöpfe um, statt abgeschnitten zu werden. */
+.lt-bedienung .lm-stufenleiste { border: 0; padding: 0; gap: 8px; flex-wrap: wrap; text-align: left; font-size: max(var(--lm-min), calc(var(--lt-e) * 1.65)); }
+.lt-bedienung .lm-stufe { flex: 1 1 auto; margin: 0; font-weight: 600; color: var(--lt-text-2); white-space: nowrap; }
+.lt-wahl { display: flex; flex-wrap: wrap; gap: 8px; font-size: max(var(--lm-min), calc(var(--lt-e) * 1.65)); }
+.lt-wahl .lm-knopf { flex: 1 1 auto; }
+.lt-bedienung .lm-knopf { min-height: 44px; padding: 0.2em 0.55em; font-size: inherit; font-weight: 600; white-space: nowrap; border-width: 1px; border-radius: 0; background: transparent; color: var(--lt-text); }
+@media (hover: hover) {
+  .lt-bedienung .lm-knopf:hover { color: var(--lt-text); border-color: var(--lt-text); }
+}
+.lt-bedienung .lm-knopf:focus-visible { outline: 3px solid var(--lt-text); outline-offset: 2px; }
+
+/* ------------------------------------------------------------ Telefon, flaches Querformat, Hochformat
+   Nichts davon ist für den Fernseher gedacht: eine Spalte, Mindestgrößen aus der Systemschrift, die Seite rollt (wie R7-L2).
+   Dieselbe Abfrage steht in lagetafel-ui.tsx (SCHMAL): Dort entfällt dann der gerechnete Satz. */
+@media (max-width: 640px), (max-height: 480px), (max-aspect-ratio: 6/5) {
+  main.lt {
+    --lt-b: min(1rem, 4.6vw);
+    --lt-f: calc(var(--lt-b) * 1.06);
+    --lm-min: calc(var(--lt-b) * 0.875);
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+    padding: calc(var(--lt-b) * 0.7) calc(var(--lt-b) * 0.8) calc(var(--lt-b) * 1.2);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--lt-b) * 0.9);
+    font-size: var(--lt-b);
+  }
+  .lt-hinweise { padding-bottom: 0; gap: calc(var(--lt-b) * 0.5); }
+  .lt-uebung { font-size: calc(var(--lt-b) * 1.05); }
+  .lt-unlesbar { font-size: var(--lt-b); }
+  .lt-kopf { grid-template-columns: minmax(0, 1fr) auto; row-gap: calc(var(--lt-b) * 0.8); padding-bottom: calc(var(--lt-b) * 0.8); }
+  .lt-wo { padding-right: calc(var(--lt-b) * 0.8); }
+  main.lt .lt-wo h1 { font-size: calc(var(--lt-b) * 1.35); }
+  main.lt .lt-einsatz { font-size: var(--lt-b); white-space: normal; }
+  .lt-staerke-gross { grid-column: 1 / -1; grid-row: 2; padding-right: 0; justify-self: start; }
+  .lt-meldung { font-size: min(calc(var(--lt-b) * 2.9), 12vw); gap: min(calc(var(--lt-b) * 1.1), 3.4vw); padding-bottom: calc(var(--lt-b) * 1.5); justify-content: flex-start; }
+  .lt-m-wort { margin-top: calc(var(--lt-b) * 0.45); font-size: min(calc(var(--lt-b) * 0.875), 3.4vw); }
+  /* Unter schmalen Zahlen am linken Rand beginnt das erste Wort an der Zahl, statt aus dem Bild zu ragen. */
+  .lt-m-zahl:first-child .lt-m-wort { left: 0; transform: none; }
+  main.lt .lt-vorbehalt { font-size: calc(var(--lt-b) * 0.9375); text-align: left; }
+  .lt-uhr { grid-column: 2; grid-row: 1; padding-left: 0; justify-items: end; align-self: start; }
+  .lt-uhr strong { font-size: calc(var(--lt-b) * 2); }
+  .lt-datum { margin-top: calc(var(--lt-b) * 0.2); font-size: calc(var(--lt-b) * 0.875); }
+  .lt-dtg { font-size: calc(var(--lt-b) * 0.875); }
+
+  .lt-tafel { display: block; min-height: auto; padding: 0; }
+  .lt-flaeche { display: block; flex: none; min-height: auto; overflow: visible; }
+  main.lt .lt-leer { font-size: calc(var(--lt-b) * 1.15); padding: 0; }
+  main.lt .lt-leer-zusatz { font-size: var(--lt-b); padding: 0 0 calc(var(--lt-b) * 0.6); }
+  .lt-seite { display: block; flex: none; min-height: auto; }
+  /* Nebenzeilen folgen der Systemschrift und werden nie kleiner als die Mindestschrift des Monitors (R8-L5). */
+  :is(.lt-typ, .lt-funkruf, .lt-auftrag, .lt-fum, .lt-stand, .lt-marke, .lt-soll, .lt-gruppe-zahl), .lt-abgang > *, main.lt[data-fassung] .lt-auftrag { font-size: var(--lm-min); }
+  .lt-marken { flex-wrap: wrap; }
+  /* Karten wachsen mit ihrem Inhalt; Namen brechen um, statt abgeschnitten zu werden. */
+  main.lt[data-fassung] .lt-karte {
+    height: auto;
+    grid-template-columns: 2.9em minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+    grid-template-areas: "z herkunft staerke" "z typ stand" "z funkruf funkruf" "z auftrag auftrag" "z marken marken";
+    align-items: start;
+    row-gap: 0.1em;
+  }
+  main.lt[data-fassung] .lt-funkruf { max-width: none; margin: 0; }
+  .lt-karte > .lt-typ-wahl { height: auto; }
+  .lt-typ-kurz, .lt-typ-anker { display: none; }
+  .lt-typ-lang { display: inline; white-space: normal; background: none; }
+  main.lt[data-fassung] .lt-karte > .lt-auftrag::before { content: none; }
+  .lt-marken { justify-content: flex-start; margin: 0.15em 0 0; }
+  .lt-karte > * { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .lt-karte > :is(.lt-staerke, .lt-stand, .lt-marken) { white-space: nowrap; overflow-wrap: normal; }
+  .lt-gruppe { height: auto; padding-top: 0.2em; white-space: normal; flex-wrap: wrap; row-gap: 0; }
+  .lt-abgang { height: auto; min-height: calc(var(--lt-abgang-h) * 1em); white-space: normal; }
+
+  .lt-rand { min-height: auto; border-left: 0; padding: calc(var(--lt-b) * 0.8) 0 0; border-top: 2px solid var(--lt-linie); gap: calc(var(--lt-b) * 0.9); overflow: visible; }
+  .lt-zaehler { column-gap: calc(var(--lt-b) * 1); }
+  .lt-zaehler > div { gap: calc(var(--lt-b) * 0.35); }
+  main.lt .lt-zaehler dd { font-size: calc(var(--lt-b) * 1.15); }
+  main.lt .lt-zaehler dt { font-size: var(--lt-b); }
+  main.lt .lt-dauer { margin-top: calc(var(--lt-b) * -0.5); font-size: var(--lt-b); }
+  .lt-block { padding-top: calc(var(--lt-b) * 0.6); gap: calc(var(--lt-b) * 0.3); }
+  main.lt .lt-block h2 { font-size: calc(var(--lt-b) * 0.9375); }
+  main.lt .lt-bedarf li { font-size: var(--lt-b); }
+  .lt-block-zuletzt { flex: none; }
+  .lt-bewegungen { flex: none; flex-wrap: nowrap; overflow: visible; row-gap: calc(var(--lt-b) * 0.5); }
+  main.lt .lt-bewegung { font-size: var(--lt-b); }
+  .lt-fuss { margin-top: 0; }
+  main.lt .lt-datenstand { font-size: calc(var(--lt-b) * 0.9375); }
+  main.lt .lt-seitenzeile { height: auto; font-size: var(--lt-b); }
+}

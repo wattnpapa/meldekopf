@@ -12,7 +12,7 @@
  * Gezeigt werden Zahlen und Einheitsnamen, keine Personen.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./lagemonitor.css";
 import { einsaetzeLaden, einsaetzePapierkorb } from "./einsaetze-lesen";
 import {
@@ -32,6 +32,10 @@ import { sammlungenBeiseitegelegt } from "./eingang/unlesbar";
 import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, dauerText, lagebild, uhrTeile, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile, type ZugZeile } from "./lagemonitor";
 
 import { URL_PARAMETER, lagemonitorKennung } from "./lagemonitor-kennung";
+import { ANSICHT_NAME, ANSICHT_SCHLUESSEL, lageAnsichtLaden, lageAnsichtMerken, type LageAnsicht } from "./lagemonitor-ansicht";
+
+// Die Tafel-Ansicht (neu im Meldekopf) wird erst geladen, wenn sie gewählt ist: Wer bei den Zeilen bleibt, lädt sie nicht.
+const Lagetafel = lazy(() => import("./lagetafel-ui"));
 /** Gemerkte Helligkeitsstufe des Monitors („dunkel" oder „gedimmt"; „hell" wird nie gemerkt, R7-L3). */
 export const STUFE_SCHLUESSEL = "eeb.lagestufe.v1";
 /** Mehr Bewegungszeilen als das gibt es nicht im Bild; der Rest steht als „+ n weitere" (R7-K2). */
@@ -139,6 +143,29 @@ function useSpeicherAenderung(): number {
     return () => window.removeEventListener("storage", horcher);
   }, []);
   return stand;
+}
+
+/**
+ * Gewählte Ansicht des Monitors (Zeilen oder Tafel, `lagemonitor-ansicht.ts`). Stellt das andere Fenster um, folgt
+ * dieses nach: Wer in der Einsatzansicht wählt, muss nicht mit der Maus auf den Fernseher. Lässt sich die Wahl nicht
+ * speichern, gilt sie in diesem Fenster trotzdem.
+ */
+function useLageAnsicht(): [LageAnsicht, (ansicht: LageAnsicht) => void] {
+  const [ansicht, setAnsicht] = useState<LageAnsicht>(lageAnsichtLaden);
+  useEffect(() => {
+    const horcher = (e: StorageEvent) => {
+      if (e.key === null || e.key === ANSICHT_SCHLUESSEL) setAnsicht(lageAnsichtLaden());
+    };
+    window.addEventListener("storage", horcher);
+    return () => window.removeEventListener("storage", horcher);
+  }, []);
+  return [
+    ansicht,
+    (neu) => {
+      lageAnsichtMerken(neu);
+      setAnsicht(neu);
+    },
+  ];
 }
 
 function schliessen() {
@@ -306,6 +333,7 @@ export function bedarfTeile(b: BedarfZeile): { text: string; dringend: boolean }
 export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
   const jetzt = usePuls();
   const stand = useSpeicherAenderung();
+  const [ansicht, setAnsicht] = useLageAnsicht();
   useWachhalten();
   // Bei jedem Durchlauf neu lesen: `stand` und `jetzt` lösen ihn aus, der Lesezugriff ist gepuffert (einsaetze-lesen.ts).
   void stand;
@@ -372,6 +400,16 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
     </div>
   );
 
+  // Ansicht wechseln, Vollbild, Schließen: in beiden Ansichten dieselben Knöpfe.
+  const andereAnsicht: LageAnsicht = ansicht === "tafel" ? "zeilen" : "tafel";
+  const fensterKnoepfe = (
+    <>
+      <button type="button" className="lm-knopf" onClick={() => setAnsicht(andereAnsicht)}>Ansicht: {ANSICHT_NAME[andereAnsicht]}</button>
+      <button type="button" className="lm-knopf" onClick={vollbild}>Vollbild</button>
+      <button type="button" className="lm-knopf" onClick={schliessen}>Schließen</button>
+    </>
+  );
+
   if (!einsatz) {
     const imPapierkorb = einsaetzePapierkorb().some((s) => s.id === einsatzId);
     // Auch hier läuft die Uhr weiter, damit ein Monitor ohne Daten nicht wie ein eingefrorener aussieht (R6-L6).
@@ -393,6 +431,28 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         </div>
         <button type="button" className="lm-knopf" onClick={schliessen}>Schließen</button>
       </main>
+    );
+  }
+
+  if (ansicht === "tafel") {
+    return (
+      // Bis die Tafel geladen ist, steht der leere Grund der Stufe da, kein Bild der anderen Ansicht.
+      <Suspense fallback={<main className={klasse} />}>
+        <Lagetafel
+          einsatz={einsatz}
+          jetzt={jetzt}
+          beginn={beginn}
+          funkruf={funkruf}
+          staleSeit={staleSeit}
+          stufe={stufe}
+          bedienung={
+            <>
+              {stufenleiste}
+              <div className="lt-wahl">{fensterKnoepfe}</div>
+            </>
+          }
+        />
+      </Suspense>
     );
   }
 
@@ -570,10 +630,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
       {stufenleiste}
       <details className="lm-zeile lm-klapp">
         <summary>Optionen</summary>
-        <div className="lm-optionen">
-          <button type="button" className="lm-knopf" onClick={vollbild}>Vollbild</button>
-          <button type="button" className="lm-knopf" onClick={schliessen}>Schließen</button>
-        </div>
+        <div className="lm-optionen">{fensterKnoepfe}</div>
       </details>
       </div>
     </main>
@@ -590,6 +647,8 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
   // Der Funkrufname meldet ein Scheitern des Speicherns wie der Beginn, mit eigenem Satz (R11-O5).
   const [funkrufFehler, setFunkrufFehler] = useState(false);
   const [funkruf, setFunkruf] = useState(() => einsatzFunkrufLaden(einsatzId) ?? "");
+  // Die Ansicht des Fernsehers wird hier gewählt, wo gearbeitet wird; ein offener Monitor stellt sich sofort um.
+  const [ansicht, setAnsicht] = useLageAnsicht();
 
   function setzeFunkruf(text: string) {
     setFunkruf(text.slice(0, FUNKRUF_MAX));
@@ -691,6 +750,24 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
           />
         </label>
       </div>
+      <fieldset className="lm-ansicht-wahl">
+        <legend>Ansicht am Fernseher</legend>
+        <label>
+          <input type="radio" name="lm-ansicht" checked={ansicht === "zeilen"} onChange={() => setAnsicht("zeilen")} />
+          <span>
+            <strong>{ANSICHT_NAME.zeilen}</strong>
+            <span className="hinweis">Die Lage in großen Zeilen untereinander, die Einheiten als Tabelle darunter.</span>
+          </span>
+        </label>
+        <label>
+          <input type="radio" name="lm-ansicht" checked={ansicht === "tafel"} onChange={() => setAnsicht("tafel")} />
+          <span>
+            <strong>{ANSICHT_NAME.tafel}</strong>
+            <span className="hinweis">Alle Einheiten mit taktischem Zeichen an festem Platz, nach Zug geordnet; Stärke und Uhr groß für die Ferne.</span>
+          </span>
+        </label>
+      </fieldset>
+      <p className="hinweis lm-ansicht-hinweis">Die Wahl gilt für dieses Gerät. Ein offener Lagemonitor stellt sich sofort um; dort lässt sie sich auch ändern.</p>
       {/* R12-N5: Zweck und Wirkung von Feld und Knöpfen stehen vor ihnen. */}
       <p className="hinweis lm-beginn-erklaerung">
         Der Fernseher zeigt die Dauer seit dem Einsatzbeginn („seit Beginn: 2 Stunden, 5 Minuten“). „Jetzt“ setzt den

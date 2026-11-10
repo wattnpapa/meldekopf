@@ -11,6 +11,9 @@ import type { EebWelt } from "../support/welt";
 
 const MONITOR = new WeakMap<EebWelt, Page>();
 
+/** Wurzel des Monitors in beiden Ansichten: Zeilen (`main.lm`) und Tafel (`main.lt`, neu im Meldekopf). */
+const BILD = "main.lm, main.lt";
+
 function monitor(welt: EebWelt): Page {
   const p = MONITOR.get(welt);
   if (!p) throw new Error("Der Lagemonitor ist nicht offen.");
@@ -26,17 +29,99 @@ When("ich den Lagemonitor öffne", async function (this: EebWelt) {
   // Ein Fernseher, kein Laptopfenster: Unter 800 px Höhe zeigt der Monitor nur eine Bewegungszeile
   // (bewegungenMax, Erfassungsbogen R10).
   await fenster.setViewportSize({ width: 1920, height: 1080 });
-  await fenster.locator("main.lm").waitFor({ state: "visible" });
+  await fenster.locator(BILD).waitFor({ state: "visible" });
   MONITOR.set(this, fenster);
 });
 
 Then("zeigt der Lagemonitor {string}", async function (this: EebWelt, text: string) {
-  await monitor(this).locator("main.lm").getByText(text).first().waitFor({ state: "visible" });
+  await monitor(this).locator(BILD).getByText(text).first().waitFor({ state: "visible" });
 });
 
 Then("zeigt der Lagemonitor {string} nicht", async function (this: EebWelt, text: string) {
-  const treffer = monitor(this).locator("main.lm").getByText(text);
+  const treffer = monitor(this).locator(BILD).getByText(text);
   if ((await treffer.count()) > 0) throw new Error(`Der Lagemonitor zeigt „${text}“.`);
+});
+
+// ---------------------------------------------------------------- Ansicht des Monitors: Zeilen oder Tafel
+
+/** Die Wahl in der Einsatzansicht, Block „Lagemonitor für den Fernseher". */
+When("ich für den Fernseher die Ansicht {string} wähle", async function (this: EebWelt, name: string) {
+  await this.page.getByRole("group", { name: "Ansicht am Fernseher" }).getByRole("radio", { name: new RegExp(`^${name}`) }).check();
+});
+
+Then("ist für den Fernseher die Ansicht {string} gewählt", async function (this: EebWelt, name: string) {
+  const wahl = this.page.getByRole("group", { name: "Ansicht am Fernseher" }).getByRole("radio", { name: new RegExp(`^${name}`) });
+  // Die Wahl kommt über das Speicher-Ereignis aus dem Monitor-Fenster: kurz warten, statt sofort zu lesen.
+  await this.page.waitForFunction((el) => (el as HTMLInputElement | null)?.checked === true, await wahl.elementHandle());
+});
+
+When("ich im Lagemonitor auf {string} klicke", async function (this: EebWelt, name: string) {
+  await monitor(this).getByRole("button", { name, exact: true }).click();
+});
+
+Then("zeigt der Lagemonitor die Tafel", async function (this: EebWelt) {
+  await monitor(this).locator("main.lt").waitFor({ state: "visible" });
+  if ((await monitor(this).locator("main.lm").count()) > 0) throw new Error("Der Lagemonitor zeigt noch die Zeilen.");
+});
+
+Then("zeigt der Lagemonitor die Zeilen", async function (this: EebWelt) {
+  await monitor(this).locator("main.lm").waitFor({ state: "visible" });
+  if ((await monitor(this).locator("main.lt").count()) > 0) throw new Error("Der Lagemonitor zeigt noch die Tafel.");
+});
+
+/** Das Zeichen kommt aus einem nachgeladenen Brocken: Geprüft wird, dass es im gebauten Stand ankommt. */
+Then("trägt jede Einheit der Tafel ihr taktisches Zeichen", async function (this: EebWelt) {
+  const seite = monitor(this);
+  await seite.waitForFunction(() => {
+    const karten = document.querySelectorAll("main.lt .lt-karte");
+    return karten.length > 0 && document.querySelectorAll('main.lt .lt-karte .lt-zeichen img[data-zeichen="geladen"]').length === karten.length;
+  });
+});
+
+/**
+ * Was jsdom nicht rechnen kann: Der Satz der Tafel (lagetafel.ts) und die Stilvorlage müssen im Browser dasselbe
+ * ergeben. Jede Karte steht ganz in der Fläche, kein Name einer Einheit ist abgeschnitten, jede Zelle hat die
+ * gerechnete Höhe und den gerechneten Abstand, und die Seite rollt nicht.
+ */
+Then("stehen alle Einheiten der Tafel ganz im Bild", async function (this: EebWelt) {
+  const befund = await monitor(this).evaluate(() => {
+    const flaeche = document.querySelector("main.lt .lt-flaeche")!.getBoundingClientRect();
+    const fehler: string[] = [];
+    for (const karte of Array.from(document.querySelectorAll<HTMLElement>("main.lt .lt-karte"))) {
+      const r = karte.getBoundingClientRect();
+      const name = karte.querySelector<HTMLElement>(".lt-herkunft")!;
+      if (r.top < flaeche.top - 1 || r.bottom > flaeche.bottom + 1 || r.left < flaeche.left - 1 || r.right > flaeche.right + 1) {
+        fehler.push(`„${name.textContent}“ ragt aus der Fläche`);
+      }
+      if (name.scrollWidth > name.clientWidth + 1) fehler.push(`„${name.textContent}“ ist abgeschnitten`);
+    }
+    // Rechnung und Stilvorlage müssen dieselben Maße ergeben: Höhe jeder Zelle und ihr Abstand zur Zelle darüber.
+    // Ohne benannte Hilfsfunktion: tsx hängt solchen einen Helfer an, den es im Browser nicht gibt (siehe support/haken.ts).
+    const stil = document.querySelector<HTMLElement>("main.lt")!.style;
+    const schrift = parseFloat(stil.getPropertyValue("--lt-f"));
+    const kopfHoehe = parseFloat(stil.getPropertyValue("--lt-kopf-h")) * schrift;
+    const kartenHoehe = parseFloat(stil.getPropertyValue("--lt-karte-h")) * schrift;
+    const abgangHoehe = parseFloat(stil.getPropertyValue("--lt-abgang-h")) * schrift;
+    const absatz = parseFloat(stil.getPropertyValue("--lt-absatz")) * schrift;
+    const fuge = parseFloat(stil.getPropertyValue("--lt-fuge")) * schrift;
+    for (const spalte of Array.from(document.querySelectorAll("main.lt .lt-spalte"))) {
+      const zellen = Array.from(spalte.children) as HTMLElement[];
+      zellen.forEach((zelle, i) => {
+        const kopf = zelle.classList.contains("lt-gruppe");
+        const r = zelle.getBoundingClientRect();
+        const hoehe = kopf ? kopfHoehe : zelle.classList.contains("lt-karte") ? kartenHoehe : abgangHoehe;
+        if (Math.abs(r.height - hoehe) > 0.6) fehler.push(`Zelle ${i + 1} ist ${r.height.toFixed(1)} px hoch, gerechnet sind ${hoehe.toFixed(1)}`);
+        if (i === 0) return;
+        const abstand = r.top - zellen[i - 1]!.getBoundingClientRect().bottom;
+        const soll = kopf ? absatz : fuge;
+        if (Math.abs(abstand - soll) > 0.6) fehler.push(`Abstand über Zelle ${i + 1} ist ${abstand.toFixed(1)} px, gerechnet sind ${soll.toFixed(1)}`);
+      });
+    }
+    const seite = document.documentElement;
+    if (seite.scrollHeight > window.innerHeight + 1 || seite.scrollWidth > window.innerWidth + 1) fehler.push("die Seite rollt");
+    return fehler;
+  });
+  if (befund.length > 0) throw new Error(`Tafel passt nicht ins Bild: ${befund.join("; ")}`);
 });
 
 /**

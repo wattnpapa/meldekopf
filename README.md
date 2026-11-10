@@ -3,10 +3,10 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** 2026-11-09, Phasen 0 bis 6 umgesetzt (Phase 6: Rollenaudit, alle P0/P1 behoben), abgeglichen mit dem Erfassungsbogen `1d7ed5f` (Prüfrunden 10 bis 21, Schema 12):
+> **Stand:** 2026-11-10, Phasen 0 bis 6 umgesetzt (Phase 6: Rollenaudit, alle P0/P1 behoben), abgeglichen mit dem Erfassungsbogen `1d7ed5f` (Prüfrunden 10 bis 21, Schema 12):
 > Einsatz-Sammlungen anlegen und führen, Summen, Einheitenliste und -tabelle,
 > Zug, Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
-> Lagemonitor, Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
+> Lagemonitor (als Zeilen oder als Tafel), Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
 > (auch die des Erfassungsbogens). Bögen kommen per Kamera, USB-Handscanner,
 > Foto, Datei, PDF mit QR-Code, Einsatz-Datei oder geteiltem Link herein; ein
 > Link fragt, in welche Sammlung der Bogen gehört, oder reicht ihn an den
@@ -44,7 +44,9 @@ Tage oder Aufträge braucht, ist S1-Control.
 - Abrücken, Zug zuordnen, Bogen aufteilen und zusammenführen, Papier-Abgleich.
 - Lagemonitor für den Fernseher am Gerät: Funkrufname, Einsatzname, DTG,
   Einsatzdauer, Stärke, Bedarf, Stärke je Zug, Einheitentabelle mit Zug und
-  Gesamt, ohne Personennamen.
+  Gesamt, ohne Personennamen. Wahlweise als Tafel für den großen Fernseher im
+  Führungsfahrzeug: alle Einheiten mit taktischem Zeichen an festem Platz nach
+  Zug, Stärkemeldung und Uhr groß für die Ferne.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
   Daten, Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.

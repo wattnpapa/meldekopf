@@ -198,7 +198,7 @@ des Erfassungsbogens.
 | D2k | Haken einer Musterung | **Entfällt** (keine Vorlagen, keine Musterung in dieser App; ADR-006) | — | D2k |
 | D2l | Beiseitegelegter, unlesbarer Entwurf | Text eines unlesbaren Entwurfs mit Ursache; **kann Personendaten enthalten**, die die Datenschutzfrist nicht erreicht; fällt nach 90 Tagen selbst weg (`entwurf.ts`). Heute nur über eine eingespielte Sicherung erreichbar | `eeb.entwurf.beschaedigt.v1` | D2l |
 | D2m | Merker im Sitzungsspeicher | (a) **Live:** Eingaben des Papier-Abgleichs je Sammlung (Nummer, Zeiten, Status, Zug, Notiz) bis Tab-Ende, Übernehmen oder Verwerfen (`papier-abgleich-entwurf.ts`). (b) `eeb.abgleich.fortsetzen`: Merker nach „Anderen Stand laden“ im Fensterabgleich der Schnellerfassung, beim nächsten Start gelesen und gelöscht; keine Personendaten. (c) **Live seit Phase 3:** wartender Link einer eingegangenen Meldung (`eeb.wartet.fragment`, enthält den Bogen samt Personendaten, `eingang/wartender-link.ts`), bis die Rückfrage „Wohin damit?“ beantwortet ist. **Live seit Phase 4:** Rückwege der Schnellerfassung nach „Vorbelegung entfernen“, „Fahrzeug entfernen“ und „Ebene entfernen“ (`eeb.vorbelegung.rueckweg`, `eeb.fahrzeug.rueckweg`, `eeb.ebene.rueckweg`; 15 Minuten). Nicht in der Datensicherung; „Alle Daten löschen" leert alle `eeb.`-Einträge des Sitzungsspeichers | `sessionStorage` des Tabs (`eeb.papierabgleich.v1.<Einsatz>` u. a.) | D2m |
-| D2n | Einsatzbeginn, Funkrufname, Helligkeit für den Lagemonitor | Von Hand gesetzter Beginn je Einsatz, optionaler Funkrufname der eigenen Führungsstelle (Freitext bis 60 Zeichen), Helligkeitsstufe (`lagemonitor-beginn.ts`, `lagemonitor-ui.tsx`); reisen als `lage` im Umschlag von Sammel-PDF und Einsatz-Datei; keine Personennamen vorgesehen | `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1` | D2n |
+| D2n | Einsatzbeginn, Funkrufname, Helligkeit und Ansicht für den Lagemonitor | Von Hand gesetzter Beginn je Einsatz, optionaler Funkrufname der eigenen Führungsstelle (Freitext bis 60 Zeichen), Helligkeitsstufe (`lagemonitor-beginn.ts`, `lagemonitor-ui.tsx`); Beginn und Funkrufname reisen als `lage` im Umschlag von Sammel-PDF und Einsatz-Datei; keine Personennamen vorgesehen. Seit 2026-11-10 dazu die gewählte Ansicht (Zeilen oder Tafel, `lagemonitor-ansicht.ts`): ein Wort, geräteweit, reist nicht mit | `eeb.lagebeginn.v1`, `eeb.lagefunkruf.v1`, `eeb.lagestufe.v1`, `eeb.lageansicht.v1` | D2n |
 | D2o | Beiseitegelegter unlesbarer Bestand | Unlesbare Sammlungen, Meldungen, Gesamttexte (und aus einer Erfassungsbogen-Sicherung Vorlagen, Absenderkarte) unverändert; **kann Personendaten enthalten**; 90 Tage ab Beiseitelegen nach der geprüften Uhr, eigener Weg „Beiseitegelegtes entfernen…" (`eingang/unlesbar.ts`, `eingang/unlesbar-aufraeumen.ts`) | `eeb.unlesbar.v1` | D2o (Runde 7/8) |
 | D2p | Fremdbestand aus einer Erfassungsbogen-Sicherung | **Neu gegenüber der Vorlage.** Vorlagen („Meine Vorlagen" mit ganzer Mannschaft, Namen, Funktionen, Erreichbarkeiten), Übergabe-Stand des eigenen Bogens, ggf. Haken einer Musterung. Die App hat dafür keine Oberfläche; `vorlagen.ts` und `uebergabe-stand.ts` sind reine Datenmodule, damit eine eingespielte Sicherung nichts verliert. Vorlagen haben keine Datenschutzfrist (wie im Erfassungsbogen), nur die Papierkorbfrist von 30 Tagen. Genannt werden sie in den Rückfragen „Sicherung einspielen" und „Alle Daten löschen" | `eeb.vorlagen.v1`, `eeb.musterung.v1` (falls vorhanden), am Entwurf `uebergabe` | — |
 | D2q | Einstellungen | Anzeigemodus (`eeb.anzeigemodus.v1`, Altschlüssel `eeb.feldmodus.v1` nur lesend), Karten-/Tabellensicht (`eeb.einheiten-ansicht`), Widerspruch gegen die Reichweitenmessung (`skipgc`, **ohne** `eeb.`-Präfix: nicht in der Sicherung, überlebt „Alle Daten löschen" bewusst), kurzlebige Speicherprobe (`eeb.speicherprobe`); keine Personendaten | `localStorage` | — |
@@ -577,6 +577,18 @@ Bewegungen (Einheitsname, Art, Zeit) und aufklappbar die Einheitentabelle
 Stärke). Er hält den Bildschirm wach (Wake Lock), liest bei jedem
 `storage`-Ereignis und alle fünf Sekunden neu, zeigt „ÜBUNG – keine
 Echtlage" und kennt die Stufen hell, dunkel, gedimmt.
+
+Seit 2026-11-10 gibt es daneben die Ansicht **Tafel** (`lagetafel-ui.tsx`,
+`lagetafel.ts`). Sie zeigt dieselbe Klasse von Angaben, aber alle Einheiten
+auf einmal und je Einheit mehr: taktisches Zeichen, Herkunft, Typ,
+Funkrufname des ersten Fahrzeugs, Auftrag oder Notiz des Meldekopfs, Stärke,
+Uhrzeit des Stands der Angaben, den Sofortbedarf als Marke (Ruhezeit,
+Unterbringung, abweichende Verpflegung) und die abgerückten Einheiten mit
+Uhrzeit. Personen, Namen und Erreichbarkeiten zeigt sie wie die Zeilen nicht;
+das prüft ein Test (`lagetafel-ui.test.tsx`). Für die Sichtbarkeit heißt das:
+Wer den Fernseher sieht, liest die Lage vollständiger ab als bisher, auch aus
+größerer Entfernung (Stärke und Uhr sind dafür groß gesetzt). M12 gilt
+unverändert und mit mehr Gewicht.
 
 Sicherheitsrelevant ist die **Sichtbarkeit für Umstehende**: Ein Fernseher im
 Raum oder im ELW zeigt die Lage jedem, der vorbeikommt, auch Presse,
