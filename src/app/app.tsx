@@ -42,6 +42,7 @@ import { QrScannerWeb } from "./eingang/qr-scanner-web";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
 import { SpeicherWarnung } from "./speicher-warnung";
 import { UhrWarnung } from "./uhr-warnung";
+import { ErfassungsbogenWeg } from "./erfassungsbogen-weg";
 
 
 /** Untertitel der Startseite — derselbe Satz wie im statischen Gerüst der index.html. */
@@ -425,6 +426,7 @@ export function App() {
               </label>
             </div>
           </section>
+          <ErfassungsbogenWeg />
         </div>
         {(meldung || fehler) && <p className={fehler ? "fehler" : "meldung"} role="status">{fehler || meldung}</p>}
         {/* Die Überschrift bleibt wörtlich wie im Erfassungsbogen: Szenarien

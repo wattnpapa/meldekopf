@@ -225,7 +225,9 @@
     }
     @media (hover: hover) { button:hover, .datei-knopf:hover { border-color: var(--akzent); color: var(--akzent); } }
     button.primaer, .datei-knopf.primaer { background: var(--akzent); color: var(--auf-akzent); border-color: var(--akzent); }
-    @media (hover: hover) { button.primaer:hover { background: var(--akzent-hell); border-color: var(--akzent-hell); color: var(--auf-akzent); } }
+    /* Ein Link in Knopfgestalt (Startseite: „Erfassungsbogen öffnen ↗“) trägt keine Unterstreichung. */
+    a.datei-knopf { text-decoration: none; }
+    @media (hover: hover) { button.primaer:hover, .datei-knopf.primaer:hover { background: var(--akzent-hell); border-color: var(--akzent-hell); color: var(--auf-akzent); } }
     button.gefahr { color: var(--alarm); border-color: var(--alarm); }
     button:disabled { opacity: 0.4; cursor: default; }
     /* Sichtbarer Tastaturfokus in der Kennfarbe — überall gleich. */

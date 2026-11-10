@@ -138,7 +138,8 @@ erklären, warum etwas so ist, wie es ist. Diese Begründungen gehen mit.
 | Nutzungsmessung | Ein Treffer je Kaltstart an GoatCounter, cookielos, ohne Fremdcode, Widerspruch per Schlüssel. | `statistik.ts` | erledigt (Phase 0), eigene GoatCounter-Site `meldekopf.goatcounter.com` |
 | Electron-Hülle | Desktop-Fenster, Auto-Update, Berechtigungen (Kamera erlaubt), externe Links im Systembrowser, zweites Fenster für den Lagemonitor. | `electron/main.js` | erledigt: Release baut Windows (x64, arm64) und Linux (deb, pacman); macOS stillgelegt wie im Erfassungsbogen |
 | Capacitor-Hülle | Android (und später iOS): Barcode-Scanner, Dateisystem, Teilen, App-Links. | `android/`, `capacitor.config.json`, `nativ.ts` | übernommen (Phase 5): `android/` mit Paket `de.meldekopf.app`, App Link auf die eigene Adresse; CI baut eine Debug-APK. Die signierte APK im Release braucht die Secrets `ANDROID_KEYSTORE_BASE64` und `ANDROID_KEYSTORE_PASSWORD`, der App Link zusätzlich `assetlinks.json` mit dem Fingerabdruck. iOS folgt dem Erfassungsbogen |
-| Startseite | Erklärender Text einmal als Daten, daraus React-Ansicht und statisches Gerüst in `index.html`. | `start-inhalt.ts`, `scripts/start-inhalt.mts` | erledigt (Phase 0, neuer Text) |
+| Startseite | Erklärender Text einmal als Daten, daraus React-Ansicht und statisches Gerüst in `index.html`. | `start-inhalt.ts`, `scripts/start-inhalt.mts` | erledigt (Phase 0, neuer Text); der Hinweis „Im Aufbau“ entfällt seit dem 2026-11-10 |
+| Weg zum Erfassungsbogen | Abschnitt „Bogen erfassen (Erfassungsbogen)“ neben „Bögen sammeln“ mit Primärknopf „Erfassungsbogen öffnen ↗“; Gegenstück zu „Bögen sammeln (Meldekopf)“ im Erfassungsbogen. Am Telefon zwei Spalten wie dort (R19-W3). | `erfassungsbogen-weg.tsx` | erledigt (2026-11-10) |
 | Erststart | Erklärt das Grundprinzip beim ersten Aufruf. | `app.tsx`, `daten-und-anzeige.feature` | übernehmen, neuer Text |
 
 ## 10. Bewusst nicht in dieser App

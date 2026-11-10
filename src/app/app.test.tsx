@@ -16,6 +16,8 @@ describe("Startseite", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Meldekopf" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Im Aufbau" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Die Produktfamilie" })).toBeTruthy();
+    // Gegenstück zu „Bögen sammeln (Meldekopf)“ im Erfassungsbogen: der Weg zurück zum Bogen der Einheit.
+    expect(screen.getByRole("link", { name: /Erfassungsbogen öffnen/ })).toBeTruthy();
     // Die Offline-Zeile nennt den echten Stand (offline-bereit.ts); jsdom hat keinen Service Worker.
     expect(screen.getByText(/Offline-Vorrat ist in diesem Browser nicht möglich.*Alle Daten bleiben auf diesem Gerät/)).toBeTruthy();
   });
