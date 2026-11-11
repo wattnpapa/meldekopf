@@ -31,7 +31,7 @@
 import { staerke as staerkeAusBogen, type Einheit, type OrganisationsTyp, type Staerke } from "@bos/eeb-format/model";
 import { MeldeStatus, type Einsatzsammlung, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { angabenZeit } from "./angaben-alter";
-import { aktuelleMeldungen, uebungenAusserhalbDerLage } from "./auswertung";
+import { aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage } from "./auswertung";
 import { bedarfMarken } from "./einheiten-tabelle";
 import { eintreffzeit } from "./eintrag-zeiten";
 import { geltendeJeEinheit } from "./fassung-vorrang";
@@ -66,7 +66,7 @@ export interface TafelEinheit {
   typKurz: string;
   /** Funkrufname des ersten Fahrzeugs, das einen trägt; sonst leer. */
   funkruf: string;
-  /** Auftrag oder Notiz des Meldekopfs, eine Zeile. */
+  /** Auftrag oder Notiz des Meldekopfs, eine Zeile. Bei einer Übungsmeldung, die nicht zählt, steht ihr Zug davor („1. Zug · …"). */
   auftrag: string;
   staerke: Staerke;
   /** Niemand hat gezählt: Die Zahlen sind die Sollstärke der Vorbelegung. */
@@ -277,7 +277,8 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
           einheit: e,
           ...meldungTeile(m),
           funkruf: m.bogen.fahrzeuge.map((f) => funkrufText(f, e)).find((t) => t !== "") ?? "",
-          auftrag: m.notiz?.trim() ? auftragKurz(m.notiz) : "",
+          // Die Gruppe geht über alle Züge: Zu welchem Zug die Einheit gehört, stünde sonst nirgends. Der Zug steht vor dem Auftrag.
+          auftrag: [(m.zugEtikett ?? "").trim(), m.notiz?.trim() ? auftragKurz(m.notiz) : ""].filter(Boolean).join(" · "),
           staerke: { fuehrer: st.fuehrer, unterfuehrer: st.unterfuehrer, mannschaft: st.mannschaft, gesamt: st.gesamt },
           soll: nurSollstaerke(m.bogen),
           stand: angabenZeit(m),
@@ -295,7 +296,10 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
     .filter((e) => e.status === MeldeStatus.ABGERUECKT)
     .map((e): TafelAbgang => {
       const n = meldungTeile(e);
-      return { id: e.id, name: [n.herkunft, n.typKurz].filter(Boolean).join(" "), zeit: abrueckzeit(e) };
+      // Eine Übungsmeldung, die in dieser Lage nie gezählt hat, trägt auch als abgerückte ihr Wort: Sonst läse sie sich
+      // wie eine Einheit, die der Lage jetzt fehlt.
+      const uebung = zaehltInLage(einsatz.art, e.bogen) ? "" : `(${UEBUNG_WORT})`;
+      return { id: e.id, name: [n.herkunft, n.typKurz, uebung].filter(Boolean).join(" "), zeit: abrueckzeit(e) };
     })
     .sort((a, b) => (b.zeit ?? 0) - (a.zeit ?? 0) || a.id.localeCompare(b.id));
 

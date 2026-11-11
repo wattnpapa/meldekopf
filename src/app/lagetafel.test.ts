@@ -279,7 +279,9 @@ describe("tafelbild: feste Plätze", () => {
     expect(uebung.einheiten.map((e) => e.herkunft)).toEqual(["THW Früher", "THW Geübt"]);
     // Weder Bedarf noch Bewegung: Beides gehört nicht in diese Lage, obwohl „Geübt" vor 20 Minuten kam und Ruhezeit meldet.
     expect(uebung.einheiten.every((e) => e.uebung && e.bedarf.length === 0 && e.marke === undefined)).toBe(true);
-    expect(uebung.einheiten[1]).toMatchObject({ auftrag: "Ausbildung Deichbau", soll: false, staerke: { fuehrer: 1, unterfuehrer: 1, mannschaft: 4, gesamt: 6 } });
+    // Die Gruppe geht über alle Züge: Der Zug der Einheit steht vor ihrem Auftrag; ohne Zug und Auftrag bleibt das Feld leer.
+    expect(uebung.einheiten[1]).toMatchObject({ auftrag: "1. Zug · Ausbildung Deichbau", soll: false, staerke: { fuehrer: 1, unterfuehrer: 1, mannschaft: 4, gesamt: 6 } });
+    expect(uebung.einheiten[0]!.auftrag).toBe("");
     expect(uebung.einheiten[1]!.funkruf).toMatch(/22\/51$/);
     expect(uebung.staerke.gesamt).toBe(10);
     // Gezählt wird nur, was zählt: Kopf, Zwischensummen und Bedarf bleiben ohne die Übung.
@@ -304,16 +306,25 @@ describe("tafelbild: feste Plätze", () => {
     expect(tb.bild.uebungenDaneben).toBe(0);
   });
 
-  it("lässt die einzige Organisation ohne Kopf, auch wenn Übungsmeldungen danebenstehen; abgerückte Übungsmeldungen sind keine Karte", () => {
+  it("lässt die einzige Organisation ohne Kopf, auch wenn Übungsmeldungen danebenstehen; abgerückte Übungsmeldungen sind keine Karte und tragen ihr Wort", () => {
     const tb = tafelbild(
-      sammlung([eintrag({ ort: "Echt" }), eintrag({ ort: "Geübt", uebung: true }), eintrag({ ort: "Weg", uebung: true, status: MeldeStatus.ABGERUECKT, abgeruecktVorMin: 10 })]),
+      sammlung([
+        eintrag({ ort: "Echt" }),
+        eintrag({ ort: "Geübt", uebung: true }),
+        eintrag({ ort: "Weg", uebung: true, status: MeldeStatus.ABGERUECKT, abgeruecktVorMin: 10 }),
+        eintrag({ ort: "Fort", status: MeldeStatus.ABGERUECKT, abgeruecktVorMin: 20 }),
+      ]),
       JETZT,
     );
     expect(tb.gruppen.map((g) => [g.titel, g.kopf, g.einheiten.length])).toEqual([
       ["THW", false, 1],
       ["Übung", true, 1],
     ]);
-    expect(tb.abgerueckt.map((a) => a.name)).toEqual(["THW Weg"]);
+    // Die Übungsmeldung hat in dieser Lage nie gezählt: Als abgerückte läse sie sich sonst wie eine Einheit, die der Lage fehlt.
+    expect(tb.abgerueckt.map((a) => a.name)).toEqual(["THW Weg (Übung)", "THW Fort"]);
+    // In einer Übung zählt sie und trägt das Wort nicht.
+    const uebung = tafelbild(sammlung([eintrag({ ort: "Weg", uebung: true, status: MeldeStatus.ABGERUECKT, abgeruecktVorMin: 10 })], EinsatzArt.UEBUNG), JETZT);
+    expect(uebung.abgerueckt.map((a) => a.name)).toEqual(["THW Weg"]);
   });
 
   it("stellt Übungsmeldungen auch dann hin, wenn sonst niemand in der Lage ist", () => {

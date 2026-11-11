@@ -300,15 +300,17 @@ describe("Lagetafel", () => {
     expect(uebung.hasAttribute("data-marke")).toBe(false);
     // Ihre Angaben stehen da wie bei jeder Einheit.
     expect(within(uebung).getByRole("group").getAttribute("aria-label")).toBe("Stärke: 0 Führer, 2 Unterführer, 7 Mannschaft, gesamt 9");
-    expect(uebung.querySelector(".lt-auftrag")!.textContent).toBe("Ausbildung Deichbau");
+    // Vor dem Auftrag steht ihr Zug: Die Gruppe geht über alle Züge.
+    expect(uebung.querySelector(".lt-auftrag")!.textContent).toBe("1. Zug · Ausbildung Deichbau");
     expect(uebung.querySelector(".lt-stand")!.textContent).toMatch(/^Stand /);
     expect(karte("THW Oldenburg (NI)").hasAttribute("data-uebung")).toBe(false);
 
-    // Die Randspalte zählt und warnt ohne sie. Eigens nennt sie die Übungsmeldung nicht: Das sagt die Gruppe auf der Tafel.
+    // Die Randspalte zählt und warnt ohne sie und nennt sie gleich bei der Zahl, wie die Einsatzansicht („Einheiten (+1 Übung)").
     const rand = screen.getByRole("complementary");
     expect(rand.querySelector(".lt-zaehler dd")!.textContent).toBe("1");
+    expect(rand.querySelector(".lt-daneben")!.textContent).toBe("+ 1 Übung, nicht gezählt");
+    expect(rand.querySelector(".lt-zaehler")!.nextElementSibling).toBe(rand.querySelector(".lt-daneben"));
     expect(rand.querySelector(".lt-bedarf")!.textContent).not.toContain("Ruhezeit");
-    expect(rand.textContent).not.toMatch(/Übung/);
     expect(document.querySelector(".lt-leer-block")).toBeNull();
   });
 
@@ -601,7 +603,7 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(hier()).not.toContain("1. Zug");
   });
 
-  it("führt die Übungsmeldungen beim Blättern in der Übersicht ohne Zahl und nennt sie in der Seitenzeile", () => {
+  it("nennt die Übungsmeldungen beim Blättern auf jeder Seite in der Randspalte; die Übersicht führt nur die Züge, die zählen", () => {
     fernseher();
     vi.useFakeTimers();
     const { sammlung } = einsatzMit([
@@ -611,53 +613,76 @@ describe("Lagetafel: Satz und Blättern", () => {
     ]);
     tafel(sammlung());
     const status = () => screen.getByRole("status").textContent!;
+    const rand = screen.getByRole("complementary");
+    const uebungskarten = () => karten().filter((k) => k.hasAttribute("data-uebung")).map((k) => k.querySelector(".lt-herkunft")!.textContent);
     expect(status()).toMatch(/^Seite 1 von \d: 1\. Zug bis/);
-    const block = within(screen.getByRole("complementary")).getByRole("heading", { name: /^Züge/ }).closest("section")!;
-    const zeilen = Array.from(block.querySelectorAll(".lt-zuege li"));
-    expect(zeilen).toHaveLength(12);
-    // Elf Züge mit ihrer Stärke; die Übungsmeldungen ohne Zahl, damit niemand sie dazurechnet.
-    expect(zeilen.slice(0, 11).map((z) => z.querySelector("b")?.textContent)).toEqual(Array.from({ length: 11 }, () => "32"));
-    const letzte = zeilen[11]!;
-    expect(letzte.textContent).toBe("Übungnicht gezählt");
-    expect(letzte.querySelector("b")).toBeNull();
+    // Auf der ersten Seite steht keine Karte einer Übungsmeldung; dass es sie gibt, sagt die Randspalte trotzdem.
+    expect(uebungskarten()).toEqual([]);
+    expect(rand.querySelector(".lt-daneben")!.textContent).toBe("+ 2 Übung, nicht gezählt");
+    const block = within(rand).getByRole("heading", { name: /^Züge/ }).closest("section")!;
+    // Elf Züge mit ihrer Stärke. Die Übungsmeldungen stehen nicht dazwischen: Sie haben keine Stärke, die in die Lage zählt.
+    expect(block.querySelector("h2")!.textContent).toBe("Züge fett: auf dieser Seite");
+    expect(Array.from(block.querySelectorAll(".lt-zuege li")).map((z) => z.textContent)).toEqual(Array.from({ length: 11 }, (_, i) => `${i + 1}. Zug32`));
     // Die Stärke oben ist die der elf Züge.
     expect(document.querySelector(".lt-meldung")!.getAttribute("aria-label")).toBe("Stärke: 0 Führer, 88 Unterführer, 264 Mannschaft, gesamt 352");
     // Die Seite davor kündigt sie an („weiter mit … bis Übung"); auf der letzten Seite stehen ihre Karten, und die Seitenzeile nennt die Gruppe.
     const seiten = Number(/von (\d)/.exec(status())![1]);
-    expect(letzte.hasAttribute("data-hier")).toBe(false);
     for (let i = 1; i < seiten; i++) act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
     const hier = /^Seite (\d) von \1: (.*?)(?: · weiter mit .*)?$/.exec(status());
     expect(hier, status()).not.toBeNull();
     expect(hier![2]).toMatch(/(^| bis )Übung$/);
-    expect(block.querySelector(".lt-zuege li:last-child")!.hasAttribute("data-hier")).toBe(true);
-    expect(karten().filter((k) => k.hasAttribute("data-uebung")).map((k) => k.querySelector(".lt-herkunft")!.textContent)).toEqual(["THW Geübt 1", "THW Geübt 2"]);
+    expect(uebungskarten()).toEqual(["THW Geübt 1", "THW Geübt 2"]);
+    expect(rand.querySelector(".lt-daneben")!.textContent).toBe("+ 2 Übung, nicht gezählt");
   });
 
-  it("lässt die Übersicht der Züge nachgeben: Zu sehen sind nur ganze Zeilen, die Überschrift nennt, wie viele, und der Fuß steht außerhalb", () => {
+  it("lässt die Übersicht der Züge nachgeben: nur ganze Zeilen, der Ausschnitt folgt der laufenden Seite, und der Fuß steht außerhalb", () => {
     fernseher();
     vi.useFakeTimers();
     const { sammlung } = einsatzMit(
       Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number] })),
     );
-    // Dem DOM ohne Layout eine Liste geben, in die nur die ersten drei Zeilen (sechs Züge) ganz hineinpassen; die vierte ist angeschnitten.
-    const zeile = 20;
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      const kasten = (top: number, hoehe: number, links = 0, breite = 300) => ({ x: links, y: top, left: links, top, width: breite, height: hoehe, right: links + breite, bottom: top + hoehe, toJSON: () => ({}) }) as DOMRect;
-      if (this.classList.contains("lt-zuege")) return kasten(0, 3 * zeile + 8);
-      const liste = this.parentElement;
-      if (liste?.classList.contains("lt-zuege")) {
-        const i = Array.from(liste.children).indexOf(this);
-        return kasten(Math.floor(i / 2) * zeile, zeile, (i % 2) * 150, 150);
-      }
-      return kasten(0, 0, 0, 0);
+    // Dem DOM ohne Layout ein Fenster geben, in das drei der sechs Zeilen passen (Zeile 20 hoch, Fenster 68: die vierte wäre angeschnitten).
+    const flaeche = (el: HTMLElement) => el.classList.contains("lt-flaeche");
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return flaeche(this) ? 1386 : this.classList.contains("lt-zuege-fenster") ? 300 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return flaeche(this) ? 852 : this.classList.contains("lt-zuege-fenster") ? 68 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.parentElement?.classList.contains("lt-zuege") ? 20 : 0;
     });
     tafel(sammlung());
     const rand = screen.getByRole("complementary");
     const block = within(rand).getByRole("heading", { name: /^Züge/ }).closest("section")!;
+    const liste = block.querySelector<HTMLElement>(".lt-zuege")!;
+    const zeilen = () => Array.from(liste.querySelectorAll<HTMLElement>("li"));
+    const zuSehen = () => zeilen().filter((z) => z.style.visibility !== "hidden").map((z) => z.querySelector(".lt-zug-name")!.textContent);
+    const fett = () => zeilen().filter((z) => z.hasAttribute("data-hier")).map((z) => z.querySelector(".lt-zug-name")!.textContent);
+
+    // Erste Seite: der Anfang der Liste, nichts verschoben. Alle zwölf Züge bleiben im DOM (die Liste behält ihre Höhe).
     expect(block.querySelector("h2")!.textContent).toBe("Züge 6 von 12 · fett: auf dieser Seite");
-    const zeilen = Array.from(block.querySelectorAll<HTMLElement>(".lt-zuege li"));
-    expect(zeilen).toHaveLength(12);
-    expect(zeilen.map((z) => z.style.visibility)).toEqual([...Array.from({ length: 6 }, () => ""), ...Array.from({ length: 6 }, () => "hidden")]);
+    expect(zeilen()).toHaveLength(12);
+    expect(zuSehen()).toEqual(["1. Zug", "2. Zug", "3. Zug", "4. Zug", "5. Zug", "6. Zug"]);
+    expect(liste.style.transform).toBe("");
+    expect(fett().length).toBeGreaterThan(0);
+    expect(zuSehen()).toContain(fett()[0]);
+
+    // Letzte Seite: Der Ausschnitt ist mitgewandert, die Züge der Seite sind zu sehen und stehen fett da.
+    const status = () => screen.getByRole("status").textContent!;
+    const seiten = Number(/von (\d)/.exec(status())![1]);
+    for (let i = 1; i < seiten; i++) act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
+    expect(status()).toMatch(new RegExp(`^Seite ${seiten} von ${seiten}`));
+    expect(fett()).toContain("12. Zug");
+    expect(fett().every((name) => zuSehen().includes(name!))).toBe(true);
+    expect(zuSehen()).toHaveLength(6);
+    // Verschoben wird in ganzen Zeilen und höchstens bis zur letzten (drei von sechs Zeilen passen: höchstens drei Zeilen weit).
+    const schub = /^translateY\(-(\d+)px\)$/.exec(liste.style.transform);
+    expect(schub, liste.style.transform).not.toBeNull();
+    expect(Number(schub![1]) % 20).toBe(0);
+    expect(Number(schub![1])).toBeLessThanOrEqual(60);
+    expect(block.querySelector("h2")!.textContent).toBe("Züge 6 von 12 · fett: auf dieser Seite");
+
     // Datenstand und Bedienung stehen unter der Hülle, die misst und abschneidet, nicht in ihr.
     const huelle = rand.querySelector(".lt-rand-inhalt")!;
     expect(huelle.contains(block)).toBe(true);

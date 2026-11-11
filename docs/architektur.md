@@ -371,13 +371,15 @@ alle Züge mit ihrer Stärke.
 `auswertung.ts`), stehen aber auf der Tafel: als eigene, letzte Gruppe über
 alle Züge hinweg, mit „nicht gezählt“ am Kopf statt einer Summe. Stünden sie
 in ihrem Zug, ergäben dessen Karten nicht mehr dessen Summe. Ihr Bedarf und
-ihre Bewegungen gehen wie in `lagebild` in nichts ein. Die Zeilenansicht
-nennt sie weiter nur als Zahl.
+ihre Bewegungen gehen wie in `lagebild` in nichts ein; die Randspalte nennt
+sie bei der Zahl der Einheiten, damit sie beim Blättern auf jeder Seite
+erwähnt sind. Die Zeilenansicht nennt sie weiter nur als Zahl.
 
 Die Randspalte hat eine Rangfolge. Alles über dem Fuß steht in einer Hülle,
 die die Höhe nimmt, die der Fuß lässt. Wird es eng, weicht erst „Zuletzt“
-(bis auf seine Überschrift), dann die Übersicht der Züge, zeilenweise; was
-dann noch übersteht, schneidet die Hülle ab. Datenstand und Bedienung
+(bis auf seine Überschrift), dann die Übersicht der Züge, zeilenweise und
+so verschoben, dass die Züge der laufenden Seite zu sehen sind; was dann
+noch übersteht, schneidet die Hülle ab. Datenstand und Bedienung
 bleiben so immer im Bild. Vorher drückten zwölf und mehr Züge mit vollem
 Bedarf die Knöpfe aus dem Bild.
 

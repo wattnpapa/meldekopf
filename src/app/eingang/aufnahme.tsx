@@ -459,15 +459,16 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     // in eine echte Sammlung und bekam dort eine Nummer. Jetzt fragt die App
     // vorher; im Kiosk-Scan genügt die Quittung (kein Dialog im Scanstapel).
     if (uebungDaneben && !kiosk && !schonDa) {
-      // Neu im Meldekopf: Zählt in der Sammlung noch keine Einheit, ist sie womöglich selbst die Übung und nur als
-      // „Einsatz" angelegt (die Vorgabe beim Anlegen). Dann steht der Weg dorthin in derselben Rückfrage. Sobald echte
-      // Einheiten in der Lage zählen, bleibt es bei „Trotzdem ablegen": Die Art einer laufenden Lage stellt niemand
-      // nebenbei beim Einlesen um; dafür gibt es „Einsatz bearbeiten".
-      const nochKeineZaehlt = aktuelleMeldungen(einsatz!.eintraege, einsatz!.art).length === 0;
+      // Neu im Meldekopf: Führt die Sammlung noch keine Meldung, die nicht Übung ist, ist sie womöglich selbst die Übung
+      // und nur als „Einsatz" angelegt (die Vorgabe beim Anlegen). Dann steht der Weg dorthin in derselben Rückfrage.
+      // Sobald eine echte Meldung in der Sammlung steht, auch eine abgerückte oder eine ältere Fassung, bleibt es bei
+      // „Trotzdem ablegen": Die Art einer Lage, die echte Einheiten geführt hat, stellt niemand nebenbei beim Einlesen um;
+      // dafür gibt es die Einsatzansicht mit ihrer eigenen Rückfrage.
+      const nurUebung = einsatz!.eintraege.every((e) => !!e.bogen.uebung);
       const wahl = await frageWahl({
         titel: "Übungsbogen in diese Sammlung?",
         text: `„${einheitAnzeigename(b.einheit)}" ist als ÜBUNG gekennzeichnet. In „${einsatz!.name}" zählt er nicht in die Lage, bekommt aber eine Nummer. Für Übungen gibt es Sammlungen der Art „Übung“.`,
-        wege: nochKeineZaehlt
+        wege: nurUebung
           ? [
               { wert: "uebung", label: "Als Übung führen und ablegen", hinweis: `„${einsatz!.name}" wird zur Übung: Übungsmeldungen zählen dann wie jede andere Einheit.` },
               { wert: "ja", label: "Trotzdem ablegen", hinweis: "Der Bogen bekommt eine Nummer, zählt aber nicht in die Lage." },
@@ -681,10 +682,13 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     // Stand vor der Aufnahme — für die Frage, welche Fassung gilt (R4-W1).
     const vorherEintraege = einsatz?.eintraege ?? [];
     let r;
+    // Neu im Meldekopf: die Art vor „Als Übung führen und ablegen", solange umgestellt, aber noch nichts abgelegt ist.
+    let artDavor: EinsatzArt | null = null;
     try {
-      // Neu im Meldekopf: Auf „Als Übung führen und ablegen" wird die Sammlung jetzt zur Übung, im selben Schritt wie
-      // das Ablegen. Scheitert das Schreiben (voller Speicher), steht unten, dass nichts aufgenommen wurde.
-      if (alsUebung) einsatzArtSetzen(zielId, EinsatzArt.UEBUNG);
+      // Auf „Als Übung führen und ablegen" wird die Sammlung jetzt zur Übung, unmittelbar vor dem Ablegen. Es sind zwei
+      // Schreibvorgänge; scheitert der zweite (voller Speicher: Der Bogen braucht Platz, die Art nicht), nimmt der
+      // Fehlerzweig unten die Umstellung zurück.
+      if (alsUebung) artDavor = einsatzArtSetzen(zielId, EinsatzArt.UEBUNG);
       // meldungAufnehmen: legt ab und lässt die Folgemeldung Zug, Auftrag und
       // Eintreffzeit der Vorgängerin erben (eintrag-zeiten.ts, R2-K1).
       r = meldungAufnehmen(zielId, aufzunehmen, {
@@ -696,7 +700,16 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     } catch (e) {
       // Voller Speicher: nichts abgelegt, und das muss sichtbar sein — der
       // Bogen bleibt beim Aufrufer offen (Audit „Offline und Speicher", O1).
-      const text = istSpeicherVoll(e) ? new SpeicherVollFehler(e).message : fehlerText(e);
+      let text = istSpeicherVoll(e) ? new SpeicherVollFehler(e).message : fehlerText(e);
+      // Neu im Meldekopf: Der Knopf hieß „… und ablegen". Ist nichts abgelegt, gilt auch die Umstellung nicht; lässt sie
+      // sich nicht zurücknehmen, steht es da, statt eine Übung zu hinterlassen, von der die Meldung nichts sagt.
+      if (artDavor != null && artDavor !== EinsatzArt.UEBUNG) {
+        try {
+          einsatzArtSetzen(zielId, artDavor);
+        } catch {
+          text += ` „${einsatz!.name}" wird aber schon als Übung geführt.`;
+        }
+      }
       ablageFehler.current = text;
       if (kiosk) setScanFortschritt(`✗ Nicht aufgenommen: ${text}`);
       else setFehler(text);

@@ -210,6 +210,38 @@ function useGanzSichtbar(liste: RefObject<HTMLElement | null>): number | null {
   return zahl;
 }
 
+/**
+ * Wie viele Zeilen einer Liste in ihr Fenster passen und wie hoch eine Zeile samt Abstand ist; `null`, solange es nichts
+ * zu messen gibt (kein Layout). Das Fenster ist das Element um die Liste, das die Höhe begrenzt. Gemessen werden Höhen,
+ * nicht die Lage der Einträge: Die Übersicht der Züge wird im Fenster verschoben, damit die Züge der laufenden Seite zu
+ * sehen sind, und das Verschieben darf die Messung nicht ändern (sonst liefe sie sich selbst hinterher).
+ */
+function useZeilenPlatz(fenster: RefObject<HTMLElement | null>): { zeilen: number; schritt: number } | null {
+  const [platz, setPlatz] = useState<{ zeilen: number; schritt: number } | null>(null);
+  const messen = () => {
+    const el = fenster.current;
+    const liste = el?.firstElementChild as HTMLElement | null | undefined;
+    const eintrag = liste?.firstElementChild as HTMLElement | null | undefined;
+    if (!el || !liste || !eintrag || !(el.clientWidth > 0) || !(eintrag.offsetHeight > 0)) return setPlatz(null);
+    const abstand = px(getComputedStyle(liste).rowGap);
+    const schritt = eintrag.offsetHeight + abstand;
+    // Die letzte Zeile braucht keinen Abstand unter sich; ein halber Bildpunkt Rundung geht zugunsten der Zeile.
+    const zeilen = Math.max(0, Math.floor((el.clientHeight + abstand + 0.5) / schritt));
+    setPlatz((alt) => (alt && alt.zeilen === zeilen && alt.schritt === schritt ? alt : { zeilen, schritt }));
+  };
+  // Nach jedem Durchgang (andere Höhe der Nachbarn) und bei jeder Größenänderung des Fensters.
+  useLayoutEffect(messen);
+  useEffect(() => {
+    const el = fenster.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const beobachter = new ResizeObserver(messen);
+    beobachter.observe(el);
+    return () => beobachter.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fenster.current]);
+  return platz;
+}
+
 const einheitenWort = (n: number) => (n === 1 ? "Einheit" : "Einheiten");
 
 type Zeichensammlung = Awaited<ReturnType<typeof zeichenLaden>>;
@@ -519,7 +551,9 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   const hier = seitenZahl > 1 ? spanne(seite) : null;
   const weiter = seitenZahl > 1 ? spanne((seite + 1) % seitenZahl) : null;
   // Beim Blättern steht die Stärke eines Zuges nur da, solange seine Seite steht: Die Randspalte führt dann alle Züge.
-  const uebersicht = seitenZahl > 1 && tb.gruppen.filter((g) => g.kopf).length > 1;
+  // Sie führt die zählenden Gruppen; Übungsmeldungen, die nicht zählen, haben keine Stärke, die hierher gehörte.
+  const zuege = tb.gruppen.map((g, nummer) => ({ g, nummer })).filter(({ g }) => !g.uebung);
+  const uebersicht = seitenZahl > 1 && zuege.filter(({ g }) => g.kopf).length > 1;
 
   // Abgerückte Einheiten: Stehen Karten auf der Tafel (auch nur Übungsmeldungen, die nicht zählen), nennt die Randspalte
   // die letzten mit Uhrzeit; sonst stehen sie auf der Tafel. Dieselbe Bedingung wie im Satz (`tafelSatz`, Regel 3).
@@ -531,8 +565,16 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   const zuletztSichtbar = useGanzSichtbar(zuletzt);
   // Die Übersicht der Züge gibt nach, wenn die Randspalte voll ist (viele Züge, viel Bedarf): Zu sehen sind dann nur
   // ganze Zeilen, und die Überschrift nennt, wie viele. Datenstand und Bedienung darunter bleiben so immer im Bild.
-  const zuegeListe = useRef<HTMLUListElement>(null);
-  const zuegeSichtbar = useGanzSichtbar(zuegeListe);
+  // Passen nicht alle Zeilen, steht der Ausschnitt da, in dem die Züge der laufenden Seite stehen: „fett: auf dieser
+  // Seite" zeigte sonst auf den hinteren Seiten nichts Fettes, und die hinteren Züge stünden nie in der Übersicht.
+  const zuegeFenster = useRef<HTMLDivElement>(null);
+  const zuegePlatz = useZeilenPlatz(zuegeFenster);
+  const zuegeZeilen = Math.ceil(zuege.length / 2);
+  const zuegeKnapp = zuegePlatz != null && zuegePlatz.zeilen < zuegeZeilen;
+  const ersteHier = Math.max(0, zuege.findIndex(({ nummer }) => aufSeite.has(nummer)));
+  const zuegeAb = zuegeKnapp ? Math.min(Math.floor(ersteHier / 2), zuegeZeilen - zuegePlatz.zeilen) : 0;
+  const zuegeVon = zuegeAb * 2;
+  const zuegeBis = zuegeKnapp ? Math.min(zuege.length, (zuegeAb + zuegePlatz.zeilen) * 2) : zuege.length;
 
   const dauer = dauerZeile(beginn, bild, jetzt);
   const letzteAlt = bild.letzteMeldung != null && jetzt - bild.letzteMeldung >= VERALTET_MS;
@@ -668,9 +710,10 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
             </div>
           )}
         </dl>
+        {/* Wie in der Einsatzansicht („Einheiten (+3 Übung)"): gleich bei der Zahl, die ohne sie gerechnet ist, und auf jeder Seite.
+            Beim Blättern steht die Gruppe „Übung" nur auf ihrer eigenen Seite; ohne diese Zeile erführe man davor nichts von ihr. */}
+        {bild.uebungenDaneben > 0 && <p className="lt-dauer lt-daneben">+ {bild.uebungenDaneben} {UEBUNG_WORT}, nicht gezählt</p>}
         {dauer && <p className="lt-dauer">{dauer}</p>}
-        {/* Übungsmeldungen, die nicht zählen, nennt die Randspalte nicht eigens: Sie stehen als Gruppe „Übung · nicht gezählt" auf der
-            Tafel und beim Blättern in der Übersicht der Züge. */}
 
         {bild.einheiten.length > 0 && (
           <section className="lt-block" aria-labelledby="lt-bedarf-titel">
@@ -709,27 +752,30 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
             <h2 id="lt-zuege-titel">
               {tb.gliederung === "zug" ? "Züge" : "Organisationen"}{" "}
               <span className="lt-block-zusatz">
-                {zuegeSichtbar === 0
+                {zuegeKnapp && zuegeBis === zuegeVon
                   ? // Passt keine Zeile, sagt die Überschrift wenigstens, dass es die Züge gibt und wo sie stehen.
-                    `${tb.gruppen.length} · siehe Seiten`
-                  : `${zuegeSichtbar != null && zuegeSichtbar < tb.gruppen.length ? `${zuegeSichtbar} von ${tb.gruppen.length} · ` : ""}fett: auf dieser Seite`}
+                    `${zuege.length} · siehe Seiten`
+                  : `${zuegeKnapp ? `${zuegeBis - zuegeVon} von ${zuege.length} · ` : ""}fett: auf dieser Seite`}
               </span>
             </h2>
-            <ul className="lt-zuege" ref={zuegeListe}>
-              {tb.gruppen.map((g, i) => (
-                // Was nicht ganz in die Liste passt, bleibt unsichtbar an seinem Platz: Eine halbe Zeile stünde sonst angeschnitten da,
-                // und die Zählung der sichtbaren Einträge hängt so nicht an dem, was sie selbst ausblendet.
-                <li
-                  key={g.schluessel}
-                  data-hier={aufSeite.has(i) || undefined}
-                  data-achtung={g.einheiten.some((e) => e.bedarf.length > 0) || undefined}
-                  style={zuegeSichtbar != null && i >= zuegeSichtbar ? { visibility: "hidden" } : undefined}
-                >
-                  <span className="lt-zug-name">{g.titel}</span>
-                  {g.uebung ? <span className="lt-zug-ohne">nicht gezählt</span> : <b>{g.staerke.gesamt}</b>}
-                </li>
-              ))}
-            </ul>
+            {/* Das Fenster begrenzt die Höhe und schneidet ab; die Liste darin behält ihre volle Höhe und wird nur verschoben.
+                So hängt das Maß des Fensters nicht an dem Ausschnitt, den es selbst bestimmt. */}
+            <div className="lt-zuege-fenster" ref={zuegeFenster}>
+              <ul className="lt-zuege" style={zuegeAb > 0 && zuegePlatz ? { transform: `translateY(-${zuegeAb * zuegePlatz.schritt}px)` } : undefined}>
+                {zuege.map(({ g, nummer }, i) => (
+                  // Was außerhalb des Ausschnitts liegt, bleibt unsichtbar an seinem Platz: Eine halbe Zeile stünde sonst angeschnitten da.
+                  <li
+                    key={g.schluessel}
+                    data-hier={aufSeite.has(nummer) || undefined}
+                    data-achtung={g.einheiten.some((e) => e.bedarf.length > 0) || undefined}
+                    style={i < zuegeVon || i >= zuegeBis ? { visibility: "hidden" } : undefined}
+                  >
+                    <span className="lt-zug-name">{g.titel}</span>
+                    <b>{g.staerke.gesamt}</b>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </section>
         )}
 
