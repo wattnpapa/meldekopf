@@ -75,7 +75,7 @@ export const START_ABSCHNITTE: Abschnitt[] = [
       {
         art: "absatz",
         teile: [
-          "Jede Meldung landet in der Historie ihrer Einheit; eine Folgemeldung zeigt, was sich seit der letzten geändert hat. Abrücken, Zug zuordnen, Aufteilen und Zusammenführen gehören dazu, ebenso der Abgleich vom Papier, wenn ein Gerät ausgefallen ist.",
+          "Jede Meldung landet in der Historie ihrer Einheit; eine Folgemeldung zeigt, was sich seit der letzten geändert hat. Abrücken, Aufteilen und Zusammenführen gehören dazu, ebenso der Abgleich vom Papier, wenn ein Gerät ausgefallen ist.",
         ],
       },
     ],

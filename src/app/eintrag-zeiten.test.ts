@@ -22,7 +22,6 @@ import {
   EinsatzArt,
   MeldeStatus,
   einsaetzeLaden,
-  einheitZugEtikettSetzen,
   einsatzAnlegen,
   meldungHinzufuegen,
   speicherhuelleSetzen,
@@ -35,7 +34,7 @@ import {
   eintragGespeichert,
   eintreffzeit,
   eintreffzeitSetzen,
-  nummerUndZugSetzen,
+  nummerSetzen,
   eintreffzeitErben,
   einheitEntfernen,
   einheitVerschieben,
@@ -47,7 +46,6 @@ import {
   statusMitZeitSetzen,
   zeitKurz,
   zeitLang,
-  zugSetzen,
   speicherText,
   HERKUNFT_TEXT,
   speicherVollMeldung,
@@ -196,24 +194,20 @@ describe("folgemeldungErbt", () => {
 });
 
 describe("meldungAufnehmen (R2-K1)", () => {
-  it("lässt die Folgemeldung Zug, Auftrag und Eintreffzeit der Führungsstelle behalten", () => {
+  it("lässt die Folgemeldung Auftrag und Eintreffzeit der Führungsstelle behalten", () => {
     const { einsatzId, eintragId } = buehne();
-    const schl = eintrag(einsatzId, eintragId).einheitSchluessel;
     eintreffzeitSetzen(einsatzId, eintragId, 4242);
     notizSetzen(einsatzId, eintragId, "Ortung Trümmerkegel B");
-    einheitZugEtikettSetzen(einsatzId, schl, "1. TZ");
 
     const r = meldungAufnehmen(einsatzId, bogen("Crailsheim", 200), { quelle: "pdf-import" })!;
     expect(r.neu).toBe(true);
     const folge = eintrag(einsatzId, r.eintrag.id);
-    expect(folge.zugEtikett).toBe("1. TZ");
     expect(folge.notiz).toBe("Ortung Trümmerkegel B");
     expect(folge.eingetroffenAm).toBe(4242);
 
     // Auch die dritte Fassung erbt — über die zweite hinweg.
     const r3 = meldungAufnehmen(einsatzId, bogen("Crailsheim", 300), { quelle: "manuell" })!;
     const dritte = eintrag(einsatzId, r3.eintrag.id);
-    expect(dritte.zugEtikett).toBe("1. TZ");
     expect(dritte.notiz).toBe("Ortung Trümmerkegel B");
     expect(dritte.eingetroffenAm).toBe(4242);
   });
@@ -229,7 +223,6 @@ describe("meldungAufnehmen (R2-K1)", () => {
     expect(fremd.neu).toBe(true);
     const e = eintrag(einsatzId, fremd.eintrag.id);
     expect(e.notiz).toBeUndefined();
-    expect(e.zugEtikett).toBeUndefined();
   });
 });
 
@@ -382,30 +375,25 @@ describe("zeitpunktZuMs (R2-N4)", () => {
 });
 
 describe("Vermerke der Führungsstelle (Audit Runde 2, R2-K6)", () => {
-  it("hält Zug, Auftrag, Zeitkorrektur und Abrücken mit Uhrzeit fest", () => {
+  it("hält Auftrag, Zeitkorrektur und Abrücken mit Uhrzeit fest", () => {
     const { einsatzId, eintragId } = buehne();
-    const schl = eintrag(einsatzId, eintragId).einheitSchluessel;
-    zugSetzen(einsatzId, schl, eintragId, "1. TZ");
     notizSetzen(einsatzId, eintragId, "Einspeisung Pumpwerk Süd");
     notizSetzen(einsatzId, eintragId, "Pumpwerk Nord");
     eintreffzeitSetzen(einsatzId, eintragId, new Date("2026-09-28T15:40").getTime());
     statusMitZeitSetzen(einsatzId, eintragId, MeldeStatus.ABGERUECKT, new Date("2026-09-28T18:00").getTime());
     const v = eintrag(einsatzId, eintragId).vermerke!;
     expect(v.map((x) => x.text)).toEqual([
-      "Zug: 1. TZ",
       "Auftrag/Notiz: Einspeisung Pumpwerk Süd",
       "Auftrag/Notiz geändert: Pumpwerk Nord (war: Einspeisung Pumpwerk Süd)",
       expect.stringMatching(/^Eintreffzeit korrigiert: .* → 28\.09\.2026, 15:40$/),
       "Abgerückt",
     ]);
     expect(v.every((x) => typeof x.zeit === "number" && x.zeit > 0)).toBe(true);
-    expect(eintrag(einsatzId, eintragId).zugEtikett).toBe("1. TZ");
   });
 
   it("vermerkt nichts, wenn sich nichts ändert", () => {
     const { einsatzId, eintragId } = buehne();
     notizSetzen(einsatzId, eintragId, "");
-    zugSetzen(einsatzId, eintrag(einsatzId, eintragId).einheitSchluessel, eintragId, "");
     expect(eintrag(einsatzId, eintragId).vermerke).toBeUndefined();
   });
 
@@ -456,20 +444,12 @@ describe("zeitUnstimmigkeit (R3-E5)", () => {
   });
 });
 
-describe("nummerUndZugSetzen (Schnellerfassung, Zettel)", () => {
-  it("übernimmt die Schreibweise der schon vergebenen Züge (Audit Phase 6)", () => {
+describe("nummerSetzen (Schnellerfassung, Zettel)", () => {
+  it("setzt die Nummer laut Zettel für die Einheit und vermerkt sie", () => {
     const { einsatzId, eintragId } = buehne();
-    zugSetzen(einsatzId, eintrag(einsatzId, eintragId).einheitSchluessel, eintragId, "Bergungszug Nord");
-    const zweite = meldungHinzufuegen(einsatzId, bogen("Ellwangen"))!.eintrag.id;
-    nummerUndZugSetzen(einsatzId, zweite, { zug: "bergungszug  nord" });
-    expect(eintrag(einsatzId, zweite).zugEtikett).toBe("Bergungszug Nord");
-  });
-
-  it("schreibt Nummernzüge einheitlich: „2.Zug“ wird „2. Zug“", () => {
-    const { einsatzId, eintragId } = buehne();
-    nummerUndZugSetzen(einsatzId, eintragId, { zug: "2.Zug", nummer: 7 });
-    expect(eintrag(einsatzId, eintragId).zugEtikett).toBe("2. Zug");
+    nummerSetzen(einsatzId, eintragId, 7);
     expect(eintrag(einsatzId, eintragId).nummer).toBe(7);
+    expect(eintrag(einsatzId, eintragId).vermerke?.map((v) => v.text)).toEqual(["Nr. 7 laut Zettel"]);
   });
 });
 
@@ -482,20 +462,6 @@ describe("eintreffzeitErben (Aufteilen, Audit Phase 6)", () => {
     expect(eintrag(einsatzId, eintragId).eingetroffenAm).toBe(zeit);
     expect(eintrag(einsatzId, zweite).eingetroffenAm).toBe(zeit);
     expect(eintrag(einsatzId, zweite).vermerke ?? []).toEqual([]);
-  });
-});
-
-describe("Zug aus der manuellen Aufnahme (R10-S1, R10-A1)", () => {
-  it("führt „2“, „Zug 2“ und „2.Zug“ auf „2. Zug“ und gleicht mit vorhandenen Zügen ab", () => {
-    const s = einsatzAnlegen("Hochwasser Zug", EinsatzArt.EINSATZ);
-    const a = meldungHinzufuegen(s.id, bogen("Emden"))!.eintrag;
-    const b = meldungHinzufuegen(s.id, bogen("Norden"))!.eintrag;
-    const c = meldungHinzufuegen(s.id, bogen("Aurich"))!.eintrag;
-    nummerUndZugSetzen(s.id, a.id, { zug: "2" });
-    nummerUndZugSetzen(s.id, b.id, { zug: "Zug 2" });
-    nummerUndZugSetzen(s.id, c.id, { zug: "2.Zug" });
-    expect([a, b, c].map((e) => eintrag(s.id, e.id).zugEtikett)).toEqual(["2. Zug", "2. Zug", "2. Zug"]);
-    expect(eintrag(s.id, b.id).vermerke?.some((v) => v.text === "Zug: 2. Zug")).toBe(true);
   });
 });
 

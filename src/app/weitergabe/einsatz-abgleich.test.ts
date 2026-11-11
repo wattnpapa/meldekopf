@@ -19,7 +19,7 @@ import {
   speicherhuelleSetzen,
   type Einsatzsammlung,
 } from "@bos/meldekopf/einsaetze";
-import { meldungAufnehmen, notizSetzen, statusMitZeitSetzen, zugSetzen, eintreffzeitSetzen } from "../eintrag-zeiten";
+import { meldungAufnehmen, notizSetzen, statusMitZeitSetzen, eintreffzeitSetzen } from "../eintrag-zeiten";
 import { abgleichText, einsatzAbgleichen, sammlungFuerZiel } from "./einsatz-abgleich";
 import { fassungGiltSetzen, geltendeJeEinheit } from "../fassung-vorrang";
 import { aenderungenSeit, neueEintraege, weitergabeStandLaden, weitergabeUmImportErgaenzen, weitergabeVermerken } from "./export-stand";
@@ -70,6 +70,14 @@ function weitergeben(id: string): Einsatzsammlung {
   return JSON.parse(JSON.stringify(sammlung(id))) as Einsatzsammlung;
 }
 
+/** Zug-Etikett wie in Altdaten (eeb.einsaetze.v1 aus dem Erfassungsbogen) direkt in den Speicher des aktiven Geräts schreiben. */
+function altZug(g: MemStorage, id: string, ort: string, zug: string) {
+  auf(g);
+  const s = sammlung(id);
+  for (const e of s.eintraege) if (e.bogen.einheit.hierarchie[0]!.name === ort) e.zugEtikett = zug;
+  g.setItem("eeb.einsaetze.v1", JSON.stringify([s]));
+}
+
 function kopf(id: string, ort: string) {
   return neuesteJeEinheit(sammlung(id).eintraege).find((e) => e.bogen.einheit.hierarchie[0]!.name === ort)!;
 }
@@ -87,13 +95,12 @@ function buehne() {
 }
 
 describe("einsatzAbgleichen — Szenario 3 aus dem Audit", () => {
-  it("übernimmt Abrücken, Zug und Auftrag des anderen Geräts und behält die eigene, jüngere Änderung", () => {
+  it("übernimmt Abrücken und Auftrag des anderen Geräts und behält die eigene, jüngere Änderung", () => {
     const id = buehne();
-    // B: Ulm abgerückt, Biberach 2. TZ mit Auftrag.
+    // B: Ulm abgerückt, Biberach mit Auftrag.
     auf(geraetB);
     statusMitZeitSetzen(id, kopf(id, "Ulm").id, MeldeStatus.ABGERUECKT, 2000);
     const bib = kopf(id, "Biberach");
-    zugSetzen(id, bib.einheitSchluessel, bib.id, "2. TZ");
     notizSetzen(id, bib.id, "Ortung Trümmerkegel B27");
     // A: Albstadt abgerückt.
     auf(geraetA);
@@ -109,13 +116,12 @@ describe("einsatzAbgleichen — Szenario 3 aus dem Audit", () => {
     expect(r.aktualisiert.map((a) => a.einheit).sort()).toEqual(["Biberach", "Ulm"]);
     expect(kopf(id, "Ulm").status).toBe(MeldeStatus.ABGERUECKT);
     expect(kopf(id, "Ulm").abgerueckAm).toBe(2000);
-    expect(kopf(id, "Biberach").zugEtikett).toBe("2. TZ");
     expect(kopf(id, "Biberach").notiz).toBe("Ortung Trümmerkegel B27");
     expect(kopf(id, "Albstadt").status).toBe(MeldeStatus.ABGERUECKT);
     const text = abgleichText(r);
     expect(text).toMatch(/^2 Meldungen aktualisiert: /);
     expect(text).toContain("Ulm abgerückt");
-    expect(text).toContain("Biberach Zug „2. TZ“, Auftrag „Ortung Trümmerkegel B27“");
+    expect(text).toContain("Biberach Auftrag „Ortung Trümmerkegel B27“");
 
     // A gibt zurück, B importiert: Albstadt kommt an, beide Stände gleich.
     const vonA = weitergeben(id);
@@ -183,21 +189,18 @@ describe("einsatzAbgleichen — Widersprüche", () => {
     expect(kopf(id, "Ulm").vermerke?.some((v) => v.text.startsWith("Abgleich mit anderem Gerät"))).toBe(true);
   });
 
-  it("überschreibt ohne Vermerk keinen gesetzten Zug, sondern nennt den Unterschied", () => {
+  it("lässt einen Zug aus Altdaten unverändert stehen und gleicht ihn nicht ab", () => {
     const id = buehne();
-    // Zug ohne Vermerk (wie aus einem Bündel): direkt in die Sammlung geschrieben.
-    for (const [g, zug] of [[geraetA, "1. TZ"], [geraetB, "2. TZ"]] as const) {
-      auf(g);
-      const s = sammlung(id);
-      for (const e of s.eintraege) if (e.bogen.einheit.hierarchie[0]!.name === "Biberach") e.zugEtikett = zug;
-      g.setItem("eeb.einsaetze.v1", JSON.stringify([s]));
-    }
+    // Zug ohne Vermerk wie aus dem Erfassungsbogen: auf beiden Geräten verschieden.
+    altZug(geraetA, id, "Biberach", "1. TZ");
+    altZug(geraetB, id, "Biberach", "2. TZ");
     auf(geraetB);
     const vonB = weitergeben(id);
     auf(geraetA);
     const r = einsatzAbgleichen(vonB);
     expect(kopf(id, "Biberach").zugEtikett).toBe("1. TZ");
-    expect(r.widersprueche[0]).toMatchObject({ einheit: "Biberach", feld: "Zug", gilt: "hier" });
+    expect(r.widersprueche).toEqual([]);
+    expect(r.aktualisiert).toEqual([]);
   });
 
   it("übernimmt eine korrigierte Eintreffzeit vom anderen Gerät", () => {
@@ -249,21 +252,19 @@ describe("Weitergabe-Vermerk nach dem Rückimport (R3-W2)", () => {
 
     // Jetzt arbeitet A selbst weiter.
     meldungAufnehmen(id, bogen("Bamberg"), { quelle: "scan" });
-    const bib = kopf(id, "Biberach");
-    zugSetzen(id, bib.einheitSchluessel, bib.id, "1. TZ");
+    notizSetzen(id, kopf(id, "Biberach").id, "Deich Nord");
     stand = weitergabeStandLaden(id)!;
     expect(neueEintraege(sammlung(id).eintraege, stand)).toHaveLength(1);
-    expect(aenderungenSeit(sammlung(id).eintraege, stand)).toMatchObject({ anzahl: 1, arten: ["Zug"] });
+    expect(aenderungenSeit(sammlung(id).eintraege, stand)).toMatchObject({ anzahl: 1, arten: ["Auftrag"] });
   });
 
-  it("zählt nach dem Rückimport auch Zug und Auftrag des anderen Geräts nicht als „hier“ (R4-W7)", () => {
+  it("zählt nach dem Rückimport auch Auftrag und Abrücken des anderen Geräts nicht als „hier“ (R4-W7)", () => {
     const id = buehne();
-    // A gibt weiter (Stand), B ändert Zug und Auftrag und gibt zurück.
+    // A gibt weiter (Stand), B ändert Auftrag und Abrücken und gibt zurück.
     auf(geraetA);
     weitergabeVermerken(sammlung(id));
     auf(geraetB);
-    const ulm = kopf(id, "Ulm");
-    zugSetzen(id, ulm.einheitSchluessel, ulm.id, "2. TZ");
+    notizSetzen(id, kopf(id, "Ulm").id, "Sandsäcke füllen");
     notizSetzen(id, kopf(id, "Biberach").id, "Ölsperre Brücke");
     statusMitZeitSetzen(id, kopf(id, "Albstadt").id, MeldeStatus.ABGERUECKT);
     const vonB = weitergeben(id);
@@ -273,10 +274,9 @@ describe("Weitergabe-Vermerk nach dem Rückimport (R3-W2)", () => {
     weitergabeUmImportErgaenzen(id, r.neueIds, r.neueVermerke, r.bekannt);
     const stand = weitergabeStandLaden(id)!;
     expect(aenderungenSeit(sammlung(id).eintraege, stand)).toEqual({ anzahl: 0, arten: [], einheiten: [], jeEinheit: {} });
-    // Ändert A danach selbst einen Zug, steht genau das da.
-    const bib = kopf(id, "Biberach");
-    zugSetzen(id, bib.einheitSchluessel, bib.id, "1. TZ");
-    expect(aenderungenSeit(sammlung(id).eintraege, stand)).toMatchObject({ anzahl: 1, arten: ["Zug"] });
+    // Ändert A danach selbst einen Auftrag, steht genau das da.
+    notizSetzen(id, kopf(id, "Ulm").id, "Deich Süd");
+    expect(aenderungenSeit(sammlung(id).eintraege, stand)).toMatchObject({ anzahl: 1, arten: ["Auftrag"] });
   });
 
   it("bucht einen Wert, der hier gegen die Datei gewonnen hat, nicht als bekannt (R4-W7)", () => {
@@ -364,7 +364,7 @@ describe("Fassungsentscheidung des anderen Geräts (Audit Runde 5, R5-W4, R5-W1)
 });
 
 describe("sammlungFuerZiel — Sammlung des Zugführers in die laufende Lage (R3-W3)", () => {
-  it("legt die Meldungen mit Zeiten, Status und Siegel in die Zielsammlung und schlägt den Zug vor", () => {
+  it("legt die Meldungen mit Zeiten, Status und Siegel in die Zielsammlung, ohne einen Zug zu setzen", () => {
     // ZFü-Telefon: eigene Sammlung „1. TZ Albstadt" mit Albstadt (signiert) und Ulm (abgerückt).
     auf(geraetB);
     const zfue = einsatzAnlegen("1. TZ Albstadt", EinsatzArt.EINSATZ);
@@ -382,7 +382,7 @@ describe("sammlungFuerZiel — Sammlung des Zugführers in die laufende Lage (R3
     auf(geraetA);
     const mk = einsatzAnlegen("Hochwasser Albstadt", EinsatzArt.EINSATZ);
     meldungAufnehmen(mk.id, bogen("Biberach"), { quelle: "scan" });
-    const r = einsatzAbgleichen(sammlungFuerZiel(datei, sammlung(mk.id), "1. TZ Albstadt"));
+    const r = einsatzAbgleichen(sammlungFuerZiel(datei, sammlung(mk.id)));
     expect(r.neuerEinsatz).toBe(false);
     expect(r.hinzugefuegt).toBe(2);
     expect(einsaetzeLaden()).toHaveLength(1); // keine zweite Sammlung
@@ -390,30 +390,30 @@ describe("sammlungFuerZiel — Sammlung des Zugführers in die laufende Lage (R3
     expect(alb.signatur?.kurzform).toBe("4402 c713");
     expect(alb.herkunft).toBe("QUJD");
     expect(alb.eingetroffenAm).toBe(1234);
-    expect(alb.zugEtikett).toBe("1. TZ Albstadt");
-    expect(alb.vermerke?.some((v) => v.text.startsWith("Zug: 1. TZ Albstadt"))).toBe(true);
+    expect(alb.zugEtikett).toBeUndefined();
+    expect(alb.vermerke?.some((v) => v.text.startsWith("Zug"))).toBe(false);
     expect(kopf(mk.id, "Ulm").status).toBe(MeldeStatus.ABGERUECKT);
     expect(kopf(mk.id, "Biberach").zugEtikett).toBeUndefined();
   });
 
-  it("überschreibt den Zug einer schon bekannten Einheit nicht und setzt ohne Vorschlag keinen", () => {
+  it("reicht einen Zug aus Altdaten unverändert durch und lässt den der bekannten Einheit stehen", () => {
     auf(geraetB);
     const zfue = einsatzAnlegen("1. TZ", EinsatzArt.EINSATZ);
     meldungAufnehmen(zfue.id, bogen("Biberach"), { quelle: "scan" });
     meldungAufnehmen(zfue.id, bogen("Ulm"), { quelle: "scan" });
+    altZug(geraetB, zfue.id, "Ulm", "1. TZ");
+    altZug(geraetB, zfue.id, "Biberach", "3. TZ");
+    auf(geraetB);
     const datei = weitergeben(zfue.id);
     auf(geraetA);
     const mk = einsatzAnlegen("Lage", EinsatzArt.EINSATZ);
     meldungAufnehmen(mk.id, bogen("Biberach"), { quelle: "scan" });
-    const bib = kopf(mk.id, "Biberach");
-    zugSetzen(mk.id, bib.einheitSchluessel, bib.id, "2. TZ");
-    const vorbereitet = sammlungFuerZiel(datei, sammlung(mk.id), "1. TZ");
-    expect(vorbereitet.eintraege.find((e) => e.bogen.einheit.hierarchie[0]!.name === "Biberach")!.zugEtikett).toBeUndefined();
+    altZug(geraetA, mk.id, "Biberach", "2. TZ");
+    const vorbereitet = sammlungFuerZiel(datei, sammlung(mk.id));
+    expect(vorbereitet.eintraege.find((e) => e.bogen.einheit.hierarchie[0]!.name === "Ulm")!.zugEtikett).toBe("1. TZ");
     einsatzAbgleichen(vorbereitet);
     expect(kopf(mk.id, "Biberach").zugEtikett).toBe("2. TZ");
     expect(kopf(mk.id, "Ulm").zugEtikett).toBe("1. TZ");
-    const ohne = sammlungFuerZiel(datei, sammlung(mk.id), "");
-    expect(ohne.eintraege.every((e) => !e.zugEtikett)).toBe(true);
   });
 });
 

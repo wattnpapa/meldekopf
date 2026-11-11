@@ -49,20 +49,20 @@ Then("zeigt der Lagemonitor {string} nicht", async function (this: EebWelt, text
  * Eine volle Lage für die Tafel liegt im Gerätespeicher und ist die zuletzt geöffnete (support/sammlung.ts). Sie
  * ersetzt, was die Grundlage des Szenarios dorthin gelegt hat; ein Neuladen im Szenario setzt sie nicht zurück.
  */
-Given("auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele mit Sofortbedarf", async function (this: EebWelt, einheiten: number, zuege: number) {
-  await tafelLageAufDemGeraet(this, einheiten, zuege, 0);
+Given("auf dem Gerät liegt eine Lage mit {int} Einheiten aus {int} Organisationen, viele mit Sofortbedarf", async function (this: EebWelt, einheiten: number, organisationen: number) {
+  await tafelLageAufDemGeraet(this, einheiten, organisationen, 0);
 });
 
-/** Dieselbe Lage, die zuerst eingetroffenen Einheiten abgerückt: für die volle Randspalte (Bedarf, Abgerückt, Züge, Zuletzt). */
+/** Dieselbe Lage, die zuerst eingetroffenen Einheiten abgerückt: für die volle Randspalte (Bedarf, Abgerückt, Zuletzt). */
 Given(
-  "auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele mit Sofortbedarf, {int} davon abgerückt",
-  async function (this: EebWelt, einheiten: number, zuege: number, abgerueckt: number) {
-    await tafelLageAufDemGeraet(this, einheiten, zuege, abgerueckt);
+  "auf dem Gerät liegt eine Lage mit {int} Einheiten aus {int} Organisationen, viele mit Sofortbedarf, {int} davon abgerückt",
+  async function (this: EebWelt, einheiten: number, organisationen: number, abgerueckt: number) {
+    await tafelLageAufDemGeraet(this, einheiten, organisationen, abgerueckt);
   },
 );
 
-async function tafelLageAufDemGeraet(welt: EebWelt, einheiten: number, zuege: number, abgerueckt: number): Promise<void> {
-  const { einsaetze, einsatzId } = tafelLageSpeicher("Hochwasser Hunte", einheiten, zuege, abgerueckt);
+async function tafelLageAufDemGeraet(welt: EebWelt, einheiten: number, organisationen: number, abgerueckt: number): Promise<void> {
+  const { einsaetze, einsatzId } = tafelLageSpeicher("Hochwasser Hunte", einheiten, organisationen, abgerueckt);
   await welt.page.addInitScript(
     ([e, id]) => {
       if (sessionStorage.getItem("prüfstand.tafellage")) return;
@@ -127,12 +127,12 @@ When("ich den Fernseher auf {int} x {int} stelle", async function (this: EebWelt
 });
 
 /**
- * Die Randspalte der Tafel hat eine Rangfolge: Datenstand und Bedienung stehen immer im Bild; von den weichenden Blöcken
- * (Übersicht der Züge, „Zuletzt") steht keiner angeschnitten da, jeder mindestens mit seiner Überschrift, und in keiner
- * Liste der Randspalte steht eine Zeile halb.
+ * Die Randspalte der Tafel hat eine Rangfolge: Datenstand und Bedienung stehen immer im Bild; der weichende Block
+ * „Zuletzt" steht nie angeschnitten da, sondern mindestens mit seiner Überschrift oder gar nicht, und in keiner Liste der
+ * Randspalte steht eine Zeile halb.
  *
- * Vorgefallen (Gegenprüfung): Bei voller Lage schrumpfte die Übersicht der Züge auf ihre Linie, und von „Zuletzt" blieben
- * sechs Pixel Text über dem Fuß. Als Text übergeben, nicht als Funktion mit inneren Hilfsfunktionen (support/haken.ts).
+ * Vorgefallen (Gegenprüfung): Bei voller Lage blieben von „Zuletzt" sechs Pixel Text über dem Fuß. Als Text übergeben,
+ * nicht als Funktion mit inneren Hilfsfunktionen (support/haken.ts).
  */
 Then("steht die Randspalte der Tafel geordnet im Bild", async function (this: EebWelt) {
   const befund = await monitor(this).evaluate<string[]>(`(() => {
@@ -149,13 +149,12 @@ Then("steht die Randspalte der Tafel geordnet im Bild", async function (this: Ee
       const titel = block.querySelector("h2");
       const k = kasten(titel);
       if (k.height < 1 || k.top < h.top - 0.5 || k.bottom > h.bottom + 0.5) fehler.push("Überschrift „" + titel.textContent + "“ ist angeschnitten");
-      if (kasten(block).bottom > h.bottom + 0.5 && !block.classList.contains("lt-block-zuletzt") && !block.classList.contains("lt-block-zuege")) fehler.push("Block „" + titel.textContent + "“ ragt unter die Randspalte");
+      if (kasten(block).bottom > h.bottom + 0.5 && !block.classList.contains("lt-block-zuletzt")) fehler.push("Block „" + titel.textContent + "“ ragt unter die Randspalte");
     }
-    for (const liste of huelle.querySelectorAll(".lt-abgaenge, .lt-zuege, .lt-bewegungen")) {
-      const fenster = kasten(liste.closest(".lt-zuege-fenster") || liste);
+    for (const liste of huelle.querySelectorAll(".lt-abgaenge, .lt-bewegungen")) {
+      const fenster = kasten(liste);
       const unten = Math.min(fenster.bottom, h.bottom);
       for (const eintrag of liste.children) {
-        if (eintrag.style && eintrag.style.visibility === "hidden") continue;
         const k = kasten(eintrag);
         // In „Zuletzt" bricht, was nicht passt, in eine zweite Spalte rechts außerhalb um: Die zählt nicht.
         if (k.left >= fenster.right - 1 || k.top >= unten - 1) continue;
@@ -387,7 +386,7 @@ Then("überdeckt auf der Tafel keine Angabe eine andere", async function (this: 
     const gekuerzt = (el) => { messung.selectNodeContents(el); return messung.getBoundingClientRect().width > kasten(el).width + 0.01; };
     for (const zeile of zeilen) {
       const name = nameVon(zeile);
-      const teile = Array.from(zeile.querySelectorAll(".lt-herkunft, .lt-uebung-typ, .lt-uebung-zug, .lt-staerke")).filter(sichtbar);
+      const teile = Array.from(zeile.querySelectorAll(".lt-herkunft, .lt-uebung-typ, .lt-staerke")).filter(sichtbar);
       const rand = kasten(zeile);
       teile.forEach((teil, i) => {
         const k = kasten(teil);

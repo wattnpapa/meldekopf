@@ -81,7 +81,6 @@ function eintrag(
 
 const thwOldenburg = eintrag("a", bogen(OrganisationsTyp.THW, "Oldenburg", "FGr N"), {
   empfangenAm: 3000,
-  zugEtikett: "2. Zug",
 });
 const fwMuenchen = eintrag(
   "b",
@@ -90,7 +89,6 @@ const fwMuenchen = eintrag(
 );
 const drkBremen = eintrag("c", bogen(OrganisationsTyp.DRK, "Bremen", "SEG"), {
   empfangenAm: 2000,
-  zugEtikett: "1. Zug",
 });
 const liste = [thwOldenburg, fwMuenchen, drkBremen];
 
@@ -111,8 +109,7 @@ describe("einheitenFiltern", () => {
     expect(ids(einheitenFiltern(liste, "thw bremen"))).toEqual([]);
   });
 
-  it("findet über Zug-Etikett und Kennzeichen", () => {
-    expect(ids(einheitenFiltern(liste, "2. Zug"))).toEqual(["a"]);
+  it("findet über das Kennzeichen", () => {
     expect(ids(einheitenFiltern(liste, "M-FW 1234"))).toEqual(["b"]);
   });
 
@@ -165,10 +162,6 @@ describe("einheitenSortieren", () => {
     expect(ids(einheitenSortieren(lage, "zuletzt"))).toEqual(["folge", "alt"]);
   });
 
-  it("sortiert nach Zug und stellt Einheiten ohne Zug ans Ende", () => {
-    expect(ids(einheitenSortieren(liste, "zug"))).toEqual(["c", "a", "b"]);
-  });
-
   it("sortiert nach Organisation, innerhalb der Organisation nach Name", () => {
     const zweitesDrk = eintrag("d", bogen(OrganisationsTyp.DRK, "Aurich", "SEG"));
     expect(ids(einheitenSortieren([...liste, zweitesDrk], "organisation"))).toEqual([
@@ -206,7 +199,8 @@ describe("einheitenSortieren", () => {
 
 describe("einheitenAnsicht", () => {
   it("sucht zuerst und sortiert dann das Ergebnis", () => {
-    const treffer = einheitenAnsicht(liste, "zug", "eintreffzeit");
+    const mitAuftrag = [{ ...thwOldenburg, notiz: "Deich Nord" }, fwMuenchen, { ...drkBremen, notiz: "Deich Süd" }];
+    const treffer = einheitenAnsicht(mitAuftrag, "deich", "eintreffzeit");
     expect(ids(treffer)).toEqual(["a", "c"]);
   });
 });
@@ -351,13 +345,11 @@ describe("Sortierung nach Nr. und Lückenfilter (R7-K9, R7-K6)", () => {
     expect(ids(einheitenAnsicht(liste, "", "nummer", "", nummern))).toEqual(["c", "a", "b"]);
   });
 
-  it("findet anwesende Einheiten ohne Auftrag bzw. ohne Zug; abgerückte zählen nicht", () => {
+  it("findet anwesende Einheiten ohne Auftrag; abgerückte zählen nicht", () => {
     const mitAuftrag = { ...thwOldenburg, notiz: "Deich Nord" };
     const abgerueckt = { ...fwMuenchen, status: MeldeStatus.ABGERUECKT };
     expect(passtZuLueckenfilter(mitAuftrag, "ohne-auftrag")).toBe(false);
     expect(passtZuLueckenfilter(drkBremen, "ohne-auftrag")).toBe(true);
-    expect(passtZuLueckenfilter(thwOldenburg, "ohne-zug")).toBe(false);
-    expect(passtZuLueckenfilter(fwMuenchen, "ohne-zug")).toBe(true);
     expect(passtZuLueckenfilter(abgerueckt, "ohne-auftrag")).toBe(false);
     expect(passtZuLueckenfilter({ ...drkBremen, notiz: "   " }, "ohne-auftrag")).toBe(true);
   });

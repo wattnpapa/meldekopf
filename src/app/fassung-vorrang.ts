@@ -170,7 +170,7 @@ function alleSammlungen() {
 /**
  * Diese Fassung gilt für ihre Einheit. Alle Fassungen, die nach der
  * Kern-Regel vor ihr stünden, werden als verdrängt vermerkt; ein eigener
- * Verweis der Fassung fällt weg. Zug, Auftrag, Eintreffzeit und Verlauf
+ * Verweis der Fassung fällt weg. Auftrag, Eintreffzeit und Verlauf
  * gehören der Einheit, nicht der Fassung: Fehlen sie an der jetzt geltenden,
  * übernimmt sie sie von der bisher geltenden. Ein Schreibvorgang. Rückgabe
  * für {@link vorrangZuruecknehmen}, null wenn nichts zu tun war.
@@ -204,7 +204,6 @@ export function fassungGiltSetzen(einsatzId: string, eintragId: string, jetzt = 
   if (bisherKopf && bisherKopf.id !== gilt.id) {
     if (gilt.eingetroffenAm == null) gilt.eingetroffenAm = bisherKopf.eingetroffenAm ?? bisherKopf.empfangenAm;
     if (gilt.notiz == null && bisherKopf.notiz) gilt.notiz = bisherKopf.notiz;
-    if (!gilt.zugEtikett && bisherKopf.zugEtikett) gilt.zugEtikett = bisherKopf.zugEtikett;
     if (!gilt.teilEtikett && bisherKopf.teilEtikett) gilt.teilEtikett = bisherKopf.teilEtikett;
     // Hat die bisher geltende Fassung die Einheit nur durch eine Folgemeldung
     // zurückgeholt (R5-K1), war ihr Status keine Entscheidung der Führungsstelle:

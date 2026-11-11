@@ -9,7 +9,7 @@
 # Gerät (ADR-007).
 Funktionalität: Einsatz-Sammlung führen (Meldekopf)
   Als Meldekopf sammle ich fremde Bögen unter einem Einsatz, sehe die Summen
-  über alle anwesenden Einheiten, ordne Züge zu, verfolge Folgemeldungen in der
+  über alle anwesenden Einheiten, verfolge Folgemeldungen in der
   Historie und gebe die Sammlung als PDF oder CSV weiter.
 
   Grundlage:
@@ -45,19 +45,6 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Wenn ich auf "Wieder anwesend" klicke
     Dann sehe ich die Schaltfläche "Abrücken"
 
-  Szenario: Einheit einem Zug zuordnen
-    Wenn ich auf "Zug zuordnen" klicke
-    Und ich das Feld mit dem Platzhalter "z. B. 2. Zug" mit "2. Zug" fülle
-    Und ich auf "Speichern" klicke
-    Dann sehe ich die Schaltfläche "Zug ändern"
-    Und sehe ich den Hinweis "2. Zug"
-
-  Szenario: Zug-Zuordnung abbrechen ändert nichts
-    Wenn ich auf "Zug zuordnen" klicke
-    Und ich das Feld mit dem Platzhalter "z. B. 2. Zug" mit "3. Zug" fülle
-    Und ich auf "Abbrechen" klicke
-    Dann sehe ich die Schaltfläche "Zug zuordnen"
-
   Szenario: Bogen aufteilen — der Fachberater steht plötzlich einzeln
     Wenn ich auf "Mehr…" klicke
     Und ich auf "Aufteilen…" klicke
@@ -73,7 +60,7 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Und sehe ich den Hinweis "Stärke 1 / 0 / 0 // 1"
     Und sehe ich den Hinweis "Stärke 0 / 0 / 2 // 2"
 
-  Szenario: Aufgeteilte Teile wieder zusammenführen — der Zug sammelt sich
+  Szenario: Aufgeteilte Teile wieder zusammenführen — die Einheit sammelt sich
     Wenn ich auf "Mehr…" klicke
     Und ich auf "Aufteilen…" klicke
     Und ich das Feld "Bezeichnung des abgeteilten Teils" mit "Fachberater" fülle

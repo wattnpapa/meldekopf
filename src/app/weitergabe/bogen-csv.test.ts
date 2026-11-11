@@ -272,18 +272,19 @@ describe("einsatzDetailCsvInhalt()", () => {
     );
     const einheiten = zeilen(csv)
       .slice(1)
-      .filter((z) => felder(z)[7] === "Einheit")
+      .filter((z) => felder(z)[6] === "Einheit")
       .map((z) => felder(z)[2]);
     expect(einheiten).toEqual(["THW Alpha Media Team", "THW Zeta Media Team"]);
   });
 
-  it("trägt Sammlungsname, Zug, Teil, Quelle und Status in jede Zeile bzw. Einheitszeile", () => {
+  it("trägt Sammlungsname, Teil, Quelle und Status in jede Zeile bzw. Einheitszeile — ein Zug aus Altdaten erscheint nicht", () => {
     const csv = einsatzDetailCsvInhalt(
       sammlung([meldung(bogen(), { zugEtikett: "1. Zug", teilEtikett: "Fachberater", quelle: "aufteilung" })]),
     );
     expect(spalte(csv, 1, "Einsatz")).toBe("Sturmflut 26");
     expect(spalte(csv, 2, "Einsatz")).toBe("Sturmflut 26"); // auch auf der Personenzeile
-    expect(spalte(csv, 2, "Zug")).toBe("1. Zug");
+    expect(felder(zeilen(csv)[0]!)).not.toContain("Zug");
+    expect(csv).not.toContain("1. Zug");
     expect(spalte(csv, 2, "Teil")).toBe("Fachberater");
     expect(spalte(csv, 1, "Quelle")).toBe("Aufteilung");
     expect(spalte(csv, 1, "Status")).toBe("Anwesend");
@@ -316,7 +317,7 @@ describe("einsatzDetailCsvInhalt()", () => {
     );
     const status = zeilen(csv)
       .slice(1)
-      .filter((z) => felder(z)[7] === "Einheit")
+      .filter((z) => felder(z)[6] === "Einheit")
       .map((z) => felder(z)[felder(zeilen(csv)[0]!).indexOf("Status")]);
     expect(status).toEqual(["Anwesend", "Abgerückt"]);
   });
@@ -327,7 +328,7 @@ describe("einsatzDetailCsvInhalt()", () => {
     const csv = einsatzDetailCsvInhalt(sammlung([meldung(alt), meldung(neu, { empfangenAm: 2000 })]));
     const personen = zeilen(csv)
       .slice(1)
-      .filter((z) => felder(z)[7] === "Person");
+      .filter((z) => felder(z)[6] === "Person");
     expect(personen).toHaveLength(1);
     expect(spalte(csv, 2, "Nachname")).toBe("Neu");
   });

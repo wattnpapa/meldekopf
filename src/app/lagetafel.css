@@ -214,7 +214,7 @@ main.lt .lt-vorbehalt { margin-top: calc(var(--lt-e) * 0.6); font-size: calc(var
 main.lt .lt-leer { font-size: calc(var(--lt-e) * 3.6); padding: calc(var(--lt-e) * 1) 0 0; }
 main.lt .lt-leer-zusatz { font-size: calc(var(--lt-e) * 2.5); color: var(--lt-text-2); padding: calc(var(--lt-e) * 0.6) 0 calc(var(--lt-e) * 2); }
 
-/* Gruppenkopf: Zug oder Organisation mit Zahl der Einheiten und Stärke. */
+/* Gruppenkopf: Organisation mit Zahl der Einheiten und Stärke. */
 .lt-gruppe {
   box-sizing: border-box;
   height: calc(var(--lt-kopf-h) * 1em);
@@ -240,7 +240,7 @@ main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; display: flex; align-items
 .lt-gruppe .lt-staerke b { font-size: 0.96em; }
 .lt-gruppe-ab { border-bottom-style: dashed; color: var(--lt-text-2); }
 /* Übungsmeldungen in einer echten Lage: Der Kopf steht in der Farbe der Übung und gestrichelt wie der der Abgerückten (auch ohne
-   Farbe als „nicht Teil der Lage" zu erkennen), und wo bei einem Zug die Stärke steht, steht „nicht gezählt". Eine Summe hat diese
+   Farbe als „nicht Teil der Lage" zu erkennen), und wo bei einer Organisation die Stärke steht, steht „nicht gezählt". Eine Summe hat diese
    Gruppe auf der Tafel nicht: Niemand soll sie zur Stärke oben dazurechnen. */
 .lt-gruppe-uebung { border-bottom-style: dashed; border-bottom-color: var(--lt-uebung); }
 main.lt .lt-gruppe-uebung h3 { color: var(--lt-uebung); }
@@ -392,13 +392,13 @@ main.lt[data-fassung="breit"] .lt-auftrag { font-size: 0.86em; line-height: 1.22
 .lt-abgang-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lt-abgang-uebung { flex: none; }
 
-/* Übungsmeldung, die in der Lage nicht zählt: eine Zeile wie die einer abgerückten Einheit, zurückgenommen. Name, Typ und Zug
-   links, die Stärke mager am rechten Rand; sie bleibt immer ganz. Reicht die Zeile nicht, werden Name (der längere seiner Teile,
-   wie auf der Karte), Typ und Zug gekürzt, jeder nach seiner Länge: Ein Freitext-Typ ohne Kurzform darf die Stärke nicht verdrängen. */
+/* Übungsmeldung, die in der Lage nicht zählt: eine Zeile wie die einer abgerückten Einheit, zurückgenommen. Name und Typ links,
+   die Stärke mager am rechten Rand; sie bleibt immer ganz. Reicht die Zeile nicht, werden Name (zuerst der volle zugunsten der
+   Kurzform, dann der längere ihrer Teile, wie auf der Karte) und Typ gekürzt, jeder nach seiner Länge: Ein Freitext-Typ darf die
+   Stärke nicht verdrängen. */
 .lt-uebung-zeile > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lt-uebung-zeile .lt-herkunft { flex: 0 1 auto; font-weight: 600; line-height: 1.2; }
-.lt-uebung-typ, .lt-uebung-zug { flex: 0 1 auto; }
-.lt-uebung-zug::before { content: "\00B7\00A0"; }
+.lt-uebung-typ { flex: 0 1 auto; }
 .lt-uebung-zeile > .lt-staerke { margin-left: auto; overflow: visible; }
 .lt-uebung-zeile .lt-staerke b { font-size: 1em; font-weight: 400; color: var(--lt-text-2); }
 
@@ -444,11 +444,11 @@ main.lt .lt-seitenzeile {
   overflow: hidden;
 }
 /* Alles über dem Fuß. Die Hülle nimmt die Höhe, die der Fuß lässt, und schneidet ab, was nicht hineinpasst: Datenstand und Bedienung
-   stehen so immer im Bild, wie voll die Lage auch ist. Vorher weichen der Reihe nach „Zuletzt" (bis auf seine Überschrift) und die
-   Übersicht der Züge (zeilenweise); abgeschnitten wird nur, was dann noch übersteht. */
+   stehen so immer im Bild, wie voll die Lage auch ist. Vorher weicht „Zuletzt" (bis auf seine Überschrift); abgeschnitten wird nur,
+   was dann noch übersteht. */
 .lt-rand-inhalt { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--lt-e) * 1.6); overflow: hidden; }
 /* Die festen Blöcke darin (Zähler, Dauer, Bedarf, Abgerückt). Ihr unterer Rand ist das Maß, an dem lagetafel-ui.tsx entscheidet,
-   ob die Übersicht der Züge und „Zuletzt" noch mit ihrer Überschrift Platz haben; sonst entfallen sie samt Linie. */
+   ob „Zuletzt" noch mit seiner Überschrift Platz hat; sonst entfällt der Block samt Linie. */
 .lt-rand-fest { flex: none; display: flex; flex-direction: column; gap: calc(var(--lt-e) * 1.6); }
 /* Einheiten, Fahrzeuge, abgerückt: eine Zeile, die Zahl vor ihrem Wort. Für Vorlesesoftware bleibt das Wort die Benennung (dt). */
 .lt-zaehler { flex: none; display: flex; flex-wrap: wrap; column-gap: calc(var(--lt-e) * 2); row-gap: calc(var(--lt-e) * 0.2); }
@@ -477,23 +477,6 @@ main.lt .lt-abgaenge li { display: flex; gap: calc(var(--lt-e) * 1); font-size: 
 /* Dicht am Namen, wie ein Wortabstand: Der Abstand der Zeile (1 --lt-e) wäre für ein nachgestelltes Wort zu weit. */
 .lt-ab-uebung { flex: none; margin-left: -0.2em; color: var(--lt-text-2); }
 main.lt .lt-abgaenge li.lt-ab-rest { color: var(--lt-text-2); }
-
-/* Übersicht der Züge beim Blättern: zwei Spalten, Name und Gesamtstärke. Fett steht, was die laufende Seite zeigt.
-   Der Block gibt nach, wenn die Randspalte voll ist (nach „Zuletzt", das zuerst weicht): Bei sechzehn Zügen mit Bedarf drückte er
-   sonst Datenstand und Bedienung aus dem Bild. Er behält mindestens Überschrift und eine Zeile (ZUEGE_MINDESTENS_E in
-   lagetafel-ui.tsx); hat er nicht einmal das, entfällt er. Das Fenster um die Liste begrenzt die Höhe und schneidet ab; zu sehen sind
-   nur ganze Zeilen, bei Platzmangel zuerst die Züge der anderen Seiten (lagetafel-ui.tsx blendet aus, was nicht passt). Die
-   Überschrift nennt, wie viele Züge zu sehen sind. */
-.lt-block-zuege { flex: 0 1 auto; min-height: calc(var(--lt-e) * 6.9 + 1px); overflow: hidden; }
-.lt-zuege-fenster { flex: 0 1 auto; min-height: 0; overflow: hidden; }
-.lt-zuege { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: calc(var(--lt-e) * 2); row-gap: calc(var(--lt-e) * 0.25); }
-main.lt .lt-zuege li { display: flex; align-items: baseline; gap: calc(var(--lt-e) * 0.8); font-size: calc(var(--lt-e) * 2.1); line-height: 1.2; color: var(--lt-text-2); white-space: nowrap; }
-.lt-zug-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.lt-zuege b { flex: none; font-weight: 400; }
-main.lt .lt-zuege li[data-hier] { color: var(--lt-text); font-weight: 700; }
-.lt-zuege li[data-hier] b { font-weight: 800; }
-/* Ein Zug mit Bedarf trägt das Warnzeichen auch, wenn seine Seite gerade nicht steht. */
-.lt-zuege li[data-achtung] .lt-zug-name::before { content: "\26A0\FE0E\00A0"; color: var(--lt-achtung); }
 
 /* „Zuletzt" nimmt, was übrig ist. Die Liste bricht in Spalten um; zu sehen ist nur die erste, also nur ganze Einträge.
    Der Block behält mindestens seine Überschrift (Abstand, Linie und eine Zeile; ZULETZT_MINDESTENS_E in lagetafel-ui.tsx): Sie nennt
@@ -638,8 +621,7 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   .lt-teil-weich, .lt-teil-fest { flex: 0 1 auto; min-width: 0; overflow: visible; overflow-wrap: anywhere; }
   main.lt .lt-einsatz { flex-wrap: wrap; }
   .lt-einsatz-name, .lt-ort, .lt-einsatz-name + .lt-ort { max-width: 100%; min-width: 0; overflow: visible; }
-  main.lt .lt-abgaenge li, main.lt .lt-zuege li { font-size: var(--lt-b); }
-  .lt-zuege { column-gap: calc(var(--lt-b) * 1); }
+  main.lt .lt-abgaenge li { font-size: var(--lt-b); }
   .lt-bedienung .lm-stufenleiste { flex-wrap: wrap; }
   .lt-bedienung .lm-stufenleiste .lm-knopf, .lt-bedienung .lm-stufenleiste .lm-knopf + .lm-knopf { flex: 1 1 auto; width: auto; padding-inline: 0.55em; }
   main.lt .lt-seitenzeile { white-space: normal; }
@@ -662,7 +644,6 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   main.lt .lt-block h2 { font-size: calc(var(--lt-b) * 0.9375); }
   main.lt .lt-bedarf li { font-size: var(--lt-b); }
   .lt-block-zuletzt { flex: none; min-height: 0; overflow: visible; }
-  .lt-block-zuege, .lt-zuege-fenster { flex: none; min-height: 0; overflow: visible; }
   .lt-bewegungen { flex: none; flex-wrap: nowrap; overflow: visible; row-gap: calc(var(--lt-b) * 0.5); }
   .lt-bewegungen::before { content: none; }
   main.lt .lt-bewegung { font-size: var(--lt-b); }

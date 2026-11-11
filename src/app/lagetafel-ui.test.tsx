@@ -8,7 +8,7 @@ import { OrganisationsTyp } from "@bos/eeb-format/model";
 import { EinsatzArt, MeldeStatus, einsaetzeSpeichern, einsatzAnlegen, meldungHinzufuegen } from "@bos/meldekopf/einsaetze";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 import { statusMitZeitSetzen } from "./eintrag-zeiten";
-import { neuePerson, neuerBogen, neuesFahrzeug } from "./hilfen";
+import { ersteEbene, neuePerson, neuerBogen, neuesFahrzeug } from "./hilfen";
 import { ANSICHT_SCHLUESSEL } from "./lagemonitor-ansicht";
 import { einsatzFunkrufSetzen, einsatzbeginnSetzen } from "./lagemonitor-beginn";
 import { Lagemonitor, LagemonitorBlock, STUFE_SCHLUESSEL } from "./lagemonitor-ui";
@@ -18,7 +18,8 @@ interface Einheit {
   ort: string;
   typ?: number | string;
   st?: [number, number, number];
-  zug?: string;
+  /** Organisation; Vorgabe THW. */
+  org?: OrganisationsTyp;
   ruhezeit?: boolean;
   funk?: number[];
   auftrag?: string;
@@ -34,6 +35,10 @@ function einsatzMit(einheiten: Einheit[], art = EinsatzArt.EINSATZ, name = "Hoch
   const ids: string[] = [];
   for (const x of einheiten) {
     const b = neuerBogen();
+    if (x.org != null) {
+      b.einheit.organisation = x.org;
+      b.einheit.hierarchie = [ersteEbene(x.org)];
+    }
     b.einheit.hierarchie[0]!.name = x.ort;
     if (x.typ != null) b.einheit.einheitsTyp = typeof x.typ === "number" ? { code: x.typ } : { freitext: x.typ };
     if (x.uebung) b.uebung = true;
@@ -47,7 +52,7 @@ function einsatzMit(einheiten: Einheit[], art = EinsatzArt.EINSATZ, name = "Hoch
       fz.funkrufname = { kennwort: { freitext: "Heros" }, eigenerStandort: true, teile: x.funk };
       b.fahrzeuge = [fz];
     }
-    ids.push(meldungHinzufuegen(e.id, b, x.zug ? { zugEtikett: x.zug } : undefined)!.eintrag.id);
+    ids.push(meldungHinzufuegen(e.id, b)!.eintrag.id);
   }
   if (einheiten.some((x) => x.auftrag || x.teil)) {
     const liste = structuredClone(einsaetzeLaden());
@@ -109,19 +114,20 @@ describe("Lagetafel", () => {
     expect(uhr.querySelector(".lt-dtg")!.textContent).toBe("DTG 101806nov26");
   });
 
-  it("stellt jede Einheit mit Zeichen, Herkunft, Typ, Funkrufname, Auftrag und Stärke an ihren Platz im Zug", () => {
+  it("stellt jede Einheit mit Zeichen, Herkunft, Typ, Funkrufname, Auftrag und Stärke an ihren Platz in ihrer Organisation", () => {
     const { sammlung } = einsatzMit([
-      { ort: "Oldenburg (NI)", typ: 3, st: [1, 1, 2], zug: "1. Zug" },
-      { ort: "Oldenburg (NI)", typ: 4, st: [0, 3, 6], zug: "1. Zug", funk: [22, 51], auftrag: "Sandsackfüllplatz Nord" },
-      { ort: "Brake", typ: 16, st: [0, 2, 7], zug: "2. Zug" },
+      { ort: "Oldenburg (NI)", typ: 3, st: [1, 1, 2] },
+      { ort: "Oldenburg (NI)", typ: 4, st: [0, 3, 6], funk: [22, 51], auftrag: "Sandsackfüllplatz Nord" },
+      { ort: "Elsfleth", org: OrganisationsTyp.FEUERWEHR, typ: "Löschgruppe", st: [0, 1, 8] },
+      { ort: "Brake", typ: 16, st: [0, 2, 7] },
     ]);
     tafel(sammlung());
-    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["1. Zug", "2. Zug"]);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["THW", "Feuerwehr"]);
     const koepfe = Array.from(document.querySelectorAll<HTMLElement>(".lt-gruppe"));
-    expect(koepfe[0]!.textContent).toContain("2 Einheiten");
-    expect(within(koepfe[0]!).getByRole("group").getAttribute("aria-label")).toBe("Stärke: 1 Führer, 4 Unterführer, 8 Mannschaft, gesamt 13");
+    expect(koepfe[0]!.textContent).toContain("3 Einheiten");
+    expect(within(koepfe[0]!).getByRole("group").getAttribute("aria-label")).toBe("Stärke: 1 Führer, 6 Unterführer, 15 Mannschaft, gesamt 22");
     expect(koepfe[1]!.textContent).toContain("1 Einheit");
-    expect(karten().map((k) => nameVon(k))).toEqual(["THW Oldenburg (NI)", "THW Oldenburg (NI)", "THW Brake"]);
+    expect(karten().map((k) => nameVon(k))).toEqual(["THW Oldenburg (NI)", "THW Oldenburg (NI)", "THW Brake", "Feuerwehr Elsfleth"]);
 
     const bergung = karten()[1]!;
     // Ausgeschrieben, dahinter als Ausweich für enge Zeilen die Kurzform (für Vorlesesoftware nur der ausgeschriebene Typ).
@@ -284,13 +290,14 @@ describe("Lagetafel", () => {
 
   it("stellt Übungsmeldungen in einer echten Lage als letzte Gruppe hin: als knappe Zeilen, ohne Summe, und die Stärke oben bleibt ohne sie", () => {
     const { sammlung } = einsatzMit([
-      { ort: "Oldenburg (NI)", typ: 4, st: [0, 3, 6], zug: "1. Zug" },
-      { ort: "Brake", typ: 4, st: [0, 2, 7], zug: "1. Zug", uebung: true, ruhezeit: true, auftrag: "Ausbildung Deichbau" },
+      { ort: "Oldenburg (NI)", typ: 4, st: [0, 3, 6] },
+      { ort: "Brake", typ: 4, st: [0, 2, 7], uebung: true, ruhezeit: true, auftrag: "Ausbildung Deichbau" },
       { ort: "Varel", typ: 16, st: [1, 1, 4], uebung: true },
     ]);
     tafel(sammlung());
     expect(document.querySelector(".lt-meldung")!.getAttribute("aria-label")).toBe("Stärke: 0 Führer, 3 Unterführer, 6 Mannschaft, gesamt 9");
-    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["1. Zug", "Übung"]);
+    // Die einzige Organisation steht ohne Kopf (ihre Summe ist die Stärke oben); die Übungsmeldungen haben ihren eigenen.
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Übung"]);
     const kopf = document.querySelector<HTMLElement>(".lt-gruppe-uebung")!;
     expect(kopf.textContent).toBe("Übung2 Einheitennicht gezählt");
     // Keine Summe am Kopf: Niemand soll sie zur Stärke oben dazurechnen.
@@ -302,10 +309,8 @@ describe("Lagetafel", () => {
     expect(zeilen.map((z) => nameVon(z))).toEqual(["THW Brake", "THW Varel"]);
     expect(zeilen.every((z) => z.hasAttribute("data-uebung") && !z.classList.contains("lt-karte"))).toBe(true);
     const brake = zeilen[0]!;
-    // Typ in Kurzform, ihr Zug (die Gruppe geht über alle Züge) und die Stärke; ohne Zug fehlt das Feld.
+    // Name, Typ in Kurzform und die Stärke.
     expect(brake.querySelector(".lt-uebung-typ")!.textContent).toBe("B");
-    expect(brake.querySelector(".lt-uebung-zug")!.textContent).toBe("1. Zug");
-    expect(zeilen[1]!.querySelector(".lt-uebung-zug")).toBeNull();
     expect(within(brake).getByRole("group").getAttribute("aria-label")).toBe("Stärke: 0 Führer, 2 Unterführer, 7 Mannschaft, gesamt 9");
     // Kein Zeichen, kein Auftrag, kein Stand, keine Marke: Bedarf und „neu" gehören nicht in diese Lage, obwohl der Bogen
     // Ruhezeit meldet und eben erst kam.
@@ -602,14 +607,16 @@ describe("Lagetafel: Satz und Blättern", () => {
 
   it("trennt im Gruppenkopf den Namen von „(Fortsetzung)“: Der Name darf gekürzt werden, der Zusatz bleibt stehen", () => {
     fernseher();
-    const { sammlung } = einsatzMit(Array.from({ length: 30 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: "1. Technischer Zug Oldenburg-Wesermarsch Nord" })).concat([{ ort: "Brake", typ: 4, zug: "2. Zug" }]));
+    const { sammlung } = einsatzMit(
+      Array.from({ length: 30 }, (_, i): Einheit => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: "Gruppe", org: OrganisationsTyp.RETTUNGSDIENST })).concat([{ ort: "Brake", typ: 4 }]),
+    );
     tafel(sammlung());
     const koepfe = Array.from(document.querySelectorAll(".lt-gruppe h3"));
     const fortgesetzt = koepfe.filter((h) => h.querySelector(".lt-fortsetzung"));
     expect(fortgesetzt.length).toBeGreaterThan(0);
     for (const h of fortgesetzt) {
-      expect(h.textContent).toBe("1. Technischer Zug Oldenburg-Wesermarsch Nord (Fortsetzung)");
-      expect(h.querySelector(".lt-gruppe-name")!.textContent).toBe("1. Technischer Zug Oldenburg-Wesermarsch Nord");
+      expect(h.textContent).toBe("Rettungsdienst (Fortsetzung)");
+      expect(h.querySelector(".lt-gruppe-name")!.textContent).toBe("Rettungsdienst");
       expect(h.querySelector(".lt-fortsetzung")!.textContent).toBe("(Fortsetzung)");
     }
   });
@@ -642,128 +649,67 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(sichtbar()).toEqual(erste);
   });
 
-  it("nennt beim Blättern, welche Züge die Seite zeigt, und führt in der Randspalte alle Züge mit ihrer Stärke", () => {
+  it("nennt beim Blättern, welche Organisationen die Seite zeigt und welche die nächste", () => {
     fernseher();
     vi.useFakeTimers();
-    // Zwölf Züge mit je vier Einheiten; im 3. Zug hat eine Einheit Bedarf.
+    // Acht Organisationen mit je sechs Einheiten, in der festen Folge des Formats.
+    const orgs = [
+      OrganisationsTyp.THW,
+      OrganisationsTyp.FEUERWEHR,
+      OrganisationsTyp.POLIZEI,
+      OrganisationsTyp.BUNDESPOLIZEI,
+      OrganisationsTyp.DRK,
+      OrganisationsTyp.ASB,
+      OrganisationsTyp.DLRG,
+      OrganisationsTyp.BUNDESWEHR,
+    ];
     const { sammlung } = einsatzMit(
-      Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number], ruhezeit: i === 9 })),
+      Array.from({ length: 48 }, (_, i): Einheit => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: "Gruppe", org: orgs[Math.floor(i / 6)]!, st: [0, 2, 6] })),
     );
     tafel(sammlung());
     const status = () => screen.getByRole("status").textContent!;
-    const seite1 = /^Seite 1 von (\d): 1\. Zug bis (\d+)\. Zug · weiter mit (\d+)\. Zug bis \d+\. Zug$/.exec(status());
-    expect(seite1, status()).not.toBeNull();
-    const letzter = Number(seite1![2]);
-    expect(Number(seite1![3])).toBeGreaterThanOrEqual(letzter);
+    expect(status()).toMatch(/^Seite 1 von \d: THW bis [^·]+ · weiter mit [^·]+$/);
 
-    const block = within(screen.getByRole("complementary")).getByRole("heading", { name: /^Züge/ }).closest("section")!;
-    expect(block.querySelector("h2")!.textContent).toBe("Züge fett: auf dieser Seite");
-    const zeilen = Array.from(block.querySelectorAll(".lt-zuege li"));
-    // Alle zwölf Züge mit ihrer Gesamtstärke, auch die der anderen Seite.
-    expect(zeilen.map((z) => z.textContent)).toEqual(Array.from({ length: 12 }, (_, i) => `${i + 1}. Zug32`));
-    // Fett steht, was die laufende Seite zeigt.
-    const hier = () => zeilen.filter((z) => z.hasAttribute("data-hier")).map((z) => z.querySelector(".lt-zug-name")!.textContent);
-    expect(hier()).toEqual(Array.from({ length: letzter }, (_, i) => `${i + 1}. Zug`));
-    // Der Zug mit Bedarf ist markiert, auch wenn seine Seite gerade nicht steht.
-    expect(zeilen.filter((z) => z.hasAttribute("data-achtung")).map((z) => z.querySelector(".lt-zug-name")!.textContent)).toEqual(["3. Zug"]);
     act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
     expect(status()).toMatch(/^Seite 2 von/);
-    expect(hier()).toContain("12. Zug");
-    expect(hier()).not.toContain("1. Zug");
+    expect(status()).toContain("Bundeswehr");
   });
 
-  it("nennt die Übungsmeldungen beim Blättern auf jeder Seite in der Randspalte; die Übersicht führt nur die Züge, die zählen", () => {
+  it("nennt die Übungsmeldungen beim Blättern auf jeder Seite in der Randspalte", () => {
     fernseher();
     vi.useFakeTimers();
     const { sammlung } = einsatzMit([
-      ...Array.from({ length: 44 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number] })),
+      // Zwei Organisationen: Mit nur einer stünde die Tafel ohne Kopf, und die Seitenzeile nennte keine Gruppe.
+      ...Array.from({ length: 44 }, (_, i): Einheit => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: i < 22 ? 4 : "SEG", st: [0, 2, 6], ...(i < 22 ? {} : { org: OrganisationsTyp.DRK }) })),
       { ort: "Geübt 1", typ: 4, uebung: true },
       { ort: "Geübt 2", typ: 4, uebung: true },
     ]);
     tafel(sammlung());
     const status = () => screen.getByRole("status").textContent!;
     const rand = screen.getByRole("complementary");
-    const uebungskarten = () => Array.from(document.querySelectorAll(".lt-uebung-zeile .lt-herkunft")).map((h) => h.textContent);
-    expect(status()).toMatch(/^Seite 1 von \d: 1\. Zug bis/);
+    const uebungszeilen = () => Array.from(document.querySelectorAll(".lt-uebung-zeile")).map((z) => nameVon(z));
+    expect(status()).toMatch(/^Seite 1 von \d: THW/);
     // Auf der ersten Seite steht keine Zeile einer Übungsmeldung; dass es sie gibt, sagt die Randspalte trotzdem.
-    expect(uebungskarten()).toEqual([]);
+    expect(uebungszeilen()).toEqual([]);
     expect(rand.querySelector(".lt-daneben")!.textContent).toBe("+ 2 Übung, nicht gezählt");
-    const block = within(rand).getByRole("heading", { name: /^Züge/ }).closest("section")!;
-    // Elf Züge mit ihrer Stärke. Die Übungsmeldungen stehen nicht dazwischen: Sie haben keine Stärke, die in die Lage zählt.
-    expect(block.querySelector("h2")!.textContent).toBe("Züge fett: auf dieser Seite");
-    expect(Array.from(block.querySelectorAll(".lt-zuege li")).map((z) => z.textContent)).toEqual(Array.from({ length: 11 }, (_, i) => `${i + 1}. Zug32`));
-    // Die Stärke oben ist die der elf Züge.
+    // Die Stärke oben ist die der 44 Einheiten, die zählen.
     expect(document.querySelector(".lt-meldung")!.getAttribute("aria-label")).toBe("Stärke: 0 Führer, 88 Unterführer, 264 Mannschaft, gesamt 352");
-    // Die Seite davor kündigt sie an („weiter mit … bis Übung"); auf der letzten Seite stehen ihre Zeilen, und die Seitenzeile nennt die Gruppe.
+    // Auf der letzten Seite stehen ihre Zeilen, und die Seitenzeile nennt die Gruppe.
     const seiten = Number(/von (\d)/.exec(status())![1]);
     for (let i = 1; i < seiten; i++) act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
     const hier = /^Seite (\d) von \1: (.*?)(?: · weiter mit .*)?$/.exec(status());
     expect(hier, status()).not.toBeNull();
     expect(hier![2]).toMatch(/(^| bis )Übung$/);
-    expect(uebungskarten()).toEqual(["THW Geübt 1", "THW Geübt 2"]);
+    expect(uebungszeilen()).toEqual(["THW Geübt 1", "THW Geübt 2"]);
     expect(rand.querySelector(".lt-daneben")!.textContent).toBe("+ 2 Übung, nicht gezählt");
   });
 
-  it("lässt die Übersicht der Züge nachgeben: nur ganze Zeilen, zuerst die Züge der anderen Seiten, und der Fuß steht außerhalb", () => {
+  it("hält die Rangfolge der Randspalte: Ohne Platz für seine Überschrift entfällt „Zuletzt“ samt Linie; der Fuß steht außerhalb", () => {
     fernseher();
-    vi.useFakeTimers();
-    const { sammlung } = einsatzMit(
-      Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number] })),
-    );
-    // Dem DOM ohne Layout ein Fenster geben, in das drei der sechs Zeilen passen (Zeile 20 hoch, Fenster 68: die vierte wäre angeschnitten).
-    const flaeche = (el: HTMLElement) => el.classList.contains("lt-flaeche");
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
-      return flaeche(this) ? 1386 : this.classList.contains("lt-zuege-fenster") ? 300 : 0;
-    });
-    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
-      return flaeche(this) ? 852 : this.classList.contains("lt-zuege-fenster") ? 68 : 0;
-    });
-    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
-      return this.parentElement?.classList.contains("lt-zuege") ? 20 : 0;
-    });
-    tafel(sammlung());
-    const rand = screen.getByRole("complementary");
-    const block = () => within(rand).getByRole("heading", { name: /^Züge/ }).closest("section")!;
-    const zeilen = () => Array.from(block().querySelectorAll<HTMLElement>(".lt-zuege li"));
-    const name = (z: HTMLElement) => z.querySelector(".lt-zug-name")!.textContent!;
-    const zuSehen = () => zeilen().filter((z) => z.style.visibility !== "hidden").map(name);
-    const aufSeite = () => zeilen().filter((z) => z.hasAttribute("data-hier")).map(name);
-    const status = () => screen.getByRole("status").textContent!;
-    const seiten = Number(/von (\d)/.exec(status())![1]);
-
-    for (let s = 1; s <= seiten; s++) {
-      if (s > 1) act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
-      // Alle zwölf Züge bleiben im DOM (die Liste behält ihre Höhe); zu sehen sind sechs.
-      expect(zeilen()).toHaveLength(12);
-      expect(zuSehen()).toHaveLength(6);
-      // Zu sehen sind zuerst Züge, die gerade nicht auf der Tafel stehen, in ihrer Folge: Deren Stärke stünde sonst nirgends.
-      const andere = Array.from({ length: 12 }, (_, i) => `${i + 1}. Zug`).filter((zug) => !aufSeite().includes(zug));
-      expect(zuSehen()).toEqual([...andere, ...aufSeite()].slice(0, 6));
-      const titel = block().querySelector("h2")!.textContent;
-      if (andere.length >= 6) {
-        expect(zuSehen().some((zug) => aufSeite().includes(zug))).toBe(false);
-        expect(titel).toBe(andere.length > 6 ? `Züge anderer Seiten 6 von ${andere.length}` : "Züge anderer Seiten");
-      } else {
-        expect(titel).toBe("Züge 6 von 12 · fett: auf dieser Seite");
-      }
-    }
-
-    // Datenstand und Bedienung stehen unter der Hülle, die misst und abschneidet, nicht in ihr.
-    const huelle = rand.querySelector(".lt-rand-inhalt")!;
-    expect(huelle.contains(block())).toBe(true);
-    expect(rand.querySelector(".lt-fuss")!.parentElement).toBe(rand);
-    expect(huelle.contains(rand.querySelector(".lt-fuss"))).toBe(false);
-  });
-
-  it("hält die Rangfolge der Randspalte: Ohne Platz für ihre Überschrift entfallen erst „Zuletzt“, dann die Übersicht der Züge, samt Linie", () => {
-    fernseher();
-    vi.useFakeTimers();
-    // Zwölf Züge, eben eingetroffen: Die Tafel blättert (Übersicht der Züge), und „Zuletzt" hat Einträge.
-    const { sammlung } = einsatzMit(
-      Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number] })),
-    );
+    // Zwölf Einheiten, eben eingetroffen: „Zuletzt" hat Einträge.
+    const { sammlung } = einsatzMit(Array.from({ length: 12 }, (_, i): Einheit => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4 })));
     // Die Hülle der Randspalte reicht bis 600, die festen Blöcke darin bis `fest`. Bei 1920 × 1080 ist --lt-e 10,8 px:
-    // Die Übersicht braucht mit Abstand 17,28 + 6,9 × 10,8 + 1 ≈ 92,8 px, „Zuletzt" 17,28 + 3,8 × 10,8 + 1 ≈ 59,3 px.
+    // „Zuletzt" braucht mit Abstand 17,28 + 3,8 × 10,8 + 1 ≈ 59,3 px.
     let fest = 0;
     const kasten = (oben: number, unten: number) => ({ x: 0, y: oben, left: 0, top: oben, width: 300, height: unten - oben, right: 300, bottom: unten, toJSON: () => ({}) }) as DOMRect;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
@@ -771,36 +717,31 @@ describe("Lagetafel: Satz und Blättern", () => {
       if (this.classList.contains("lt-rand-fest")) return kasten(0, fest);
       return kasten(0, 0);
     });
-    const anzeige = () => {
-      const rand = screen.getByRole("complementary");
-      return {
-        zuege: within(rand).queryByRole("heading", { name: /^Züge/ }) != null,
-        zuletzt: within(rand).queryByRole("heading", { name: /^Zuletzt/ }) != null,
-      };
-    };
     const mitFest = (unten: number) => {
       fest = unten;
       cleanup();
       tafel(sammlung());
-      return anzeige();
+      return within(screen.getByRole("complementary")).queryByRole("heading", { name: /^Zuletzt/ }) != null;
     };
-    // 200 px frei: beide.
-    expect(mitFest(400)).toEqual({ zuege: true, zuletzt: true });
-    // 100 px frei: Die Übersicht hat Platz, „Zuletzt" danach nicht mehr; es weicht zuerst.
-    expect(mitFest(500)).toEqual({ zuege: true, zuletzt: false });
-    // 70 px frei: Für die Übersicht reicht es nicht mehr (Überschrift und eine Zeile), für die Überschrift von „Zuletzt" schon.
-    expect(mitFest(530)).toEqual({ zuege: false, zuletzt: true });
-    // 40 px frei: keiner. Es bleibt keine leere Linie und keine angeschnittene Überschrift.
-    expect(mitFest(560)).toEqual({ zuege: false, zuletzt: false });
-    expect(document.querySelectorAll(".lt-rand .lt-block-zuege, .lt-rand .lt-block-zuletzt")).toHaveLength(0);
+    // 200 px frei: „Zuletzt" steht.
+    expect(mitFest(400)).toBe(true);
+    // 70 px frei: Für die Überschrift reicht es noch.
+    expect(mitFest(530)).toBe(true);
+    // 40 px frei: Es bleibt keine leere Linie und keine angeschnittene Überschrift.
+    expect(mitFest(560)).toBe(false);
+    expect(document.querySelectorAll(".lt-rand .lt-block-zuletzt")).toHaveLength(0);
+    // Datenstand und Bedienung stehen unter der Hülle, die misst und abschneidet, nicht in ihr.
+    const rand = screen.getByRole("complementary");
+    const huelle = rand.querySelector(".lt-rand-inhalt")!;
+    expect(rand.querySelector(".lt-fuss")!.parentElement).toBe(rand);
+    expect(huelle.contains(rand.querySelector(".lt-fuss"))).toBe(false);
   });
 
-  it("zeigt die Übersicht der Züge nur beim Blättern: Auf einer Seite stehen ihre Köpfe ohnehin alle da", () => {
+  it("zeigt ohne Blättern keine Seitenzeile", () => {
     fernseher();
-    const { sammlung } = einsatzMit(Array.from({ length: 8 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug` })));
+    const { sammlung } = einsatzMit(Array.from({ length: 8 }, (_, i): Einheit => ({ ort: `Ort ${i + 1}`, typ: "Gruppe", org: i < 4 ? OrganisationsTyp.THW : OrganisationsTyp.DRK })));
     tafel(sammlung());
     expect(document.querySelector(".lt-seitenzeile")).toBeNull();
-    expect(within(screen.getByRole("complementary")).queryByRole("heading", { name: /^Züge/ })).toBeNull();
   });
 
   it("beginnt vorn, wenn sich die Zahl der Seiten ändert: Takt und Balken laufen dann gemeinsam neu los", () => {
@@ -1080,7 +1021,7 @@ describe("Lagetafel, Stil", () => {
     expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-typ \{ max-width: 14em;/);
   });
 
-  it("kürzt einen langen Zugnamen mit Auslassung und lässt „(Fortsetzung)“ stehen", () => {
+  it("kürzt einen langen Gruppennamen mit Auslassung und lässt „(Fortsetzung)“ stehen", () => {
     // Vorgefallen: Die Rücksetzregel erlaubt Überschriften den Umbruch („text-wrap: wrap") und wog schwerer als das geerbte
     // „nowrap" des Kopfs. Die zweite Zeile lag unter seiner Kante: „(Fortsetzung)" war nie zu sehen.
     expect(css).toMatch(/main\.lt \.lt-gruppe h3 \{[^}]*white-space: nowrap;/);

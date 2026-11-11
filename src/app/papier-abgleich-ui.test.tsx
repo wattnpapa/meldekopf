@@ -61,7 +61,7 @@ describe("PapierAbgleich von außen öffnen (R4-A6)", () => {
     const ids = ["Ansbach", "Ulm"].map((n) => meldungAufnehmen(s.id, bogen(n), { quelle: "scan" })!.eintrag.id);
     vomPapierMarkieren(s.id, ids, 999);
     const eintraege = einsaetzeLaden().find((x) => x.id === s.id)!.eintraege;
-    const props = { einsatzId: s.id, eintraege, zuege: [], onGeaendert: () => {} };
+    const props = { einsatzId: s.id, eintraege, onGeaendert: () => {} };
     const { rerender } = render(<PapierAbgleich {...props} anstoss={0} />);
     // Zu: nur der Knopf der Karte, keine Liste.
     expect(screen.queryByRole("heading", { name: /Lage vom Papier abgleichen \(2\)/ })).toBeNull();
@@ -80,7 +80,7 @@ describe("Ein Weg zum Abgleich (R5-N9)", () => {
     const ids = ["Ansbach"].map((n) => meldungAufnehmen(s.id, bogen(n), { quelle: "scan" })!.eintrag.id);
     vomPapierMarkieren(s.id, ids, 999);
     const eintraege = einsaetzeLaden().find((x) => x.id === s.id)!.eintraege;
-    const props = { einsatzId: s.id, eintraege, zuege: [], onGeaendert: () => {} };
+    const props = { einsatzId: s.id, eintraege, onGeaendert: () => {} };
     const { rerender } = render(<PapierAbgleich {...props} knopfImBericht />);
     expect(screen.queryByRole("button", { name: "Lage vom Papier abgleichen…" })).toBeNull();
     expect(screen.getByText(/steht im Bericht darüber/)).toBeTruthy();
@@ -95,7 +95,7 @@ describe("Eingaben gehen nicht still verloren (R7-S1, R7-G1)", () => {
     const ids = ["Ansbach", "Ulm"].map((n) => meldungAufnehmen(s.id, bogen(n), { quelle: "scan" })!.eintrag.id);
     vomPapierMarkieren(s.id, ids, 999);
     const eintraege = einsaetzeLaden().find((x) => x.id === s.id)!.eintraege;
-    return { einsatzId: s.id, eintraege, zuege: [], onGeaendert: () => {} };
+    return { einsatzId: s.id, eintraege, onGeaendert: () => {} };
   }
   beforeEach(() => sessionStorage.clear());
 
@@ -163,7 +163,7 @@ describe("Nummern beim Abgleich (R8-W1)", () => {
     const eintraege = einsaetzeLaden().find((x) => x.id === s.id)!.eintraege;
     render(
       <>
-        <PapierAbgleich einsatzId={s.id} eintraege={eintraege} zuege={[]} onGeaendert={() => {}} />
+        <PapierAbgleich einsatzId={s.id} eintraege={eintraege} onGeaendert={() => {}} />
         <Dialogschicht />
       </>,
     );
@@ -200,7 +200,7 @@ describe("Zeiten beim Abgleich (Meldekopf R1, F3)", () => {
     const eintraege = einsaetzeLaden().find((x) => x.id === s.id)!.eintraege;
     render(
       <>
-        <PapierAbgleich einsatzId={s.id} eintraege={eintraege} zuege={[]} onGeaendert={() => {}} />
+        <PapierAbgleich einsatzId={s.id} eintraege={eintraege} onGeaendert={() => {}} />
         <Dialogschicht />
       </>,
     );

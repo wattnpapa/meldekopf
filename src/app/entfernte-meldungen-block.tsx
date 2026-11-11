@@ -32,7 +32,7 @@ export default function EntferntMeldungenBlock({ einsatzId, geaendert, onHolen, 
   async function loeschen(m: PapierkorbMeldung) {
     const sicher = await frageJaNein({
       titel: "Meldung endgültig löschen?",
-      text: `„${m.name}"${m.nummer != null ? ` (war Nr. ${m.nummer})` : ""} wird mit Historie, Zeiten, Zug und Auftrag endgültig gelöscht. Danach lässt sie sich nur noch aus einer Weitergabe-Datei oder einem Export zurückholen.`,
+      text: `„${m.name}"${m.nummer != null ? ` (war Nr. ${m.nummer})` : ""} wird mit Historie, Zeiten und Auftrag endgültig gelöscht. Danach lässt sie sich nur noch aus einer Weitergabe-Datei oder einem Export zurückholen.`,
       ok: "Endgültig löschen",
       gefahr: true,
     });
@@ -61,7 +61,7 @@ export default function EntferntMeldungenBlock({ einsatzId, geaendert, onHolen, 
                 Schon wieder eingelesen als Nr. {nummerHier(m.eintraege[0]!.einheitSchluessel)} — „Zurückholen" bringt sie nicht unter Nr. {m.nummer ?? "?"} zurück.
               </span>
             )}
-            {/* Je Fassung Stand, Stärke, Zug und Auftrag: Bei mehreren Meldungen derselben Einheit sieht man, welche man holt (R18-K11). */}
+            {/* Je Fassung Stand, Stärke und Auftrag: Bei mehreren Meldungen derselben Einheit sieht man, welche man holt (R18-K11). */}
             <ul className="papierkorb-fassungen">
               {fassungsZeilen(m).map((z) => (
                 <li key={z.id}>{z.text}</li>
@@ -82,7 +82,7 @@ export default function EntferntMeldungenBlock({ einsatzId, geaendert, onHolen, 
 /** Anker des Blocks: Der Verweis über der Liste springt hierher und klappt ihn auf (R18-E3). */
 export const PAPIERKORB_ANKER = "meldungen-papierkorb";
 
-/** Eine Zeile je Fassung der entfernten Meldung, die jüngste zuerst: Stand · Stärke · Zug · Auftrag. */
+/** Eine Zeile je Fassung der entfernten Meldung, die jüngste zuerst: Stand · Stärke · Auftrag. */
 export function fassungsZeilen(m: PapierkorbMeldung): { id: string; text: string }[] {
   return [...m.eintraege]
     .sort((a, b) => b.bogen.stand - a.bogen.stand)
@@ -92,7 +92,6 @@ export function fassungsZeilen(m: PapierkorbMeldung): { id: string; text: string
       const teile = [
         `Stand ${zeitpunktDeutsch(e.bogen.stand)}`,
         `Stärke ${s.fuehrer}/${s.unterfuehrer}/${s.mannschaft}//${s.gesamt}`,
-        e.zugEtikett ? `Zug „${e.zugEtikett}"` : "kein Zug",
         ...(auftrag ? [`Auftrag „${auftrag}"`] : []),
       ];
       return { id: e.id, text: teile.join(" · ") };

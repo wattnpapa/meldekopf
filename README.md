@@ -5,7 +5,7 @@ Bereitstellungsräume und kleine Führungsstellen im ELW.
 
 > **Stand:** 2026-11-11, Phasen 0 bis 6 umgesetzt (Phase 6: Rollenaudit, alle P0/P1 behoben), abgeglichen mit dem Erfassungsbogen `1d7ed5f` (Prüfrunden 10 bis 21, Schema 12):
 > Einsatz-Sammlungen anlegen und führen, Summen, Einheitenliste und -tabelle,
-> Zug, Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
+> Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
 > Lagemonitor (als Zeilen oder als Tafel), Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
 > (auch die des Erfassungsbogens). Bögen kommen per Kamera, USB-Handscanner,
 > Foto, Datei, PDF mit QR-Code, Einsatz-Datei oder geteiltem Link herein; ein
@@ -37,16 +37,16 @@ Tage oder Aufträge braucht, ist S1-Control.
   Bilderstapel (Fotos, Screenshots, ganzer Ordner), Datei, PDF, Link.
 - Einheit ohne Bogen in Minuten erfassen: nur Stärke, Führungskraft,
   Fahrzeuge; Bogen drucken, fertig.
-- Laufende Summen über alle anwesenden Einheiten, mit Zwischensummen je Zug;
+- Laufende Summen über alle anwesenden Einheiten;
   Karten- und Tabellensicht mit Suche, Qualifikations- und Kraftfahrer-Filter.
 - Folgemeldungen als Historie je Einheit; Schichtübergabe-Diff („Stärke
   12 → 9, Fahrzeug abgemeldet").
-- Abrücken, Zug zuordnen, Bogen aufteilen und zusammenführen, Papier-Abgleich.
+- Abrücken, Bogen aufteilen und zusammenführen, Papier-Abgleich.
 - Lagemonitor für den Fernseher am Gerät: Funkrufname, Einsatzname, DTG,
-  Einsatzdauer, Stärke, Bedarf, Stärke je Zug, Einheitentabelle mit Zug und
-  Gesamt, ohne Personennamen. Wahlweise als Tafel für den großen Fernseher im
+  Einsatzdauer, Stärke, Bedarf, Einheitentabelle mit Gesamtstärke, ohne
+  Personennamen. Wahlweise als Tafel für den großen Fernseher im
   Führungsfahrzeug: alle Einheiten mit taktischem Zeichen an festem Platz nach
-  Zug, Stärkemeldung und Uhr groß für die Ferne, Sofortbedarf als Marke an der
+  Organisation, Stärkemeldung und Uhr groß für die Ferne, Sofortbedarf als Marke an der
   Einheit, abgerückte Einheiten und letzte Bewegungen in der Randspalte.
   Übungsbögen in einer echten Lage stehen dort als eigene Gruppe, ohne zu
   zählen.

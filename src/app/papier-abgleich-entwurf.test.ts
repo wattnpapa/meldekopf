@@ -21,7 +21,6 @@ const zeile = (id: string, teil: Partial<AbgleichZeile> = {}): AbgleichZeile => 
   eingetroffen: "",
   abgerueckt: false,
   abgerueckAm: "",
-  zug: "",
   notiz: "",
   nummer: "",
   ...teil,
@@ -75,9 +74,14 @@ describe("Zwischenstand des Papier-Abgleichs", () => {
     expect(sessionStorage.getItem(abgleichSchluessel("e1"))).not.toBeNull();
     abgleichEntwurfSpeichern("e1", basis, basis);
     expect(sessionStorage.getItem(abgleichSchluessel("e1"))).toBeNull();
-    abgleichEntwurfSpeichern("e1", [zeile("a", { zug: "1. Zug" })], basis);
+    abgleichEntwurfSpeichern("e1", [zeile("a", { nummer: "3" })], basis);
     abgleichEntwurfLoeschen("e1");
     expect(abgleichEntwurfLaden("e1")).toEqual([]);
+  });
+
+  it("liest einen älteren Zwischenstand mit Zugfeld weiter", () => {
+    sessionStorage.setItem(abgleichSchluessel("e1"), JSON.stringify([{ ...zeile("a", { notiz: "Pumpe" }), zug: "1. Zug" }]));
+    expect(abgleichEntwurfLaden("e1").map((z) => z.notiz)).toEqual(["Pumpe"]);
   });
 
   it("liest Unbrauchbares als leer, ohne zu werfen", () => {

@@ -122,7 +122,7 @@ export function App() {
     letztenEinsatzMerken(id);
   };
   const einsaetzeNeuLaden = () => setEinsaetze(einsaetzeLaden());
-  // R14-S1: Ein nicht gespeicherter Zug oder Auftrag wird beim Verlassen der Einsatzansicht gesichert (Browser-Zurück,
+  // R14-S1: Ein nicht gespeicherter Auftrag wird beim Verlassen der Einsatzansicht gesichert (Browser-Zurück,
   // Startseite) — aber erst NACH dem letzten Laden der Liste. Die Karte zeigte beim nächsten Öffnen den alten Stand
   // („Text weg"), obwohl er im Speicher stand. Jeder Wechsel der offenen Ansicht liest die Sammlungen darum frisch ein;
   // die Aufräumfunktionen der Karten laufen vor diesem Effekt.

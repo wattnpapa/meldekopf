@@ -34,7 +34,7 @@ import {
   meldungHinzufuegen,
   type MeldeEintrag,
 } from "@bos/meldekopf/einsaetze";
-import { eintreffzeitSetzen, meldungAufnehmen, notizSetzen, statusMitZeitSetzen, vomPapierMarkieren, zeitLang, zugSetzen } from "./eintrag-zeiten";
+import { eintreffzeitSetzen, meldungAufnehmen, notizSetzen, statusMitZeitSetzen, vomPapierMarkieren, zeitLang } from "./eintrag-zeiten";
 import { aggregiere } from "./auswertung";
 import { neuerBogen, neuePerson } from "./hilfen";
 import { EXPORT_ZIELE, lageblattVermerken, weitergabeVermerken, type ExportStand, type ExportUmfang, type ExportZiel } from "./weitergabe/export-stand";
@@ -523,7 +523,7 @@ describe("Einheiten als Tabelle", () => {
    * lagen auf dem Tablet rechts außerhalb des Bilds (Audit Runde 2, R2-K5).
    * Die Zellen jeder Zeile müssen dabei unter ihrem Kopf stehen.
    */
-  it("stellt Zug, Stärke, Bedarf, Eintreffzeit und Auftrag vor die Aufschlüsselung und hält die Zellen unter ihrem Kopf", async () => {
+  it("stellt Stärke, Bedarf, Eintreffzeit und Auftrag vor die Aufschlüsselung und hält die Zellen unter ihrem Kopf", async () => {
     const nutzer = userEvent.setup();
     const { einsatzId } = buehne(["Wardenburg"]);
     notizSetzen(einsatzId, gespeichert(einsatzId, "Wardenburg").id, "Deich Nord");
@@ -535,7 +535,7 @@ describe("Einheiten als Tabelle", () => {
     const koepfe = within(tabelle).getAllByRole("columnheader").map((k) => k.textContent ?? "");
     // F/U/M und Kfz stehen bei der Gesamtstärke — am Laptop lagen sie sonst
     // außerhalb des Rahmens (R3-K7).
-    // Ohne vergebenen Zug entfällt die Spalte „Zug" (R10-K3: 45 px leer vor den Zahlen).
+    // Eine Spalte „Zug" gibt es nicht.
     expect(koepfe.slice(0, 9).map((k) => k.replace(/^(\S+?)[A-ZÄÖÜ].*$/, "$1"))).toEqual([
       "Einheit", "F", "U", "M", "Ges.", "Kfz", "Auftrag", "Eingetr.", "Bedarf",
     ]);
@@ -704,7 +704,7 @@ describe("Abrücken mit Zeit, Quittung und Rückweg", () => {
     // Unter dem Finger liegt zuerst die Bestätigung, gesperrt (R3-S5) …
     expect(nachher[platz]).toBe("✓ Abgerückt");
     expect((screen.getByRole("button", { name: "✓ Abgerückt" }) as HTMLButtonElement).disabled).toBe(true);
-    // … danach der Rückweg, nicht „Zug zuordnen" (R2-G4).
+    // … danach der Rückweg, nicht der nächste Knopf (R2-G4).
     await waitFor(() => expect(kartenKnoepfe()[platz]).toBe("Wieder anwesend"), { timeout: ORTSSPERRE_MS + 500 });
     nachher = kartenKnoepfe();
     expect(nachher.slice(0, platz)).toEqual(vorher.slice(0, platz));
@@ -756,7 +756,7 @@ describe("Abrücken mit Zeit, Quittung und Rückweg", () => {
     }
   });
 
-  it("schluckt den zweiten Tipp eines Doppeltipps: weder Zurückschalten noch Zug-Editor", async () => {
+  it("schluckt den zweiten Tipp eines Doppeltipps: kein Zurückschalten", async () => {
     const nutzer = userEvent.setup();
     const { einsatzId, neuLaden } = buehne(["Crailsheim"]);
     const platz = kartenKnoepfe().indexOf("Abrücken");
@@ -768,7 +768,6 @@ describe("Abrücken mit Zeit, Quittung und Rückweg", () => {
     // Zweiter Tipp an derselben Stelle, 150 ms später: gesperrt.
     await nutzer.click(knopfAmPlatz());
     expect(gespeichert(einsatzId, "Crailsheim").status).toBe(MeldeStatus.ABGERUECKT);
-    expect(screen.queryByLabelText("Zug")).toBeNull();
     // Ein anderer Knopf der Karte nimmt dagegen sofort an (R17-H3): geschützt ist der Wechselknopf selbst, nicht die Karte.
 
     // Nach der Sperre wirkt der Rückweg wie gewohnt.
@@ -883,7 +882,7 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
   });
 
   // R11-O1: Eingetippt, nicht gespeichert, Feld noch im Fokus — Seite ausgeblendet oder verlassen: Der Text ist nicht weg.
-  it("sichert einen getippten Auftrag beim Ausblenden der Seite und ein Zug-Etikett beim Verlassen (R11-O1)", async () => {
+  it("sichert einen getippten Auftrag beim Ausblenden der Seite (R11-O1)", async () => {
     const nutzer = userEvent.setup();
     const { einsatzId } = buehne(["Wardenburg"]);
 
@@ -901,29 +900,11 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     await waitFor(() => expect(gespeichert(einsatzId, "Wardenburg").notiz).toBe("Deich Nord ab 14:00 sichern"));
     // Das Feld bleibt offen und trägt den Text weiter.
     expect((screen.getByLabelText("Auftrag/Notiz") as HTMLInputElement).value).toBe("Deich Nord ab 14:00 sichern");
-
-    await nutzer.click(screen.getByRole("button", { name: "Zug zuordnen" }));
-    await nutzer.type(screen.getByLabelText("Zug"), "2. Zug");
-    expect(gespeichert(einsatzId, "Wardenburg").zugEtikett).toBeUndefined();
-    await act(async () => { window.dispatchEvent(new Event("pagehide")); });
-    await waitFor(() => expect(gespeichert(einsatzId, "Wardenburg").zugEtikett).toBe("2. Zug"));
   });
 
-  it("speichert das Zug-Etikett beim Verlassen des Felds, lässt ein leeres Feld aber unverändert", async () => {
-    const nutzer = userEvent.setup();
-    const { einsatzId, neuLaden } = buehne(["Wardenburg"]);
-
-    await nutzer.click(screen.getByRole("button", { name: "Zug zuordnen" }));
-    await nutzer.type(screen.getByLabelText("Zug"), "1. Zug");
-    await nutzer.click(document.body);
-    expect(gespeichert(einsatzId, "Wardenburg").zugEtikett).toBe("1. Zug");
-
-    // Leer verlassen: nichts geändert, Formular zu — der Zug bleibt.
-    neuLaden();
-    await nutzer.click(screen.getByRole("button", { name: "Zug ändern" }));
-    await nutzer.clear(screen.getByLabelText("Zug"));
-    await nutzer.click(document.body);
-    expect(gespeichert(einsatzId, "Wardenburg").zugEtikett).toBe("1. Zug");
+  it("bietet an der Karte keine Zug-Zuordnung mehr an", () => {
+    buehne(["Wardenburg"]);
+    expect(screen.queryByRole("button", { name: /^Zug (zuordnen|ändern)$/ })).toBeNull();
     expect(screen.queryByLabelText("Zug")).toBeNull();
   });
 
@@ -1413,18 +1394,6 @@ describe("Kompakte Einheiten auf dem Telefon (R2-K7)", () => {
     } finally {
       Element.prototype.scrollIntoView = alt;
     }
-  });
-
-  it("Telefon: Zwischensummen bei zwei Zügen zugeklappt (R4-K5)", () => {
-    const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
-    const a = meldungHinzufuegen(angelegt.id, bogenMitName("Aalen"))!.eintrag;
-    const b = meldungHinzufuegen(angelegt.id, bogenMitName("Biberach"))!.eintrag;
-    zugSetzen(angelegt.id, a.einheitSchluessel, a.id, "1. Zug");
-    zugSetzen(angelegt.id, b.einheitSchluessel, b.id, "2. Zug");
-    ansicht(angelegt.id);
-    const summen = document.querySelector<HTMLDetailsElement>("details.zug-summen")!;
-    expect(summen).not.toBeNull();
-    expect(summen.open).toBe(false);
   });
 
   it("Telefon, lange Liste: die Suchleiste steht hinter einer Zeile, damit die erste Karte höchstens zwei Bildschirme tief liegt (R5-K4)", () => {
@@ -2201,7 +2170,7 @@ describe("Ungültige Signatur und Abgerückte ohne Aufklappen erkennbar (R3-L2, 
 });
 
 describe("Lage vom Papier abgleichen (Audit Runde 3, R3-A2)", () => {
-  it("zeigt eingelesene Einheiten mit Marke und übernimmt Status und Zug in einem Schritt", async () => {
+  it("zeigt eingelesene Einheiten mit Marke und übernimmt Eintreffzeit und Status in einem Schritt", async () => {
     const user = userEvent.setup();
     const angelegt = einsatzAnlegen("Hochwasser Neckar", EinsatzArt.EINSATZ);
     const ids = ["Ansbach", "Kirchehrenbach"].map((n) => meldungHinzufuegen(angelegt.id, bogenMitName(n))!.eintrag.id);
@@ -2217,17 +2186,16 @@ describe("Lage vom Papier abgleichen (Audit Runde 3, R3-A2)", () => {
     fireEvent.change(zeiten[1]!, { target: { value: "2026-10-06T11:22" } });
     const radios = screen.getAllByRole("radio", { name: "abgerückt" });
     await user.click(radios[0]!);
-    const zug = screen.getAllByLabelText("Zug (leer = ohne)");
-    await user.type(zug[0]!, "1. TZ");
-    await user.type(zug[1]!, "2. TZ");
+    // Ein Zugfeld gibt es im Abgleich nicht mehr.
+    expect(screen.queryByLabelText("Zug (leer = ohne)")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Abgleich übernehmen" }));
     expect(a.geaendert).toHaveBeenCalled();
     const e = einsaetzeLaden().find((s) => s.id === angelegt.id)!.eintraege;
     const ansbach = e.find((x) => x.id === ids[0])!;
     expect(ansbach.status).toBe(MeldeStatus.ABGERUECKT);
-    expect(ansbach.zugEtikett).toBe("1. TZ");
+    expect(ansbach.zugEtikett).toBeUndefined();
     expect(ansbach.vomPapier).toBeUndefined();
-    expect(e.find((x) => x.id === ids[1])!.zugEtikett).toBe("2. TZ");
+    expect(e.find((x) => x.id === ids[1])!.status).toBe(MeldeStatus.ANWESEND);
     a.neuLaden();
     expect(screen.queryByText("vom Papier, Zeiten prüfen")).toBeNull();
     expect(screen.queryByRole("button", { name: "Lage vom Papier abgleichen…" })).toBeNull();
@@ -2274,7 +2242,7 @@ describe("Papier-Abgleich ohne Eintreffzeit (Audit Runde 5, R5-A1)", () => {
     const a = ansicht(angelegt.id);
     await user.click(screen.getByRole("button", { name: "Lage vom Papier abgleichen…" }));
     for (const z of screen.getAllByLabelText(/Eingetroffen am/)) expect((z as HTMLInputElement).value).toBe("");
-    await user.type(screen.getAllByLabelText("Zug (leer = ohne)")[0]!, "1. TZ");
+    await user.type(screen.getAllByLabelText(/Auftrag \/ Notiz/)[0]!, "Pumpe 2 defekt");
     await user.click(screen.getByRole("button", { name: "Abgleich übernehmen" }));
     // R6-N3: ein Fenster für beide Hinweise, mit den Namen der Einheiten.
     const hinweis = await screen.findByRole("dialog", { name: "Abgleich übernommen – zwei Hinweise" });
@@ -2282,7 +2250,7 @@ describe("Papier-Abgleich ohne Eintreffzeit (Audit Runde 5, R5-A1)", () => {
     expect(within(hinweis).getByText(/Für 2 Einheiten stand keine „Nr\. laut Blatt“/)).toBeTruthy();
     await user.click(within(hinweis).getByRole("button", { name: "Alles klar" }));
     const e = einsaetzeLaden().find((s) => s.id === angelegt.id)!.eintraege;
-    expect(e.find((x) => x.id === ids[0])!.zugEtikett).toBe("1. TZ");
+    expect(e.find((x) => x.id === ids[0])!.notiz).toBe("Pumpe 2 defekt");
     expect(e.every((x) => x.vomPapier != null)).toBe(true);
     a.neuLaden();
     expect(screen.getAllByText("vom Papier, Zeiten prüfen")).toHaveLength(2);
@@ -2311,53 +2279,21 @@ describe("Moduswechsel von unten in der Einsatzansicht (R4-L3)", () => {
   });
 });
 
-describe("Zug zuordnen: Vorschläge und gleiche Schreibweise (R7-K4)", () => {
+describe("Auftrag auf einen Blick (R7-K6, R7-K9)", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it("bietet vergebene Züge zum Antippen an; „1.Zug“ und „1. zug“ landen im selben Zug", async () => {
-    const nutzer = userEvent.setup();
-    const b = buehne(["Wardenburg", "Oldenburg", "Aurich"]);
-    const { einsatzId } = b;
-    zugSetzen(einsatzId, gespeichert(einsatzId, "Wardenburg").einheitSchluessel, gespeichert(einsatzId, "Wardenburg").id, "1. Zug");
-    b.neuLaden();
-
-    // Zweite Einheit: Der erste Zug steht als Antippziel da und wird mit einem Tipp gespeichert.
-    const karte = (n: string) => screen.getByRole("heading", { level: 3, name: new RegExp(n) }).closest("li, .einheit-zeile")! as HTMLElement;
-    await nutzer.click(within(karte("Oldenburg")).getByRole("button", { name: "Zug zuordnen" }));
-    const gruppe = screen.getByRole("group", { name: "Schon vergebene Züge" });
-    await nutzer.click(within(gruppe).getByRole("button", { name: "1. Zug" }));
-    b.neuLaden();
-    expect(gespeichert(einsatzId, "Oldenburg").zugEtikett).toBe("1. Zug");
-
-    // Dritte Einheit: anders getippt, gleicher Zug.
-    await nutzer.click(within(karte("Aurich")).getByRole("button", { name: "Zug zuordnen" }));
-    await nutzer.type(screen.getByLabelText("Zug"), "1.zug");
-    await nutzer.click(screen.getByRole("button", { name: "Speichern" }));
-    b.neuLaden();
-    expect(gespeichert(einsatzId, "Aurich").zugEtikett).toBe("1. Zug");
-    const zuege = new Set(einsaetzeLaden().find((s) => s.id === einsatzId)!.eintraege.map((e) => e.zugEtikett));
-    expect(zuege).toEqual(new Set(["1. Zug"]));
-  });
-});
-
-describe("Auftrag und Zug auf einen Blick (R7-K6, R7-K9)", () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
-  it("zählt Einheiten ohne Auftrag und ohne Zug, filtert mit einem Tipp und zeigt den Auftragstext zugeklappt", async () => {
+  it("zählt Einheiten ohne Auftrag, filtert mit einem Tipp und zeigt den Auftragstext zugeklappt", async () => {
     const nutzer = userEvent.setup();
     const b = buehne(["Wardenburg", "Oldenburg", "Aurich"]);
     const { einsatzId } = b;
     const w = gespeichert(einsatzId, "Wardenburg");
     notizSetzen(einsatzId, w.id, "Deichabschnitt Nord ab 14:00");
-    zugSetzen(einsatzId, w.einheitSchluessel, w.id, "1. Zug");
     b.neuLaden();
 
     expect(screen.getByRole("button", { name: "2 ohne Auftrag" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "2 ohne Zug" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: /ohne Zug/ })).toBeNull();
     await nutzer.click(screen.getByRole("button", { name: "2 ohne Auftrag" }));
     const namen = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent ?? "");
     expect(namen).toHaveLength(2);
@@ -2408,16 +2344,15 @@ describe("Doppelte Karte erkennen (R7-N1)", () => {
 });
 
 describe("Spalten der Einheitentabelle (R10-K3)", () => {
-  const namen = (zug: boolean, kompakt: boolean) => tabellenSpaltenFuer(zug, kompakt).map((x) => x.schluessel);
+  const namen = (kompakt: boolean) => tabellenSpaltenFuer(kompakt).map((x) => x.schluessel);
 
-  it("blendet die Spalte Zug aus, solange keine Einheit einen Zug trägt", () => {
-    expect(namen(false, false)).not.toContain("zugEtikett");
-    expect(namen(true, false).slice(0, 3)).toEqual(["einheit", "zugEtikett", "fuehrer"]);
+  it("führt keine Spalte Zug", () => {
+    expect(namen(false)).not.toContain("zugEtikett");
+    expect(namen(false).slice(0, 2)).toEqual(["einheit", "fuehrer"]);
   });
 
-  it("stellt am Telefon die Gesamtstärke gleich hinter den Namen, Zug hinter die Aufteilung", () => {
-    expect(namen(false, true).slice(0, 5)).toEqual(["einheit", "gesamt", "fuehrer", "unterfuehrer", "mannschaft"]);
-    expect(namen(true, true).slice(0, 6)).toEqual(["einheit", "gesamt", "fuehrer", "unterfuehrer", "mannschaft", "zugEtikett"]);
-    expect(namen(true, true)).toHaveLength(namen(true, false).length);
+  it("stellt am Telefon die Gesamtstärke gleich hinter den Namen, die Aufteilung dahinter", () => {
+    expect(namen(true).slice(0, 5)).toEqual(["einheit", "gesamt", "fuehrer", "unterfuehrer", "mannschaft"]);
+    expect(namen(true)).toHaveLength(namen(false).length);
   });
 });

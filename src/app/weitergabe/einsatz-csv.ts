@@ -43,7 +43,6 @@ const SPALTEN = [
   "Einheit",
   "Teil",
   "Organisation",
-  "Zug",
   "Stärke F",
   "Stärke U",
   "Stärke M",
@@ -154,7 +153,6 @@ function datenZeile(art: EinsatzArt, e: MeldeEintrag, nr: number | undefined, gr
     // sonst zwei gleichnamige Zeilen da, und filtern lässt sich das auch nicht.
     e.teilEtikett ?? "",
     orgLabel(b.einheit.organisation),
-    e.zugEtikett ?? "",
     st.fuehrer,
     st.unterfuehrer,
     st.mannschaft,
@@ -244,7 +242,6 @@ function summenZeile(meldungen: MeldeEintrag[], titel: string, mitGrund = false)
     titel,
     "",
     "",
-    "",
     acc.f, acc.u, acc.m, acc.gesamt,
     acc.vGesamt, acc.vAnf, acc.veg, acc.vegan,
     acc.anM, acc.anW, acc.anD,
@@ -265,7 +262,7 @@ function summenZeile(meldungen: MeldeEintrag[], titel: string, mitGrund = false)
  * eine Zeile (nach Nr. sortiert), zuletzt die Summenzeile.
  *
  * Als Nachtrag („nur neue Bögen", `s.nachtragGruende`) nennt eine letzte Spalte
- * den Grund jeder Zeile („neu", „geändert: Zug"). Die „Summe Nachtrag" zählt nur
+ * den Grund jeder Zeile („neu", „geändert: Auftrag"). Die „Summe Nachtrag" zählt nur
  * die neuen Einheiten; die geänderten stehen in einer eigenen Zeile und ersetzen
  * ihre Zeile der letzten Lieferung — wer beide addierte, zählte Kräfte doppelt
  * (R5-W7). Eine Schlusszeile sagt, dass die Datei nur ein Teil der Lage ist

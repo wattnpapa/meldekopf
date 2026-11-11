@@ -689,7 +689,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       // Schreibvorgänge; scheitert der zweite (voller Speicher: Der Bogen braucht Platz, die Art nicht), nimmt der
       // Fehlerzweig unten die Umstellung zurück.
       if (alsUebung) artDavor = einsatzArtSetzen(zielId, EinsatzArt.UEBUNG);
-      // meldungAufnehmen: legt ab und lässt die Folgemeldung Zug, Auftrag und
+      // meldungAufnehmen: legt ab und lässt die Folgemeldung Auftrag und
       // Eintreffzeit der Vorgängerin erben (eintrag-zeiten.ts, R2-K1).
       r = meldungAufnehmen(zielId, aufzunehmen, {
         quelle,
@@ -763,7 +763,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
             ? ` (${folgeText})`
             : "") +
 
-      (r.erbeFehlt ? " Zug, Auftrag und Eintreffzeit der vorigen Fassung konnten nicht übernommen werden (Speicher voll) — bitte an der Karte nachtragen." : "");
+      (r.erbeFehlt ? " Auftrag und Eintreffzeit der vorigen Fassung konnten nicht übernommen werden (Speicher voll) — bitte an der Karte nachtragen." : "");
     if (kiosk) {
       // Dauerscannen: Piep + Zähler im Overlay, die Kamera bleibt an — beim
       // Massen-Check-in muss niemand zwischen den Bögen die Ansicht wechseln.
@@ -852,7 +852,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
           {
             wert: "bogen",
             label: "Bogen der Einheit gilt — ersetzt die Schnellerfassung",
-            hinweis: "Stärke, Namen, Fahrzeuge und Bedarf aus dem Bogen; Zug, Auftrag und Eintreffzeit bleiben.",
+            hinweis: "Stärke, Namen, Fahrzeuge und Bedarf aus dem Bogen; Auftrag und Eintreffzeit bleiben.",
           },
           {
             wert: "bisher",
@@ -1508,7 +1508,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
         }
         const art = bytes ? pdfInhaltArt(bytes) : null;
         if (art === "sammlung" && bytes) {
-          // Sammel-PDF (z. B. vom Zugführer): als Paket mit Zeiten, Zug und
+          // Sammel-PDF (z. B. vom Zugführer): als Paket mit Zeiten und
           // Siegel in diese Sammlung übernehmen, statt nur die Bögen zu
           // nehmen oder eine zweite Sammlung anzulegen (R3-W3).
           const uebernahme = await sammlungInZielUebernehmen(zielId, bytes);
@@ -1575,7 +1575,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
   /**
    * Sammel-PDF mit eingebetteter Sammlung beim „Bögen einlesen…" in die
    * offene Sammlung übernehmen (Audit Runde 3, R3-W3). Bisher gab es zwei
-   * schlechte Wege: nur die Bögen (ohne Siegel, Zeiten und Zug) oder
+   * schlechte Wege: nur die Bögen (ohne Siegel und Zeiten) oder
    * „Einsatz importieren…", das eine zweite Sammlung anlegte, aus der jede
    * Einheit einzeln umgebucht werden musste.
    *
@@ -1592,40 +1592,23 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       sammlung = quelle;
     } else {
       const einheiten = new Set(quelle.eintraege.map((e) => e.einheitSchluessel)).size;
-      const zug = quelle.name.trim();
-      // Heißt die Sammlung wie die Lage hier (zwei Meldeköpfe derselben Lage), ist
-      // ihr Name kein Zug: Albstadt und Radolfzell bekämen sonst „Hochwasser Eyach
-      // 10/2026" als Schein-Zug, und die Zwischensummen nach Zug stimmten nicht
-      // mehr. Dann steht „ohne Zug-Zuordnung" vorn (R4-W8).
-      const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-      const gleicheLage = norm(zug) === norm(ziel.name) || norm(ziel.name).includes(norm(zug)) || norm(zug).includes(norm(ziel.name));
-      const mitZug = {
-        wert: "mit-zug",
-        label: `Übernehmen, Zug „${zug}“`,
-        hinweis: "Einheiten ohne Zug bekommen diesen Zug. Später an der Karte änderbar.",
-      };
-      const ohneZug = {
-        wert: "ohne-zug",
-        label: "Übernehmen ohne Zug-Zuordnung",
-        ...(gleicheLage ? { hinweis: "Die Sammlung heißt wie diese Lage — ihr Name ist vermutlich kein Zug." } : {}),
-      };
       const wahl = await frageWahl({
         titel: "Sammel-PDF einer anderen Sammlung",
         text:
           `Die PDF enthält die Sammlung „${quelle.name}“ mit ${einheiten === 1 ? "1 Einheit" : `${einheiten} Einheiten`}. ` +
           `In „${ziel.name}“ übernehmen — mit Eintreffzeiten, Abrückvermerken, Auftrag und Siegel?`,
         wege: [
-          ...(gleicheLage ? [ohneZug, mitZug] : [mitZug, ohneZug]),
+          { wert: "uebernehmen", label: "Übernehmen" },
           {
             wert: "nur-boegen",
             label: "Nur die Bögen",
-            hinweis: "Ohne Zeiten, Zug und Siegel — wie ein einzeln eingelesener Bogen.",
+            hinweis: "Ohne Zeiten und Siegel — wie ein einzeln eingelesener Bogen.",
           },
         ],
       });
       if (!wahl) return "abbruch";
       if (wahl === "nur-boegen") return null;
-      sammlung = sammlungFuerZiel(quelle, ziel, wahl === "mit-zug" ? zug : "");
+      sammlung = sammlungFuerZiel(quelle, ziel);
     }
     // Die Stände der Exporte reisen mit der Sammlung desselben Einsatzes (R5-W6);
     // bei einer fremden Sammlung gehören sie nicht hierher.
@@ -1644,7 +1627,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     return (
       (quelle.id === zielId
         ? `${r.hinzugefuegt} neue Meldung(en) ergänzt.`
-        : `Sammlung „${quelle.name}“ in „${ziel.name}“ übernommen: ${r.hinzugefuegt} neue Meldung(en) mit Zeiten, Zug und Siegel.`) +
+        : `Sammlung „${quelle.name}“ in „${ziel.name}“ übernommen: ${r.hinzugefuegt} neue Meldung(en) mit Zeiten und Siegel.`) +
       (abgleich ? ` ${abgleich}` : "") +
       (nummern ? ` ${nummern}` : "") +
       (lageSatz ? ` ${lageSatz}` : "") +
@@ -1767,7 +1750,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
 
   /**
    * Ganze Einsatz-Sammlung aus einer Datei importieren (Schichtübergabe/Backup).
-   * Akzeptiert die Sammel-PDF (dort ist die komplette Sammlung inkl. Zügen,
+   * Akzeptiert die Sammel-PDF (dort ist die komplette Sammlung inkl.
    * Status und Historie eingebettet) ebenso wie eine JSON-Datei.
    */
   async function importiereEinsatzDatei(e: ChangeEvent<HTMLInputElement>) {

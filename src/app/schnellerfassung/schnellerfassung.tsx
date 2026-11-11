@@ -1,6 +1,6 @@
 /**
  * Schnellerfassung: eine Einheit ohne Bogen in eine Sammlung aufnehmen. Eine
- * Seite statt eines Assistenten: Zettel-Angaben (Eintreffzeit, Nummer, Zug),
+ * Seite statt eines Assistenten: Zettel-Angaben (Eintreffzeit, Nummer),
  * Einheit, Stärke mit Führungskraft, Fahrzeuge, dann „In Einsatz übernehmen".
  *
  * Herkunft: Erfassungsbogen `src/app/app.tsx` (Commit 1d7ed5f), die fremde
@@ -30,7 +30,7 @@ import { browserKompressor, einheitAnzeigename, ersteEbene, neuerBogen, staerkeP
 import { base64UrlKodieren, encodePayload } from "@bos/eeb-format/codec";
 import { stempelZeitpunkt } from "../datenschutz-uhr";
 import { einsaetzeLaden } from "../einsaetze-lesen";
-import { eintreffzeitSetzen, nummerUndZugSetzen, statusMitZeitSetzen, zeitKurz, zeitLang } from "../eintrag-zeiten";
+import { eintreffzeitSetzen, nummerSetzen, statusMitZeitSetzen, zeitKurz, zeitLang } from "../eintrag-zeiten";
 import { MeldeStatus } from "@bos/meldekopf/einsaetze";
 import { schnellOrganisationLaden } from "../schnell-organisation";
 import { meldungsNummern } from "../einheiten-tabelle";
@@ -84,7 +84,6 @@ export function Schnellerfassung({
   const [zeit, setZeit] = useState(start?.fremd?.zettel?.zeit ?? "");
   const [abgerueckt, setAbgerueckt] = useState(start?.fremd?.zettel?.ab ?? "");
   const [nummer, setNummer] = useState(start?.fremd?.zettel?.nr ?? "");
-  const [zug, setZug] = useState(start?.fremd?.zettel?.zug ?? "");
   const [gespeichert, setGespeichert] = useState(true);
   const staerkeAbschnitt = useRef<HTMLDivElement>(null);
   const beendet = useRef(false);
@@ -102,10 +101,10 @@ export function Schnellerfassung({
     if (beendet.current) return;
     setGespeichert(
       entwurfSpeichern(bogen, {
-        fremd: { einsatzId: einsatz.id, beginn, zettel: { zeit: zeit || undefined, ab: abgerueckt || undefined, nr: nummer || undefined, zug: zug || undefined } },
+        fremd: { einsatzId: einsatz.id, beginn, zettel: { zeit: zeit || undefined, ab: abgerueckt || undefined, nr: nummer || undefined } },
       }),
     );
-  }, [bogen, zeit, abgerueckt, nummer, zug, einsatz.id, beginn, fenster.runde]);
+  }, [bogen, zeit, abgerueckt, nummer, einsatz.id, beginn, fenster.runde]);
 
   // Jede Bearbeitung datiert den Stand neu — Zeitgruppe im PDF und Reihenfolge der Fassungen.
   const aendern = (patch: Partial<Erfassungsbogen>) => setBogen((b) => ({ ...b, ...patch, stand: stempelZeitpunkt() }));
@@ -124,7 +123,7 @@ export function Schnellerfassung({
   function zurueckInDenEinsatz() {
     beendet.current = true;
     entwurfSpeichern(bogen, {
-      fremd: { einsatzId: einsatz.id, beginn, startseite: true, zettel: { zeit: zeit || undefined, ab: abgerueckt || undefined, nr: nummer || undefined, zug: zug || undefined } },
+      fremd: { einsatzId: einsatz.id, beginn, startseite: true, zettel: { zeit: zeit || undefined, ab: abgerueckt || undefined, nr: nummer || undefined } },
     });
     onEnde();
   }
@@ -293,14 +292,14 @@ export function Schnellerfassung({
       }
       return;
     }
-    // Uhrzeit, Nummer und Zug vom Blatt an die NEUE Einheit (R2-A5). Eine
+    // Uhrzeit und Nummer vom Blatt an die NEUE Einheit (R2-A5). Eine
     // Folgemeldung erbt die Eintreffzeit ihrer Vorgängerin, die bleibt maßgeblich.
     const eintraege = einsaetzeLaden().find((s) => s.id === einsatz.id)?.eintraege ?? [];
     const neu = eintraege.find((e) => e.id === bogenInhaltsId(b) && !vorherDa.has(e.id));
     let nrSatz = "";
     if (neu && eintraege.filter((e) => e.einheitSchluessel === neu.einheitSchluessel).length === 1) {
       if (eintreffzeit != null) eintreffzeitSetzen(einsatz.id, neu.id, eintreffzeit);
-      if (zettelNr != null || zug.trim() !== "") nummerUndZugSetzen(einsatz.id, neu.id, { nummer: zettelNr, zug });
+      if (zettelNr != null) nummerSetzen(einsatz.id, neu.id, zettelNr);
       // Auf dem Meldeblock schon abgerückt: gleich mit dieser Zeit abgerückt anlegen, nicht in die Summen (R13-A1).
       if (abWahl.art === "zeit") statusMitZeitSetzen(einsatz.id, neu.id, MeldeStatus.ABGERUECKT, abWahl.zeit, abWahl.zeit);
       // Ohne Nr. vom Zettel: sagen, welche die App vergeben hat — sie gehört auf
@@ -352,7 +351,6 @@ export function Schnellerfassung({
     if (ja) beenden();
   }
 
-  const zuege = [...new Set(einsatz.eintraege.map((e) => e.zugEtikett).filter((z): z is string => !!z))].sort();
 
   return (
     <>
@@ -377,7 +375,7 @@ export function Schnellerfassung({
           {!gespeichert && !fenster.konflikt && <strong> Nicht gespeichert — der Gerätespeicher nimmt nichts an. Bitte zügig übernehmen.</strong>}
         </p>
         {/* Die Uhrzeit vom Meldeblock gleich oben mitnehmen, statt sie danach je Karte über „ändern" (R2-A5). */}
-        <EintreffzeitFeld wert={zeit} onAendern={setZeit} abgerueckt={abgerueckt} onAbgerueckt={setAbgerueckt} nummer={nummer} onNummer={setNummer} zug={zug} onZug={setZug} zuege={zuege} />
+        <EintreffzeitFeld wert={zeit} onAendern={setZeit} abgerueckt={abgerueckt} onAbgerueckt={setAbgerueckt} nummer={nummer} onNummer={setNummer} />
         <AbschnittEinheit bogen={bogen} aendern={aendern} kompakt />
         <div ref={staerkeAbschnitt} id="abschnitt-staerke">
           <AbschnittStaerke bogen={bogen} aendern={aendern} />

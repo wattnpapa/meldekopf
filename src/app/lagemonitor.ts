@@ -13,7 +13,7 @@ import { staerke, type EebZeitpunkt } from "@bos/eeb-format/model";
 import { angabenAlterWort, angabenZeit, type AngabenSeit } from "./angaben-alter";
 import { einheitOrt } from "@bos/meldekopf/darstellung";
 import { EinsatzArt, MeldeStatus, revisionen, type Einsatzsammlung, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
-import { aggregiere, aggregiereNachZug, aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage, type EinsatzSummen } from "./auswertung";
+import { aggregiere, aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage, type EinsatzSummen } from "./auswertung";
 import { eintreffzeit } from "./eintrag-zeiten";
 import { bedarfMarken, letzteMeldung, sollstaerkeAnteil } from "./einheiten-tabelle";
 import { geltendeJeEinheit } from "./fassung-vorrang";
@@ -94,7 +94,7 @@ export function dauerText(beginn: number | null, jetzt: number): string | null {
   ].join(", ");
 }
 
-/** Eine Zeile der Einheitentabelle: Organisation, Ort, Funkrufname, Einheitentyp, Zug, Führer/Unterführer/Mannschaft/gesamt. */
+/** Eine Zeile der Einheitentabelle: Organisation, Ort, Funkrufname, Einheitentyp, Führer/Unterführer/Mannschaft/gesamt. */
 export interface EinheitZeile {
   /** Schlüssel der Meldung — stabil, solange die Einheit gleich bleibt. */
   id: string;
@@ -108,8 +108,6 @@ export interface EinheitZeile {
   mannschaft: number;
   /** Gesamtstärke der Einheit — am Fernseher die Zahl, nach der gefragt wird (Audit Meldekopf R1, Führung F4). */
   gesamt: number;
-  /** Zug-Etikett; leer ohne Zuordnung. */
-  zug: string;
   /** Eintreffzeit (vom Zettel, sonst Empfang) — danach ist die Tabelle geordnet. */
   eingetroffen: number;
   /** Niemand hat gezählt: die Zahlen sind nur die Sollstärke der Vorbelegung (in der Tabelle mit „S" markiert, R10-K4). */
@@ -120,14 +118,6 @@ export interface EinheitZeile {
   standAlt?: boolean;
   /** Auftrag/Notiz des Meldekopfs, auf eine Zeile gekürzt (R14-K3). */
   auftrag?: string;
-}
-
-/** Zwischensumme eines Zugs für die Zugzeile des Monitors. */
-export interface ZugZeile {
-  /** Zug-Etikett; `null` für Einheiten ohne Zug. */
-  name: string | null;
-  einheiten: number;
-  gesamt: number;
 }
 
 /**
@@ -236,12 +226,6 @@ export function staerkeSpalteKompakt(zeilen: readonly [number, number, number, n
   return zeilen.some(([f, u, m, g]) => `${f} / ${u} / ${m} // ${g}`.length > 15);
 }
 
-/** Zwischensumme je Zug: „älteste Meldung vor 5 Std 0 Min" — nur ab einer Stunde, sonst `null` (R12-K3). */
-export function zugAlterText(aeltesteMeldungAm: number | undefined, jetzt: number): string | null {
-  if (aeltesteMeldungAm == null || jetzt - aeltesteMeldungAm < VERALTET_ALTER_MIN * 60_000) return null;
-  return `⚠ älteste Meldung ${alterText(aeltesteMeldungAm, jetzt)}`;
-}
-
 /** Was sich zuletzt in der Lage bewegt hat — der Fernseher soll nicht nur Zahlen ändern, sondern sagen, warum (Audit Runde 6, R6-K1). */
 export interface Bewegung {
   id: string;
@@ -278,8 +262,6 @@ export interface Lagebild {
   summen: EinsatzSummen;
   /** Anwesende Einheiten, zuletzt eingetroffene zuerst. */
   einheiten: EinheitZeile[];
-  /** Zwischensummen je Zug; leer, solange keine Einheit einem Zug zugeordnet ist. */
-  zuege: ZugZeile[];
   bedarf: BedarfZeile;
   /** Einheiten, die abgerückt sind (zählen nicht mehr mit). */
   abgerueckt: number;
@@ -374,7 +356,6 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
         unterfuehrer: st.unterfuehrer,
         mannschaft: st.mannschaft,
         gesamt: st.gesamt,
-        zug: m.zugEtikett?.trim() ?? "",
         eingetroffen: da,
         soll: nurSollstaerke(m.bogen),
         ...(jetzt - angabenZeit(m) >= VERALTET_ALTER_MIN * 60_000 ? { alterMin: Math.floor((jetzt - angabenZeit(m)) / 60_000) } : {}),
@@ -383,10 +364,6 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
       };
     });
   const summen = aggregiere(einsatz.eintraege, einsatz.art);
-  const gruppen = aggregiereNachZug(einsatz.eintraege, einsatz.art);
-  const zuege: ZugZeile[] = gruppen.some((g) => g.zugEtikett)
-    ? gruppen.map((g) => ({ name: g.zugEtikett ?? null, einheiten: g.summen.einheiten, gesamt: g.summen.staerke.gesamt }))
-    : [];
   const bedarf: BedarfZeile = {
     verpflegung: summen.verpflegung.gesamt,
     ruhezeit: summen.ruhezeitErforderlich,
@@ -401,7 +378,6 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
     art: lagebildArt(einsatz.art),
     summen,
     einheiten,
-    zuege,
     bedarf,
     abgerueckt: geltend.filter((e) => e.status === MeldeStatus.ABGERUECKT).length,
     // Dieselbe Zählweise wie Kopf, Startseite und Import (R18-K2).

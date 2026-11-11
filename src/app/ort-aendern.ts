@@ -56,7 +56,7 @@ export async function ortErfragen(bogen: Erfassungsbogen, jetzt: number): Promis
       titel: "Ort der Einheit ändern",
       label: "Ort der Einheit",
       vorgabe,
-      hinweis: `„${vorherName}" bekommt einen anderen Ort. Nummer, Zug, Auftrag und Historie bleiben; die alte Fassung kommt in die Historie, „Rückgängig“ nimmt die Änderung zurück.`,
+      hinweis: `„${vorherName}" bekommt einen anderen Ort. Nummer, Auftrag und Historie bleiben; die alte Fassung kommt in die Historie, „Rückgängig“ nimmt die Änderung zurück.`,
       ok: "Ort übernehmen",
     });
     if (eingabe == null) return null;

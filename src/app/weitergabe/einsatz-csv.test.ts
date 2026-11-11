@@ -85,7 +85,7 @@ describe("einsatzCsvInhalt()", () => {
     const csv = einsatzCsvInhalt(sammlung([meldung(bogen("A"))]));
     const [kopf] = zeilen(csv);
     expect(kopf!.split(";")).toEqual([
-      "Nr.", "Einheit", "Teil", "Organisation", "Zug",
+      "Nr.", "Einheit", "Teil", "Organisation",
       "Stärke F", "Stärke U", "Stärke M", "Stärke gesamt",
       "Verpflegung gesamt", "Verpflegung angefordert", "Verpflegung veg.", "Verpflegung vegan",
       "Unterbringung angefordert M", "Unterbringung angefordert W", "Unterbringung angefordert D",
@@ -106,7 +106,7 @@ describe("einsatzCsvInhalt()", () => {
   });
 
   it("schreibt je anwesende Einheit eine Datenzeile mit den erwarteten Werten", () => {
-    // zugEtikett gehört an die Meldung, nicht an den Bogen.
+    // Ein Zug aus Altdaten steht nicht mehr in der Datei.
     const csv = einsatzCsvInhalt(sammlung([meldung(bogen("OV Alpha"), { zugEtikett: "1. Zug" })]));
     const sp = spaltenIndex(csv);
     const [, daten] = zeilen(csv);
@@ -114,7 +114,7 @@ describe("einsatzCsvInhalt()", () => {
     expect(f[sp("Einheit")]).toBe("THW OV Alpha Media Team");
     expect(f[sp("Teil")]).toBe(""); // ungeteilte Einheit: keine Teil-Bezeichnung
     expect(f[sp("Organisation")]).toBe("THW");
-    expect(f[sp("Zug")]).toBe("1. Zug");
+    expect(csv).not.toContain("1. Zug");
     expect(f.slice(sp("Stärke F"), sp("Stärke gesamt") + 1)).toEqual(["1", "0", "2", "3"]);
     expect(f.slice(sp("Verpflegung gesamt"), sp("Verpflegung vegan") + 1)).toEqual(["3", "3", "1", "1"]);
     // Unterbringung angefordert (hier: ja) und WC/Dusche (alle Anwesenden) — beide M/W/D.
@@ -280,11 +280,11 @@ describe("Nachtrag-CSV (Audit Runde 5, R5-W7, R5-K6)", () => {
     const neu = mk("b", "Bamberg");
     const s = {
       id: "e", name: "Lage", art: EinsatzArt.EINSATZ, angelegt: 1, geaendert: 1, eintraege: [alt, neu], nachtragSeit: 5000,
-      nachtragGruende: { [alt.einheitSchluessel]: { neu: false, gruende: ["Zug"] }, [neu.einheitSchluessel]: { neu: true, gruende: ["neu"] } },
+      nachtragGruende: { [alt.einheitSchluessel]: { neu: false, gruende: ["Auftrag"] }, [neu.einheitSchluessel]: { neu: true, gruende: ["neu"] } },
     };
     const csv = einsatzCsvInhalt(s);
     expect(csv).toContain("Im Nachtrag wegen");
-    expect(csv).toContain("geändert: Zug");
+    expect(csv).toContain("geändert: Auftrag");
     expect(csv).toContain("Summe Nachtrag — nur neue Einheiten (1)");
     expect(csv).toContain("Geänderte Einheiten (1)");
     expect(csv).toContain("NACHTRAG seit");

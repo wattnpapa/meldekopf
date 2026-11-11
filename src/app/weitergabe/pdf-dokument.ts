@@ -77,7 +77,6 @@ import {
   lageblattZeilenAlter,
   staerkeSpalteKompakt,
   staerkeSummenText,
-  zugAlterText,
 } from "../lagemonitor";
 import {
   ANONYM_BEMERKUNG_VERMERK,
@@ -714,7 +713,7 @@ export const EEB_EINSATZ_DATEINAME = "einsatz.json";
 
 /**
  * Dateiname der eingebetteten VOLLSTÄNDIGEN Einsatz-Sammlung (Umschlag
- * „eeb-einsatz" mit Zug-Zuordnungen, Anwesenheits-Status und Historie) —
+ * „eeb-einsatz" mit Anwesenheits-Status und Historie) —
  * macht die Sammel-PDF zur kompletten Schichtübergabe in einer Datei.
  */
 export const EEB_EINSATZ_SAMMLUNG_DATEINAME = "einsatz-sammlung.json";
@@ -726,7 +725,7 @@ export function sammlungAlsEingebetteteDatei(json: string): EingebetteteDatei {
     src: `data:application/json;base64,${base64}`,
     name: EEB_EINSATZ_SAMMLUNG_DATEINAME,
     description:
-      "Vollständige Einsatz-Sammlung inkl. Zug-Zuordnung, Status und Historie (maschinenlesbar)",
+      "Vollständige Einsatz-Sammlung inkl. Status und Historie (maschinenlesbar)",
     relationship: "Alternative",
   };
 }
@@ -760,8 +759,6 @@ export interface UebersichtEintrag {
   bogen: Erfassungsbogen;
   /** Vorherige Meldung derselben Einheit; fehlt bei einer Erstmeldung. */
   vorher?: Erfassungsbogen;
-  /** Zug-/Verbandsetikett aus der Sammlung — Grundlage der Zwischensummen. */
-  zugEtikett?: string;
   /** Bezeichnung eines abgeteilten Truppteils (MeldeEintrag.teilEtikett). */
   teil?: string;
   /** Eintreffzeit (ms); fehlt bei Aufrufern, die nur Bögen kennen. */
@@ -790,7 +787,7 @@ export interface UebersichtEintrag {
    */
   rueckkehr?: { abgerueckAm?: number };
   /**
-   * Nur im Nachtrag (R5-W7): warum die Einheit dabei ist („neu", „Zug", „Auftrag" …).
+   * Nur im Nachtrag (R5-W7): warum die Einheit dabei ist („neu", „Auftrag", „Abrücken" …).
    * `nachtragNeu === false`: Sie war schon in der letzten Lieferung — ihre Zeile
    * ersetzt die frühere, ihre Kräfte gehören nicht noch einmal zur Summe.
    */
@@ -1217,13 +1214,11 @@ function uebersichtsTabelle(
     bold: true,
     fillColor: GRAU,
   });
-  // Zug und Bedarf je Einheit, wie in der App-Tabelle — „Ruhezeit bei 5
+  // Bedarf je Einheit, wie in der App-Tabelle — „Ruhezeit bei 5
   // Einheiten" ohne Namen musste die Ablösung per Funk klären (R2-K3).
-  const SPALTEN = zumWeiterfuehren ? 10 : 9;
   const body: TableCell[][] = [
     [
       kopf("Einheit"),
-      kopf("Zug"),
       ...(zumWeiterfuehren ? [kopf("Funkrufname /\nRückruf")] : []),
       // Eine Spalte für beide Zeiten: die Abrückzeit gibt es nur im Block
       // „Abgerückt", die leere Spalte daneben kostete die Änderungsspalte
@@ -1392,7 +1387,6 @@ function uebersichtsTabelle(
     }
     return [
       namensZeilen.length === 1 ? namensZeilen[0]! : { stack: namensZeilen },
-      { text: weichUmbrechen(e.zugEtikett ?? "") },
       ...(zumWeiterfuehren
         ? [
             {
@@ -1513,7 +1507,6 @@ function uebersichtsTabelle(
     margin?: [number, number, number, number],
   ): TableCell[] => [
     { text: titel, bold: true, ...(margin ? { margin } : {}) },
-    { text: "" },
     ...(zumWeiterfuehren ? [{ text: "" }] : []),
     { text: "" },
     { text: "" },
@@ -1542,7 +1535,7 @@ function uebersichtsTabelle(
     );
   }
   // Breiten für die quer liegende Übersichtsseite (714 pt Satzbreite): Zeiten
-  // brechen nach dem Datum um, damit Zug und Bedarf daneben Platz haben.
+  // brechen nach dem Datum um, damit der Bedarf daneben Platz hat.
   return {
     table: {
       headerRows: 1,
@@ -1554,7 +1547,7 @@ function uebersichtsTabelle(
       keepWithHeaderRows: 1,
       widths: zumWeiterfuehren
         ? LAGEBLATT_SPALTEN
-        : [118, 38, 48, 48, 48, 16, 66, 88, "*"],
+        : [156, 48, 48, 48, 16, 66, 88, "*"],
       body,
     },
     // Bei 7,5 pt bleibt es (Zeilenbox 6,9 pt): 8 pt schob zehn Einheiten auf
@@ -1578,15 +1571,6 @@ function uebersichtsTabelle(
  */
 function kraftstoffText(k: EinsatzSummen["kraftstoff"]): string {
   return kraftstoffTeile(k).join(" · ");
-}
-
-/** „Diesel 320 l · Gemisch 10 l" — nur gemeldete Sorten; „—" ohne Kraftstoff. */
-function kraftstoffKurz(k: EinsatzSummen["kraftstoff"]): string {
-  const teile: string[] = [];
-  if (k.dieselLiter > 0) teile.push(`Diesel ${k.dieselLiter} l`);
-  if (k.benzinLiter > 0) teile.push(`Benzin ${k.benzinLiter} l`);
-  if (k.gemischLiter > 0) teile.push(`Gemisch ${k.gemischLiter} l`);
-  return teile.join(" · ") || "—";
 }
 
 /**
@@ -1686,111 +1670,6 @@ function bedarfsTabelle(
       },
       {
         table: { headerRows: 0, widths: [104, "*"], body },
-        margin: [0, 0, 0, 4],
-      },
-    ],
-    unbreakable: true,
-  };
-}
-
-/**
- * Zwischensummen je Zug/Verband — nur sinnvoll, wenn die Sammlung überhaupt
- * mehr als eine Gruppe kennt (sonst wiederholt die Tabelle nur den Gesamtwert).
- * Nur zählende Einheiten, wie am Gerät (aggregiereNachZug).
- */
-function zugSummenTabelle(
-  eintraege: UebersichtEintrag[],
-  nachtrag?: string,
-  erstellt?: number,
-): Content | undefined {
-  const nach = new Map<string, Erfassungsbogen[]>();
-  const aeltester = new Map<string, number>();
-  for (const e of eintraege.filter(zaehlend)) {
-    const k = e.zugEtikett ?? "";
-    (nach.get(k) ?? nach.set(k, []).get(k)!).push(e.bogen);
-    if (e.empfangenAm != null) {
-      const z = angabenZeit({
-        empfangenAm: e.empfangenAm,
-        bogen: e.bogen,
-        angaben: e.angaben,
-      });
-      aeltester.set(k, Math.min(aeltester.get(k) ?? z, z));
-    }
-  }
-  if (nach.size < 2) return undefined;
-  const kopf = (text: string): TableCell => ({
-    text,
-    bold: true,
-    fillColor: GRAU,
-  });
-  const body: TableCell[][] = [
-    // „Unterbr. angef." = Personen der Einheiten mit angeforderter
-    // Unterbringung; „M / W / D (alle)" zählt alle Anwesenden (R3-K4).
-    [
-      kopf("Zug / Verband"),
-      kopf("Einh."),
-      kopf("Stärke\nF / U / M // G"),
-      kopf("Verpfl."),
-      kopf("Unterbr.\nangef."),
-      kopf("M / W / D\n(alle)"),
-      kopf("Betriebsstoff"),
-      kopf("Ruhe-\nzeit"),
-      kopf("Fzg"),
-    ],
-  ];
-  const gruppen = [...nach.entries()].sort(([a], [b]) => {
-    if (a === "") return 1; // „ohne Etikett" ans Ende — wie in der Oberfläche
-    if (b === "") return -1;
-    return a.localeCompare(b, "de");
-  });
-  for (const [etikett, gruppe] of gruppen) {
-    const s = summiereBoegen(gruppe);
-    // Die Stärke je Zug wirkt frisch, auch wenn sie es nicht ist (R12-K3).
-    const alter =
-      erstellt != null && !nachtrag
-        ? zugAlterText(aeltester.get(etikett), erstellt)
-        : null;
-    body.push([
-      alter
-        ? {
-            text: [
-              { text: etikett || "Ohne Zug" },
-              { text: `\n${alter}`, bold: true, fontSize: 6.5 },
-            ],
-          }
-        : { text: etikett || "Ohne Zug" },
-      { text: `${s.einheiten}` },
-      {
-        text: `${s.staerke.fuehrer} / ${s.staerke.unterfuehrer} / ${s.staerke.mannschaft} // ${s.staerke.gesamt}`,
-      },
-      { text: `${s.verpflegung.gesamt}` },
-      { text: `${s.unterbringungAngefordert.personen}` },
-      {
-        text: `${s.unterbringung.m} / ${s.unterbringung.w} / ${s.unterbringung.d}`,
-      },
-      // Nur, was gemeldet ist: „Benzin 0 l" brach die Zeile in der schmalen
-      // Spalte auf drei Zeilen um und schob den Block auf Seite 2 (R3-K6).
-      { text: kraftstoffKurz(s.kraftstoff) },
-      // Einheiten mit Ruhezeit je Zug: Die Summe geht mit „Ruhezeit erforderlich bei n Einheit(en)" auf (R15-K3).
-      { text: `${s.ruhezeitErforderlich}` },
-      { text: `${s.fahrzeuge}` },
-    ]);
-  }
-  return {
-    stack: [
-      {
-        text: nachtrag
-          ? "Zwischensummen nach Zug (nur Nachtrag)"
-          : "Zwischensummen nach Zug",
-        bold: true,
-        margin: [0, 6, 0, 4],
-      },
-      {
-        table: {
-          headerRows: 1,
-          widths: [84, 22, 52, 28, 32, 44, "*", 26, 18],
-          body,
-        },
         margin: [0, 0, 0, 4],
       },
     ],
@@ -1945,8 +1824,7 @@ function lageKopfleiste(
 
 /** Spaltenbreiten des Lageblatts (714 pt Satzbreite). */
 const LAGEBLATT_SPALTEN: (number | "*")[] = [
-  100,
-  34,
+  134,
   86,
   46,
   46,
@@ -1958,7 +1836,7 @@ const LAGEBLATT_SPALTEN: (number | "*")[] = [
 ];
 /** Wie das Lageblatt, die letzte Spalte geteilt: hinten schmal „übertragen“ (R4-A4). */
 const NACHTRAG_SPALTEN: (number | "*")[] = [
-  ...LAGEBLATT_SPALTEN.slice(0, 9),
+  ...LAGEBLATT_SPALTEN.slice(0, 8),
   "*",
   64,
 ];
@@ -1992,7 +1870,6 @@ function nachtragsTabelle(
   if (rueckseite) {
     body.push([
       kopf("Einheit"),
-      kopf("Zug"),
       kopf("Funkrufname /\nRückruf"),
       kopf("Eingetroffen\n(abgerückt)"),
       kopf("Stand der\nAngaben"),
@@ -2006,7 +1883,7 @@ function nachtragsTabelle(
   }
   const label: TableCell[] = [
     {
-      text: "Nachtrag von Hand (Einheit, Zug, Uhrzeit an / ab, Stärke …)",
+      text: "Nachtrag von Hand (Einheit, Uhrzeit an / ab, Stärke …)",
       italics: true,
       colSpan: SP - 1,
     },
@@ -2081,26 +1958,11 @@ function uebersichtsSeite(
     zumWeiterfuehren && nachtragZeilen > 0
       ? nachtragsTabelle(nachtragZeilen, leer, rueckseite)
       : undefined;
-  const zugSummen = zugSummenTabelle(eintraege, nachtrag, erstellt);
-  const bedarf = bedarfsTabelle(eintraege, leer, nachtrag);
-  // Sammel-PDF mit vielen Einheiten: Bedarf und Zwischensummen stehen unter der
-  // Kopfleiste. Hinter der Tabelle passte der unteilbare Block oft nicht mehr auf
-  // die Seite und stand allein auf einer eigenen (R5-A8).
-  const bedarfBlock: Content = zugSummen
-    ? {
-        columns: [
-          { width: 300, stack: [bedarf] },
-          { width: "*", stack: [zugSummen] },
-        ],
-        columnGap: 12,
-        fontSize: 7.5,
-      }
-    : bedarf;
-  // Lageblatt mit Zügen: Die Zugsummen gehören auf Seite 1 (R16-K4) — wer nur sie aushängt, hat sonst die Stärke je Zug nicht;
-  // bei langen Zeilen der Tabelle rutschte der Block sonst auf die Rückseite.
-  const bedarfVorn = zumWeiterfuehren
-    ? !leer && zugSummen != null
-    : eintraege.length > BEDARF_VORN_AB;
+  const bedarfBlock: Content = bedarfsTabelle(eintraege, leer, nachtrag);
+  // Sammel-PDF mit vielen Einheiten: Der Bedarf steht unter der Kopfleiste. Hinter
+  // der Tabelle passte der unteilbare Block oft nicht mehr auf die Seite und stand
+  // allein auf einer eigenen (R5-A8).
+  const bedarfVorn = !zumWeiterfuehren && eintraege.length > BEDARF_VORN_AB;
   return [
     // Titel und Erstellzeit in einer Zeile — jede Zeile zählt, damit das
     // Lageblatt bei rund zehn Einheiten auf eine Seite passt (R2-K3).
@@ -2129,11 +1991,9 @@ function uebersichtsSeite(
     ...(hinweis
       ? [{ text: hinweis, italics: true, margin: [0, 2, 0, 0] } as Content]
       : []),
-    // Bedarf und Zwischensummen nebeneinander statt untereinander: vorher
-    // rutschten die Zwischensummen allein auf Seite 2 (R2-K3).
     ...(bedarfVorn ? [] : [bedarfBlock]),
-    // Das Raster zum Weiterschreiben füllt den Rest des Blatts NACH Bedarf und Zugsummen (R16-K4): bei zwei Zügen
-    // und einer abgerückten Einheit stand es vor ihnen, und sie rutschten hinter zwölf leere Zeilen auf die Rückseite.
+    // Das Raster zum Weiterschreiben füllt den Rest des Blatts NACH dem Bedarf (R16-K4): Stand es davor, rutschte
+    // der Bedarf hinter zwölf leere Zeilen auf die Rückseite.
     // Tafel und Summenzeile bleiben auf einer Seite (R18-A9): Passt sie nicht mehr unter den Inhalt, steht sie ganz auf der
     // nächsten; vorher begann sie am Seitenende mit zwei Zeilen, der Rest samt „Summe einschl. Nachträge" folgte auf Seite 2.
     ...(nachtragsTab && !rueckseite && !leer
@@ -2155,14 +2015,14 @@ function uebersichtsSeite(
 /**
  * Stand einer Einheit am Meldekopf als Text für ihre Bogenseiten in der
  * Sammel-PDF. Der QR-Code trägt nur den Bogen der Einheit — Eintreffzeit,
- * Abrückvermerk, Zug und Auftrag gehören dem Meldekopf und stehen sonst nur
+ * Abrückvermerk und Auftrag gehören dem Meldekopf und stehen sonst nur
  * auf Seite 1. Ein Ausdruck ohne Seite 1 zeigte eine abgerückte Einheit wie
  * eine anwesende, und wer die Codes einlas, bekam die Scan-Uhrzeit als
  * Eintreffzeit, ohne dass Blatt oder App sagten, was fehlt (Audit Runde 2,
  * R2-A1). Kein Schemawechsel: der Vermerk ist reiner Text neben dem Code.
  */
 export interface MeldekopfVermerk {
-  /** „Eingetroffen … · ABGERÜCKT … · Zug: … · Auftrag / Notiz: …" */
+  /** „Eingetroffen … · ABGERÜCKT … · Auftrag / Notiz: …" */
   stand: string;
   /** Nicht mehr vor Ort — hebt den Kasten hervor. */
   abgerueckt: boolean;
@@ -2172,7 +2032,7 @@ export interface MeldekopfVermerk {
 
 /** Hinweis neben den QR-Codes der Sammel-PDF: was der Code NICHT enthält (R2-A1). */
 export const QR_NUR_BOGEN_HINWEIS =
-  "Der Code enthält nur den Bogen der Einheit. Eintreffzeit, Abrückvermerk, Zug und Auftrag des Meldekopfs " +
+  "Der Code enthält nur den Bogen der Einheit. Eintreffzeit, Abrückvermerk und Auftrag des Meldekopfs " +
   "stehen als Text im Kasten „Stand am Meldekopf“ und auf Seite 1 — nach dem Einlesen von Hand nachtragen. " +
   "Die ganze Lage liest „Einsatz importieren…“ aus der PDF-Datei.";
 
@@ -2260,7 +2120,6 @@ export function meldekopfVermerk(
       e.zaehlt === false ? "anwesend, zählt nicht in diese Lage" : "anwesend",
     );
   }
-  teile.push(`Zug: ${e.zugEtikett || "–"}`);
   if (e.teil) teile.push(`Teil: ${e.teil}`);
   teile.push(`Auftrag / Notiz: ${e.notiz || "–"}`);
   if (e.absender) teile.push(`Absender: ${e.absender}`);
@@ -2476,7 +2335,7 @@ export function einsatzPdfDokument(
   return winAnsiDokument({
     pageSize: "A4",
     // Nur die vorangestellte Übersicht liegt quer — sie trägt breite Tabellen
-    // (Änderungsspalte, Zug-Zwischensummen); ab dem ersten Bogen wird oben
+    // (Änderungsspalte); ab dem ersten Bogen wird oben
     // wieder auf Hochformat zurückgeschaltet.
     pageOrientation: "landscape",
     // Links und rechts auf dem Rahmen der Bögen (siehe BOGEN_RAENDER), sonst
@@ -3049,7 +2908,7 @@ function qrBlock(
 
 /**
  * Kasten oben auf dem Vordruck: was der Meldekopf auf das Papier schreibt —
- * Eingang, Nummer, Zug, Übung, und der Haken „ins Gerät übertragen“. Auf dem
+ * Eingang, Nummer, Übung, und der Haken „ins Gerät übertragen“. Auf dem
  * Vordruck fehlte beides: Nach einer Papierphase tippen zwei Helfer denselben
  * Stapel ab oder ein Blatt bleibt liegen, und ein handschriftlicher
  * Übungsbogen wird in einer echten Lage mitgezählt (Audit Runde 4, R4-A4).
@@ -3064,7 +2923,7 @@ function blankoMeldekopf(z: BlankoZeilen): Content {
           {
             stack: [
               {
-                text: "Meldekopf:   Nr. ______   ·   eingegangen am ____________  um ____:____ Uhr   ·   Zug / Verband: ________________",
+                text: "Meldekopf:   Nr. ______   ·   eingegangen am ____________  um ____:____ Uhr",
               },
               // „abgerückt am … um …" neben „eingegangen": Rückt die Einheit ab, während das Gerät aus ist, steht die
               // Uhrzeit auf ihrem Blatt statt nur auf dem Meldeblock (R11-A2).

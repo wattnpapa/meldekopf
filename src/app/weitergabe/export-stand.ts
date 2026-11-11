@@ -90,7 +90,7 @@ export interface ExportStand {
   eintragIds: string[];
   /**
    * Nur Weitergabe-Stand: Prüfsummen aller Vermerke der Führungsstelle
-   * (Abrücken, Zug, Auftrag, Eintreffzeit), die das andere Gerät kennt —
+   * (Abrücken, Auftrag, Eintreffzeit), die das andere Gerät kennt —
    * gezählt wird, was danach HIER dazukam (Audit Runde 3, R3-W2). Prüfsummen
    * statt Text, damit kein Auftragstext in diesem Komfort-Stand landet.
    * Fehlt bei älteren Ständen; dann zählt der Zeitpunkt.
@@ -98,7 +98,7 @@ export interface ExportStand {
   vermerke?: string[];
   /**
    * Zustand je Einheit zum Zeitpunkt des Stands: Prüfsumme von Status samt
-   * Abrückzeit, Zug, Auftrag und Eintreffzeit (R4-K1). „Seitdem geändert" heißt
+   * Abrückzeit, Auftrag und Eintreffzeit (R4-K1). „Seitdem geändert" heißt
    * damit: der Zustand weicht ab — ein Abrücken und sein „Rückgängig" ergeben
    * nichts Neues, und was ein Import vom anderen Gerät brachte, lässt sich als
    * bekannt buchen (R4-W7). Prüfsummen statt Text, damit kein Auftragstext in
@@ -394,7 +394,7 @@ export function weitergabeUmImportErgaenzen(
 export interface AenderungenSeit {
   anzahl: number;
   /**
-   * „Abrücken", „Wieder anwesend", „Zug", „Auftrag", „Eintreffzeit", „Fassung" —
+   * „Abrücken", „Wieder anwesend", „Auftrag", „Eintreffzeit", „Fassung" —
    * in dieser Reihenfolge, ohne Doppel.
    */
   arten: string[];
@@ -404,11 +404,11 @@ export interface AenderungenSeit {
   jeEinheit: Record<string, string[]>;
 }
 
-const ART_TEXT: Record<Feld, string> = { status: "Abrücken", zug: "Zug", notiz: "Auftrag", eintreffzeit: "Eintreffzeit" };
+const ART_TEXT: Record<Feld, string> = { status: "Abrücken", notiz: "Auftrag", eintreffzeit: "Eintreffzeit" };
 const ART_FASSUNG = "Fassung";
 const ART_WIEDER_DA = "Wieder anwesend";
-/** Reihenfolge der Arten in „2 Änderungen (Zug, Auftrag)". */
-const ART_REIHE = [ART_TEXT.status, "Zusammenführen", ART_WIEDER_DA, ART_TEXT.zug, ART_TEXT.notiz, ART_TEXT.eintreffzeit, ART_FASSUNG];
+/** Reihenfolge der Arten in „2 Änderungen (Abrücken, Auftrag)". */
+const ART_REIHE = [ART_TEXT.status, "Zusammenführen", ART_WIEDER_DA, ART_TEXT.notiz, ART_TEXT.eintreffzeit, ART_FASSUNG];
 
 /** Das Wort für einen Statuswechsel — in die Richtung, in die er ging (R5-K1: „Abrücken" für zwei Zurückgekehrte war falsch). */
 function statusArt(status: MeldeStatus): string {
@@ -477,7 +477,7 @@ export function aenderungenSeit(eintraege: MeldeEintrag[], stand: ExportStand): 
   };
 }
 
-/** „1 Änderung (Abrücken)" / „2 Änderungen (Zug, Auftrag)" — leer ohne Änderung. */
+/** „1 Änderung (Abrücken)" / „2 Änderungen (Abrücken, Auftrag)" — leer ohne Änderung. */
 export function aenderungText(a: AenderungenSeit): string {
   if (a.anzahl === 0) return "";
   return `${a.anzahl === 1 ? "1 Änderung" : `${a.anzahl} Änderungen`} (${a.arten.join(", ")})`;
@@ -520,7 +520,7 @@ export function neuZurKenntnis(eintraege: MeldeEintrag[], stand: ExportStand | n
 
 /**
  * Was ein Nachtrag seit dem Stand enthält: die neuen Meldungen und die geltende
- * Fassung jeder Einheit, an der sich seither etwas geändert hat (Abrücken, Zug,
+ * Fassung jeder Einheit, an der sich seither etwas geändert hat (Abrücken,
  * Auftrag, Eintreffzeit). Ohne das ginge ein Abrücken nie in einen Teilexport
  * (R4-K1): Die Einheit stünde beim Stab weiter als anwesend in der Lage.
  */
@@ -538,7 +538,7 @@ export function nachtragEintraege(eintraege: MeldeEintrag[], stand: ExportStand 
 export interface NachtragGrund {
   /** Die Einheit war beim Stand noch nicht in der Sammlung — nur ihre Kräfte kommen zur Summe der letzten Lieferung dazu. */
   neu: boolean;
-  /** „neu", „Folgemeldung", „Zug", „Auftrag", „Abrücken", „Wieder anwesend", „Eintreffzeit", „Fassung". */
+  /** „neu", „Folgemeldung", „Auftrag", „Abrücken", „Wieder anwesend", „Eintreffzeit", „Fassung". */
   gruende: string[];
 }
 
@@ -582,7 +582,7 @@ export function ortHinweisText(ort: string): string {
 
 /**
  * Je Einheit des Nachtrags der Grund, warum sie dabei ist (R5-W7). Ohne den Grund
- * sah eine Einheit mit bloßer Zugänderung wie eine neue Meldung aus, und wer die
+ * sah eine Einheit mit bloßer Auftragsänderung wie eine neue Meldung aus, und wer die
  * „Summe Nachtrag" auf die bisherige Summe addierte, zählte ihre Kräfte doppelt.
  */
 export function nachtragGruende(eintraege: MeldeEintrag[], stand: ExportStand): Record<string, NachtragGrund> {
@@ -602,7 +602,7 @@ export function nachtragGruende(eintraege: MeldeEintrag[], stand: ExportStand): 
   return aus;
 }
 
-/** „neu" / „geändert: Zug, Auftrag" — der Grund als Wort für eine Zeile (R5-W7). */
+/** „neu" / „geändert: Abrücken, Auftrag" — der Grund als Wort für eine Zeile (R5-W7). */
 export function nachtragGrundText(g: NachtragGrund | undefined): string {
   if (!g) return "";
   return g.neu ? "neu" : `geändert: ${g.gruende.join(", ")}`;

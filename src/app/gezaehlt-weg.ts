@@ -53,7 +53,7 @@ export function gezaehltWegVergessen(): void {
 }
 
 /**
- * Den als „gezählt" abgelegten Eintrag wieder zur Sollstärke machen: Der Bogen davor kommt an seine Stelle, Zeiten, Zug,
+ * Den als „gezählt" abgelegten Eintrag wieder zur Sollstärke machen: Der Bogen davor kommt an seine Stelle, Zeiten,
  * Nummer und Notiz am Eintrag bleiben. Liefert `false`, wenn der Eintrag nicht mehr da ist (entfernt, Sammlung gelöscht).
  */
 export function gezaehltZuruecknehmen(w: GezaehltWeg): boolean {

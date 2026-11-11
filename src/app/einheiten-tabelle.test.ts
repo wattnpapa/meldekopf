@@ -585,7 +585,7 @@ describe("Nummern und Sollstärke (Audit Runde 8)", () => {
 describe("tabellenSpalten", () => {
   it("stellt am Telefon Gesamt direkt hinter die Einheit und lässt die Aufschlüsselung weg", () => {
     const telefon = tabellenSpalten(true, false).map((s) => s.schluessel);
-    expect(telefon.slice(0, 3)).toEqual(["einheit", "gesamt", "zugEtikett"]);
+    expect(telefon.slice(0, 2)).toEqual(["einheit", "gesamt"]);
     expect(telefon).not.toContain("unterbringungM");
     expect(telefon.length).toBeLessThan(TABELLEN_SPALTEN.length);
   });
