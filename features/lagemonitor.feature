@@ -73,3 +73,17 @@ Funktionalität: Lagemonitor für den Fernseher
     Wenn ich im Lagemonitor auf "Ansicht: Zeilen" klicke
     Dann zeigt der Lagemonitor die Zeilen
     Und ist für den Fernseher die Ansicht "Zeilen" gewählt
+
+  # Die volle Tafel: viele Einheiten, ein langer Zugname, Sofortbedarf an den meisten Karten. Vorgefallen (Durchsicht
+  # nach dem ersten Stand): Bedarfsmarken liefen über Typ und Zeichen, „(Fortsetzung)" im Gruppenkopf war nie zu sehen.
+  Szenario: Auf der vollen Tafel überdeckt nichts, und geteilte Züge sind als Fortsetzung zu erkennen
+    Angenommen auf dem Gerät liegt eine Lage mit 30 Einheiten in 2 Zügen, viele mit Sofortbedarf
+    Dann sehe ich die Überschrift "Einheiten (30 gemeldet"
+    Wenn ich für den Fernseher die Ansicht "Tafel" wähle
+    Und ich den Lagemonitor öffne
+    Dann zeigt der Lagemonitor die Tafel
+    Und zeigt der Lagemonitor "(Fortsetzung)"
+    Und zeigt der Lagemonitor "Ruhezeit"
+    Und trägt jede Einheit der Tafel ihr taktisches Zeichen
+    Und stehen alle Einheiten der Tafel ganz im Bild
+    Und überdeckt auf der Tafel keine Angabe eine andere

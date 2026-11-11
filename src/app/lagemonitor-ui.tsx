@@ -12,7 +12,7 @@
  * Gezeigt werden Zahlen und Einheitsnamen, keine Personen.
  */
 
-import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Component, Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import "./lagemonitor.css";
 import { einsaetzeLaden, einsaetzePapierkorb } from "./einsaetze-lesen";
 import {
@@ -36,6 +36,24 @@ import { ANSICHT_NAME, ANSICHT_SCHLUESSEL, lageAnsichtLaden, lageAnsichtMerken, 
 
 // Die Tafel-Ansicht (neu im Meldekopf) wird erst geladen, wenn sie gewählt ist: Wer bei den Zeilen bleibt, lädt sie nicht.
 const Lagetafel = lazy(() => import("./lagetafel-ui"));
+
+/**
+ * Fängt einen Fehlschlag beim Nachladen oder Zeichnen der Tafel (neu im Meldekopf). Ohne diese Grenze bliebe ein
+ * laufender Monitor leer, etwa wenn ein lange offenes Fenster nach einem Update der App den alten Brocken der Tafel
+ * nicht mehr bekommt. Der Monitor zeigt dann die Zeilen, die schon geladen sind, und sagt es.
+ */
+class TafelGrenze extends Component<{ beiFehler: () => void; children: ReactNode }, { fehler: boolean }> {
+  override state = { fehler: false };
+  static getDerivedStateFromError(): { fehler: boolean } {
+    return { fehler: true };
+  }
+  override componentDidCatch(): void {
+    this.props.beiFehler();
+  }
+  override render(): ReactNode {
+    return this.state.fehler ? null : this.props.children;
+  }
+}
 /** Gemerkte Helligkeitsstufe des Monitors („dunkel" oder „gedimmt"; „hell" wird nie gemerkt, R7-L3). */
 export const STUFE_SCHLUESSEL = "eeb.lagestufe.v1";
 /** Mehr Bewegungszeilen als das gibt es nicht im Bild; der Rest steht als „+ n weitere" (R7-K2). */
@@ -148,9 +166,10 @@ function useSpeicherAenderung(): number {
 /**
  * Gewählte Ansicht des Monitors (Zeilen oder Tafel, `lagemonitor-ansicht.ts`). Stellt das andere Fenster um, folgt
  * dieses nach: Wer in der Einsatzansicht wählt, muss nicht mit der Maus auf den Fernseher. Lässt sich die Wahl nicht
- * speichern, gilt sie in diesem Fenster trotzdem.
+ * speichern, gilt sie in diesem Fenster trotzdem; mit `nurGemerkt` gilt sie dann nirgends (Einsatzansicht: Dort hat
+ * die Wahl keine eigene Wirkung, sie muss den Monitor erreichen). Zurück kommt, ob sie gespeichert ist.
  */
-function useLageAnsicht(): [LageAnsicht, (ansicht: LageAnsicht) => void] {
+function useLageAnsicht(): [LageAnsicht, (ansicht: LageAnsicht, nurGemerkt?: boolean) => boolean] {
   const [ansicht, setAnsicht] = useState<LageAnsicht>(lageAnsichtLaden);
   useEffect(() => {
     const horcher = (e: StorageEvent) => {
@@ -161,9 +180,10 @@ function useLageAnsicht(): [LageAnsicht, (ansicht: LageAnsicht) => void] {
   }, []);
   return [
     ansicht,
-    (neu) => {
-      lageAnsichtMerken(neu);
-      setAnsicht(neu);
+    (neu, nurGemerkt = false) => {
+      const gemerkt = lageAnsichtMerken(neu);
+      if (gemerkt || !nurGemerkt) setAnsicht(neu);
+      return gemerkt;
     },
   ];
 }
@@ -334,6 +354,8 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
   const jetzt = usePuls();
   const stand = useSpeicherAenderung();
   const [ansicht, setAnsicht] = useLageAnsicht();
+  // Lässt sich die Tafel nicht laden oder zeichnen, zeigt dieses Fenster die Zeilen, bis es neu geladen wird (TafelGrenze).
+  const [tafelDefekt, setTafelDefekt] = useState(false);
   useWachhalten();
   // Bei jedem Durchlauf neu lesen: `stand` und `jetzt` lösen ihn aus, der Lesezugriff ist gepuffert (einsaetze-lesen.ts).
   void stand;
@@ -400,11 +422,18 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
     </div>
   );
 
-  // Ansicht wechseln, Vollbild, Schließen: in beiden Ansichten dieselben Knöpfe.
-  const andereAnsicht: LageAnsicht = ansicht === "tafel" ? "zeilen" : "tafel";
+  // Ansicht wechseln, Vollbild, Schließen: in beiden Ansichten dieselben Knöpfe. Ließ sich die Tafel nicht laden, zeigt
+  // dieses Fenster die Zeilen; statt des Wechsels steht dann „Neu laden" da, weil erst das den Fehler behebt.
+  const tafelFaelltAus = ansicht === "tafel" && tafelDefekt;
+  const zeigt: LageAnsicht = ansicht === "tafel" && !tafelDefekt ? "tafel" : "zeilen";
+  const andereAnsicht: LageAnsicht = zeigt === "tafel" ? "zeilen" : "tafel";
   const fensterKnoepfe = (
     <>
-      <button type="button" className="lm-knopf" onClick={() => setAnsicht(andereAnsicht)}>Ansicht: {ANSICHT_NAME[andereAnsicht]}</button>
+      {tafelFaelltAus ? (
+        <button type="button" className="lm-knopf" onClick={() => window.location.reload()}>Neu laden</button>
+      ) : (
+        <button type="button" className="lm-knopf" onClick={() => setAnsicht(andereAnsicht)}>Ansicht: {ANSICHT_NAME[andereAnsicht]}</button>
+      )}
       <button type="button" className="lm-knopf" onClick={vollbild}>Vollbild</button>
       <button type="button" className="lm-knopf" onClick={schliessen}>Schließen</button>
     </>
@@ -434,9 +463,10 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
     );
   }
 
-  if (ansicht === "tafel") {
+  if (zeigt === "tafel") {
     return (
-      // Bis die Tafel geladen ist, steht der leere Grund der Stufe da, kein Bild der anderen Ansicht.
+      <TafelGrenze beiFehler={() => setTafelDefekt(true)}>
+      {/* Bis die Tafel geladen ist, steht der leere Grund der Stufe da, kein Bild der anderen Ansicht. */}
       <Suspense fallback={<main className={klasse} />}>
         <Lagetafel
           einsatz={einsatz}
@@ -453,6 +483,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
           }
         />
       </Suspense>
+      </TafelGrenze>
     );
   }
 
@@ -554,6 +585,11 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
           </span>
         </div>
       )}
+      {tafelFaelltAus && (
+        <div className="lm-zeile lm-r3 lm-stand" role="alert">
+          <span className="lm-label lm-veraltet">Die Tafel lässt sich in diesem Fenster gerade nicht zeigen – hier stehen die Zeilen. Unter „Optionen“: „Neu laden“.</span>
+        </div>
+      )}
       <div className="lm-zeile lm-r3 lm-stand">
         {lage}
         {datenstand && (
@@ -649,6 +685,9 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
   const [funkruf, setFunkruf] = useState(() => einsatzFunkrufLaden(einsatzId) ?? "");
   // Die Ansicht des Fernsehers wird hier gewählt, wo gearbeitet wird; ein offener Monitor stellt sich sofort um.
   const [ansicht, setAnsicht] = useLageAnsicht();
+  // Die Wahl wirkt nur über den Speicher: Lässt sie sich nicht merken, bleibt sie stehen, und der Block sagt es (wie beim Beginn).
+  const [ansichtFehler, setAnsichtFehler] = useState(false);
+  const waehleAnsicht = (neu: LageAnsicht) => setAnsichtFehler(!setAnsicht(neu, true));
 
   function setzeFunkruf(text: string) {
     setFunkruf(text.slice(0, FUNKRUF_MAX));
@@ -753,14 +792,14 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
       <fieldset className="lm-ansicht-wahl">
         <legend>Ansicht am Fernseher</legend>
         <label>
-          <input type="radio" name="lm-ansicht" checked={ansicht === "zeilen"} onChange={() => setAnsicht("zeilen")} />
+          <input type="radio" name="lm-ansicht" checked={ansicht === "zeilen"} onChange={() => waehleAnsicht("zeilen")} />
           <span>
             <strong>{ANSICHT_NAME.zeilen}</strong>
             <span className="hinweis">Die Lage in großen Zeilen untereinander, die Einheiten als Tabelle darunter.</span>
           </span>
         </label>
         <label>
-          <input type="radio" name="lm-ansicht" checked={ansicht === "tafel"} onChange={() => setAnsicht("tafel")} />
+          <input type="radio" name="lm-ansicht" checked={ansicht === "tafel"} onChange={() => waehleAnsicht("tafel")} />
           <span>
             <strong>{ANSICHT_NAME.tafel}</strong>
             <span className="hinweis">Alle Einheiten mit taktischem Zeichen an festem Platz, nach Zug geordnet; Stärke und Uhr groß für die Ferne.</span>
@@ -808,6 +847,9 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
       )}
       {hinweis && <p className="hinweis warnung-text lm-beginn-hinweis" role="status">{hinweis}</p>}
       {fehler && <p className="fehler" role="status">Der Beginn konnte nicht gespeichert werden (Speicher voll oder gesperrt).</p>}
+      {ansichtFehler && (
+        <p className="fehler" role="status">Die Ansicht konnte nicht gespeichert werden (Speicher voll oder gesperrt) — ein offener Lagemonitor stellt sich nicht um; dort lässt sie sich direkt wählen.</p>
+      )}
       {funkrufFehler && (
         <p className="fehler" role="status">Der Funkrufname konnte nicht gespeichert werden (Speicher voll oder gesperrt) — der Lagemonitor zeigt ihn nicht.</p>
       )}

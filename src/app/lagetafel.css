@@ -187,7 +187,9 @@ main.lt .lt-vorbehalt { margin-top: calc(var(--lt-e) * 0.6); font-size: calc(var
 .lt-dtg { margin-top: calc(var(--lt-e) * 0.5); font-size: calc(var(--lt-e) * 1.95); line-height: 1; color: var(--lt-text-2); }
 
 /* ------------------------------------------------------------ Tafel: die Einheiten */
-.lt-tafel { grid-area: tafel; min-width: 0; min-height: 0; display: flex; padding: calc(var(--lt-e) * 1.8) calc(var(--lt-e) * 2.4) 0 0; }
+.lt-tafel { grid-area: tafel; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: calc(var(--lt-e) * 1.8) calc(var(--lt-e) * 2.4) 0 0; }
+/* Hinweise der leeren Tafel stehen über der Fläche: Sie kosten Höhe, mit der der Satz nicht rechnen darf. */
+.lt-leer-block { flex: none; }
 /* Die Fläche, die der Satz ausmisst. */
 .lt-flaeche { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .lt-seite {
@@ -216,8 +218,11 @@ main.lt .lt-leer-zusatz { font-size: calc(var(--lt-e) * 2.5); color: var(--lt-te
   white-space: nowrap;
   overflow: hidden;
 }
-main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; font-size: 0.96em; font-weight: 700; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
-.lt-fortsetzung { font-weight: 400; color: var(--lt-text-2); }
+/* „white-space" steht ausdrücklich da: Die Rücksetzregel oben erlaubt Überschriften den Umbruch und wöge schwerer als das geerbte „nowrap";
+   die zweite Zeile läge unter der Kante des Kopfs. Ein langer Name endet mit Auslassung, „(Fortsetzung)" bleibt immer stehen. */
+main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; font-size: 0.96em; font-weight: 700; line-height: 1.15; white-space: nowrap; }
+.lt-gruppe-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lt-fortsetzung { flex: none; margin-left: 0.3em; font-weight: 400; color: var(--lt-text-2); }
 .lt-gruppe-zahl { flex: 1 1 auto; font-size: 0.66em; color: var(--lt-text-2); }
 .lt-gruppe .lt-staerke { flex: none; }
 .lt-gruppe .lt-staerke b { font-size: 0.96em; }
@@ -239,13 +244,18 @@ main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; font-size: 0.96em; font-we
 .lt-spalte > :first-child { margin-top: 0; }
 .lt-karte[data-marke] { border-left-color: var(--lt-neu); }
 .lt-karte[data-achtung] { border-left-color: var(--lt-achtung); }
-.lt-karte > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-karte > *, .lt-kopfzeile > *, .lt-wie > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Zwei Hüllen ordnen die Karte, wo eine Zeile ihren Platz unter sich aufteilt; wo sie nicht zählen, ist jedes ihrer Kinder ein eigenes Feld.
+   .lt-kopfzeile: Name und Stärke. In „zwei" und „drei" eine Zeile für sich: Der Name reicht bis an die Stärke und hängt nicht an der Breite
+   des Stands darunter (mit Datum ist er doppelt so breit wie die Stärke).
+   .lt-wie: Funkrufname, Auftrag und Marken. In „drei" die dritte Zeile. */
+.lt-kopfzeile, .lt-wie { display: contents; }
 
 .lt-zeichen { grid-area: z; align-self: center; margin-right: 0.55em; line-height: 0; overflow: visible; }
 /* Unterlage im Format des beschnittenen Zeichens (256 × 172, lagetafel.ts); solange es lädt, bleibt der Platz leer. */
 .lt-zeichen img { display: block; width: 100%; aspect-ratio: 256 / 172; object-fit: contain; }
 .lt-zeichen img[data-zeichen="geladen"] { background: #fff; filter: var(--lt-zeichen-filter); }
-.lt-herkunft { grid-area: herkunft; font-weight: 700; line-height: 1.22; }
+.lt-herkunft { grid-area: herkunft; flex: 1 1 0; font-weight: 700; line-height: 1.22; }
 .lt-typ { grid-area: typ; font-size: 0.74em; font-weight: 600; line-height: 1.3; }
 /* Langer oder kurzer Typ, je nach Platz und ohne Messung: Die Kurzform steht fest am Zeilenanfang. Der ausgeschriebene Typ
    steht hinter einem Anker ohne Breite in derselben Zeile und deckt die Kurzform zu; passt er nicht in die Zeile, bricht er
@@ -256,49 +266,63 @@ main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; font-size: 0.96em; font-we
 .lt-typ-lang { position: relative; display: inline-block; white-space: nowrap; background: var(--lt-flaeche); }
 .lt-funkruf { grid-area: funkruf; font-size: 0.74em; line-height: 1.3; color: var(--lt-text-2); }
 .lt-auftrag { grid-area: auftrag; font-size: 0.74em; line-height: 1.3; }
-/* Marken stehen in jeder Fassung in der letzten Zeile vor dem Stand: Herkunft und Auftrag behalten ihre Zeile. */
-.lt-marken { grid-area: marken; display: flex; gap: 0.3em; justify-content: flex-end; margin-left: 0.4em; overflow: visible; }
+/* Bleiben dem Auftrag neben Typ und Marken weniger als vier Schriftbreiten, entfällt er ganz: „· Bo…" sagt nichts und sieht nach Fehler aus.
+   Das Feld misst sich dafür selbst (seine Breite hängt in diesen Fassungen nie am eigenen Inhalt). */
+main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-auftrag { container-type: inline-size; }
+@container (max-width: 4em) {
+  .lt-auftrag-text { display: none; }
+}
+/* Marken stehen in jeder Fassung am Ende der letzten Zeile. Reicht ihr Feld nicht, wird der Bedarf gekürzt (mit Auslassung) und läuft
+   nicht über Typ oder Zeichen. Die Marke der Bewegung bleibt ganz: Sie steht nur eine Viertelstunde da und ist die Neuigkeit. */
+.lt-marken { grid-area: marken; display: flex; gap: 0.3em; margin-left: 0.4em; }
 .lt-stand { grid-area: stand; justify-self: end; margin-left: 0.6em; font-size: 0.62em; line-height: 1.3; color: var(--lt-text-2); }
 /* Leichter als die Bedarfsmarke: Nach einer Stunde trägt fast jede Einheit dieses Zeichen, der Bedarf soll darüber stehen. */
 .lt-stand-alt { color: var(--lt-achtung); }
 .lt-stand-alt::before { content: "\26A0\FE0E\00A0"; }
 
 /* Stärke in der Schreibweise der Meldung: „0/3/6//" zurückgenommen, die Gesamtstärke als die Zahl, nach der gefragt wird. */
-.lt-staerke { grid-area: staerke; justify-self: end; margin-left: 0.6em; display: inline-flex; align-items: baseline; overflow: visible; }
+.lt-staerke { grid-area: staerke; justify-self: end; flex: none; margin-left: 0.6em; display: inline-flex; align-items: baseline; overflow: visible; }
 .lt-fum { font-size: 0.66em; color: var(--lt-text-2); letter-spacing: 0.01em; }
 .lt-staerke b { font-size: 1.16em; font-weight: 800; line-height: 1; margin-left: 0.12em; }
 .lt-soll { align-self: center; margin-right: 0.4em; padding: 0 0.3em; font-size: 0.62em; font-weight: 700; text-decoration: none; color: var(--lt-achtung); border: 1px solid var(--lt-achtung); }
 
-.lt-marke { flex: none; padding: 0 0.32em; font-size: 0.6em; font-weight: 700; line-height: 1.45; border: 1px solid currentColor; color: var(--lt-neu); }
-.lt-marke-achtung { color: var(--lt-achtung); }
+.lt-marke { flex: none; padding: 0 0.32em; font-size: 0.6em; font-weight: 700; line-height: 1.45; border: 1px solid currentColor; color: var(--lt-neu); white-space: nowrap; }
+.lt-marke-achtung { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--lt-achtung); }
 .lt-marke-achtung::before { content: "\26A0\FE0E\00A0"; }
 
 /* Zwei Zeilen, Typ in Kurzform; der Funkrufname entfällt, wo es eng ist. */
 main.lt[data-fassung="zwei"] .lt-karte {
-  grid-template-columns: 2.95em auto minmax(0, 1fr) auto auto;
+  /* Typ (Kurzform), Stärke und Stand behalten ihre Breite; die Marken bekommen, was dann bleibt, der Auftrag den Rest. */
+  grid-template-columns: calc(var(--lt-zeichen) * 1em) max-content minmax(0, 1fr) auto max-content;
   grid-template-rows: 1.22em 0.97em;
-  grid-template-areas: "z herkunft herkunft herkunft staerke" "z typ auftrag marken stand";
+  grid-template-areas: "z kopf kopf kopf kopf" "z typ auftrag marken stand";
 }
+main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-kopfzeile { grid-area: kopf; display: flex; align-items: center; }
 /* Trägt die Einheit eine Marke, steht die Uhrzeit des Stands ohne ihr Wort da: Der Platz gehört dem Auftrag. */
 main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-stand-wort { display: none; }
 main.lt[data-fassung="zwei"] .lt-funkruf { display: none; }
-main.lt[data-fassung="zwei"] .lt-typ { margin-right: 0.45em; }
-main.lt[data-fassung="zwei"] .lt-typ ~ .lt-auftrag::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
+/* Ein Typ ohne Kurzform (Freitext) nimmt höchstens diese Breite, neben einer Marke weniger: Sonst bliebe für sie und den Auftrag nichts. */
+main.lt[data-fassung="zwei"] .lt-typ { max-width: 14em; margin-right: 0.45em; }
+main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-typ { max-width: 8.5em; }
+main.lt[data-fassung="zwei"] .lt-typ ~ .lt-wie .lt-auftrag-text::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
 
-/* Drei Zeilen: Herkunft, Typ ausgeschrieben, darunter Funkrufname und Auftrag. */
+/* Drei Zeilen: Herkunft; Typ ausgeschrieben (mit dem Stand); darunter über die ganze Breite Funkrufname, Auftrag und Marken.
+   Wird die dritte Zeile eng, weicht zuerst der Auftrag, dann wird der Bedarf gekürzt; der Funkrufname behält seine Nummer. */
 main.lt[data-fassung="drei"] .lt-karte {
-  grid-template-columns: 2.95em auto minmax(0, 1fr) auto auto;
+  grid-template-columns: calc(var(--lt-zeichen) * 1em) minmax(0, 1fr) max-content;
   grid-template-rows: 1.22em 0.97em 0.97em;
-  grid-template-areas: "z herkunft herkunft herkunft staerke" "z typ typ typ stand" "z funkruf auftrag marken marken";
+  grid-template-areas: "z kopf kopf" "z typ stand" "z wie wie";
 }
-/* Ohne Marke gehört die dritte Zeile bis zum Rand dem Funkrufnamen und dem Auftrag. */
-main.lt[data-fassung="drei"] .lt-karte:not(:has(.lt-marken)) .lt-auftrag { grid-column-end: -1; }
-main.lt[data-fassung="drei"] .lt-funkruf { max-width: 15em; margin-right: 0.45em; }
-main.lt[data-fassung="drei"] .lt-funkruf ~ .lt-auftrag::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
+main.lt[data-fassung="drei"] .lt-wie { grid-area: wie; display: flex; align-items: center; }
+main.lt[data-fassung="drei"] .lt-funkruf { flex: none; max-width: 15em; margin-right: 0.45em; }
+main.lt[data-fassung="drei"] .lt-auftrag { flex: 1 1 0; }
+main.lt[data-fassung="drei"] .lt-marken { flex: 0 1 auto; margin-left: auto; padding-left: 0.4em; }
+main.lt[data-fassung="drei"] .lt-funkruf ~ .lt-auftrag .lt-auftrag-text::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
 
-/* Breit: links wer (Herkunft, Typ), rechts was (Auftrag, Funkrufname). Der Anteil ist fest, damit die Spalten über alle Karten fluchten. */
+/* Breit: links wer (Herkunft, Typ), rechts was (Auftrag, Funkrufname). Die linke Spalte ist so breit wie der längste Name der
+   Tafel (--lt-wer, gemessen in lagetafel-ui.tsx) und für alle Karten gleich, damit die Spalten fluchten. */
 main.lt[data-fassung="breit"] .lt-karte {
-  grid-template-columns: 2.95em 42% minmax(0, 1fr) auto auto;
+  grid-template-columns: calc(var(--lt-zeichen) * 1em) var(--lt-wer) minmax(0, 1fr) auto max-content;
   grid-template-rows: 1.22em 0.97em;
   grid-template-areas: "z herkunft auftrag auftrag staerke" "z typ funkruf marken stand";
 }
@@ -389,6 +413,9 @@ main.lt .lt-bedarf li.lt-dringend { color: var(--lt-achtung); font-weight: 700; 
   row-gap: calc(var(--lt-e) * 1.1);
   overflow: hidden;
 }
+/* Der erste Eintrag einer Spalte bricht nie um, auch wenn er nicht hineinpasst; er stünde dann angeschnitten da (Uhrzeit ohne Einheit).
+   Ein Vorläufer ohne Höhe nimmt ihm diese Rolle ab; sein Rand hebt den Zeilenabstand auf, den er sonst kostete. */
+.lt-bewegungen::before { content: ""; width: 100%; height: 0; margin-bottom: calc(var(--lt-e) * -1.1); }
 main.lt .lt-bewegung {
   width: 100%;
   display: grid;
@@ -466,6 +493,8 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   /* Nebenzeilen folgen der Systemschrift und werden nie kleiner als die Mindestschrift des Monitors (R8-L5). */
   :is(.lt-typ, .lt-funkruf, .lt-auftrag, .lt-fum, .lt-stand, .lt-marke, .lt-soll, .lt-gruppe-zahl), .lt-abgang > *, main.lt[data-fassung] .lt-auftrag { font-size: var(--lm-min); }
   .lt-marken { flex-wrap: wrap; }
+  /* Marken brechen in sich um, statt gekürzt zu werden oder aus dem Bild zu ragen. */
+  .lt-marke { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   /* Karten wachsen mit ihrem Inhalt; Namen brechen um, statt abgeschnitten zu werden. */
   main.lt[data-fassung] .lt-karte {
     height: auto;
@@ -475,15 +504,20 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
     align-items: start;
     row-gap: 0.1em;
   }
+  main.lt[data-fassung] :is(.lt-kopfzeile, .lt-wie) { display: contents; }
+  main.lt[data-fassung] .lt-typ { max-width: none; margin: 0; }
   main.lt[data-fassung] .lt-funkruf { max-width: none; margin: 0; }
   .lt-karte > .lt-typ-wahl { height: auto; }
   .lt-typ-kurz, .lt-typ-anker { display: none; }
   .lt-typ-lang { display: inline; white-space: normal; background: none; }
-  main.lt[data-fassung] .lt-karte > .lt-auftrag::before { content: none; }
+  main.lt[data-fassung] .lt-karte .lt-auftrag-text::before { content: none; }
+  main.lt[data-fassung] .lt-auftrag { container-type: normal; }
   .lt-marken { justify-content: flex-start; margin: 0.15em 0 0; }
-  .lt-karte > * { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
-  .lt-karte > :is(.lt-staerke, .lt-stand, .lt-marken) { white-space: nowrap; overflow-wrap: normal; }
+  .lt-karte > *, .lt-kopfzeile > *, .lt-wie > * { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .lt-karte :is(.lt-staerke, .lt-stand) { white-space: nowrap; overflow-wrap: normal; }
   .lt-gruppe { height: auto; padding-top: 0.2em; white-space: normal; flex-wrap: wrap; row-gap: 0; }
+  main.lt .lt-gruppe h3 { flex-wrap: wrap; white-space: normal; }
+  .lt-gruppe-name { overflow: visible; }
   .lt-abgang { height: auto; min-height: calc(var(--lt-abgang-h) * 1em); white-space: normal; }
 
   .lt-rand { min-height: auto; border-left: 0; padding: calc(var(--lt-b) * 0.8) 0 0; border-top: 2px solid var(--lt-linie); gap: calc(var(--lt-b) * 0.9); overflow: visible; }
@@ -497,6 +531,7 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   main.lt .lt-bedarf li { font-size: var(--lt-b); }
   .lt-block-zuletzt { flex: none; }
   .lt-bewegungen { flex: none; flex-wrap: nowrap; overflow: visible; row-gap: calc(var(--lt-b) * 0.5); }
+  .lt-bewegungen::before { content: none; }
   main.lt .lt-bewegung { font-size: var(--lt-b); }
   .lt-fuss { margin-top: 0; }
   main.lt .lt-datenstand { font-size: calc(var(--lt-b) * 0.9375); }

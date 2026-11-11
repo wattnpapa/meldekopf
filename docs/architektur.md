@@ -347,10 +347,22 @@ Adresse des Fensters bleibt dieselbe, die Regel der Electron-Hülle auch.
 Die Tafel rechnet ihren Satz selbst (`tafelSatz` in `lagetafel.ts`, reine
 Rechnung ohne Browser): aus Zahl und Gliederung der Einheiten und der
 gemessenen Fläche die größte Schrift, bei der alles auf eine Seite passt, in
-einer von drei Fassungen der Einheitenkarte. Die Stilvorlage bekommt dieselben
-Maße als CSS-Eigenschaften hineingereicht, es gibt eine Quelle für Rechnung
-und Satz. Die Summen kommen unverändert aus `lagebild` (`lagemonitor.ts`);
-beide Ansichten zeigen dieselben Zahlen.
+einer von drei Fassungen der Einheitenkarte. Dazu kommt der Platzbedarf des
+Inhalts (`kartenBedarf`, geschätzt aus Zeichenzahlen): Gibt es einen Satz, in
+dem nichts gekürzt wird, gewinnt er, solange seine Schrift gut lesbar bleibt
+oder höchstens ein Zehntel kleiner ist. Sonst wird ein langer Name gekürzt,
+statt allen die Schrift zu nehmen oder die Tafel blättern zu lassen. Die
+Stilvorlage bekommt dieselben Maße als CSS-Eigenschaften hineingereicht, es
+gibt eine Quelle für Rechnung und Satz. Im Browser gemessen wird nur
+zweierlei: die Fläche und, in der breiten Fassung, die Breite des längsten
+Namens (`--lt-wer`), nach der sich die linke Spalte aller Karten richtet. Die
+Summen kommen unverändert aus `lagebild` (`lagemonitor.ts`); beide Ansichten
+zeigen dieselben Zahlen.
+
+Lässt sich der Brocken der Tafel nicht nachladen (ein lange offenes
+Monitor-Fenster nach einem Update der App), fängt eine Fehlergrenze in
+`lagemonitor-ui.tsx` das ab: Der Monitor zeigt die Zeilen, sagt es und bietet
+„Neu laden“ an, statt leer zu bleiben.
 
 ### 6.5 Offline-Start, Auto-Update
 

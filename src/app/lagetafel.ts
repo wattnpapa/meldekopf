@@ -95,6 +95,8 @@ export interface Tafelbild {
   abgerueckt: TafelAbgang[];
   /** Kurzer Name je Meldung (Herkunft und Typ in Kurzform), für die Bewegungen in der Randspalte. */
   namen: Map<string, string>;
+  /** Breite, die die breiteste Karte je Fassung braucht, damit nichts gekürzt wird, in Schriftgrößen ({@link kartenBedarf}); 0 ohne Einheiten. */
+  bedarf: Record<KartenFassung, number>;
 }
 
 /**
@@ -116,6 +118,18 @@ export function nameTeile(e: Einheit): { herkunft: string; typ: string; typKurz:
   // Nennt Organisation oder Standort den Typ schon („Bundeswehr Panzerpionierzug"), steht er nicht noch einmal da.
   const schonGenannt = lang !== "" && einheitAnzeigename(e) === herkunft;
   return { herkunft, typ: schonGenannt ? "" : lang.replace(/^Fachgruppe(?=\s)/, "FGr"), typKurz: schonGenannt ? "" : kurz || lang };
+}
+
+/**
+ * Herkunft und Typ einer Meldung. Ein abgeteilter Teil der Einheit („Fachberater", „Rest") trägt sein Etikett hinter
+ * dem Typ, in Klammern wie in der Einsatzansicht: Sonst stünden zwei gleichnamige Karten nebeneinander.
+ */
+export function meldungTeile(m: Pick<MeldeEintrag, "bogen" | "teilEtikett">): { herkunft: string; typ: string; typKurz: string } {
+  const n = nameTeile(m.bogen.einheit);
+  const teil = (m.teilEtikett ?? "").trim();
+  if (!teil) return n;
+  const mit = (typ: string) => [typ, `(${teil})`].filter(Boolean).join(" ");
+  return { herkunft: n.herkunft, typ: mit(n.typ), typKurz: mit(n.typKurz) };
 }
 
 /** Kurzer Bedarf je Einheit: nur, was zu entscheiden ist (`bedarfMarken`, dringend), ohne Füllwörter. */
@@ -147,10 +161,14 @@ function summe(einheiten: readonly TafelEinheit[]): Staerke {
   return s;
 }
 
-/** Wann eine abgerückte Einheit abgerückt ist: die gesetzte Abrückzeit, sonst der jüngste Vermerk „Abgerückt". */
+/**
+ * Wann eine abgerückte Einheit abgerückt ist: die gesetzte Abrückzeit, sonst der jüngste Vermerk „Abgerückt". Verglichen
+ * wird genau, wie in der Zeilenansicht (`bewegungenSeit`): „Abgerückt (Zeit vom Papier nicht bestätigt)" aus dem
+ * Papier-Abgleich trägt die Uhrzeit des Abgleichs, nicht die des Abrückens; die bleibt dann offen (R6-A6).
+ */
 function abrueckzeit(e: MeldeEintrag): number | null {
   if (e.abgerueckAm != null) return e.abgerueckAm;
-  const vermerke = (e.vermerke ?? []).filter((v) => v.text.startsWith("Abgerückt"));
+  const vermerke = (e.vermerke ?? []).filter((v) => v.text === "Abgerückt");
   return vermerke.length > 0 ? Math.max(...vermerke.map((v) => v.zeit)) : null;
 }
 
@@ -186,7 +204,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
     gruppe.einheiten.push({
       id: m.id,
       einheit: m.bogen.einheit,
-      ...nameTeile(m.bogen.einheit),
+      ...meldungTeile(m),
       funkruf: z.funkruf,
       auftrag: z.auftrag ?? "",
       staerke: { fuehrer: z.fuehrer, unterfuehrer: z.unterfuehrer, mannschaft: z.mannschaft, gesamt: z.gesamt },
@@ -212,34 +230,116 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
   const abgerueckt = geltendeJeEinheit(einsatz.eintraege)
     .filter((e) => e.status === MeldeStatus.ABGERUECKT)
     .map((e): TafelAbgang => {
-      const n = nameTeile(e.bogen.einheit);
+      const n = meldungTeile(e);
       return { id: e.id, name: [n.herkunft, n.typKurz].filter(Boolean).join(" "), zeit: abrueckzeit(e) };
     })
     .sort((a, b) => (b.zeit ?? 0) - (a.zeit ?? 0) || a.id.localeCompare(b.id));
 
   const namen = new Map<string, string>(abgerueckt.map((a) => [a.id, a.name]));
   for (const g of gruppen) for (const e of g.einheiten) namen.set(e.id, [e.herkunft, e.typKurz].filter(Boolean).join(" "));
-  return { bild, gruppen, abgerueckt, namen };
+  const bedarf: Record<KartenFassung, number> = { breit: 0, drei: 0, zwei: 0 };
+  for (const g of gruppen) {
+    for (const e of g.einheiten) {
+      const b = kartenBedarf(e);
+      for (const f of FASSUNGEN) bedarf[f] = Math.max(bedarf[f], b[f]);
+    }
+  }
+  return { bild, gruppen, abgerueckt, namen, bedarf };
+}
+
+/**
+ * Mittlere Breite eines Zeichens der Tafelschrift (Archivo) in Schriftgrößen, gemessen an typischen Namen, Aufträgen
+ * und Funkrufnamen: fett 0,46 bis 0,59, normal 0,44 bis 0,55. Gerechnet wird mit Werten am oberen Rand der Mitte.
+ */
+const ZEICHENBREITE = { fett: 0.56, normal: 0.5 } as const;
+
+/**
+ * Breite, die eine Karte je Fassung braucht, damit nichts gekürzt wird, in Schriftgrößen der Herkunftszeile. Geschätzt
+ * aus Zeichenzahlen, weil der Satz ohne Browser rechnet; die Schriftgrade sind die der Stilvorlage (Typ, Funkrufname
+ * und Auftrag 0,74, in der breiten Fassung der Auftrag 0,86, Marken 0,6, Stand 0,62). Für einen Typ mit Kurzform zählt
+ * die Kurzform: Sie springt ein, wo der ausgeschriebene nicht passt.
+ *
+ * {@link tafelSatz} wählt damit, wenn es die Schrift kaum kostet, einen Satz, in dem alles ganz dasteht: etwa die
+ * dreizeilige Fassung, wo in der breiten Name und Auftrag nicht nebeneinander passen.
+ */
+export function kartenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
+  const fett = (text: string) => text.length * ZEICHENBREITE.fett;
+  const normal = (text: string) => text.length * ZEICHENBREITE.normal;
+  // Zeichen, Polster und Balken der Karte (0,36 + 0,5 + 0,2).
+  const rand = SATZ.zeichen + 1.06;
+  const s = e.staerke;
+  const staerke = 0.66 * 0.42 * `${s.fuehrer}/${s.unterfuehrer}/${s.mannschaft}//`.length + 1.16 * 0.63 * String(s.gesamt).length + 0.74 + (e.soll ? 1.1 : 0);
+  const stand = 3.75 + (e.standAlt ? 0.77 : 0);
+  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.6 * (fett(t) + 0.64));
+  const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.75 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
+  const kopf = fett(e.herkunft) + staerke;
+  const typKurz = e.typKurz ? 0.74 * fett(e.typKurz) + 0.33 : 0;
+  const ohneKurzform = e.typ !== "" && e.typKurz === e.typ;
+  const funk = e.funkruf ? 0.74 * normal(e.funkruf) + 0.33 : 0;
+  const auftrag = e.auftrag ? 0.74 * (normal(e.auftrag) + 0.8) : 0;
+  return {
+    // Zwei Zeilen: Name und Stärke; darunter Typ in Kurzform, Auftrag, Marken und Stand (ohne Funkrufname).
+    zwei: rand + Math.max(kopf, typKurz + auftrag + markenBreite + stand),
+    // Drei Zeilen: Name und Stärke; Typ und Stand; Funkrufname, Auftrag und Marken.
+    drei: rand + Math.max(kopf, typKurz + stand, funk + auftrag + markenBreite),
+    // Breit: links Name (und ein Typ ohne Kurzform), rechts Auftrag oder Funkrufname mit Marken, dahinter Stärke und Stand.
+    breit: rand + Math.max(fett(e.herkunft), ohneKurzform ? typKurz : 0) + 0.8 + Math.max(e.auftrag ? 0.86 * normal(e.auftrag) : 0, funk + markenBreite) + Math.max(staerke, stand),
+  };
 }
 
 // ------------------------------------------------------------------ Zeichen
 
 /**
+ * Das Band des Quadrats, in dem das Zeichen (Kasten y = 64 bis 192) und in aller Regel sein Größenzeichen (Punkte von
+ * y = 38 bis 58) stehen, mit etwas Rand. Das Feld der Tafel hat dieses Seitenverhältnis.
+ */
+export const ZEICHEN_BAND = { oben: 30, hoehe: 172 } as const;
+/** Rand über einem Größenzeichen, das über das Band hinausragt. */
+const ZEICHEN_RAND = 8;
+
+const zahlAus = (tag: string, name: string): number | null => {
+  const m = new RegExp(`\\s${name}="(-?[\\d.]+)"`).exec(tag);
+  return m ? Number(m[1]) : null;
+};
+
+/**
+ * Oberkante der Größenzeichen: Die Sammlung zeichnet sie als Punkte (Ellipsen) und, beim Verband, als Strich (Linie)
+ * über den Kasten. „Staffel" trägt zwei Punkte übereinander und beginnt bei y = 14, der Verband bei 23, alles andere
+ * frühestens bei 38.
+ */
+function zeichenOberkante(svg: string): number {
+  let oben = Infinity;
+  for (const [tag] of svg.matchAll(/<ellipse\b[^>]*>/g)) {
+    const cy = zahlAus(tag, "cy");
+    const ry = zahlAus(tag, "ry");
+    if (cy != null && ry != null) oben = Math.min(oben, cy - ry);
+  }
+  for (const [tag] of svg.matchAll(/<line\b[^>]*>/g)) {
+    const y1 = zahlAus(tag, "y1");
+    const y2 = zahlAus(tag, "y2");
+    if (y1 != null && y2 != null) oben = Math.min(oben, Math.min(y1, y2) - (zahlAus(tag, "stroke-width") ?? 0) / 2);
+  }
+  return oben;
+}
+
+/**
  * Taktisches Zeichen für die Tafel zurichten. Die Sammlung zeichnet auf ein Quadrat (256 × 256), das Zeichen samt
  * Größenzeichen füllt davon nur das mittlere Band; auf der Tafel wäre es halb so groß wie sein Platz. Hier wird das
- * Bild auf dieses Band beschnitten. Dazu bekommt die Schrift im Zeichen einen Ausweich: Als Bild eingebettet lädt ein
- * SVG keine Schrift nach, und ohne installierte Roboto stünde das Kurzzeichen in der Serifenschrift des Browsers da.
+ * Bild auf dieses Band beschnitten. Ragt das Größenzeichen darüber hinaus (die zwei Punkte der Staffel, der Strich des
+ * Verbands), beginnt der Ausschnitt entsprechend höher: Das Zeichen steht dann etwas kleiner im selben Feld, statt
+ * einen Punkt zu verlieren und als „Trupp" dazustehen. Dazu bekommt die Schrift im Zeichen einen Ausweich: Als Bild
+ * eingebettet lädt ein SVG keine Schrift nach, und ohne installierte Roboto stünde das Kurzzeichen in der
+ * Serifenschrift des Browsers da.
  *
  * Erkennt die Funktion den Kopf des SVG nicht (anderer Stand der Sammlung), bleibt das Bild unbeschnitten.
  */
 export function zeichenFuerTafel(svg: string): string {
+  const oben = Math.max(0, Math.min(ZEICHEN_BAND.oben, Math.floor(zeichenOberkante(svg) - ZEICHEN_RAND)));
+  const hoehe = ZEICHEN_BAND.oben + ZEICHEN_BAND.hoehe - oben;
   return svg
-    .replace(/^(<svg\b[^>]*?)\swidth="256"\sheight="256"\sviewBox="0 0 256 256"/, `$1 width="256" height="${ZEICHEN_BAND.hoehe}" viewBox="0 ${ZEICHEN_BAND.oben} 256 ${ZEICHEN_BAND.hoehe}"`)
+    .replace(/^(<svg\b[^>]*?)\swidth="256"\sheight="256"\sviewBox="0 0 256 256"/, `$1 width="256" height="${hoehe}" viewBox="0 ${oben} 256 ${hoehe}"`)
     .replaceAll("font-family: 'Roboto';", "font-family: Roboto, Arial, 'Liberation Sans', sans-serif;");
 }
-
-/** Das Band des Quadrats, in dem Größenzeichen (ab y = 38) und Zeichen (bis y = 192) stehen, mit etwas Rand. */
-export const ZEICHEN_BAND = { oben: 30, hoehe: 172 } as const;
 
 // -------------------------------------------------------------- Kleine Texte
 
@@ -283,6 +383,7 @@ export function wochentag(d: Date): string {
  *  - `zwei`: zwei Zeilen, Typ in Kurzform; für viele Einheiten.
  */
 export type KartenFassung = "breit" | "drei" | "zwei";
+const FASSUNGEN = ["breit", "drei", "zwei"] as const satisfies readonly KartenFassung[];
 
 /**
  * Maße des Satzes in Vielfachen der Schriftgröße der Herkunftszeile. Die Stilvorlage (`lagetafel.css`) bekommt
@@ -295,6 +396,13 @@ export const SATZ = {
     drei: { hoehe: 3.7, breite: 18.6 },
     zwei: { hoehe: 2.75, breite: 18.6 },
   } satisfies Record<KartenFassung, { hoehe: number; breite: number }>,
+  /** Breite des taktischen Zeichens samt Abstand zum Text. */
+  zeichen: 2.95,
+  /**
+   * Spalte „wer" (Herkunft und Typ) der breiten Fassung, als Anteil des Platzes neben dem Zeichen: Vorgabe ohne
+   * Messung, kleinster und größter Anteil mit Messung ({@link werBreite}).
+   */
+  wer: { vorgabe: 0.42, min: 0.2, max: 0.62 },
   /** Kopfzeile einer Gruppe samt Linie. */
   kopf: 1.75,
   /** Abstand über einem Gruppenkopf, der nicht am Spaltenanfang steht. */
@@ -325,6 +433,8 @@ export const SATZ = {
   abgaengeMax: 6,
   /** Abgerückte Einheiten dürfen die Schrift der anwesenden höchstens so weit drücken, solange sie unter „gut genug" liegt. */
   abgaengeAb: 0.9,
+  /** Ein Satz, in dem nichts gekürzt wird, gewinnt, solange seine Schrift gut lesbar („gut genug") oder höchstens so viel kleiner ist. */
+  ungekuerztAb: 0.9,
 } as const;
 
 /** Eine Zelle der Tafel in Lesefolge. `gruppe` und `index` zeigen in {@link Tafelbild.gruppen}. */
@@ -456,12 +566,18 @@ function groessteSchrift(bl: readonly Block[], spalten: number, masse: TafelMass
   return a;
 }
 
-function besterSatz(gruppen: readonly { kopf: boolean; anzahl: number }[], abgaengeGesamt: number, abgaenge: number, masse: TafelMasse): Kandidat | null {
+function besterSatz(
+  gruppen: readonly { kopf: boolean; anzahl: number }[],
+  abgaengeGesamt: number,
+  abgaenge: number,
+  masse: TafelMasse,
+  breiten: Record<KartenFassung, number>,
+): Kandidat | null {
   const beste: Partial<Record<KartenFassung, Kandidat>> = {};
-  for (const fassung of ["breit", "drei", "zwei"] as const) {
+  for (const fassung of FASSUNGEN) {
     const bl = bloecke(gruppen, fassung, abgaengeGesamt, abgaenge);
     for (let spalten = 1; spalten <= SATZ.spaltenMax; spalten++) {
-      const schrift = groessteSchrift(bl, spalten, masse, SATZ.karte[fassung].breite);
+      const schrift = groessteSchrift(bl, spalten, masse, breiten[fassung]);
       if (schrift != null && (beste[fassung] == null || schrift > beste[fassung].schrift * SATZ.spalteLohnt)) beste[fassung] = { fassung, spalten, schrift };
     }
   }
@@ -504,8 +620,18 @@ const runden = (schrift: number) => Math.floor(schrift * 4) / 4;
  *  1. Alle anwesenden Einheiten stehen auf einer Seite, in der größten Schrift, die das erlaubt.
  *  2. Abgerückte Einheiten stehen dahinter, solange die Schrift der anwesenden gut lesbar bleibt oder kaum kleiner wird.
  *  3. Erst wenn die kleinste Schrift nicht reicht, blättert die Tafel; dann in der knappsten Fassung.
+ *
+ * `bedarf` ist die Breite, die der längste Inhalt je Fassung braucht ({@link kartenBedarf}, in Schriftgrößen). Gibt es
+ * damit einen Satz, in dem nichts gekürzt wird, gewinnt er, solange seine Schrift gut lesbar bleibt oder höchstens ein
+ * Zehntel kleiner ist als ohne diese Rücksicht. Sonst gelten die Mindestbreiten der Fassungen: Dann wird ein langer
+ * Name gekürzt, statt allen die Schrift zu nehmen oder die Tafel blättern zu lassen.
  */
-export function tafelSatz(gruppen: readonly { kopf: boolean; anzahl: number }[], abgaengeGesamt: number, masse: TafelMasse): TafelSatz {
+export function tafelSatz(
+  gruppen: readonly { kopf: boolean; anzahl: number }[],
+  abgaengeGesamt: number,
+  masse: TafelMasse,
+  bedarf: Partial<Record<KartenFassung, number>> = {},
+): TafelSatz {
   const leer: TafelSatz = { fassung: "drei", schrift: runden(SATZ.schriftMax * masse.einheit), spalten: 1, seiten: [[]], abgaenge: 0 };
   const einheiten = gruppen.reduce((n, g) => n + g.anzahl, 0);
   if (einheiten === 0 && abgaengeGesamt === 0) return leer;
@@ -521,10 +647,25 @@ export function tafelSatz(gruppen: readonly { kopf: boolean; anzahl: number }[],
     return { fassung: k.fassung, schrift, spalten: k.spalten, seiten: [ausgeglichen(bl, masse.hoehe / schrift)], abgaenge };
   };
 
-  const ohne = besterSatz(gruppen, abgaengeGesamt, 0, masse);
+  const mindestens: Record<KartenFassung, number> = { breit: SATZ.karte.breit.breite, drei: SATZ.karte.drei.breite, zwei: SATZ.karte.zwei.breite };
+  const ungekuerzt: Record<KartenFassung, number> = {
+    breit: Math.max(mindestens.breit, bedarf.breit ?? 0),
+    drei: Math.max(mindestens.drei, bedarf.drei ?? 0),
+    zwei: Math.max(mindestens.zwei, bedarf.zwei ?? 0),
+  };
+  const waehle = (abgaenge: number): Kandidat | null => {
+    const frei = besterSatz(gruppen, abgaengeGesamt, abgaenge, masse, mindestens);
+    if (!frei) return null;
+    const ganz = besterSatz(gruppen, abgaengeGesamt, abgaenge, masse, ungekuerzt);
+    // Wie bei den Fassungen: Ist die Schrift des ungekürzten Satzes gut lesbar, gewinnt er immer; darunter nur, wenn er kaum kleiner ist.
+    const schwelle = Math.min(frei.schrift * SATZ.ungekuerztAb, SATZ.gutGenug * masse.einheit);
+    return ganz && ganz.schrift >= schwelle - GENAU ? ganz : frei;
+  };
+
+  const ohne = waehle(0);
   if (ohne) {
     for (let n = Math.min(abgaengeGesamt, SATZ.abgaengeMax); n > 0; n--) {
-      const mit = besterSatz(gruppen, abgaengeGesamt, n, masse);
+      const mit = waehle(n);
       // Wie bei den Fassungen: Bleibt die Schrift gut lesbar, stehen die abgerückten Einheiten da, auch wenn sie ohne sie größer wäre.
       const schwelle = Math.min(ohne.schrift * SATZ.abgaengeAb, SATZ.gutGenug * masse.einheit);
       if (mit && (einheiten === 0 || mit.schrift >= schwelle - GENAU)) return fertig(mit, n);
@@ -556,6 +697,22 @@ export function tafelSatz(gruppen: readonly { kopf: boolean; anzahl: number }[],
   const seiten: TafelZelle[][][] = [];
   for (let i = 0; i < alle.length; i += spalten) seiten.push(alle.slice(i, i + spalten));
   return { fassung, schrift, spalten, seiten, abgaenge };
+}
+
+/**
+ * Breite der Spalte „wer" in der breiten Fassung. Dort steht links, wer die Einheit ist (Herkunft, Typ), rechts, was
+ * sie tut (Auftrag, Funkrufname). Ein fester Anteil passt selten: Bei „THW Brake" bliebe die halbe Zeile leer, während
+ * der Auftrag daneben gekürzt würde; bei „Johanniter-Unfall-Hilfe Regionalverband …" würde der Name gekürzt. Die Spalte
+ * ist deshalb so breit wie der längste Name der Tafel (`bedarf.herkunft`, gemessen in `lagetafel-ui.tsx`), für alle
+ * Karten gleich, damit die Spalten fluchten. Dem Auftrag bleibt immer ein Rest: Mehr als `SATZ.wer.max` des Platzes
+ * neben dem Zeichen (`platz`) bekommt der Name nicht.
+ */
+export function werBreite(bedarf: { herkunft: number; typ: number; frei: number }, platz: number): number {
+  if (!(platz > 0)) return 0;
+  // Der Name zuerst. Für einen ausgeschriebenen Typ wächst die Spalte nur so weit, wie dafür weder ein Auftrag noch
+  // ein Funkrufname gekürzt wird (`frei`): Der Typ hat eine Kurzform, die beiden haben keine.
+  const breite = Math.max(bedarf.herkunft, Math.min(bedarf.typ, bedarf.frei));
+  return Math.min(Math.max(breite, platz * SATZ.wer.min), platz * SATZ.wer.max);
 }
 
 /** Alle Zellen in einer Spalte, ohne Rechnung: für das Telefon und überall, wo die Fläche mitwächst. */

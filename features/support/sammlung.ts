@@ -77,3 +77,49 @@ export function sammlungSpeicher(
     speicherhuelleSetzen(null);
   }
 }
+
+/**
+ * Eine volle Lage für die Tafel des Lagemonitors (neu im Meldekopf): THW-Einheiten reihum auf Züge verteilt, der erste
+ * Zug mit langem Namen, zwei von drei Einheiten mit Sofortbedarf (Ruhezeit und Unterbringung, jede dritte dazu mit
+ * abweichender Verpflegung). Über die Oberfläche bräuchte das je Einheit ein Dutzend Schritte.
+ */
+export function tafelLageSpeicher(name: string, einheiten: number, zuege: number): { einsaetze: string; einsatzId: string } {
+  const ablage = new Map<string, string>();
+  speicherhuelleSetzen({ getItem: (k) => ablage.get(k) ?? null, setItem: (k, v) => void ablage.set(k, v) });
+  try {
+    const s = einsatzAnlegen(name, EinsatzArt.EINSATZ);
+    // Einheitentypen des THW-Vokabulars: Zugtrupp, Bergungsgruppe und Fachgruppen, jede mit Kurzform.
+    const typen = [3, 4, 16, 27, 9, 6, 25, 43, 18, 5];
+    for (let i = 0; i < einheiten; i++) {
+      const zug = i % zuege;
+      const nr = Math.floor(i / zuege);
+      const b = weitereEinheit(OrganisationsTyp.THW, "");
+      const gesamt = b.staerkeManuell?.gesamt ?? 6;
+      const ort = `Ort ${zug + 1}${nr >= typen.length ? `-${Math.floor(nr / typen.length) + 1}` : ""}`;
+      const bogen: Erfassungsbogen = {
+        ...b,
+        einheit: { organisation: OrganisationsTyp.THW, einheitsTyp: { code: typen[nr % typen.length]! }, hierarchie: [{ bezeichnung: { code: 1 }, name: ort }] },
+        ...(nr % 3 === 0
+          ? {}
+          : {
+              sofortbedarf: {
+                verpflegungPersonen: nr % 3 === 2 ? gesamt + 14 : gesamt,
+                dieselLiter: 0,
+                benzinLiter: 0,
+                gemischLiter: 0,
+                unterbringung: true,
+                ruhezeitErforderlich: true,
+              },
+            }),
+      };
+      meldungHinzufuegen(s.id, bogen, { quelle: "scan", zugEtikett: zug === 0 ? "1. Technischer Zug Oldenburg-Wesermarsch Nord" : `${zug + 1}. Zug` });
+    }
+    // Eingetroffen im Abstand von einer Minute: Die jüngsten tragen auf der Tafel die Marke „neu".
+    const liste = JSON.parse(ablage.get("eeb.einsaetze.v1") ?? "[]") as { id: string; eintraege: { empfangenAm: number }[] }[];
+    const beginn = Date.now() - einheiten * 60_000;
+    for (const x of liste) x.eintraege.forEach((e, i) => (e.empfangenAm = beginn + i * 60_000));
+    return { einsaetze: JSON.stringify(liste), einsatzId: s.id };
+  } finally {
+    speicherhuelleSetzen(null);
+  }
+}

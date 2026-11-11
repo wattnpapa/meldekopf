@@ -21,6 +21,8 @@ interface Einheit {
   ruhezeit?: boolean;
   funk?: number[];
   auftrag?: string;
+  /** Etikett eines abgeteilten Teils der Einheit. */
+  teil?: string;
 }
 
 /** Einsatz mit Einheiten anlegen, wie die App es tut; liefert die gespeicherte Sammlung. */
@@ -43,11 +45,12 @@ function einsatzMit(einheiten: Einheit[], art = EinsatzArt.EINSATZ, name = "Hoch
     }
     ids.push(meldungHinzufuegen(e.id, b, x.zug ? { zugEtikett: x.zug } : undefined)!.eintrag.id);
   }
-  if (einheiten.some((x) => x.auftrag)) {
+  if (einheiten.some((x) => x.auftrag || x.teil)) {
     const liste = structuredClone(einsaetzeLaden());
     const s = liste.find((l) => l.id === e.id)!;
     einheiten.forEach((x, i) => {
       if (x.auftrag) s.eintraege[i]!.notiz = x.auftrag;
+      if (x.teil) s.eintraege[i]!.teilEtikett = x.teil;
     });
     einsaetzeSpeichern(liste);
   }
@@ -218,6 +221,27 @@ describe("Lagetafel", () => {
     expect(screen.getByText("Alle Einheiten sind abgerückt.")).toBeTruthy();
   });
 
+  it("stellt die Hinweise der leeren Tafel über die vermessene Fläche: Der Satz rechnet mit der Höhe, die den Zellen bleibt", () => {
+    const { id, ids, sammlung } = einsatzMit([{ ort: "Brake", typ: 4 }]);
+    statusMitZeitSetzen(id, ids[0]!, MeldeStatus.ABGERUECKT);
+    tafel(sammlung());
+    const hinweis = screen.getByText("Alle Einheiten sind abgerückt.");
+    expect(hinweis.closest(".lt-tafel")).not.toBeNull();
+    expect(hinweis.closest(".lt-flaeche")).toBeNull();
+    // Die abgerückte Einheit steht darunter in der Fläche.
+    expect(document.querySelector(".lt-flaeche .lt-abgang")).not.toBeNull();
+  });
+
+  it("nennt einen abgeteilten Teil der Einheit hinter dem Typ: Zwei Teile sind zwei unterscheidbare Karten", () => {
+    const { sammlung } = einsatzMit([
+      { ort: "Oldenburg (NI)", typ: 4, teil: "Rest" },
+      { ort: "Varel", typ: 4, teil: "Fachberater" },
+    ]);
+    tafel(sammlung());
+    expect(karte("THW Oldenburg (NI)").querySelector(".lt-typ-lang")!.textContent).toBe("Bergungsgruppe (Rest)");
+    expect(karte("THW Varel").querySelector(".lt-typ-kurz")!.textContent).toBe("B (Fachberater)");
+  });
+
   it("meldet eine unlesbare Sammlung mit der Uhrzeit des letzten Stands", () => {
     const { sammlung } = einsatzMit([{ ort: "Brake" }]);
     tafel(sammlung(), { staleSeit: new Date(2026, 10, 10, 17, 40).getTime() });
@@ -285,6 +309,57 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(document.querySelector(".lt-seitenzeile")).toBeNull();
   });
 
+  it("nimmt die dreizeilige Fassung, wo Name und Auftrag in der breiten nicht nebeneinander passen", () => {
+    fernseher();
+    const { sammlung } = einsatzMit(
+      Array.from({ length: 6 }, (_, i) => ({ ort: `Clausthal-Zellerfeld ${i + 1}`, typ: 4, funk: [22, 51], auftrag: "Beleuchtung und Stromversorgung der Einsatzstelle Nord" })),
+    );
+    tafel(sammlung());
+    const main = document.querySelector<HTMLElement>("main.lt")!;
+    expect(main.getAttribute("data-fassung")).toBe("drei");
+    expect(main.style.getPropertyValue("--lt-spalten")).toBe("1");
+    expect(main.style.getPropertyValue("--lt-karte-h")).toBe("3.7");
+  });
+
+  it("gibt der Spalte „wer“ der breiten Fassung die gemessene Breite des längsten Namens, ohne Messung den festen Anteil", () => {
+    fernseher();
+    const { sammlung } = einsatzMit(Array.from({ length: 6 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 4, auftrag: "Führung" })));
+    const { unmount } = tafel(sammlung());
+    // jsdom misst keinen Text: Es bleibt beim Anteil der Stilvorlage.
+    const main = () => document.querySelector<HTMLElement>("main.lt")!;
+    expect(main().getAttribute("data-fassung")).toBe("breit");
+    expect(main().style.getPropertyValue("--lt-wer")).toBe("42%");
+    expect(main().style.getPropertyValue("--lt-zeichen")).toBe("2.95");
+    unmount();
+
+    // Mit Messung: jeder Text 400 px breit, die Karte 1386 px. Die Spalte nimmt den Namen und lässt dem Auftrag seinen Platz.
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("lt-flaeche") || this.classList.contains("lt-karte") ? 1386 : 0;
+    });
+    const messung = Range.prototype as { getBoundingClientRect?: () => DOMRect };
+    messung.getBoundingClientRect = () => ({ width: 400 }) as DOMRect;
+    try {
+      tafel(sammlung());
+      expect(main().style.getPropertyValue("--lt-wer")).toBe("400px");
+    } finally {
+      delete messung.getBoundingClientRect;
+    }
+  });
+
+  it("trennt im Gruppenkopf den Namen von „(Fortsetzung)“: Der Name darf gekürzt werden, der Zusatz bleibt stehen", () => {
+    fernseher();
+    const { sammlung } = einsatzMit(Array.from({ length: 30 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: "1. Technischer Zug Oldenburg-Wesermarsch Nord" })).concat([{ ort: "Brake", typ: 4, zug: "2. Zug" }]));
+    tafel(sammlung());
+    const koepfe = Array.from(document.querySelectorAll(".lt-gruppe h3"));
+    const fortgesetzt = koepfe.filter((h) => h.querySelector(".lt-fortsetzung"));
+    expect(fortgesetzt.length).toBeGreaterThan(0);
+    for (const h of fortgesetzt) {
+      expect(h.textContent).toBe("1. Technischer Zug Oldenburg-Wesermarsch Nord (Fortsetzung)");
+      expect(h.querySelector(".lt-gruppe-name")!.textContent).toBe("1. Technischer Zug Oldenburg-Wesermarsch Nord");
+      expect(h.querySelector(".lt-fortsetzung")!.textContent).toBe("(Fortsetzung)");
+    }
+  });
+
   it("zeigt in der knappen Fassung den Typ in Kurzform", () => {
     fernseher();
     const { sammlung } = einsatzMit(Array.from({ length: 16 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 16 })));
@@ -311,6 +386,33 @@ describe("Lagetafel: Satz und Blättern", () => {
     act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
     expect(screen.getByRole("status").textContent).toMatch(/^Seite 1 von 2/);
     expect(sichtbar()).toEqual(erste);
+  });
+
+  it("beginnt vorn, wenn sich die Zahl der Seiten ändert: Takt und Balken laufen dann gemeinsam neu los", () => {
+    fernseher();
+    vi.useFakeTimers();
+    const viele = (anzahl: number) => einsatzMit(Array.from({ length: anzahl }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4 }))).sammlung();
+    const zwei = viele(44);
+    const zeige = (einsatz: ReturnType<typeof viele>) => <Lagetafel einsatz={einsatz} jetzt={Date.now()} beginn={null} funkruf={null} staleSeit={null} stufe="dunkel" bedienung={null} />;
+    const { rerender } = render(zeige(zwei));
+    const status = () => screen.queryByRole("status")?.textContent ?? "";
+    act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
+    expect(status()).toMatch(/^Seite 2 von 2/);
+    // Kurz vor dem nächsten Umblättern kommen Einheiten dazu, die Tafel braucht mehr Seiten: Sie steht wieder auf Seite 1 …
+    act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS - 2000));
+    rerender(zeige(viele(90)));
+    expect(status()).toMatch(/^Seite 1 von [3-9]/);
+    // … und bleibt dort einen vollen Takt, nicht nur den Rest des alten.
+    act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS - 1000));
+    expect(status()).toMatch(/^Seite 1 von/);
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(status()).toMatch(/^Seite 2 von/);
+    // Passt die Lage zwischendurch auf eine Seite, steigt die Tafel danach nicht mitten im Zählen wieder ein.
+    rerender(zeige(viele(6)));
+    expect(status()).toBe("");
+    act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS * 3));
+    rerender(zeige(zwei));
+    expect(status()).toMatch(/^Seite 1 von 2/);
   });
 });
 
@@ -392,6 +494,26 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
     expect(localStorage.getItem(ANSICHT_SCHLUESSEL)).toBe("tafel");
     fireEvent.click(zeilen);
     expect(localStorage.getItem(ANSICHT_SCHLUESSEL)).toBeNull();
+  });
+
+  it("meldet in der Einsatzansicht, wenn sich die Wahl nicht speichern lässt, und zeigt sie nicht als getroffen", () => {
+    render(<LagemonitorBlock einsatzId="e1" alleIds={["e1"]} />);
+    const gruppe = screen.getByRole("group", { name: "Ansicht am Fernseher" });
+    const zeilen = within(gruppe).getByRole("radio", { name: /^Zeilen/ }) as HTMLInputElement;
+    const tafelWahl = within(gruppe).getByRole("radio", { name: /^Tafel/ }) as HTMLInputElement;
+    const voll = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("voll", "QuotaExceededError");
+    });
+    fireEvent.click(tafelWahl);
+    voll.mockRestore();
+    // Die Wahl wirkt nur über den Speicher: Ohne ihn stellt sich kein Monitor um, also steht sie auch hier nicht als gewählt da.
+    expect(tafelWahl.checked).toBe(false);
+    expect(zeilen.checked).toBe(true);
+    expect(screen.getByRole("status").textContent).toMatch(/^Die Ansicht konnte nicht gespeichert werden/);
+    // Gelingt das Speichern wieder, verschwindet die Meldung.
+    fireEvent.click(tafelWahl);
+    expect(tafelWahl.checked).toBe(true);
+    expect(screen.queryByText(/konnte nicht gespeichert werden/)).toBeNull();
   });
 
   it("gilt in diesem Fenster auch, wenn sich die Wahl nicht speichern lässt", async () => {
@@ -485,6 +607,44 @@ describe("Lagetafel, Stil", () => {
     expect(css).toMatch(/\.lt-karte \{[^}]*margin-top: calc\(var\(--lt-fuge\) \* 1em\);[^}]*padding: 0\.28em/s);
     expect(css).toMatch(/\.lt-gruppe \{[^}]*margin-top: calc\(var\(--lt-absatz\) \* 1em\);/s);
     expect(css).toMatch(/\.lt-spalte > :first-child \{ margin-top: 0; \}/);
+  });
+
+  it("lässt Marken nie über Typ, Funkrufname oder Zeichen laufen: Der Bedarf wird gekürzt, die Marke der Bewegung bleibt ganz", () => {
+    // Vorgefallen: „.lt-marken { overflow: visible; justify-content: flex-end }" mit starren Marken. Reichte das Feld nicht,
+    // ragten sie nach links über die Nachbarn, bei drei Bedarfsangaben bis über das taktische Zeichen.
+    const regel = (wahl: string) => new RegExp(`^${wahl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`, "m").exec(css)![1]!;
+    expect(regel(".lt-marken")).not.toMatch(/overflow: visible|flex-end/);
+    expect(css).toMatch(/\.lt-karte > \*, \.lt-kopfzeile > \*, \.lt-wie > \* \{[^}]*overflow: hidden;/);
+    expect(regel(".lt-marke")).toMatch(/flex: none;/);
+    expect(regel(".lt-marke-achtung")).toMatch(/flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;/);
+  });
+
+  it("hält Stärke und Stand in jeder Fassung in ihrer Breite und nimmt Zeichen und Spalte „wer“ aus dem Satz", () => {
+    const raster = Array.from(css.matchAll(/main\.lt\[data-fassung="(zwei|drei|breit)"\] \.lt-karte \{[^}]*grid-template-columns: ([^;]*);/g));
+    expect(raster.map((m) => m[1])).toEqual(["zwei", "drei", "breit"]);
+    for (const [, fassung, spuren] of raster) {
+      expect(spuren, fassung).toMatch(/^calc\(var\(--lt-zeichen\) \* 1em\) /);
+      expect(spuren, fassung).toMatch(/ max-content$/);
+    }
+    expect(raster[2]![2]).toContain("var(--lt-wer)");
+    // Name und Stärke teilen die erste Zeile unter sich auf: Der Name hängt nicht an der Breite des Stands darunter.
+    expect(css).toMatch(/main\.lt:is\(\[data-fassung="zwei"\], \[data-fassung="drei"\]\) \.lt-kopfzeile \{ grid-area: kopf; display: flex;/);
+    // Ein Typ ohne Kurzform bekommt in der knappen Fassung eine Obergrenze, damit Auftrag und Marken Platz behalten.
+    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-typ \{ max-width: 14em;/);
+  });
+
+  it("kürzt einen langen Zugnamen mit Auslassung und lässt „(Fortsetzung)“ stehen", () => {
+    // Vorgefallen: Die Rücksetzregel erlaubt Überschriften den Umbruch („text-wrap: wrap") und wog schwerer als das geerbte
+    // „nowrap" des Kopfs. Die zweite Zeile lag unter seiner Kante: „(Fortsetzung)" war nie zu sehen.
+    expect(css).toMatch(/main\.lt \.lt-gruppe h3 \{[^}]*white-space: nowrap;/);
+    expect(css).toMatch(/\.lt-gruppe-name \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; \}/);
+    expect(css).toMatch(/\.lt-fortsetzung \{ flex: none;/);
+  });
+
+  it("zeigt in der Randspalte nur ganze Bewegungen, auch die erste, und lässt einen Auftrag ohne Platz ganz weg", () => {
+    expect(css).toMatch(/\.lt-bewegungen::before \{ content: ""; width: 100%; height: 0; margin-bottom: calc\(var\(--lt-e\) \* -1\.1\); \}/);
+    expect(css).toMatch(/row-gap: calc\(var\(--lt-e\) \* 1\.1\);/);
+    expect(css).toMatch(/@container \(max-width: 4em\) \{\s*\.lt-auftrag-text \{ display: none; \}/);
   });
 
   it("bewegt nur den Balken beim Blättern und schaltet ihn bei reduzierter Bewegung ab", () => {

@@ -5,8 +5,9 @@
  *
  * Neu im Meldekopf; kein Gegenstück im Erfassungsbogen.
  */
-import { Then, When } from "@cucumber/cucumber";
+import { Given, Then, When } from "@cucumber/cucumber";
 import type { Page } from "playwright";
+import { tafelLageSpeicher } from "../support/sammlung";
 import type { EebWelt } from "../support/welt";
 
 const MONITOR = new WeakMap<EebWelt, Page>();
@@ -43,6 +44,24 @@ Then("zeigt der Lagemonitor {string} nicht", async function (this: EebWelt, text
 });
 
 // ---------------------------------------------------------------- Ansicht des Monitors: Zeilen oder Tafel
+
+/**
+ * Eine volle Lage für die Tafel liegt im Gerätespeicher und ist die zuletzt geöffnete (support/sammlung.ts). Sie
+ * ersetzt, was die Grundlage des Szenarios dorthin gelegt hat; ein Neuladen im Szenario setzt sie nicht zurück.
+ */
+Given("auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele mit Sofortbedarf", async function (this: EebWelt, einheiten: number, zuege: number) {
+  const { einsaetze, einsatzId } = tafelLageSpeicher("Hochwasser Hunte", einheiten, zuege);
+  await this.page.addInitScript(
+    ([e, id]) => {
+      if (sessionStorage.getItem("prüfstand.tafellage")) return;
+      sessionStorage.setItem("prüfstand.tafellage", "1");
+      localStorage.setItem("eeb.einsaetze.v1", e);
+      localStorage.setItem("eeb.letzterEinsatz.v1", JSON.stringify({ id, um: Date.now() }));
+    },
+    [einsaetze, einsatzId] as const,
+  );
+  await this.oeffneApp();
+});
 
 /** Die Wahl in der Einsatzansicht, Block „Lagemonitor für den Fernseher". */
 When("ich für den Fernseher die Ansicht {string} wähle", async function (this: EebWelt, name: string) {
@@ -220,4 +239,50 @@ Then("dunkelt das offene Fenster die Seite deutlich ab", async function (this: E
   const deckkraft = Number(/rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(werte.abdunklung)?.[1] ?? "0");
   if (deckkraft < 0.6) throw new Error(`Abdunklung zu schwach: ${werte.abdunklung}`);
   if (werte.fenster === werte.seite) throw new Error(`Fenster und Seite haben dieselbe Fläche: ${werte.fenster}`);
+});
+
+/**
+ * Auf der vollen Tafel überdeckt keine Angabe einer Karte eine andere, nichts ragt aus seiner Karte, und im
+ * Gruppenkopf sind Name, „(Fortsetzung)", Zahl der Einheiten und Stärke nebeneinander zu sehen.
+ *
+ * Vorgefallen: Bedarfsmarken liefen bei vielen Einheiten nach links über Typ, Funkrufname und Zeichen; der Kopf einer
+ * fortgesetzten Gruppe brach um, „(Fortsetzung)" lag unter seiner Kante. Als Text übergeben, nicht als Funktion mit
+ * inneren Hilfsfunktionen: tsx hängt ihnen einen __name-Helfer an, den es im Browser nicht gibt (support/haken.ts).
+ */
+Then("überdeckt auf der Tafel keine Angabe eine andere", async function (this: EebWelt) {
+  const befund = await monitor(this).evaluate<string[]>(`(() => {
+    const fehler = [];
+    const kasten = (el) => el.getBoundingClientRect();
+    const sichtbar = (el) => { const k = kasten(el); return k.width > 0 && k.height > 0; };
+    const schneidet = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.6 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.6;
+    const karten = Array.from(document.querySelectorAll("main.lt .lt-karte"));
+    if (karten.length === 0) fehler.push("keine Karte auf der Tafel");
+    for (const karte of karten) {
+      const name = karte.querySelector(".lt-herkunft").textContent + " " + (karte.querySelector(".lt-typ")?.textContent ?? "");
+      const teile = Array.from(karte.querySelectorAll(".lt-zeichen, .lt-herkunft, .lt-staerke, .lt-typ, .lt-funkruf, .lt-auftrag-text, .lt-marke, .lt-stand")).filter(sichtbar);
+      const rand = kasten(karte);
+      teile.forEach((teil, i) => {
+        const k = kasten(teil);
+        if (k.left < rand.left - 0.6 || k.right > rand.right + 0.6 || k.top < rand.top - 0.6 || k.bottom > rand.bottom + 0.6) fehler.push(teil.className + " ragt aus der Karte „" + name + "“");
+        for (const anderes of teile.slice(i + 1)) {
+          if (schneidet(k, kasten(anderes))) fehler.push(teil.className + " und " + anderes.className + " überdecken sich bei „" + name + "“");
+        }
+      });
+      // Eine Marke, von der nichts zu lesen bleibt, wäre so gut wie keine.
+      for (const marke of karte.querySelectorAll(".lt-marke")) if (kasten(marke).width < 14) fehler.push("Marke ohne Platz bei „" + name + "“");
+    }
+    for (const kopf of document.querySelectorAll("main.lt .lt-gruppe")) {
+      const rand = kasten(kopf);
+      const teile = Array.from(kopf.querySelectorAll(".lt-gruppe-name, .lt-fortsetzung, .lt-gruppe-zahl, .lt-staerke")).filter(sichtbar);
+      const titel = kopf.querySelector("h3").textContent;
+      if (kopf.querySelector(".lt-fortsetzung") && !teile.some((t) => t.classList.contains("lt-fortsetzung"))) fehler.push("„(Fortsetzung)“ fehlt im Kopf „" + titel + "“");
+      teile.forEach((teil, i) => {
+        const k = kasten(teil);
+        if (k.bottom > rand.bottom + 0.6 || k.right > rand.right + 0.6) fehler.push(teil.className + " liegt außerhalb des Kopfs „" + titel + "“");
+        for (const anderes of teile.slice(i + 1)) if (schneidet(k, kasten(anderes))) fehler.push("Im Kopf „" + titel + "“ überdecken sich " + teil.className + " und " + anderes.className);
+      });
+    }
+    return fehler;
+  })()`);
+  if (befund.length > 0) throw new Error(`Die Tafel überdeckt oder verliert Angaben: ${befund.slice(0, 8).join("; ")}${befund.length > 8 ? ` (und ${befund.length - 8} weitere)` : ""}`);
 });

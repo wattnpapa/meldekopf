@@ -5,18 +5,24 @@ import { describe, expect, it } from "vitest";
 import { EEB_EPOCHE_MS, OrganisationsTyp, PersonalErfassung, SCHEMA_VERSION, type Erfassungsbogen, type Sofortbedarf } from "@bos/eeb-format/model";
 import { EinsatzArt, MeldeStatus, type Einsatzsammlung, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { einheitSymbolSvg } from "@bos/eeb-satz/taktische-zeichen-bogen";
+import { TZ_SYMBOLE } from "@bos/taktische-zeichen/symbole";
+import { Resvg } from "@resvg/resvg-js";
 import {
   SATZ,
   ZEICHEN_BAND,
   bedarfKurz,
   dauerKurz,
   dauerZeile,
+  kartenBedarf,
+  meldungTeile,
   nameTeile,
   tafelFortlaufend,
   tafelSatz,
   tafelbild,
+  werBreite,
   wochentag,
   zeichenFuerTafel,
+  type TafelEinheit,
   type TafelMasse,
   type TafelSatz,
   type TafelZelle,
@@ -54,6 +60,8 @@ interface Angaben {
   uebung?: boolean;
   abgeruecktVorMin?: number;
   vermerke?: { vorMin: number; text: string }[];
+  /** Etikett eines abgeteilten Teils der Einheit. */
+  teil?: string;
 }
 
 let laufend = 0;
@@ -94,6 +102,7 @@ function eintrag(a: Angaben): MeldeEintrag {
     ...(a.daVorMin != null ? { eingetroffenAm: JETZT - a.daVorMin * MIN } : {}),
     ...(a.abgeruecktVorMin != null ? { abgerueckAm: JETZT - a.abgeruecktVorMin * MIN } : {}),
     ...(a.notiz ? { notiz: a.notiz } : {}),
+    ...(a.teil ? { teilEtikett: a.teil } : {}),
     ...(a.vermerke ? { vermerke: a.vermerke.map((v) => ({ zeit: JETZT - v.vorMin * MIN, text: v.text })) } : {}),
     bogen: bogen(a),
   };
@@ -129,6 +138,21 @@ describe("nameTeile", () => {
       typKurz: "",
     });
     expect(nameTeile(bogen({ org: T.DRK, ort: "Wesermarsch" }).einheit)).toEqual({ herkunft: "DRK Wesermarsch", typ: "", typKurz: "" });
+  });
+});
+
+describe("meldungTeile", () => {
+  it("hängt das Etikett eines abgeteilten Teils an den Typ, in Lang- und Kurzform", () => {
+    expect(meldungTeile(eintrag({ ort: "Oldenburg (NI)", typ: 4, teil: "Fachberater" }))).toEqual({
+      herkunft: "THW Oldenburg (NI)",
+      typ: "Bergungsgruppe (Fachberater)",
+      typKurz: "B (Fachberater)",
+    });
+    // Ohne Etikett bleibt es bei Herkunft und Typ; ein Etikett aus Leerzeichen zählt nicht.
+    expect(meldungTeile(eintrag({ ort: "Brake", typ: 4 })).typ).toBe("Bergungsgruppe");
+    expect(meldungTeile(eintrag({ ort: "Brake", typ: 4, teil: "  " })).typ).toBe("Bergungsgruppe");
+    // Nennt die Herkunft den Typ schon, steht das Etikett allein in der Typzeile.
+    expect(meldungTeile(eintrag({ org: T.SONSTIGE, orgName: "Bundeswehr Panzerpionierzug", ort: "", typ: "Panzerpionierzug", teil: "Rest" })).typ).toBe("(Rest)");
   });
 });
 
@@ -301,6 +325,98 @@ describe("tafelbild: Angaben je Einheit", () => {
   });
 });
 
+describe("tafelbild: Teile und Abrückzeit", () => {
+  it("unterscheidet abgeteilte Teile derselben Einheit auf der Karte und in der Randspalte", () => {
+    const tb = tafelbild(
+      sammlung([
+        eintrag({ ort: "Oldenburg (NI)", typ: 4, teil: "Rest", vorMin: 50 }),
+        eintrag({ ort: "Oldenburg (NI)", typ: 4, teil: "Fachberater", vorMin: 40 }),
+      ]),
+      JETZT,
+    );
+    const einheiten = tb.gruppen[0]!.einheiten;
+    expect(einheiten.map((e) => e.typ)).toEqual(["Bergungsgruppe (Rest)", "Bergungsgruppe (Fachberater)"]);
+    expect(einheiten.map((e) => tb.namen.get(e.id))).toEqual(["THW Oldenburg (NI) B (Rest)", "THW Oldenburg (NI) B (Fachberater)"]);
+  });
+
+  it("nennt als Abrückzeit nur eine bestätigte: Der Vermerk des Papier-Abgleichs trägt die Uhrzeit des Abgleichs", () => {
+    const tb = tafelbild(
+      sammlung([
+        eintrag({ ort: "Brake", typ: 4 }),
+        eintrag({ ort: "Varel", typ: 6, status: MeldeStatus.ABGERUECKT, vermerke: [{ vorMin: 9, text: "Abgerückt (Zeit vom Papier nicht bestätigt)" }] }),
+        eintrag({ ort: "Jever", typ: 9, status: MeldeStatus.ABGERUECKT, vermerke: [{ vorMin: 30, text: "Abgerückt" }, { vorMin: 5, text: "Auftrag geändert" }] }),
+      ]),
+      JETZT,
+    );
+    expect(tb.abgerueckt.map((a) => [a.name, a.zeit])).toEqual([
+      ["THW Jever FGr W (A)", JETZT - 30 * MIN],
+      ["THW Varel FGr R (A)", null],
+    ]);
+  });
+});
+
+describe("kartenBedarf", () => {
+  const einheit = (a: Angaben): TafelEinheit => tafelbild(sammlung([eintrag(a)]), JETZT).gruppen[0]!.einheiten[0]!;
+
+  it("wächst mit dem Namen: Jede Fassung braucht dann mehr Breite", () => {
+    const kurz = kartenBedarf(einheit({ ort: "Brake", typ: 4 }));
+    const lang = kartenBedarf(einheit({ org: T.JUH, orgName: "Johanniter-Unfall-Hilfe Regionalverband Weser-Ems", ort: "Oldenburg", typ: "SEG" }));
+    for (const fassung of ["breit", "drei", "zwei"] as const) expect(lang[fassung], fassung).toBeGreaterThan(kurz[fassung] + 10);
+  });
+
+  it("zählt für einen Typ mit Kurzform die Kurzform: Sie springt ein, wo der ausgeschriebene nicht passt", () => {
+    // „FGr Notversorgung und Notinstandsetzung" (Kurzform „FGr N") braucht nicht mehr als die Bergungsgruppe („B").
+    const b = kartenBedarf(einheit({ ort: "Brake", typ: 4 }));
+    const n = kartenBedarf(einheit({ ort: "Brake", typ: 16 }));
+    expect(n.breit).toBeCloseTo(b.breit, 5);
+    expect(n.drei).toBeCloseTo(b.drei, 5);
+    // Ein Freitext-Typ hat keine Kurzform: Er zählt ganz.
+    const frei = kartenBedarf(einheit({ org: T.DRK, ort: "Brake", typ: "Schnelleinsatzgruppe Betreuung und Verpflegung mit Feldküche" }));
+    const kurz = kartenBedarf(einheit({ org: T.DRK, ort: "Brake", typ: "SEG" }));
+    expect(frei.breit).toBeGreaterThan(kurz.breit + 10);
+    expect(frei.drei).toBeGreaterThan(kurz.drei + 10);
+  });
+
+  it("stellt in der breiten Fassung Name und Auftrag nebeneinander, in den anderen untereinander", () => {
+    const ohne = kartenBedarf(einheit({ ort: "Clausthal-Zellerfeld", typ: 4 }));
+    const mit = kartenBedarf(einheit({ ort: "Clausthal-Zellerfeld", typ: 4, notiz: "Sandsackfüllplatz Nord, Abschnitt 3 bis 5" }));
+    // 41 Zeichen Auftrag: in „breit" kommen sie zum Namen dazu, in „drei" stehen sie in eigener Zeile.
+    expect(mit.breit - ohne.breit).toBeGreaterThan(15);
+    expect(mit.drei).toBeLessThan(mit.breit);
+    // Ohne Auftrag reicht der breiten Karte ihre Mindestbreite, mit diesem Auftrag nicht mehr.
+    expect(ohne.breit).toBeLessThan(SATZ.karte.breit.breite);
+    expect(mit.breit).toBeGreaterThan(SATZ.karte.breit.breite);
+  });
+
+  it("reicht als Bedarf der Tafel den größten je Fassung weiter", () => {
+    const tb = tafelbild(sammlung([eintrag({ ort: "Brake", typ: 4 }), eintrag({ ort: "Clausthal-Zellerfeld", typ: 16, notiz: "Beleuchtung und Stromversorgung der Einsatzstelle Nord" })]), JETZT);
+    const einzeln = tb.gruppen.flatMap((g) => g.einheiten).map(kartenBedarf);
+    for (const fassung of ["breit", "drei", "zwei"] as const) expect(tb.bedarf[fassung]).toBe(Math.max(...einzeln.map((b) => b[fassung])));
+    expect(tafelbild(sammlung([]), JETZT).bedarf).toEqual({ breit: 0, drei: 0, zwei: 0 });
+  });
+});
+
+describe("werBreite", () => {
+  it("gibt der Spalte die Breite des längsten Namens", () => {
+    expect(werBreite({ herkunft: 356, typ: 200, frei: 900 }, 1290)).toBe(356);
+  });
+
+  it("wächst für einen ausgeschriebenen Typ nur, soweit dafür kein Auftrag gekürzt wird", () => {
+    // Platz für den langen Typ ist da: Die Spalte nimmt ihn.
+    expect(werBreite({ herkunft: 356, typ: 560, frei: 700 }, 1290)).toBe(560);
+    // Der Auftrag lässt nur 534 px: Der Typ weicht seiner Kurzform, der Name bleibt ganz.
+    expect(werBreite({ herkunft: 356, typ: 560, frei: 534 }, 1290)).toBe(534);
+    // Ist der Auftrag länger, als neben dem Namen Platz ist, gewinnt der Name.
+    expect(werBreite({ herkunft: 356, typ: 560, frei: 120 }, 1290)).toBe(356);
+  });
+
+  it("hält sich an den kleinsten und den größten Anteil", () => {
+    expect(werBreite({ herkunft: 60, typ: 0, frei: 1000 }, 1000)).toBe(1000 * SATZ.wer.min);
+    expect(werBreite({ herkunft: 950, typ: 0, frei: 0 }, 1000)).toBe(1000 * SATZ.wer.max);
+    expect(werBreite({ herkunft: 300, typ: 0, frei: 0 }, 0)).toBe(0);
+  });
+});
+
 describe("Dauer und Wochentag", () => {
   const t0 = new Date(2026, 10, 10, 8, 0).getTime();
 
@@ -338,6 +454,36 @@ describe("zeichenFuerTafel", () => {
     // Größenzeichen (y = 38 bis 58) und Rechteck (y = 64 bis 192) liegen im Band.
     expect(ZEICHEN_BAND.oben).toBeLessThanOrEqual(38);
     expect(ZEICHEN_BAND.oben + ZEICHEN_BAND.hoehe).toBeGreaterThanOrEqual(192);
+  });
+
+  it("verliert bei keinem Einheiten-Zeichen der Sammlung einen Teil, auch nicht die zwei Punkte der Staffel", () => {
+    // Gemessen wird die Zeichnung selbst (resvg), unabhängig von der Rechnung in zeichenFuerTafel.
+    const hoeher: string[] = [];
+    let geprueft = 0;
+    for (const [name, svg] of Object.entries(TZ_SYMBOLE as Record<string, string>)) {
+      if (!/Einheiten$/.test(name.split("/")[0]!)) continue;
+      // Ohne Systemschriften: Sie zu laden kostete je Zeichen ein Vielfaches der Messung, und die Schrift steht im Kasten.
+      const zeichnung = new Resvg(svg, { font: { loadSystemFonts: false } }).getBBox();
+      if (!zeichnung) continue;
+      geprueft++;
+      const [, y, hoehe] = /viewBox="0 (\d+) 256 (\d+)"/.exec(zeichenFuerTafel(svg))!.map(Number) as [number, number, number];
+      expect(y, name).toBeLessThanOrEqual(zeichnung.y);
+      expect(y + hoehe, name).toBeGreaterThanOrEqual(zeichnung.y + zeichnung.height);
+      // Der Ausschnitt endet immer an derselben Unterkante; nur oben weicht er aus.
+      expect(y + hoehe, name).toBe(ZEICHEN_BAND.oben + ZEICHEN_BAND.hoehe);
+      if (y < ZEICHEN_BAND.oben) hoeher.push(name);
+    }
+    expect(geprueft).toBeGreaterThan(150);
+    // Nur Zeichen mit hohem Größenzeichen bekommen einen höheren Ausschnitt; alle anderen bleiben im Band und so groß wie bisher.
+    expect(hoeher.every((name) => /staffel|Staffel|Verband|verband/.test(name)), hoeher.join(", ")).toBe(true);
+    expect(hoeher).toContain("Einheiten/Staffel");
+  });
+
+  it("zeigt eine Staffel mit beiden Punkten: Mit einem stünde das Zeichen für „Trupp“ da", () => {
+    const staffel = zeichenFuerTafel(einheitSymbolSvg(bogen({ org: T.FEUERWEHR, orgName: "FF Elsfleth", ort: "Elsfleth", typ: "Löschstaffel" }).einheit));
+    // Die Punkte der Staffel stehen bei y = 24 und y = 48 (Halbmesser 10): Der Ausschnitt beginnt darüber.
+    expect(staffel).toMatch(/viewBox="0 6 256 196"/);
+    expect(staffel).toContain('height="196"');
   });
 
   it("lässt ein Bild, dessen Kopf es nicht kennt, unbeschnitten", () => {
@@ -418,6 +564,44 @@ describe("tafelSatz", () => {
     const satz = tafelSatz(ohneKopf(6), 0, FERNSEHER);
     expect(satz.fassung).not.toBe("zwei");
     expect(satz.schrift).toBeGreaterThanOrEqual(SATZ.gutGenug * FERNSEHER.einheit);
+  });
+
+  it("nimmt die dreizeilige Fassung, wo in der breiten Name und Auftrag nicht nebeneinander passen", () => {
+    // Sechs Einheiten: ohne Rücksicht auf den Inhalt die breite Fassung.
+    expect(tafelSatz(ohneKopf(6), 0, FERNSEHER).fassung).toBe("breit");
+    // Braucht die breite Karte 46 Schriftbreiten, bekäme sie nur noch 30 px Schrift; dreizeilig passt alles in 36 px.
+    const satz = tafelSatz(ohneKopf(6), 0, FERNSEHER, { breit: 46, drei: 30, zwei: 30 });
+    expect(satz.fassung).toBe("drei");
+    expect(satz.spalten).toBe(1);
+    expect(satz.schrift).toBeGreaterThan(SATZ.gutGenug * FERNSEHER.einheit);
+    // In der gewählten Schrift ist die Karte so breit, wie ihr Inhalt braucht.
+    expect(FERNSEHER.breite / satz.schrift).toBeGreaterThanOrEqual(30);
+  });
+
+  it("nimmt für ungekürzte Namen eine etwas kleinere Schrift, aber keine deutlich kleinere", () => {
+    const lage = gruppen(4, 3, 3, 4);
+    const frei = tafelSatz(lage, 0, FERNSEHER);
+    expect(frei.spalten).toBe(2);
+    const spalte = (FERNSEHER.breite - SATZ.spaltenAbstand * FERNSEHER.einheit) / 2;
+    // Ein Name, der 21 Schriftbreiten braucht: Die Schrift gibt gerade so viel nach, dass er hineinpasst.
+    const ganz = tafelSatz(lage, 0, FERNSEHER, { zwei: 21, drei: 21, breit: 60 });
+    expect(ganz.spalten).toBe(2);
+    expect(ganz.schrift).toBeLessThan(frei.schrift);
+    expect(ganz.schrift).toBeGreaterThanOrEqual(frei.schrift * SATZ.ungekuerztAb);
+    expect(spalte / ganz.schrift).toBeGreaterThanOrEqual(21);
+    // Braucht er 27, kostete das ein Fünftel der Schrift: Dann wird der eine Name gekürzt, nicht allen die Schrift genommen.
+    expect(tafelSatz(lage, 0, FERNSEHER, { zwei: 27, drei: 27, breit: 60 })).toEqual(frei);
+  });
+
+  it("kürzt lieber, als wegen eines langen Namens zu blättern oder unter die kleinste Schrift zu gehen", () => {
+    for (const lage of [ohneKopf(6), gruppen(4, 3, 3, 4), gruppen(6, 6, 6)]) {
+      const frei = tafelSatz(lage, 0, FERNSEHER);
+      const riesig = tafelSatz(lage, 0, FERNSEHER, { breit: 120, drei: 90, zwei: 90 });
+      expect(riesig).toEqual(frei);
+      expect(riesig.seiten).toHaveLength(1);
+    }
+    // Ohne Angabe und mit einem Bedarf unter den Mindestbreiten ändert sich nichts.
+    expect(tafelSatz(gruppen(4, 3, 3, 4), 0, FERNSEHER, { breit: 20, drei: 10, zwei: 10 })).toEqual(tafelSatz(gruppen(4, 3, 3, 4), 0, FERNSEHER));
   });
 
   it("hält Gruppen zusammen und lässt keinen Kopf allein am Spaltenende", () => {
@@ -502,12 +686,16 @@ describe("tafelSatz", () => {
   });
 
   it("hält seine Zusagen für beliebige Lagen und Flächen: jede Einheit einmal, nichts über den Rand, nie mehr Spalten als gesetzt", () => {
-    // Fester Zufall, damit ein Fehlschlag sich wiederholen lässt.
+    // Fester Zufall, damit ein Fehlschlag sich wiederholen lässt. Gerechnet wird in 32 Bit (mulberry32): Ein Produkt über
+    // 2^53 verlöre die unteren Bits, und der Würfel fiele immer auf dieselbe Seite.
     let saat = 20261110;
     const zufall = (bis: number) => {
-      saat = (saat * 1103515245 + 12345) % 2147483648;
-      return saat % bis;
+      saat = (saat + 0x6d2b79f5) | 0;
+      let w = Math.imul(saat ^ (saat >>> 15), 1 | saat);
+      w = (w + Math.imul(w ^ (w >>> 7), 61 | w)) ^ w;
+      return ((w ^ (w >>> 14)) >>> 0) % bis;
     };
+    const gesehen = { ohneKopf: 0, mitKopf: 0, abgerueckt: 0, ohneAbgerueckte: 0, bedarf: 0, geblaettert: 0 };
     const flaechen: TafelMasse[] = [
       FERNSEHER,
       { breite: 924, hoehe: 568, einheit: 7.2 }, // 1280 × 720
@@ -517,11 +705,18 @@ describe("tafelSatz", () => {
     ];
     for (let lauf = 0; lauf < 400; lauf++) {
       const masse = flaechen[lauf % flaechen.length]!;
-      const anzahlen = Array.from({ length: 1 + zufall(9) }, () => 1 + zufall(lauf % 7 === 0 ? 30 : 9));
+      // Jede vierte Lage hat nur eine Gruppe: der häufigste Fall, ein Zug oder eine Organisation, mit und ohne Kopf.
+      const anzahlen = Array.from({ length: zufall(4) === 0 ? 1 : 1 + zufall(9) }, () => 1 + zufall(lauf % 7 === 0 ? 30 : 9));
       const mitKopf = anzahlen.length > 1 || zufall(2) === 0;
       const abgerueckt = zufall(4) === 0 ? zufall(15) : 0;
-      const satz = tafelSatz(anzahlen.map((anzahl) => ({ kopf: mitKopf, anzahl })), abgerueckt, masse);
-      const lage = `Lauf ${lauf}: ${anzahlen.join(",")} + ${abgerueckt} abgerückt auf ${masse.breite} × ${masse.hoehe}`;
+      // Jeder dritte Lauf mit einem Bedarf des Inhalts: Die Zusagen gelten, welche Breite die Karten auch brauchen.
+      const bedarf = zufall(3) === 0 ? { breit: 30 + zufall(50), drei: 14 + zufall(30), zwei: 14 + zufall(30) } : {};
+      const satz = tafelSatz(anzahlen.map((anzahl) => ({ kopf: mitKopf, anzahl })), abgerueckt, masse, bedarf);
+      const lage = `Lauf ${lauf}: ${anzahlen.join(",")} + ${abgerueckt} abgerückt auf ${masse.breite} × ${masse.hoehe}, Bedarf ${JSON.stringify(bedarf)}`;
+      gesehen[mitKopf ? "mitKopf" : "ohneKopf"]++;
+      gesehen[abgerueckt > 0 ? "abgerueckt" : "ohneAbgerueckte"]++;
+      if ("breit" in bedarf) gesehen.bedarf++;
+      if (satz.seiten.length > 1) gesehen.geblaettert++;
       erwarteAlle(satz, anzahlen);
       expect(satz.schrift, lage).toBeGreaterThan(0);
       const geblaettert = satz.seiten.length > 1;
@@ -545,6 +740,22 @@ describe("tafelSatz", () => {
       const rest = zellen.find((z) => z.art === "abgang-rest");
       if (satz.abgaenge > 0 && abgerueckt > satz.abgaenge) expect(rest, lage).toEqual({ art: "abgang-rest", anzahl: abgerueckt - satz.abgaenge });
       else expect(rest, lage).toBeUndefined();
+    }
+    // Der Würfel trifft alle Fälle, die der Test nennt: mit und ohne Kopf, mit und ohne abgerückte, mit Bedarf, geblättert.
+    for (const [fall, anzahl] of Object.entries(gesehen)) expect(anzahl, fall).toBeGreaterThan(20);
+  });
+
+  it("setzt nie mehr Spalten, als er ansagt, auch wo das Abrunden der Schrift eine Gruppe in die nächste Spalte rückte", () => {
+    // Zwei Lagen, in denen die auf Viertelpixel abgerundete Schrift eine Spalte mehr gebraucht hätte als die gerechnete:
+    // In der etwas höheren Spalte passt eine Gruppe „gerade ganz" in die nächste, statt geteilt zu werden.
+    const faelle: [number[], TafelMasse][] = [
+      [[1, 7, 1], { breite: 1394, hoehe: 830, einheit: 10.757042990997434 }],
+      [[5, 12, 15], { breite: 1118, hoehe: 693, einheit: 8.440708930492402 }],
+    ];
+    for (const [anzahlen, masse] of faelle) {
+      const satz = tafelSatz(gruppen(...anzahlen), 0, masse);
+      erwarteAlle(satz, anzahlen);
+      for (const seite of satz.seiten) expect(seite.length, anzahlen.join(",")).toBeLessThanOrEqual(satz.spalten);
     }
   });
 

@@ -41,6 +41,7 @@ import {
   type TafelMasse,
   type TafelZelle,
   type Tafelbild,
+  werBreite,
   zeichenFuerTafel,
 } from "./lagetafel";
 import { zeichenLaden } from "./zeichen-bild";
@@ -105,6 +106,62 @@ function useFlaeche(ref: RefObject<HTMLElement | null>): TafelMasse | null {
     return () => beobachter.disconnect();
   }, [ref]);
   return masse;
+}
+
+const px = (wert: string) => Number.parseFloat(wert) || 0;
+
+/**
+ * Breite der Spalte „wer" (Herkunft und Typ) der breiten Fassung in Pixeln; `null` ohne Messung, dann gilt der feste
+ * Anteil der Stilvorlage. Gemessen wird der Text selbst (Range), nicht sein Kasten: Das Ergebnis hängt so nicht an der
+ * Breite, die es bestimmt, und kennt auch die volle Länge eines gekürzten Namens. Die Rechnung steht in `werBreite`.
+ */
+function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): number | null {
+  const [breite, setBreite] = useState<number | null>(null);
+  // Kommt die Schrift der App erst nach dem ersten Bild, wird noch einmal gemessen.
+  const [, setSchriftDa] = useState(false);
+  useEffect(() => {
+    let lebt = true;
+    void document.fonts?.ready.then(() => lebt && setSchriftDa(true));
+    return () => {
+      lebt = false;
+    };
+  }, []);
+  // Nach jedem Durchgang: Namen, Typen und Schriftgröße können sich mit jeder Meldung ändern.
+  useLayoutEffect(() => {
+    const el = flaeche.current;
+    const erste = aktiv ? el?.querySelector<HTMLElement>(".lt-karte") : null;
+    if (!el || !erste || typeof Range === "undefined" || typeof Range.prototype.getBoundingClientRect !== "function") {
+      setBreite(null);
+      return;
+    }
+    const stil = getComputedStyle(erste);
+    const platz = erste.clientWidth - px(stil.paddingLeft) - px(stil.paddingRight) - SATZ.zeichen * px(stil.fontSize);
+    const messung = document.createRange();
+    const text = (teil: Element | null | undefined): number => {
+      if (!teil) return 0;
+      messung.selectNodeContents(teil);
+      return messung.getBoundingClientRect().width;
+    };
+    const bedarf = { herkunft: 0, typ: 0, frei: platz };
+    for (const karte of el.querySelectorAll<HTMLElement>(".lt-karte")) {
+      const herkunft = karte.querySelector<HTMLElement>(".lt-herkunft");
+      const typ = karte.querySelector<HTMLElement>(".lt-typ");
+      if (herkunft) bedarf.herkunft = Math.max(bedarf.herkunft, text(herkunft) + px(getComputedStyle(herkunft).paddingRight));
+      // Ein Typ ohne Kurzform zählt wie der Name; sonst der ausgeschriebene Typ, soweit Platz ist (für ihn springt die Kurzform ein).
+      const lang = typ?.querySelector(".lt-typ-lang");
+      if (typ && !lang) bedarf.herkunft = Math.max(bedarf.herkunft, text(typ) + px(getComputedStyle(typ).paddingRight));
+      if (typ && lang) bedarf.typ = Math.max(bedarf.typ, text(lang) + px(getComputedStyle(typ).paddingRight));
+      // Was die rechte Seite dieser Karte braucht: oben der Auftrag, unten Funkrufname und Marken, dahinter Stärke und Stand.
+      const spuren = getComputedStyle(karte).gridTemplateColumns.split(" ").map(px);
+      const rechts = (spuren[4] ?? 0) + Math.max(text(karte.querySelector(".lt-auftrag")), text(karte.querySelector(".lt-funkruf")) + (spuren[3] ?? 0));
+      bedarf.frei = Math.min(bedarf.frei, platz - rechts);
+    }
+    // Bruchteile gehen zugunsten dessen, was nicht gekürzt werden soll: Der Bedarf von Name und Typ wird aufgerundet,
+    // der Platz, den Auftrag und Funkrufname lassen, abgerundet.
+    const neu = werBreite({ herkunft: Math.ceil(bedarf.herkunft), typ: Math.ceil(bedarf.typ), frei: Math.floor(bedarf.frei) - 1 }, platz);
+    setBreite((alt) => (alt === neu ? alt : neu));
+  });
+  return breite;
 }
 
 const einheitenWort = (n: number) => (n === 1 ? "Einheit" : "Einheiten");
@@ -202,15 +259,27 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
       <span className="lt-zeichen">
         <TafelZeichen einheit={e.einheit} />
       </span>
-      <span className="lt-herkunft">{e.herkunft}</span>
-      <StaerkeKlein s={e.staerke} soll={e.soll} />
+      {/* Name und Stärke teilen sich die erste Zeile unter sich: Der Name reicht bis an die Stärke, wie breit der Stand darunter auch ist. */}
+      <span className="lt-kopfzeile">
+        <span className="lt-herkunft">{e.herkunft}</span>
+        <StaerkeKlein s={e.staerke} soll={e.soll} />
+      </span>
       <Typ e={e} fassung={fassung} />
-      {e.funkruf && <span className="lt-funkruf">{e.funkruf}</span>}
-      {e.auftrag && <span className="lt-auftrag">{e.auftrag}</span>}
-      {(e.marke || e.bedarf.length > 0) && (
-        <span className="lt-marken">
-          {e.marke && <span className={`lt-marke lt-marke-${e.marke.art}`}>{e.marke.text}</span>}
-          {e.bedarf.length > 0 && <span className="lt-marke lt-marke-achtung">{e.bedarf.join(", ")}</span>}
+      {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, sonst je ein Feld der Karte (lagetafel.css). */}
+      {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0) && (
+        <span className="lt-wie">
+          {e.funkruf && <span className="lt-funkruf">{e.funkruf}</span>}
+          {e.auftrag && (
+            <span className="lt-auftrag">
+              <span className="lt-auftrag-text">{e.auftrag}</span>
+            </span>
+          )}
+          {(e.marke || e.bedarf.length > 0) && (
+            <span className="lt-marken">
+              {e.marke && <span className={`lt-marke lt-marke-${e.marke.art}`}>{e.marke.text}</span>}
+              {e.bedarf.length > 0 && <span className="lt-marke lt-marke-achtung">{e.bedarf.join(", ")}</span>}
+            </span>
+          )}
         </span>
       )}
       {/* Der Stand der Angaben steht an jeder Einheit; ab einer Stunde in Warnfarbe und mit Zeichen (wie R11-K1, R14-K1). */}
@@ -228,9 +297,10 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
       const g = tb.gruppen[zelle.gruppe]!;
       return (
         <li className="lt-gruppe">
+          {/* Ein langer Name wird gekürzt, „(Fortsetzung)" bleibt stehen: Es sagt, dass die Gruppe weiter vorn beginnt. */}
           <h3>
-            {g.titel}
-            {zelle.fortsetzung && <span className="lt-fortsetzung"> (Fortsetzung)</span>}
+            <span className="lt-gruppe-name">{g.titel}</span>
+            {zelle.fortsetzung && <> <span className="lt-fortsetzung">(Fortsetzung)</span></>}
           </h3>
           <span className="lt-gruppe-zahl">{g.einheiten.length} {einheitenWort(g.einheiten.length)}</span>
           <StaerkeKlein s={g.staerke} />
@@ -243,8 +313,8 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
       return (
         <li className="lt-gruppe lt-gruppe-ab">
           <h3>
-            Abgerückt
-            {zelle.fortsetzung && <span className="lt-fortsetzung"> (Fortsetzung)</span>}
+            <span className="lt-gruppe-name">Abgerückt</span>
+            {zelle.fortsetzung && <> <span className="lt-fortsetzung">(Fortsetzung)</span></>}
           </h3>
           <span className="lt-gruppe-zahl">{tb.abgerueckt.length} {einheitenWort(tb.abgerueckt.length)}</span>
         </li>
@@ -309,26 +379,36 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   const masse = useFlaeche(flaeche);
   const zaehlung = tb.gruppen.map((g) => `${g.kopf ? "k" : "o"}${g.einheiten.length}`).join(",");
   const abgaenge = tb.abgerueckt.length;
+  // Auf halbe Schriftbreiten gerundet: Ein Zeichen mehr im Auftrag soll den Satz nicht neu rechnen lassen.
+  const halbe = (em: number) => Math.ceil(em * 2) / 2;
+  const bedarf = { breit: halbe(tb.bedarf.breit), drei: halbe(tb.bedarf.drei), zwei: halbe(tb.bedarf.zwei) };
   // Der Satz hängt nur an Zahl und Gliederung der Einheiten und an der Fläche, nicht an jedem Takt der Uhr.
   const satz = useMemo(
     () =>
       schmal || !masse
         ? null
-        : tafelSatz(tb.gruppen.map((g) => ({ kopf: g.kopf, anzahl: g.einheiten.length })), abgaenge, masse),
+        : tafelSatz(tb.gruppen.map((g) => ({ kopf: g.kopf, anzahl: g.einheiten.length })), abgaenge, masse, bedarf),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [schmal, masse, zaehlung, abgaenge],
+    [schmal, masse, zaehlung, abgaenge, bedarf.breit, bedarf.drei, bedarf.zwei],
   );
   // Ohne Messung (kein Layout) und am Telefon: alles in einer Spalte, die Seite rollt.
   const seiten = satz ? satz.seiten : [[tafelFortlaufend(tb.gruppen.map((g) => ({ kopf: g.kopf, anzahl: g.einheiten.length })), abgaenge)]];
   const fassung: KartenFassung = satz ? satz.fassung : "drei";
 
-  const [blatt, setBlatt] = useState(0);
+  const wer = useWerBreite(flaeche, satz?.fassung === "breit");
+
+  // Blättern. Ändert sich die Zahl der Seiten, beginnt die Tafel vorn: Takt und Balken laufen dann gemeinsam neu los,
+  // und nach einer Lage, die auf eine Seite passte, steht wieder Seite 1 da.
+  const seitenZahl = seiten.length;
+  const [lauf, setLauf] = useState({ seiten: seitenZahl, blatt: 0 });
+  if (lauf.seiten !== seitenZahl) setLauf({ seiten: seitenZahl, blatt: 0 });
   useEffect(() => {
-    if (seiten.length < 2) return;
-    const t = window.setInterval(() => setBlatt((n) => n + 1), SEITEN_TAKT_MS);
+    if (seitenZahl < 2) return;
+    const t = window.setInterval(() => setLauf((l) => ({ ...l, blatt: l.blatt + 1 })), SEITEN_TAKT_MS);
     return () => window.clearInterval(t);
-  }, [seiten.length]);
-  const seite = blatt % seiten.length;
+  }, [seitenZahl]);
+  const blatt = lauf.seiten === seitenZahl ? lauf.blatt : 0;
+  const seite = blatt % seitenZahl;
 
   const dauer = dauerZeile(beginn, bild, jetzt);
   const uebungTeil = bild.uebungenDaneben > 0 ? `${bild.uebungenDaneben} ${bild.uebungenDaneben === 1 ? "Übungsmeldung" : "Übungsmeldungen"} nicht gezählt` : "";
@@ -349,6 +429,8 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
     "--lt-abgang-h": SATZ.abgang,
     "--lt-spalten": satz?.spalten ?? 1,
     "--lt-seitenzeile": SATZ.seitenzeile,
+    "--lt-zeichen": SATZ.zeichen,
+    "--lt-wer": wer != null ? `${wer}px` : `${SATZ.wer.vorgabe * 100}%`,
     ...(satz ? { "--lt-f": `${satz.schrift}px` } : {}),
   } as CSSProperties;
 
@@ -392,14 +474,15 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
 
       <section className="lt-tafel" aria-labelledby="lt-tafel-titel">
         <h2 id="lt-tafel-titel" className="nur-sr">Einheiten</h2>
+        {/* Über der Fläche, nicht in ihr: Der Satz rechnet mit der Höhe, die für die Zellen wirklich bleibt. */}
+        {s.einheiten === 0 && (
+          <div className="lt-leer-block">
+            <p className="lt-leer">{leerText}</p>
+            {/* Der Monitor ist reine Anzeige: Wer davorsteht, soll wissen, dass er nichts tun muss. */}
+            <p className="lt-leer-zusatz">Was im Hauptfenster aufgenommen wird, erscheint hier von selbst.</p>
+          </div>
+        )}
         <div className="lt-flaeche" ref={flaeche}>
-          {s.einheiten === 0 && (
-            <>
-              <p className="lt-leer">{leerText}</p>
-              {/* Der Monitor ist reine Anzeige: Wer davorsteht, soll wissen, dass er nichts tun muss. */}
-              <p className="lt-leer-zusatz">Was im Hauptfenster aufgenommen wird, erscheint hier von selbst.</p>
-            </>
-          )}
           {seiten.map((spalten, i) =>
             i === seite ? (
               <div className="lt-seite" key={i}>
@@ -415,7 +498,7 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
           )}
           {seiten.length > 1 && (
             // Der Balken läuft je Seite einmal durch: Wer „seine" Einheit sucht, sieht, wann umgeblättert wird.
-            <p className="lt-seitenzeile" role="status" key={`s${seite}`}>
+            <p className="lt-seitenzeile" role="status" key={`${seitenZahl}:${blatt}`}>
               <span className="lt-seitenlauf" style={{ animationDuration: `${SEITEN_TAKT_MS}ms` }} aria-hidden="true" />
               Seite {seite + 1} von {seiten.length}
               <span className="lt-seitenhinweis"> – die Tafel blättert von selbst</span>
