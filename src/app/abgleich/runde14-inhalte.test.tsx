@@ -30,14 +30,12 @@ import {
   bedarfText,
   lageblattZeilenAlter,
   lagebild,
-  zugAlterText,
 } from "../lagemonitor";
 import { abweichenderOrt, lueckenText, vergleichKurztext } from "../einheiten-tabelle";
 import { passtZuStatusfilter } from "../einheiten-liste";
 import { aenderungsText } from "../meldungs-vergleich";
 import { nurStaerkeUebernehmen } from "../schnellerfassung/nur-staerke";
 import { abgeteiltDoppeltImStapel } from "../abgeteilt-doppelt";
-import { aggregiereNachZug } from "../auswertung";
 
 afterEach(() => localStorage.clear());
 
@@ -87,34 +85,30 @@ describe("R14-K1 Alter der Angaben (Stand), nicht des Eintreffens", () => {
     expect(angabenZeit(zukunft)).toBe(jetzt);
   });
 
-  it("Kopfzeile, Filter, Zugsumme und Monitor rechnen alle ab dem Stand", () => {
-    const alt = eintrag("alt", mitStandVor(14 * 60), { empfangenAm: jetzt, einheitSchluessel: "alt", zugEtikett: "1. Zug" });
-    const neu = eintrag("neu", mitStandVor(2), { empfangenAm: jetzt, einheitSchluessel: "neu", zugEtikett: "1. Zug" });
+  it("Kopfzeile und Filter rechnen ab dem Stand", () => {
+    const alt = eintrag("alt", mitStandVor(14 * 60), { empfangenAm: jetzt, einheitSchluessel: "alt" });
+    const neu = eintrag("neu", mitStandVor(2), { empfangenAm: jetzt, einheitSchluessel: "neu" });
     // Kopfzeile: „1 von 2 älter als 1 Std“, die älteste Meldung vor 14 Std.
     expect(anwesendenAlterText(anwesendenAlter([alt, neu], jetzt), jetzt)).toMatch(/^älteste Meldung vor 14 Std \d+ Min, 1 von 2 älter als 1 Std$/);
     expect(anwesendenAlterText(anwesendenAlter([neu], jetzt), jetzt)).toBeNull();
     // Filter „nur ältere als 1 Std“.
     expect(passtZuStatusfilter(alt, "veraltet", jetzt)).toBe(true);
     expect(passtZuStatusfilter(neu, "veraltet", jetzt)).toBe(false);
-    // Zugsumme.
-    const zug = aggregiereNachZug([alt, neu], EinsatzArt.EINSATZ);
-    expect(zugAlterText(zug[0]!.aeltesteMeldungAm, jetzt)).toMatch(/^⚠ älteste Meldung vor 14 Std/);
   });
 
-  it("der Monitor gibt der Zeile Alter, Marke „Stand“, Zug und Auftrag (R14-K3)", () => {
+  it("der Monitor gibt der Zeile Alter, Marke „Stand“ und Auftrag (R14-K3)", () => {
     const s = einsatzAnlegen("Hochwasser Weser", EinsatzArt.EINSATZ);
     const alt = bogenMit("Biberach");
     alt.stand = jetztZeitpunkt() - 400;
     meldungHinzufuegen(s.id, alt);
     const ent = einsaetzeLaden()[0]!.eintraege[0]!;
     ent.empfangenAm = Date.now();
-    ent.zugEtikett = "2. Zug";
     ent.notiz = "Sandsackverbau Damm Nord,\n   Ablösung 18 Uhr — bitte Funk halten, Rückfragen über die Führungsstelle des Abschnitts";
     const bild = lagebild({ ...einsaetzeLaden()[0]!, eintraege: [ent] }, Date.now());
     const z = bild.einheiten[0]!;
     expect(z.standAlt).toBe(true);
     expect(alterKurz(z.alterMin!)).toMatch(/^6 Std (39|40|41) Min$/);
-    expect(z.zug).toBe("2. Zug");
+    expect(z).not.toHaveProperty("zug");
     expect(z.auftrag!.length).toBeLessThanOrEqual(48);
     expect(z.auftrag).toMatch(/^Sandsackverbau Damm Nord, Ablösung 18 Uhr/);
   });

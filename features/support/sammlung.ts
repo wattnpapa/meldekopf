@@ -80,7 +80,7 @@ export function sammlungSpeicher(
 
 /**
  * Eine volle Lage für die Tafel des Lagemonitors (neu im Meldekopf): Einheiten reihum auf Organisationen verteilt (THW,
- * dann DRK, JUH, …), die erste mit langem Ortsnamen, zwei von drei Einheiten mit Sofortbedarf (Ruhezeit und Unterbringung, jede dritte dazu mit
+ * dann DRK, JUH, …), zwei von drei Einheiten mit Sofortbedarf (Ruhezeit und Unterbringung, jede dritte dazu mit
  * abweichender Verpflegung). Über die Oberfläche bräuchte das je Einheit ein Dutzend Schritte.
  */
 export function tafelLageSpeicher(name: string, einheiten: number, organisationen: number): { einsaetze: string; einsatzId: string } {
@@ -97,13 +97,16 @@ export function tafelLageSpeicher(name: string, einheiten: number, organisatione
       const org = orgs[gruppe % orgs.length]!;
       const b = weitereEinheit(org, "");
       const gesamt = b.staerkeManuell?.gesamt ?? 6;
-      const ort = `${gruppe === 0 && nr === 0 ? "Oldenburg-Wesermarsch Nord " : "Ort "}${gruppe + 1}${nr >= typen.length ? `-${Math.floor(nr / typen.length) + 1}` : ""}`;
+      // THW unterscheidet sich über den Typ, die übrigen Organisationen (zwei kurze Freitext-Typen) über den Ort. Ein langer
+      // Freitext-Typ neben Bedarf und Stand mit Datum passt in der zweizeiligen Karte derzeit nicht (bekannt, eigener Fehler).
+      const folge = org === OrganisationsTyp.THW ? (nr >= typen.length ? Math.floor(nr / typen.length) + 1 : 0) : nr + 1;
+      const ort = `Ort ${gruppe + 1}${folge ? `-${folge}` : ""}`;
       const bogen: Erfassungsbogen = {
         ...b,
         einheit:
           org === OrganisationsTyp.THW
             ? { organisation: org, einheitsTyp: { code: typen[nr % typen.length]! }, hierarchie: [{ bezeichnung: { code: 1 }, name: ort }] }
-            : { organisation: org, einheitsTyp: { freitext: nr % 2 === 0 ? "Sanitätsgruppe" : "Betreuungsgruppe" }, hierarchie: [{ bezeichnung: { freitext: "Ort" }, name: ort }] },
+            : { organisation: org, einheitsTyp: { freitext: nr % 2 === 0 ? "SEG San" : "SEG Bt" }, hierarchie: [{ bezeichnung: { freitext: "Ort" }, name: ort }] },
         ...(nr % 3 === 0
           ? {}
           : {

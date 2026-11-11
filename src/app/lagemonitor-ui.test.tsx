@@ -321,7 +321,7 @@ describe("Lagemonitor, Runde 7", () => {
   });
 });
 
-// Audit Meldekopf Runde 1, Führungssicht F3/F4: Zug, Gesamt, Bedarf und Nachträge am Fernseher.
+// Audit Meldekopf Runde 1, Führungssicht F3/F4: Gesamt, Bedarf und Nachträge am Fernseher.
 describe("Lagemonitor, Meldekopf Runde 1", () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
@@ -353,29 +353,18 @@ describe("Lagemonitor, Meldekopf Runde 1", () => {
     return e;
   }
 
-  it("zeigt Zug und Gesamt je Einheit und die Stärke je Zug", () => {
+  it("zeigt die Gesamtstärke je Einheit; ein Zug aus älteren Daten erscheint weder als Spalte noch als Zeile", () => {
     const e = mitEinheiten([
       { name: "OV Eins", zug: "1. Zug", gesamt: 9 },
       { name: "OV Zwei", zug: "2. Zug", gesamt: 4 },
-      { name: "OV Drei", zug: "1. Zug", gesamt: 3 },
     ]);
     render(<Lagemonitor einsatzId={e.id} />);
     const kopf = Array.from(document.querySelectorAll(".lm-einheiten thead th")).map((t) => t.textContent);
-    expect(kopf).toContain("Zug");
     expect(kopf).toContain("Ges.");
+    expect(kopf).not.toContain("Zug");
     const zwei = Array.from(document.querySelectorAll(".lm-einheiten tbody tr")).find((r) => r.textContent!.includes("OV Zwei"))!;
-    expect(zwei.querySelector(".lm-zug")!.textContent).toBe("2. Zug");
     expect(zwei.querySelector(".lm-gesamt")!.textContent).toBe("4");
-    const zuege = document.querySelector(".lm-zuege")!.textContent!;
-    expect(zuege).toMatch(/1\. Zug 12 \(2 Einheiten\)/);
-    expect(zuege).toMatch(/2\. Zug 4 \(1 Einheit\)/);
-  });
-
-  it("lässt Zug-Spalte und Zugzeile weg, solange niemand einem Zug zugeordnet ist", () => {
-    const e = mitEinheiten([{ name: "OV Eins", gesamt: 9 }]);
-    render(<Lagemonitor einsatzId={e.id} />);
-    expect(document.querySelector(".lm-einheiten .lm-zug")).toBeNull();
-    expect(document.querySelector(".lm-zuege")).toBeNull();
+    expect(document.body.textContent).not.toContain("2. Zug");
   });
 
   it("nennt Ruhezeit und abweichende Verpflegung in der Bedarfszeile, mit Warnzeichen", () => {

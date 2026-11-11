@@ -617,25 +617,6 @@ describe("einsatzPdfDokument()", () => {
     expect(t).not.toContain("Benzin 0 l");
     expect(t).toContain("2 Fahrzeuge · Ruhezeit erforderlich bei 0 Einheiten");
   });
-
-  it("zeigt Zwischensummen erst ab zwei Zügen — und stellt „ohne Zug“ ans Ende", () => {
-    const einZug = texte(
-      einsatzPdfDokument("Lage", [{ bogen: basisBogen(), qr: QR, zugEtikett: "1. Zug" }]).content,
-    ).join("\n");
-    expect(einZug).not.toContain("Zwischensummen nach Zug");
-
-    const t = texte(
-      einsatzPdfDokument("Lage", [
-        { bogen: basisBogen(), qr: QR },
-        { bogen: basisBogen(), qr: QR, zugEtikett: "2. Zug" },
-        { bogen: basisBogen(), qr: QR, zugEtikett: "1. Zug" },
-      ]).content,
-    ).join("\n");
-    expect(t).toContain("Zwischensummen nach Zug");
-    const zs = t.slice(t.indexOf("Zwischensummen nach Zug"));
-    expect(zs.indexOf("1. Zug")).toBeLessThan(zs.indexOf("2. Zug"));
-    expect(zs.indexOf("2. Zug")).toBeLessThan(zs.indexOf("Ohne Zug"));
-  });
 });
 
 describe("einsatzPdfDokument() — Stand am Meldekopf auf den Bogenseiten (R2-A1)", () => {
@@ -658,11 +639,11 @@ describe("einsatzPdfDokument() — Stand am Meldekopf auf den Bogenseiten (R2-A1
     return bloecke.map((b) => texte(b).join("\n"));
   }
 
-  it("vermerkt Eintreffzeit, Abrückvermerk, Zug und Auftrag über jedem Bogen", () => {
+  it("vermerkt Eintreffzeit, Abrückvermerk und Auftrag über jedem Bogen", () => {
     const dd = einsatzPdfDokument(
       "Hochwasser Albtal",
       [
-        { bogen: basisBogen(), qr: QR, eingetroffenAm: eingetroffen, zugEtikett: "1. Zug", notiz: "Deich Nord" },
+        { bogen: basisBogen(), qr: QR, eingetroffenAm: eingetroffen, notiz: "Deich Nord" },
         { bogen: basisBogen(), qr: QR3, eingetroffenAm: eingetroffen, abgerueckAm: abgerueckt, abgerueckt: true },
       ],
       undefined,
@@ -670,9 +651,9 @@ describe("einsatzPdfDokument() — Stand am Meldekopf auf den Bogenseiten (R2-A1
     );
     const [albstadt, biberach] = bogenTexte(dd);
     expect(albstadt).toContain(
-      "Stand am Meldekopf (Hochwasser Albtal, erstellt 28.09.2026, 17:00): Eingetroffen 28.09.2026, 14:05 · anwesend · Zug: 1. Zug · Auftrag / Notiz: Deich Nord",
+      "Stand am Meldekopf (Hochwasser Albtal, erstellt 28.09.2026, 17:00): Eingetroffen 28.09.2026, 14:05 · anwesend · Auftrag / Notiz: Deich Nord",
     );
-    expect(biberach).toContain("Eingetroffen 28.09.2026, 14:05 · ABGERÜCKT 28.09.2026, 16:30 · Zug: – · Auftrag / Notiz: –");
+    expect(biberach).toContain("Eingetroffen 28.09.2026, 14:05 · ABGERÜCKT 28.09.2026, 16:30 · Auftrag / Notiz: –");
     // Der Kasten steht vor dem Formular — also auf der ersten Seite des Bogens.
     expect(albstadt!.indexOf("Stand am Meldekopf")).toBeLessThan(albstadt!.indexOf("Erfassungsbogen FGr K (A)"));
   });
@@ -716,7 +697,7 @@ describe("einsatzLageblattDokument()", () => {
   it("liefert nur die Übersichtsseite quer — ohne Bögen, QR und Anhang", () => {
     const dd = einsatzLageblattDokument("Hochwasser", [
       { bogen: basisBogen(), eingetroffenAm: new Date("2026-09-27T09:40").getTime() },
-      { bogen: basisBogen(), zugEtikett: "1. Zug" },
+      { bogen: basisBogen() },
     ], new Date("2026-09-27T20:19").getTime());
     const t = texte(dd.content).join("\n");
     expect(dd.pageOrientation).toBe("landscape");
@@ -724,7 +705,7 @@ describe("einsatzLageblattDokument()", () => {
     expect(t).toContain("Erstellt 27.09.2026, 20:19");
     expect(t).toContain("27.09.2026, 09:40");
     expect(t).toContain("Bedarf gesamt (2 Einheiten, 4 Personen)");
-    expect(t).toContain("Zwischensummen nach Zug");
+    expect(t).not.toContain("Zwischensummen nach Zug");
     // Kein Bogen, kein QR-Code, keine eingebettete Datei.
     expect(t).not.toContain("Erfassungsbogen FGr K (A)");
     expect(t).not.toContain(QR_BILD);
@@ -732,24 +713,10 @@ describe("einsatzLageblattDokument()", () => {
     expect((dd.content as { pageBreak?: string }[]).some((c) => c && c.pageBreak === "before")).toBe(false);
   });
 
-  it("setzt Bedarf und Zwischensummen nach Zug vor das Raster zum Nachtragen (R16-K4)", () => {
-    const dd = einsatzLageblattDokument("Lage", [
-      { bogen: basisBogen(), zugEtikett: "1. Zug" },
-      { bogen: basisBogen(), zugEtikett: "2. Zug" },
-    ], 0, 12);
-    const t = texte(dd.content).join("\n");
-    const zug = t.indexOf("Zwischensummen nach Zug");
-    const bedarf = t.indexOf("Bedarf gesamt");
-    const raster = t.indexOf("Nachtrag von Hand");
-    expect(zug).toBeGreaterThan(-1);
-    expect(raster).toBeGreaterThan(zug);
-    expect(raster).toBeGreaterThan(bedarf);
-    // Mit Zügen stehen Bedarf und Zugsummen sogar vor der Einheitentabelle, damit sie auf Seite 1 bleiben.
-    expect(zug).toBeLessThan(t.indexOf("Veränderung seit der letzten Meldung"));
-    // Ohne Zug-Etiketten bleibt die gewohnte Reihenfolge: Tabelle, dann Bedarf.
-    const ohneZug = texte(einsatzLageblattDokument("Lage", [{ bogen: basisBogen() }], 0, 12).content).join("\n");
-    expect(ohneZug.indexOf("Bedarf gesamt")).toBeGreaterThan(ohneZug.indexOf("Veränderung seit der letzten Meldung"));
-    expect(ohneZug.indexOf("Nachtrag von Hand")).toBeGreaterThan(ohneZug.indexOf("Bedarf gesamt"));
+  it("setzt den Bedarf hinter die Tabelle und vor das Raster zum Nachtragen (R16-K4)", () => {
+    const t = texte(einsatzLageblattDokument("Lage", [{ bogen: basisBogen() }, { bogen: basisBogen() }], 0, 12).content).join("\n");
+    expect(t.indexOf("Bedarf gesamt")).toBeGreaterThan(t.indexOf("Veränderung seit der letzten Meldung"));
+    expect(t.indexOf("Nachtrag von Hand")).toBeGreaterThan(t.indexOf("Bedarf gesamt"));
   });
 
   it("beschriftet die Stärke-Linien des Blanko-Vordrucks (R2-A6)", () => {
@@ -767,7 +734,7 @@ describe("einsatzLageblattDokument()", () => {
     expect(blanko).toMatch(/eingegangen am/);
     expect(blanko).toMatch(/\[ {2}\] ÜBUNG/);
     expect(blanko).toMatch(/ins Gerät übertragen \[ {2}\]/);
-    expect(blanko).toContain("Zug / Verband:");
+    expect(blanko).not.toContain("Zug / Verband");
     // Ein ausgefüllter Bogen trägt den Kasten nicht — er hat seinen „Stand am Meldekopf“.
     expect(texte(pdfDokument(basisBogen(), QR).content).join("\n")).not.toContain("ins Gerät übertragen");
   });
@@ -800,22 +767,22 @@ describe("einsatzLageblattDokument()", () => {
     expect(t.match(/Nr\. \d/g)).toHaveLength(1);
   });
 
-  it("zeigt Zug und Bedarf je Einheit und Änderungen ohne Pfeil (R2-K3)", () => {
+  it("zeigt den Bedarf je Einheit und Änderungen ohne Pfeil, keine Spalte Zug (R2-K3)", () => {
     const ruhe = basisBogen();
     ruhe.sofortbedarf = { ...ruhe.sofortbedarf!, ruhezeitErforderlich: true, dieselLiter: 200 };
     const vorher = basisBogen();
     vorher.sofortbedarf = { ...vorher.sofortbedarf!, dieselLiter: 50 };
     const t = texte(
-      einsatzLageblattDokument("Lage", [{ bogen: ruhe, vorher, zugEtikett: "1. TZ" }]).content,
+      einsatzLageblattDokument("Lage", [{ bogen: ruhe, vorher }]).content,
     ).join("\n");
-    expect(t).toContain("1. TZ");
+    expect(t).not.toMatch(/^Zug$/m);
     expect(t).toMatch(/Ruhezeit\n · [\s\S]*Diesel 200 l/);
     expect(t).toMatch(/von 50 l auf 200 l/);
     expect(t).not.toContain("→");
   });
 
   it("ist ein Blatt zum Weiterführen: Funkrufname, Rückruf und freie Zeilen (R2-A3)", () => {
-    const dd = einsatzLageblattDokument("Lage", [{ bogen: basisBogen(), zugEtikett: "1. TZ" }]);
+    const dd = einsatzLageblattDokument("Lage", [{ bogen: basisBogen() }]);
     const t = texte(dd.content).join("\n").replace(/\u200B/g, "");
     expect(t).toContain("Funkrufname /\nRückruf");
     expect(t).toContain("Oldenburg - Ni 18/13");
@@ -825,7 +792,7 @@ describe("einsatzLageblattDokument()", () => {
     // Mindestens fünf Nachtragszeilen (R3-A5); den Rest der Seite füllt
     // einsatzLageblattSeiteFuellen (gemessen in pdf-seiten.test.ts).
     const leer = JSON.stringify(dd.content).match(/\{"text":" ","margin":\[0,5,0,5\]/g) ?? [];
-    expect(leer.length).toBe(5 * 10);
+    expect(leer.length).toBe(5 * 9);
     // Unter der gedruckten Summe ein Feld für die fortgeschriebene (R3-A5).
     expect(t).toContain("Summe laut Gerät (1 zählend)");
     expect(t).toContain("Summe einschl. Nachträge (von Hand)");

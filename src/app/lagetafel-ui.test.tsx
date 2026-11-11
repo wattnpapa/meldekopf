@@ -7,7 +7,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { EinsatzArt, MeldeStatus, einsaetzeSpeichern, einsatzAnlegen, meldungHinzufuegen } from "@bos/meldekopf/einsaetze";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 import { statusMitZeitSetzen } from "./eintrag-zeiten";
-import { neuePerson, neuerBogen, neuesFahrzeug } from "./hilfen";
+import { OrganisationsTyp } from "@bos/eeb-format/model";
+import { ersteEbene, neuePerson, neuerBogen, neuesFahrzeug } from "./hilfen";
 import { ANSICHT_SCHLUESSEL } from "./lagemonitor-ansicht";
 import { einsatzFunkrufSetzen, einsatzbeginnSetzen } from "./lagemonitor-beginn";
 import { Lagemonitor, LagemonitorBlock, STUFE_SCHLUESSEL } from "./lagemonitor-ui";
@@ -17,7 +18,8 @@ interface Einheit {
   ort: string;
   typ?: number | string;
   st?: [number, number, number];
-  zug?: string;
+  /** Organisation; Vorgabe THW. */
+  org?: OrganisationsTyp;
   ruhezeit?: boolean;
   funk?: number[];
   auftrag?: string;
@@ -31,6 +33,10 @@ function einsatzMit(einheiten: Einheit[], art = EinsatzArt.EINSATZ, name = "Hoch
   const ids: string[] = [];
   for (const x of einheiten) {
     const b = neuerBogen();
+    if (x.org != null) {
+      b.einheit.organisation = x.org;
+      b.einheit.hierarchie = [ersteEbene(x.org)];
+    }
     b.einheit.hierarchie[0]!.name = x.ort;
     if (x.typ != null) b.einheit.einheitsTyp = typeof x.typ === "number" ? { code: x.typ } : { freitext: x.typ };
     const st = x.st ?? [0, 2, 7];
@@ -43,7 +49,7 @@ function einsatzMit(einheiten: Einheit[], art = EinsatzArt.EINSATZ, name = "Hoch
       fz.funkrufname = { kennwort: { freitext: "Heros" }, eigenerStandort: true, teile: x.funk };
       b.fahrzeuge = [fz];
     }
-    ids.push(meldungHinzufuegen(e.id, b, x.zug ? { zugEtikett: x.zug } : undefined)!.eintrag.id);
+    ids.push(meldungHinzufuegen(e.id, b)!.eintrag.id);
   }
   if (einheiten.some((x) => x.auftrag || x.teil)) {
     const liste = structuredClone(einsaetzeLaden());
@@ -103,19 +109,20 @@ describe("Lagetafel", () => {
     expect(uhr.querySelector(".lt-dtg")!.textContent).toBe("DTG 101806nov26");
   });
 
-  it("stellt jede Einheit mit Zeichen, Herkunft, Typ, Funkrufname, Auftrag und Stärke an ihren Platz im Zug", () => {
+  it("stellt jede Einheit mit Zeichen, Herkunft, Typ, Funkrufname, Auftrag und Stärke an ihren Platz in ihrer Organisation", () => {
     const { sammlung } = einsatzMit([
-      { ort: "Oldenburg (NI)", typ: 3, st: [1, 1, 2], zug: "1. Zug" },
-      { ort: "Oldenburg (NI)", typ: 4, st: [0, 3, 6], zug: "1. Zug", funk: [22, 51], auftrag: "Sandsackfüllplatz Nord" },
-      { ort: "Brake", typ: 16, st: [0, 2, 7], zug: "2. Zug" },
+      { ort: "Oldenburg (NI)", typ: 3, st: [1, 1, 2] },
+      { ort: "Oldenburg (NI)", typ: 4, st: [0, 3, 6], funk: [22, 51], auftrag: "Sandsackfüllplatz Nord" },
+      { ort: "Elsfleth", org: OrganisationsTyp.FEUERWEHR, typ: "Löschgruppe", st: [0, 1, 8] },
+      { ort: "Brake", typ: 16, st: [0, 2, 7] },
     ]);
     tafel(sammlung());
-    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["1. Zug", "2. Zug"]);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["THW", "Feuerwehr"]);
     const koepfe = Array.from(document.querySelectorAll<HTMLElement>(".lt-gruppe"));
-    expect(koepfe[0]!.textContent).toContain("2 Einheiten");
-    expect(within(koepfe[0]!).getByRole("group").getAttribute("aria-label")).toBe("Stärke: 1 Führer, 4 Unterführer, 8 Mannschaft, gesamt 13");
+    expect(koepfe[0]!.textContent).toContain("3 Einheiten");
+    expect(within(koepfe[0]!).getByRole("group").getAttribute("aria-label")).toBe("Stärke: 1 Führer, 6 Unterführer, 15 Mannschaft, gesamt 22");
     expect(koepfe[1]!.textContent).toContain("1 Einheit");
-    expect(karten().map((k) => k.querySelector(".lt-herkunft")!.textContent)).toEqual(["THW Oldenburg (NI)", "THW Oldenburg (NI)", "THW Brake"]);
+    expect(karten().map((k) => k.querySelector(".lt-herkunft")!.textContent)).toEqual(["THW Oldenburg (NI)", "THW Oldenburg (NI)", "THW Brake", "Feuerwehr Elsfleth"]);
 
     const bergung = karten()[1]!;
     // Ausgeschrieben, dahinter als Ausweich für enge Zeilen die Kurzform (für Vorlesesoftware nur der ausgeschriebene Typ).
@@ -458,14 +465,16 @@ describe("Lagetafel: Satz und Blättern", () => {
 
   it("trennt im Gruppenkopf den Namen von „(Fortsetzung)“: Der Name darf gekürzt werden, der Zusatz bleibt stehen", () => {
     fernseher();
-    const { sammlung } = einsatzMit(Array.from({ length: 30 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: "1. Technischer Zug Oldenburg-Wesermarsch Nord" })).concat([{ ort: "Brake", typ: 4, zug: "2. Zug" }]));
+    const { sammlung } = einsatzMit(
+      Array.from({ length: 30 }, (_, i): Einheit => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: "Gruppe", org: OrganisationsTyp.RETTUNGSDIENST })).concat([{ ort: "Brake", typ: 4 }]),
+    );
     tafel(sammlung());
     const koepfe = Array.from(document.querySelectorAll(".lt-gruppe h3"));
     const fortgesetzt = koepfe.filter((h) => h.querySelector(".lt-fortsetzung"));
     expect(fortgesetzt.length).toBeGreaterThan(0);
     for (const h of fortgesetzt) {
-      expect(h.textContent).toBe("1. Technischer Zug Oldenburg-Wesermarsch Nord (Fortsetzung)");
-      expect(h.querySelector(".lt-gruppe-name")!.textContent).toBe("1. Technischer Zug Oldenburg-Wesermarsch Nord");
+      expect(h.textContent).toBe("Rettungsdienst (Fortsetzung)");
+      expect(h.querySelector(".lt-gruppe-name")!.textContent).toBe("Rettungsdienst");
       expect(h.querySelector(".lt-fortsetzung")!.textContent).toBe("(Fortsetzung)");
     }
   });
@@ -498,29 +507,35 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(sichtbar()).toEqual(erste);
   });
 
-  it("nennt beim Blättern, welche Züge die Seite zeigt und welche die nächste", () => {
+  it("nennt beim Blättern, welche Organisationen die Seite zeigt und welche die nächste", () => {
     fernseher();
     vi.useFakeTimers();
-    // Zwölf Züge mit je vier Einheiten.
+    // Acht Organisationen mit je sechs Einheiten, in der festen Folge des Formats.
+    const orgs = [
+      OrganisationsTyp.THW,
+      OrganisationsTyp.FEUERWEHR,
+      OrganisationsTyp.POLIZEI,
+      OrganisationsTyp.BUNDESPOLIZEI,
+      OrganisationsTyp.DRK,
+      OrganisationsTyp.ASB,
+      OrganisationsTyp.DLRG,
+      OrganisationsTyp.BUNDESWEHR,
+    ];
     const { sammlung } = einsatzMit(
-      Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number], ruhezeit: i === 9 })),
+      Array.from({ length: 48 }, (_, i): Einheit => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: "Gruppe", org: orgs[Math.floor(i / 6)]!, st: [0, 2, 6] })),
     );
     tafel(sammlung());
     const status = () => screen.getByRole("status").textContent!;
-    const seite1 = /^Seite 1 von (\d): 1\. Zug bis (\d+)\. Zug · weiter mit (\d+)\. Zug bis \d+\. Zug$/.exec(status());
-    expect(seite1, status()).not.toBeNull();
-    const letzter = Number(seite1![2]);
-    expect(Number(seite1![3])).toBeGreaterThanOrEqual(letzter);
+    expect(status()).toMatch(/^Seite 1 von \d: THW bis [^·]+ · weiter mit [^·]+$/);
 
     act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
     expect(status()).toMatch(/^Seite 2 von/);
-    // Eine eigene Aufstellung der Züge mit Stärke führt die Randspalte nicht.
-    expect(within(screen.getByRole("complementary")).queryByRole("heading", { name: /^Züge/ })).toBeNull();
+    expect(status()).toContain("Bundeswehr");
   });
 
   it("zeigt ohne Blättern keine Seitenzeile", () => {
     fernseher();
-    const { sammlung } = einsatzMit(Array.from({ length: 8 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug` })));
+    const { sammlung } = einsatzMit(Array.from({ length: 8 }, (_, i): Einheit => ({ ort: `Ort ${i + 1}`, typ: "Gruppe", org: i < 4 ? OrganisationsTyp.THW : OrganisationsTyp.DRK })));
     tafel(sammlung());
     expect(document.querySelector(".lt-seitenzeile")).toBeNull();
   });
@@ -799,7 +814,7 @@ describe("Lagetafel, Stil", () => {
     expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-typ \{ max-width: 14em;/);
   });
 
-  it("kürzt einen langen Zugnamen mit Auslassung und lässt „(Fortsetzung)“ stehen", () => {
+  it("kürzt einen langen Gruppennamen mit Auslassung und lässt „(Fortsetzung)“ stehen", () => {
     // Vorgefallen: Die Rücksetzregel erlaubt Überschriften den Umbruch („text-wrap: wrap") und wog schwerer als das geerbte
     // „nowrap" des Kopfs. Die zweite Zeile lag unter seiner Kante: „(Fortsetzung)" war nie zu sehen.
     expect(css).toMatch(/main\.lt \.lt-gruppe h3 \{[^}]*white-space: nowrap;/);

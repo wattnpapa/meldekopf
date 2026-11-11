@@ -251,13 +251,13 @@ describe("Änderungen an bekannten Einheiten seit dem Stand (Audit Runde 4, R4-K
     expect(aenderungenSeit([a, b], stand).anzahl).toBe(0);
   });
 
-  it("zählt Zug, Auftrag und Eintreffzeit, je Art genannt", () => {
+  it("zählt Auftrag und Eintreffzeit, je Art genannt; ein Zug aus Altdaten zählt nicht", () => {
     const a = eintrag("m1", "Wardenburg", 1000);
     const stand = lageblattVermerken(sammlung("e1", [a]), undefined, 3000);
     a.zugEtikett = "1. TZ";
     a.notiz = "Deich Nord";
     a.eingetroffenAm = 1500;
-    expect(aenderungenSeit([a], stand)).toMatchObject({ anzahl: 3, arten: ["Zug", "Auftrag", "Eintreffzeit"] });
+    expect(aenderungenSeit([a], stand)).toMatchObject({ anzahl: 2, arten: ["Auftrag", "Eintreffzeit"] });
     expect(JSON.stringify(localStorage.getItem("eeb.lageblatt-stand.v1"))).not.toContain("Deich");
   });
 
@@ -352,10 +352,10 @@ describe("Nachtrag: Gründe, Namen, Stände vom anderen Gerät (Audit Runde 5, R
     const a = eintrag("m1", "Wardenburg", 1000);
     const b = eintrag("m2", "Hatten", 2000);
     const stand = exportVermerken(sammlung("e1", [a, b]), "csv", undefined, 3000);
-    a.zugEtikett = "1. TZ";
+    a.notiz = "Deich Nord";
     const c = eintrag("m3", "Ganderkesee", 5000);
     const g = nachtragGruende([a, b, c], stand);
-    expect(g[a.einheitSchluessel]).toEqual({ neu: false, gruende: ["Zug"] });
+    expect(g[a.einheitSchluessel]).toEqual({ neu: false, gruende: ["Auftrag"] });
     expect(g[c.einheitSchluessel]).toEqual({ neu: true, gruende: ["neu"] });
     expect(g[b.einheitSchluessel]).toBeUndefined();
     const teil = exportSammlung(sammlung("e1", [a, b, c]), "neue", stand);

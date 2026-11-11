@@ -23,7 +23,7 @@ import {
   nachgereichterBogen,
   vorrangZuruecknehmen,
 } from "./fassung-vorrang";
-import { notizSetzen, zugSetzen, meldungAufnehmen } from "./eintrag-zeiten";
+import { notizSetzen, meldungAufnehmen } from "./eintrag-zeiten";
 import { nurStaerkeUebernehmen } from "./schnellerfassung/nur-staerke";
 
 class MemStorage {
@@ -111,9 +111,8 @@ describe("fassungPruefen", () => {
 });
 
 describe("fassungGiltSetzen", () => {
-  it("lässt den Bogen der Einheit gelten — Zug und Auftrag der Schnellerfassung bleiben", () => {
+  it("lässt den Bogen der Einheit gelten — der Auftrag der Schnellerfassung bleibt", () => {
     const { id, schnell, echt } = schnellUndBogen();
-    zugSetzen(id, schnell.einheitSchluessel, schnell.id, "1. Zug");
     notizSetzen(id, schnell.id, "Deich Nord");
     expect(nachgereichterBogen(geltendeJeEinheit(eintraege(id))[0]!, fassungenJeEinheit(eintraege(id), schnell.einheitSchluessel))?.id).toBe(echt.id);
 
@@ -123,7 +122,6 @@ describe("fassungGiltSetzen", () => {
     expect(kopf.id).toBe(echt.id);
     expect(gesamt(kopf)).toBe(11);
     expect(kopf.bogen.fahrzeuge).toHaveLength(4);
-    expect(kopf.zugEtikett).toBe("1. Zug");
     expect(kopf.notiz).toBe("Deich Nord");
     // Die Historie behält beide, die Schnellerfassung als ersetzt.
     const revs = fassungenJeEinheit(eintraege(id), schnell.einheitSchluessel);

@@ -45,7 +45,6 @@ interface Angaben {
   ort: string;
   typ?: number | string;
   st?: [number, number, number];
-  zug?: string;
   /** Empfangen vor … Minuten (Vorgabe 30). */
   vorMin?: number;
   /** Eingetroffen vor … Minuten, wenn es von der Empfangszeit abweicht. */
@@ -98,7 +97,6 @@ function eintrag(a: Angaben): MeldeEintrag {
     empfangenAm: JETZT - (a.vorMin ?? 30) * MIN,
     quelle: "scan",
     status: a.status ?? MeldeStatus.ANWESEND,
-    ...(a.zug ? { zugEtikett: a.zug } : {}),
     ...(a.daVorMin != null ? { eingetroffenAm: JETZT - a.daVorMin * MIN } : {}),
     ...(a.abgeruecktVorMin != null ? { abgerueckAm: JETZT - a.abgeruecktVorMin * MIN } : {}),
     ...(a.notiz ? { notiz: a.notiz } : {}),
@@ -174,21 +172,7 @@ describe("meldungTeile", () => {
 });
 
 describe("tafelbild: feste Plätze", () => {
-  it("ordnet nach Zug in Zählfolge, „ohne Zug“ zuletzt", () => {
-    const tb = tafelbild(
-      sammlung([
-        eintrag({ ort: "Jever", zug: "10. Zug" }),
-        eintrag({ ort: "Varel" }),
-        eintrag({ ort: "Brake", zug: "2. Zug" }),
-        eintrag({ ort: "Oldenburg (NI)", zug: "1. Zug" }),
-      ]),
-      JETZT,
-    );
-    expect(tb.gruppen.map((g) => g.titel)).toEqual(["1. Zug", "2. Zug", "10. Zug", "ohne Zug"]);
-    expect(tb.gruppen.every((g) => g.kopf)).toBe(true);
-  });
-
-  it("ordnet ohne Züge nach Organisation, in der festen Folge des Formats", () => {
+  it("ordnet nach Organisation, in der festen Folge des Formats", () => {
     const tb = tafelbild(
       sammlung([
         eintrag({ org: T.DRK, ort: "Wesermarsch", typ: "SEG Betreuung" }),
@@ -204,9 +188,6 @@ describe("tafelbild: feste Plätze", () => {
     const tb = tafelbild(sammlung([eintrag({ ort: "Brake", typ: 3 }), eintrag({ ort: "Brake", typ: 4 })]), JETZT);
     expect(tb.gruppen).toHaveLength(1);
     expect(tb.gruppen[0]!.kopf).toBe(false);
-    // Ein einzelner Zug behält seinen Kopf: Er trägt den Namen des Zugs.
-    const zug = tafelbild(sammlung([eintrag({ ort: "Brake", typ: 3, zug: "1. Zug" })]), JETZT);
-    expect(zug.gruppen[0]).toMatchObject({ titel: "1. Zug", kopf: true });
   });
 
   it("stellt die Einheiten nach Eintreffzeit; eine Folgemeldung rückt niemanden nach vorn", () => {
@@ -226,7 +207,7 @@ describe("tafelbild: feste Plätze", () => {
     expect(einheiten[0]!.staerke.gesamt).toBe(7);
   });
 
-  it("hält bei gleicher Eintreffzeit die Folge der Aufnahme: ein Stapel Bögen, in einem Zug eingelesen", () => {
+  it("hält bei gleicher Eintreffzeit die Folge der Aufnahme: ein Stapel Bögen, auf einmal eingelesen", () => {
     const tb = tafelbild(
       sammlung([
         eintrag({ ort: "Zuerst", schluessel: "z", vorMin: 40 }),
@@ -243,17 +224,17 @@ describe("tafelbild: feste Plätze", () => {
   it("rechnet je Gruppe dieselbe Stärke wie die Summe im Kopf", () => {
     const tb = tafelbild(
       sammlung([
-        eintrag({ ort: "Oldenburg (NI)", zug: "1. Zug", st: [1, 1, 2] }),
-        eintrag({ ort: "Oldenburg (NI)", zug: "1. Zug", st: [0, 3, 6] }),
-        eintrag({ ort: "Brake", zug: "2. Zug", st: [0, 2, 5] }),
-        eintrag({ org: T.FEUERWEHR, ort: "Elsfleth", st: [1, 3, 18] }),
+        eintrag({ ort: "Oldenburg (NI)", st: [1, 1, 2] }),
+        eintrag({ ort: "Brake", st: [0, 3, 6] }),
+        eintrag({ org: T.FEUERWEHR, ort: "Elsfleth", st: [0, 2, 5] }),
+        eintrag({ org: T.DRK, ort: "Wesermarsch", st: [1, 3, 18] }),
       ]),
       JETZT,
     );
     expect(tb.gruppen.map((g) => [g.titel, g.staerke])).toEqual([
-      ["1. Zug", { fuehrer: 1, unterfuehrer: 4, mannschaft: 8, gesamt: 13 }],
-      ["2. Zug", { fuehrer: 0, unterfuehrer: 2, mannschaft: 5, gesamt: 7 }],
-      ["ohne Zug", { fuehrer: 1, unterfuehrer: 3, mannschaft: 18, gesamt: 22 }],
+      ["THW", { fuehrer: 1, unterfuehrer: 4, mannschaft: 8, gesamt: 13 }],
+      ["Feuerwehr", { fuehrer: 0, unterfuehrer: 2, mannschaft: 5, gesamt: 7 }],
+      ["DRK", { fuehrer: 1, unterfuehrer: 3, mannschaft: 18, gesamt: 22 }],
     ]);
     const gesamt = tb.gruppen.reduce((n, g) => n + g.staerke.gesamt, 0);
     expect(gesamt).toBe(tb.bild.summen.staerke.gesamt);
@@ -590,7 +571,7 @@ describe("tafelSatz", () => {
     expect(tafelSatz(ohneKopf(2), 0, FERNSEHER)).toMatchObject({ fassung: "drei", spalten: 1 });
     expect(tafelSatz(ohneKopf(6), 0, FERNSEHER)).toMatchObject({ fassung: "breit", spalten: 1 });
     expect(tafelSatz(gruppen(4, 1), 0, FERNSEHER)).toMatchObject({ fassung: "breit", spalten: 1 });
-    // Zwei Züge mit je fünf: drei Zeilen, ein Zug je Spalte.
+    // Zwei Gruppen mit je fünf: drei Zeilen, eine Gruppe je Spalte.
     expect(tafelSatz(gruppen(5, 5), 0, FERNSEHER)).toMatchObject({ fassung: "drei", spalten: 2 });
     // Drei Züge mit je sechs: drei Bahnen nebeneinander, weiter mit vollem Inhalt.
     expect(tafelSatz(gruppen(6, 6, 6), 0, FERNSEHER)).toMatchObject({ fassung: "drei", spalten: 3 });
@@ -751,7 +732,7 @@ describe("tafelSatz", () => {
     ];
     for (let lauf = 0; lauf < 400; lauf++) {
       const masse = flaechen[lauf % flaechen.length]!;
-      // Jede vierte Lage hat nur eine Gruppe: der häufigste Fall, ein Zug oder eine Organisation, mit und ohne Kopf.
+      // Jede vierte Lage hat nur eine Gruppe: der häufigste Fall, eine Organisation, mit und ohne Kopf.
       const anzahlen = Array.from({ length: zufall(4) === 0 ? 1 : 1 + zufall(9) }, () => 1 + zufall(lauf % 7 === 0 ? 30 : 9));
       const mitKopf = anzahlen.length > 1 || zufall(2) === 0;
       // Jede zwölfte Lage ohne anwesende Einheit: Nur dann stehen die abgerückten auf der Tafel.

@@ -14,7 +14,7 @@ import {
   type Person,
 } from "@bos/eeb-format/model";
 import { EinsatzArt, MeldeStatus, einheitSchluessel, bogenInhaltsId, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
-import { aggregiere, aggregiereNachZug, aktuelleMeldungen, uebungenAusserhalbDerLage, unterbringungAngefordertText } from "./auswertung";
+import { aggregiere, aktuelleMeldungen, uebungenAusserhalbDerLage, unterbringungAngefordertText } from "./auswertung";
 
 function person(rolle: StaerkeRolle, geschlecht = Geschlecht.M, ernaehrung = Ernaehrung.FLEISCH): Person {
   return {
@@ -139,19 +139,6 @@ describe("aggregiere()", () => {
   });
 });
 
-describe("aggregiereNachZug()", () => {
-  it("bildet Zwischensummen je Etikett, ohne Etikett zuletzt", () => {
-    const gruppen = aggregiereNachZug([
-      meldung(bogen("A"), { zugEtikett: "1. Bergungszug" }),
-      meldung(bogen("B"), { zugEtikett: "1. Bergungszug" }),
-      meldung(bogen("C")), // ohne Etikett
-    ]);
-    expect(gruppen.map((g) => g.zugEtikett)).toEqual(["1. Bergungszug", undefined]);
-    expect(gruppen[0]!.summen.einheiten).toBe(2);
-    expect(gruppen[1]!.summen.einheiten).toBe(1);
-  });
-});
-
 describe("aktuelleMeldungen()", () => {
   it("liefert neueste Revision je Einheit, nur anwesende", () => {
     const m = aktuelleMeldungen([
@@ -181,16 +168,6 @@ describe("Übungsmeldungen und die Lage", () => {
     const eintraege = [meldung(bogen("Echt")), meldung(bogen("Übung", { uebung: true }))];
     expect(aggregiere(eintraege, EinsatzArt.UEBUNG).einheiten).toBe(2);
     expect(uebungenAusserhalbDerLage(eintraege, EinsatzArt.UEBUNG)).toHaveLength(0);
-  });
-
-  it("hält die Zwischensummen nach Zug an dieselbe Regel", () => {
-    const eintraege = [
-      meldung(bogen("Echt"), { zugEtikett: "1. Zug" }),
-      meldung(bogen("Übung", { uebung: true }), { zugEtikett: "1. Zug" }),
-    ];
-    const gruppen = aggregiereNachZug(eintraege, EinsatzArt.EINSATZ);
-    expect(gruppen).toHaveLength(1);
-    expect(gruppen[0]!.summen.einheiten).toBe(1);
   });
 
   it("zählt ohne Einsatzart wie bisher alles (Aufrufer ohne Sammlungsbezug)", () => {

@@ -162,7 +162,7 @@ describe("R20-W1 „Endgültig löschen“ im Notweg bei vollem Speicher", () =>
 });
 
 describe("R20-O3 Nach einem Speicherfehler bleibt der getippte Text im Feld", () => {
-  it("Auftrag/Notiz und Zug zuordnen: das Feld bleibt mit dem Text offen, der Dialog ist schnell zu", async () => {
+  it("Auftrag/Notiz: das Feld bleibt mit dem Text offen, der Dialog ist schnell zu", async () => {
     const nutzer = userEvent.setup();
     const s = einsatzAnlegen("Hochwasser Text", EinsatzArt.EINSATZ);
     meldungHinzufuegen(s.id, bogenName("Crailsheim"));
@@ -180,15 +180,6 @@ describe("R20-O3 Nach einem Speicherfehler bleibt der getippte Text im Feld", ()
     expect(einsaetzeLaden()[0]!.eintraege[0]!.notiz).toBeUndefined();
     // Es folgt kein zweiter Dialog aus dem Fokuswechsel (kein Dialog-Kreislauf).
     expect(document.querySelectorAll("dialog[open]")).toHaveLength(0);
-
-    await nutzer.click(screen.getByRole("button", { name: "Zug zuordnen" }));
-    await nutzer.type(screen.getByLabelText("Zug"), "2. Zug");
-    const speichernKnoepfe = screen.getAllByRole("button", { name: "Speichern" });
-    await nutzer.click(speichernKnoepfe[speichernKnoepfe.length - 1]!);
-    const fehler2 = await screen.findByRole("dialog", { name: "Zug zuordnen" });
-    expect(fehler2.textContent).toContain("2. Zug");
-    await nutzer.click(within(fehler2).getByRole("button", { name: "Alles klar" }));
-    expect((screen.getByLabelText("Zug") as HTMLInputElement).value).toBe("2. Zug");
   }, 30000);
 });
 
@@ -275,26 +266,6 @@ describe("R20-S1/N4/H2 Quittungsleiste nach der Aufnahme von Hand", () => {
     await nutzer.click(within(leiste).getByRole("button", { name: "Aufnahme rückgängig machen" }));
     await waitFor(() => expect(einsaetzeLaden()[0]!.eintraege.map((e) => e.bogen.einheit.hierarchie[0]!.name)).toEqual(["Albstadt"]), { timeout: 5000 });
     expect(document.body.textContent).toMatch(/Aufnahme zurückgenommen: Nr\. 2 „THW Husum"/);
-  }, 30000);
-});
-
-describe("R20-W5 Quittung „Zug zugeordnet“ nennt die Zahl der Einheiten in der Kurzfassung", () => {
-  it("steht als „Zug „1. Zug“: 2 Einheiten“ in der sichtbaren Leiste", async () => {
-    const nutzer = userEvent.setup();
-    const s = einsatzAnlegen("Hochwasser Zug", EinsatzArt.EINSATZ);
-    meldungHinzufuegen(s.id, bogenName("Zeitz"));
-    const r = render(<Wirt id={s.id} />);
-    for (const n of ["Albstadt", "Biberach"]) meldungHinzufuegen(s.id, bogenName(n));
-    r.rerender(<Wirt key="neu" id={s.id} />); // zwei Einheiten neu seit der letzten Kenntnisnahme
-    const gruppe = document.querySelector<HTMLElement>(".stapel-eingang .zug-schnell")!;
-    await nutzer.type(gruppe.querySelector<HTMLInputElement>("input")!, "1. Zug");
-    await nutzer.click(within(gruppe).getByRole("button", { name: "Zuordnen" }));
-    const leiste = await waitFor(() => {
-      const l = document.querySelector<HTMLElement>(".quittung-daumen");
-      expect(l).not.toBeNull();
-      return l!;
-    });
-    expect(leiste.textContent).toMatch(/Zug „1\. Zug“: 2 Einheiten/);
   }, 30000);
 });
 

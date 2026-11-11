@@ -67,7 +67,7 @@ Funktionalität: Lagemonitor für den Fernseher
     Dann zeigt der Lagemonitor die Zeilen
     Und ist für den Fernseher die Darstellung "Zeilen" gewählt
 
-  # Die volle Tafel: viele Einheiten, ein langer Ortsname, Sofortbedarf an den meisten Karten. Vorgefallen (Durchsicht
+  # Die volle Tafel: viele Einheiten, Sofortbedarf an den meisten Karten. Vorgefallen (Durchsicht
   # nach dem ersten Stand): Bedarfsmarken liefen über Typ und Zeichen, „(Fortsetzung)" im Gruppenkopf war nie zu sehen.
   Szenario: Auf der vollen Tafel überdeckt nichts, und geteilte Gruppen sind als Fortsetzung zu erkennen
     Angenommen auf dem Gerät liegt eine Lage mit 30 Einheiten aus 2 Organisationen, viele mit Sofortbedarf

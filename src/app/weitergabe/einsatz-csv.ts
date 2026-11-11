@@ -242,7 +242,6 @@ function summenZeile(meldungen: MeldeEintrag[], titel: string, mitGrund = false)
     titel,
     "",
     "",
-    "",
     acc.f, acc.u, acc.m, acc.gesamt,
     acc.vGesamt, acc.vAnf, acc.veg, acc.vegan,
     acc.anM, acc.anW, acc.anD,

@@ -255,7 +255,7 @@ describe("qrStapelLesen", () => {
     const leer = { gelesen: 4, funde: [], fehler: [], luecken: [], abgebrochen: false };
     const t = stapelBericht(leer, 4, 0).join(" ");
     expect(t).toContain("Eintreffzeit der neu aufgenommenen Einheiten ist die Zeit des Einlesens");
-    expect(t).toContain("Abrückvermerk, Zug und Auftrag stecken nicht im Bogen");
+    expect(t).toContain("Abrückvermerk und Auftrag stecken nicht im Bogen");
     expect(t).toContain("„Lage vom Papier abgleichen…“");
     // Nichts aufgenommen — nichts nachzutragen.
     expect(stapelBericht(leer, 0, 4)).not.toContain(LAGE_NACHTRAGEN_HINWEIS);
