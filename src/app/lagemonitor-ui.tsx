@@ -29,7 +29,7 @@ import { frageJaNein } from "@bos/oberflaeche/dialoge";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
 import { ortOhneZusatz } from "./hilfen";
 import { sammlungenBeiseitegelegt } from "./eingang/unlesbar";
-import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, dauerText, lagebild, uhrTeile, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile, type ZugZeile } from "./lagemonitor";
+import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, dauerText, lagebild, uhrTeile, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile } from "./lagemonitor";
 
 import { URL_PARAMETER, lagemonitorKennung } from "./lagemonitor-kennung";
 import { ANSICHT_NAME, ANSICHT_SCHLUESSEL, lageAnsichtLaden, lageAnsichtMerken, type LageAnsicht } from "./lagemonitor-ansicht";
@@ -208,10 +208,8 @@ function vollbild() {
  * der Zeilen samt Hinweiszeile in den Behälter passen (R8-L1, R8-N2). Wo es keine
  * Messung gibt (kein Layout) oder der Behälter mitwächst (Telefon), stehen alle
  * Zeilen da. Die Zeilen sind nach „zuletzt eingetroffen zuerst" geordnet (R8-K5).
- * Die Zug-Spalte steht nur da, wenn mindestens eine Einheit einen Zug hat.
  */
 function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] }) {
-  const mitZug = einheiten.some((e) => e.zug !== "");
   const behaelter = useRef<HTMLDivElement>(null);
   const hinweisEl = useRef<HTMLDivElement>(null);
   const tabelleEl = useRef<HTMLTableElement>(null);
@@ -282,7 +280,6 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
         <thead>
           <tr>
             <th className="lm-orga">Orga</th><th>Ort</th><th><span className="lm-lang">Funkrufname</span><span className="lm-kurz">Funkruf / Ort</span></th><th className="lm-typ">Einheitentyp</th>
-            {mitZug && <th className="lm-zug">Zug</th>}
             <th className="lm-zahl" title="Führer">F</th>
             <th className="lm-zahl" title="Unterführer">U</th>
             <th className="lm-zahl" title="Mannschaft">M</th>
@@ -300,7 +297,6 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
                 {e.typ || "–"}
                 {e.auftrag && <span className="lm-auftrag">{e.auftrag}</span>}
               </td>
-              {mitZug && <td className="lm-zug">{e.zug || "–"}</td>}
               <td className="lm-zahl">{e.fuehrer}</td>
               <td className="lm-zahl">{e.unterfuehrer}</td>
               <td className="lm-zahl">{e.mannschaft}</td>
@@ -312,21 +308,6 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
       <div className="lm-weitere" ref={hinweisEl} style={weitere === 0 ? { display: "none" } : undefined}>
         + {Math.max(weitere, 1)} weitere {weitere <= 1 ? "Einheit" : "Einheiten"} · ⚠ und zuletzt eingetroffene zuerst
       </div>
-    </div>
-  );
-}
-
-/** „1. Zug 3 E. / 27 · 2. Zug 2 E. / 14 · ohne Zug 1 E. / 4" — die Frage „wie stark ist welcher Zug?" ohne Tablet (F4). */
-function ZugZeileAnzeige({ zuege }: { zuege: readonly ZugZeile[] }) {
-  return (
-    <div className="lm-zeile lm-r2 lm-zuege" aria-label="Stärke je Zug">
-      {zuege.map((z, i) => (
-        <span key={z.name ?? ""} className="lm-zug-teil">
-          {i > 0 ? " · " : ""}
-          {z.name ?? "ohne Zug"} <strong>{z.gesamt}</strong>
-          <span className="lm-label lm-inline"> ({z.einheiten} {z.einheiten === 1 ? "Einheit" : "Einheiten"})</span>
-        </span>
-      ))}
     </div>
   );
 }
@@ -618,7 +599,6 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
           ))}
         </div>
       )}
-      {bild.zuege.length > 0 && <ZugZeileAnzeige zuege={bild.zuege} />}
       {sichtbareBewegungen.length > 0 && (
         <div className="lm-zeile lm-bewegungen">
           {sichtbareBewegungen.map((b, i) => (
@@ -809,7 +789,7 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
           <input type="radio" name="lm-ansicht" checked={ansicht === "tafel"} onChange={() => waehleAnsicht("tafel")} />
           <span>
             <strong>{ANSICHT_NAME.tafel}</strong>
-            <span className="hinweis">Alle Einheiten mit taktischem Zeichen an festem Platz, nach Zug geordnet; Stärke und Uhr groß für die Ferne.</span>
+            <span className="hinweis">Alle Einheiten mit taktischem Zeichen an festem Platz, nach Organisation geordnet; Stärke und Uhr groß für die Ferne.</span>
           </span>
         </label>
       </fieldset>

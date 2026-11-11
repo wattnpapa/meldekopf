@@ -1531,11 +1531,11 @@
     @media (max-width: 30rem) {
     .einsatz-liste > .kopfzeile h2 { font-size: var(--t-l); }
     }
-    /* Zug- und Teil-Kennzeichnung an einer gemeldeten Einheit. Ruhiger als der
-       Übungs-Störer daneben: sie ordnen ein, sie warnen nicht. Das Teil-Etikett
+    /* Teil-Kennzeichnung an einer gemeldeten Einheit. Ruhiger als der
+       Übungs-Störer daneben: sie ordnet ein, sie warnt nicht. Das Teil-Etikett
        trägt den Akzent, weil es nach einer Aufteilung das einzige ist, was zwei
        gleichnamige Zeilen unterscheidet. */
-    .zug-badge, .teil-badge {
+    .teil-badge {
       display: inline-block; margin-left: 0.4rem; padding: 0 0.35rem;
       border: 1px solid var(--rand); border-radius: var(--radius);
       font-size: var(--t-xs); font-weight: 600; color: var(--text-2);
@@ -1588,7 +1588,7 @@
        Rand — „Unterbringung angefordert" bei 200 % Systemschrift, Seite
        442 statt 360 px (Audit Runde 2, R2-M1). Bei normaler Schrift passt
        jede Marke in eine Zeile, dort ändert sich nichts. */
-    .zug-badge, .teil-badge, .neu-badge, .alt-badge, .bedarf-marke, .staerke-fehlt { white-space: normal; max-width: 100%; }
+    .teil-badge, .neu-badge, .alt-badge, .bedarf-marke, .staerke-fehlt { white-space: normal; max-width: 100%; }
     .bedarf-filter { margin-top: var(--r-2); }
     /* Audit Runde 2, R2-K4: Dringendes (Ruhezeit, Unterbringung, abweichende
        Verpflegung) hebt sich von Routine-Kraftstoff ab — nicht nur über die
@@ -1658,14 +1658,9 @@
        Einheit noch vor einem steht (K3). */
     .luecken-marke { font-size: var(--t-xs); color: var(--warn-text); font-weight: 600; margin-left: 0.4rem; }
     .luecken-liste { margin: 0.25rem 0 0; padding-left: 1.2rem; font-size: var(--t-s); color: var(--warn-text); }
-    /* Inline-Bearbeitung von Zeiten und Notiz: gleiche Bauart wie der Zug. */
-    .zug-bearbeiten.zeit-bearbeiten, .zug-bearbeiten.notiz-bearbeiten { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--r-2); margin-top: var(--r-2); }
-    .zug-bearbeiten.notiz-bearbeiten input { flex: 1 1 14rem; }
-    details.zug-summen > summary { cursor: pointer; list-style: none; display: flex; align-items: center; min-height: calc(var(--ziel-basis) + var(--ziel)); }
-    details.zug-summen > summary::-webkit-details-marker { display: none; }
-    details.zug-summen > summary::before { content: "▸"; margin-right: var(--r-2); color: var(--text-2); }
-    details.zug-summen[open] > summary::before { content: "▾"; }
-    details.zug-summen > summary h2 { margin: 0; }
+    /* Inline-Bearbeitung von Zeiten und Notiz. */
+    .zeit-bearbeiten, .notiz-bearbeiten { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--r-2); margin-top: var(--r-2); }
+    .notiz-bearbeiten input { flex: 1 1 14rem; }
     /* Bedarf am Telefon eingeklappt, mit Summenzeile (R5-K4). */
     details.bedarf-block > summary { cursor: pointer; list-style: none; display: flex; align-items: center; min-height: calc(var(--ziel-basis) + var(--ziel)); }
     details.bedarf-block > summary::-webkit-details-marker { display: none; }
@@ -1751,7 +1746,7 @@
     table.einheiten-tabelle > thead > tr > :first-child,
     table.einheiten-tabelle > tfoot > tr > :first-child { background: var(--flaeche-2); z-index: 2; }
     /* R5-M4: Die Zelle nach der klebenden Spalte beginnt mit Abstand — die Spalte
-       „Zug" fing unter deren Kante an, der Text stand angeschnitten („. TZ
+       die zweite Spalte fing unter deren Kante an, der Text stand angeschnitten („. TZ
        Albstadt"). Und „ABGERÜCKT" bricht nicht mitten im Wort („ABGERÜCK/T"):
        Marken sind unteilbar, nur Namen trennen. */
     table.einheiten-tabelle > * > tr > :nth-child(2) { padding-left: max(var(--r-3), 12px); }
@@ -2273,7 +2268,7 @@
     .tabellen-scroll { overflow: visible !important; }
     table.einheiten-tabelle > * > tr > :first-child { position: static !important; width: auto !important; max-width: none !important; }
     table { width: 100% !important; font-size: 9pt; }
-    tr, .einheit-zeile, .eintrag, details, li, figure, .staerke-leiste, .bedarf-block, .zug-summen { break-inside: avoid; page-break-inside: avoid; }
+    tr, .einheit-zeile, .eintrag, details, li, figure, .staerke-leiste, .bedarf-block { break-inside: avoid; page-break-inside: avoid; }
     h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
     main, #app { display: block !important; max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
     main { container-type: normal; }
@@ -3199,7 +3194,6 @@
     .eintrag,
     .staerke-leiste,
     .bedarf-block,
-    .zug-summen,
     tr,
     details,
     li,
@@ -3352,7 +3346,7 @@
       html:not(.schrift-gross) .staerke-leiste:has(> div:nth-child(5)) strong { font-size: calc(var(--t-zahl) * 0.8); }
       html:not(.schrift-gross) .staerke-leiste:has(> div:nth-child(5)) span { font-size: min(var(--t-xs), 11px); letter-spacing: 0.04em; overflow-wrap: break-word; }
     }
-    /* R11-M1: Die optionalen Zettelfelder der Aufnahme (Eingetroffen um, Nr., Zug) stehen eingeklappt; die Zusammenfassung
+    /* R11-M1: Die optionalen Zettelfelder der Aufnahme (Eingetroffen um, Nr.) stehen eingeklappt; die Zusammenfassung
        ist ein voller Knopf. So liegt „Ort der Einheit" nicht zwei Bildschirme unter dem Kopf. */
     details.zettel-angaben > summary {
       cursor: pointer; display: flex; align-items: center;
@@ -3431,12 +3425,6 @@
     .lm-block .vorlage-aktionen { gap: 12px; }
     /* ===== Ende Runde 13 (Zustand) ===== */
 /* ===== Runde 13 (Inhalte) ===== */
-/* R13-W5: Zug für neu aufgenommene Einheiten gleich unter der Quittung; Knöpfe und Feld in Fingergröße. */
-    .zug-schnell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--r-2); margin: var(--r-2) 0; }
-    .zug-schnell .zug-schnell-text { font-weight: 600; flex: 1 1 100%; }
-    .zug-schnell button,
-    .zug-schnell input { min-height: 44px; }
-    .zug-schnell input { flex: 1 1 9rem; min-width: 0; }
     /* ===== Ende Runde 13 (Inhalte) ===== */
 /* ===== Runde 13 (Layout) ===== */
 /* R13-M1: Die Kurzmarke „anon." in der klebenden Namensspalte der Tabelle bleibt unteilbar und kurz. */
@@ -3445,11 +3433,6 @@
        damit „Ges." nicht angeschnitten wird. */
     table.einheiten-tabelle thead th > .spalten-sortierung { letter-spacing: 0; }
     table.einheiten-tabelle thead > tr > :first-child + th > .spalten-sortierung { padding-inline-start: 6px; }
-    /* R13-G2: „Zug zuordnen" wie „Auftrag/Notiz": Feld und Knöpfe in einer Reihe mit 8 px Abstand, auch zwischen den
-       Zugvorschlägen und unter dem Feld. */
-    .zug-bearbeiten:not(.zeit-bearbeiten):not(.notiz-bearbeiten) { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: var(--r-2); }
-    .zug-bearbeiten:not(.zeit-bearbeiten):not(.notiz-bearbeiten) input { flex: 1 1 10rem; min-width: 0; }
-    .zug-bearbeiten .zug-vorschlaege { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
     /* R13-G3: Anruf- und Mail-Verknüpfungen in „Details" stehen mit mindestens 8 px Abstand (4 px je Verknüpfung). */
     dl.paare dd a.kontakt-link { margin-block: 4px; margin-inline: 0 4px; }
     /* ===== Ende Runde 13 (Layout) ===== */
@@ -3682,7 +3665,7 @@
       /* Die Speicherzeile bleibt auch im Feld-Modus einzeilig: Kopf und Fußleiste belegen dort höchstens die Hälfte des Bildes. */
       :root .seiten-kopf.assistent-kopf .autosave:not(.speicher-fehler):not(.fest-warnung) { font-size: min(var(--t-xs), 13px); line-height: 1.25; }
     }
-    /* R17-H8, K7, G7: Kernspalten der Tabelle am Telefon (Einheit, Stärke, Zug, Alter, Bedarf) ohne seitliches Wischen; die Köpfe sind dort nur Text.
+    /* R17-H8, K7, G7: Kernspalten der Tabelle am Telefon (Einheit, Stärke, Alter, Bedarf) ohne seitliches Wischen; die Köpfe sind dort nur Text.
        Mit allen Spalten liegen die Sortierköpfe mindestens 8 px auseinander. */
     p.tabellen-spalten { margin: 8px 0; }
     table.einheiten-tabelle.tabelle-kern { table-layout: fixed; width: 100%; min-width: 0; font-size: 13px; }
@@ -3690,11 +3673,9 @@
     table.einheiten-tabelle.tabelle-kern > * > tr > :first-child { position: static; width: 34%; min-width: 0; max-width: none; padding-inline: 6px; box-shadow: none; }
     table.einheiten-tabelle.tabelle-kern > * > tr > :nth-child(2) { padding-left: 4px; }
     table.einheiten-tabelle.tabelle-kern th[data-spalte="gesamt"] { width: 12%; }
-    table.einheiten-tabelle.tabelle-kern th[data-spalte="zugEtikett"] { width: 15%; }
     table.einheiten-tabelle.tabelle-kern th[data-spalte="meldung"] { width: 19%; }
     table.einheiten-tabelle.tabelle-kern thead th { font-size: 11px; letter-spacing: 0; overflow-wrap: normal; hyphens: manual; padding-block: 8px; vertical-align: bottom; }
     table.einheiten-tabelle.tabelle-kern thead th.zahl { text-align: right; }
-    table.einheiten-tabelle.tabelle-kern td.zug-zelle { white-space: nowrap; }
     table.einheiten-tabelle.tabelle-kern tbody th { font-size: 12px; line-height: 1.25; }
     table.einheiten-tabelle.tabelle-kern td { font-size: 13px; line-height: 1.25; }
     table.einheiten-tabelle.tabelle-kern .bedarf-zelle { min-width: 0; max-width: none; }
@@ -3782,8 +3763,6 @@
     /* R18-D3: „Endgültig löschen" und „Abbrechen" im Dialog „Alle Daten löschen" liegen 32 px auseinander (vorher 16). */
     dialog .dialog-entscheidung > .aktionen { gap: 32px; row-gap: 32px; }
     p.loesch-kurz { margin: 0 0 var(--r-3); }
-    /* R18-S5: Grund des gesperrten Knopfs „Zuordnen" unter dem Feld. */
-    .zug-schnell > p.zug-schnell-fehlt { flex: 1 1 100%; margin: 0; }
     /* R18-E5, S10: Der Name in der Tabelle öffnet die Karte (Knopf ohne eigenen Rahmen, Name bleibt gestaltet wie bisher). */
     table.einheiten-tabelle button.tabelle-oeffnen { display: inline; min-height: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
     table.einheiten-tabelle button.tabelle-oeffnen::after { content: ""; position: absolute; inset: 0; }
@@ -3901,7 +3880,7 @@
     table.einheiten-tabelle button.tabelle-oeffnen::after { content: none; }
     table.einheiten-tabelle tr.zeile-antippbar:active > * { background: var(--flaeche-2); }
     /* R18-M7, S11: Die Knöpfe der aufgeklappten Karte stehen am Telefon in einem Raster gleicher Breite (drei Spalten, bei „Feld" zwei):
-       Abrücken, Zug und Auftrag in der ersten Reihe, danach Details, PDF und „Mehr…"; „Zuklappen" zuletzt. */
+       Abrücken und Auftrag in der ersten Reihe, danach Details, PDF und „Mehr…"; „Zuklappen" zuletzt. */
     @media (max-width: 30rem) {
       .einheit-zeile .vorlage-aktionen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
       .einheit-zeile .vorlage-aktionen > button { min-width: 0; width: 100%; padding-inline: 4px; white-space: normal; overflow-wrap: break-word; hyphens: none; line-height: 1.15; align-self: stretch; }
@@ -4387,7 +4366,6 @@
       main.einsatz-detail { display: flex; flex-direction: column; }
       main.einsatz-detail > .einsatz-liste { order: 2; }
       main.einsatz-detail .einsatz-seite > details.bedarf-block,
-    main.einsatz-detail .einsatz-seite > details.zug-summen,
     main.einsatz-detail .einsatz-seite > details.uebung-ausgenommen { order: 3; }
       main.einsatz-detail > .einsatz-liste ~ * { order: 4; }
       .seiten-kopf.einsatz-kopf .titelzeile > h1 { flex: 1 1 7rem; }
@@ -4470,7 +4448,6 @@
       :root:root table.einheiten-tabelle .spalten-kopf > .kopf-weich { display: inline; }
       :root:root table.einheiten-tabelle .spalten-kopf > .kopf-glatt:has(+ .kopf-weich) { display: none; }
       :root:root table.einheiten-tabelle.tabelle-kern .bedarf-teil { white-space: normal; }
-      :root:root table.einheiten-tabelle.tabelle-kern td.zug-zelle { white-space: normal; }
       :root:root table.einheiten-tabelle.tabelle-kern thead th[data-spalte="eingetroffen"] { white-space: normal; overflow-wrap: normal; hyphens: manual; }
       :root:root table.einheiten-tabelle.tabelle-kern th[data-spalte="eingetroffen"] { width: 21%; }
       :root:root table.einheiten-tabelle.tabelle-kern tbody > tr > * { vertical-align: top; }
@@ -4579,7 +4556,7 @@
           <li>Datei, PDF oder Link, etwa per AirDrop, Quick Share oder USB-Stick.</li>
           <li>Einheit ohne Bogen: nur Stärke, Führungskraft und Fahrzeuge erfassen; für den vollständigen Bogen öffnet sich der Erfassungsbogen per Link, und der Bogen kommt per Link zurück.</li>
         </ul>
-        <p>Jede Meldung landet in der Historie ihrer Einheit; eine Folgemeldung zeigt, was sich seit der letzten geändert hat. Abrücken, Zug zuordnen, Aufteilen und Zusammenführen gehören dazu, ebenso der Abgleich vom Papier, wenn ein Gerät ausgefallen ist.</p>
+        <p>Jede Meldung landet in der Historie ihrer Einheit; eine Folgemeldung zeigt, was sich seit der letzten geändert hat. Abrücken, Aufteilen und Zusammenführen gehören dazu, ebenso der Abgleich vom Papier, wenn ein Gerät ausgefallen ist.</p>
         <h2>Weitergabe: So geht die Lage weiter</h2>
         <ul>
           <li>Sammel-PDF mit Lageblatt im Papier-Layout: eine Zeile je Einheit, Summen, Stand am Meldekopf.</li>

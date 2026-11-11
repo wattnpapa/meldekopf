@@ -3,18 +3,16 @@
 # Verhaltenstests. Die Szenarien folgen der Audit-Runde 1 des Meldekopfs
 # (docs/audits/runde-1/fuehrungssicht.md, F3 und F4).
 Funktionalität: Lagemonitor für den Fernseher
-  Als Führungskraft sehe ich am Fernseher, wie stark welcher Zug ist, was
+  Als Führungskraft sehe ich am Fernseher, wie stark welche Einheit ist, was
   gebraucht wird und wer wirklich gerade eingetroffen ist, ohne das Tablet.
 
   Grundlage:
     Angenommen auf dem Gerät liegt die Sammlung "Hochwasser Weser" mit dem alten Bogen
     Dann sehe ich die Überschrift "Einheiten (1 gemeldet"
 
-  # F4: Die Tabelle hatte weder Zug noch Gesamt, Bedarf fehlte ganz.
-  Szenario: Der Lagemonitor zeigt Zug, Gesamtstärke und Bedarf
+  # F4: Die Tabelle hatte keine Gesamtstärke, Bedarf fehlte ganz.
+  Szenario: Der Lagemonitor zeigt Gesamtstärke und Bedarf
     Wenn ich auf "Einheit manuell erfassen…" klicke
-    Und ich "Angaben vom Zettel (optional)" aufklappe
-    Und ich das Feld "Zug / Verband (laut Zettel)" mit "2.Zug" fülle
     Und ich das Feld "Ort der Einheit (Pflicht)" mit "Brake" fülle
     Und ich auf "Mannschaft: erhöhen" klicke
     Und ich auf "Mannschaft: erhöhen" klicke
@@ -22,8 +20,7 @@ Funktionalität: Lagemonitor für den Fernseher
     Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
     Wenn ich den Lagemonitor öffne
     Dann zeigt der Lagemonitor "Ges."
-    Und zeigt der Lagemonitor "2. Zug"
-    Und zeigt der Lagemonitor "ohne Zug"
+    Und zeigt der Lagemonitor "Brake"
     Und zeigt der Lagemonitor "Verpflegung"
 
   # F3: Ein Nachtrag vom Meldeblock stand als „Eingetroffen … vor 2 Min" da.
@@ -41,12 +38,10 @@ Funktionalität: Lagemonitor für den Fernseher
 
   # Neu im Meldekopf: die Tafel als zweite Ansicht, für den großen Fernseher im
   # Führungsfahrzeug, auf den alle schauen. Jede Einheit steht mit taktischem
-  # Zeichen an festem Platz in ihrem Zug; nichts rückt nach oben, weil es zuletzt
-  # gemeldet hat.
-  Szenario: Die Tafel stellt jede Einheit mit Zeichen an ihren Platz im Zug
+  # Zeichen an festem Platz bei ihrer Organisation; nichts rückt nach oben, weil es
+  # zuletzt gemeldet hat.
+  Szenario: Die Tafel stellt jede Einheit mit Zeichen an ihren Platz
     Wenn ich auf "Einheit manuell erfassen…" klicke
-    Und ich "Angaben vom Zettel (optional)" aufklappe
-    Und ich das Feld "Zug / Verband (laut Zettel)" mit "2.Zug" fülle
     Und ich das Feld "Ort der Einheit (Pflicht)" mit "Brake" fülle
     Und ich auf "Mannschaft: erhöhen" klicke
     Und ich auf "Mannschaft: erhöhen" klicke
@@ -55,8 +50,6 @@ Funktionalität: Lagemonitor für den Fernseher
     Wenn ich für den Fernseher die Darstellung "Tafel" wähle
     Und ich den Lagemonitor öffne
     Dann zeigt der Lagemonitor die Tafel
-    Und zeigt der Lagemonitor "2. Zug"
-    Und zeigt der Lagemonitor "ohne Zug"
     Und zeigt der Lagemonitor "Brake"
     Und zeigt der Lagemonitor "Unterführer"
     Und zeigt der Lagemonitor "Verpflegung"
@@ -74,10 +67,10 @@ Funktionalität: Lagemonitor für den Fernseher
     Dann zeigt der Lagemonitor die Zeilen
     Und ist für den Fernseher die Darstellung "Zeilen" gewählt
 
-  # Die volle Tafel: viele Einheiten, ein langer Zugname, Sofortbedarf an den meisten Karten. Vorgefallen (Durchsicht
+  # Die volle Tafel: viele Einheiten, ein langer Ortsname, Sofortbedarf an den meisten Karten. Vorgefallen (Durchsicht
   # nach dem ersten Stand): Bedarfsmarken liefen über Typ und Zeichen, „(Fortsetzung)" im Gruppenkopf war nie zu sehen.
-  Szenario: Auf der vollen Tafel überdeckt nichts, und geteilte Züge sind als Fortsetzung zu erkennen
-    Angenommen auf dem Gerät liegt eine Lage mit 30 Einheiten in 2 Zügen, viele mit Sofortbedarf
+  Szenario: Auf der vollen Tafel überdeckt nichts, und geteilte Gruppen sind als Fortsetzung zu erkennen
+    Angenommen auf dem Gerät liegt eine Lage mit 30 Einheiten aus 2 Organisationen, viele mit Sofortbedarf
     Dann sehe ich die Überschrift "Einheiten (30 gemeldet"
     Wenn ich für den Fernseher die Darstellung "Tafel" wähle
     Und ich den Lagemonitor öffne

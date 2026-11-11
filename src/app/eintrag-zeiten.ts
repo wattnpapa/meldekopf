@@ -33,7 +33,6 @@ import {
 } from "@bos/meldekopf/einsaetze";
 import { entfernteMerken } from "./entfernte-meldungen";
 import { fassungenJeEinheit, geltendeJeEinheit } from "./fassung-vorrang";
-import { zugNormalisiert } from "./zug-name";
 import { EEB_EPOCHE_MS, type EebZeitpunkt } from "@bos/eeb-format/model";
 
 declare module "@bos/meldekopf/einsaetze" {
@@ -53,7 +52,7 @@ declare module "@bos/meldekopf/einsaetze" {
      */
     notiz?: string;
     /**
-     * Was die Führungsstelle an dieser Einheit getan hat, mit Uhrzeit: Zug,
+     * Was die Führungsstelle an dieser Einheit getan hat, mit Uhrzeit:
      * Auftrag, Zeitkorrektur, Abrücken (Audit Runde 2, R2-K6). Bisher stand nur
      * der aktuelle Wert da — „seit wann hat die FGr E diesen Auftrag?" war nicht
      * zu beantworten. Wie die übrigen Zusatzfelder am Eintrag, vom Kern
@@ -63,13 +62,13 @@ declare module "@bos/meldekopf/einsaetze" {
     /**
      * Vom Papier eingelesen (Fotos/Scans der QR-Codes, PDF ohne eingebettete
      * Daten), Lage noch nicht abgeglichen: Eintreffzeit ist die Zeit des
-     * Einlesens, Status „anwesend", kein Zug — bis jemand die Angaben vom
+     * Einlesens, Status „anwesend" — bis jemand die Angaben vom
      * Blatt bestätigt hat (Audit Runde 3, R3-A2). Zeitpunkt des Einlesens
      * (Date.now()); fehlt = abgeglichen bzw. nicht vom Papier.
      */
     vomPapier?: number;
     /**
-     * Der Papier-Abgleich hat Nr., Zug, Status und Notiz übernommen; offen ist allenfalls die
+     * Der Papier-Abgleich hat Nr., Status und Notiz übernommen; offen ist allenfalls die
      * Eintreffzeit (Audit Runde 6, R6-N3). Die Karte „Lage noch nicht abgeglichen" nennt dann
      * nur noch das Fehlende.
      */
@@ -386,27 +385,18 @@ export function eintreffzeitSetzen(einsatzId: string, eintragId: string, zeitpun
 }
 
 /**
- * „Nr. laut Zettel“ und Zug einer eben von Hand erfassten Einheit (R5-A4): Das Papier
+ * „Nr. laut Zettel“ einer eben von Hand erfassten Einheit (R5-A4): Das Papier
  * (Blanko-Kasten „Meldekopf“) hat sie, die Erfassung kannte nur die Uhrzeit — sonst gab es
  * zwei Nummernreihen. Die Nummer gilt für die ganze Einheit; sie ist fest wie die aus dem
  * Papier-Abgleich (R4-A1).
  */
-export function nummerUndZugSetzen(einsatzId: string, eintragId: string, wert: { nummer?: number; zug?: string }): void {
+export function nummerSetzen(einsatzId: string, eintragId: string, nummer: number): void {
   const liste = alleSammlungen();
   const s = liste.find((x) => x.id === einsatzId);
   const e = s?.eintraege.find((x) => x.id === eintragId);
   if (!s || !e) return;
-  // Schreibweise der schon vergebenen Züge übernehmen wie bei „Zug zuordnen“ und
-  // im Papier-Abgleich (R7-K4): „2.Zug“ vom Zettel neben „2. Zug“ stand sonst als
-  // zweiter Zug in den Zwischensummen (Audit Phase 6, Meldekopf).
-  const zug = zugNormalisiert(wert.zug ?? "", s.eintraege.filter((x) => x.einheitSchluessel !== e.einheitSchluessel).map((x) => x.zugEtikett)) || undefined;
-  for (const x of s.eintraege) {
-    if (x.einheitSchluessel !== e.einheitSchluessel) continue;
-    if (wert.nummer != null) x.nummer = wert.nummer;
-    if (zug) x.zugEtikett = zug;
-  }
-  if (zug) vermerken(e, `Zug: ${zug}`);
-  if (wert.nummer != null) vermerken(e, `Nr. ${wert.nummer} laut Zettel`);
+  for (const x of s.eintraege) if (x.einheitSchluessel === e.einheitSchluessel) x.nummer = nummer;
+  vermerken(e, `Nr. ${nummer} laut Zettel`);
   s.geaendert = Date.now();
   sammlungenSchreiben(liste);
 }
@@ -504,38 +494,10 @@ export function notizSetzen(einsatzId: string, eintragId: string, notiz: string)
 }
 
 /**
- * Zug einer Einheit setzen (alle Fassungen, wie `einheitZugEtikettSetzen` im
- * Kern) und den Vorgang mit Uhrzeit an der aktuellen Fassung vermerken
- * (R2-K6). Leer = Zuordnung entfernen.
- */
-export function zugSetzen(einsatzId: string, einheitSchl: string, kopfId: string, etikett: string): void {
-  const liste = alleSammlungen();
-  const s = liste.find((x) => x.id === einsatzId);
-  if (!s) return;
-  // Schreibweise der schon vergebenen Züge übernehmen (R7-K4).
-  const wert = zugNormalisiert(etikett, s.eintraege.map((e) => e.zugEtikett)) || undefined;
-  const kopf = s.eintraege.find((e) => e.id === kopfId);
-  const vorher = kopf?.zugEtikett;
-  let geaendert = false;
-  for (const e of s.eintraege) {
-    if (e.einheitSchluessel === einheitSchl && e.zugEtikett !== wert) {
-      e.zugEtikett = wert;
-      geaendert = true;
-    }
-  }
-  if (!geaendert) return;
-  if (kopf && vorher !== wert) {
-    vermerken(kopf, wert ? (vorher ? `Zug: ${wert} (war: ${vorher})` : `Zug: ${wert}`) : `Zug-Zuordnung entfernt (war: ${vorher})`);
-  }
-  s.geaendert = Date.now();
-  sammlungenSchreiben(liste);
-}
-
-/**
  * Eine Folgemeldung erbt, was die Führungsstelle der Einheit gegeben hat:
- * Eintreffzeit, Auftrag/Notiz, Zug und Teil-Etikett der Vorgängerin derselben
- * Einheit. Sonst stünde jede Folgemeldung als frisch eingetroffen da, und Zug
- * und Auftrag wären mit jeder Fassung weg — still, weil die Karte nur die
+ * Eintreffzeit, Auftrag/Notiz und Teil-Etikett der Vorgängerin derselben
+ * Einheit. Sonst stünde jede Folgemeldung als frisch eingetroffen da, und der
+ * Auftrag wäre mit jeder Fassung weg — still, weil die Karte nur die
  * Stärkeänderung meldet (Audit Runde 2, „Führungssicht", R2-K1). Aufzurufen
  * direkt nach `meldungHinzufuegen`, wenn `neu` war; {@link meldungAufnehmen}
  * erledigt beides.
@@ -558,10 +520,6 @@ export function folgemeldungErbt(einsatzId: string, eintragId: string): void {
     e.notiz = vorgaenger.notiz;
     geaendert = true;
   }
-  if (!e.zugEtikett && vorgaenger.zugEtikett) {
-    e.zugEtikett = vorgaenger.zugEtikett;
-    geaendert = true;
-  }
   if (!e.teilEtikett && vorgaenger.teilEtikett) {
     e.teilEtikett = vorgaenger.teilEtikett;
     geaendert = true;
@@ -576,7 +534,7 @@ export function folgemeldungErbt(einsatzId: string, eintragId: string): void {
 
 /**
  * Ergebnis von {@link meldungAufnehmen}. `erbeFehlt`: die Meldung ist
- * abgelegt, aber Zug, Auftrag und Eintreffzeit der Vorgängerin konnten nicht
+ * abgelegt, aber Auftrag und Eintreffzeit der Vorgängerin konnten nicht
  * übernommen werden (Speicher voll) — das muss der Aufrufer sagen.
  */
 export type MeldungAufnahmeMitErbe = MeldungAufnahme & {
@@ -626,7 +584,7 @@ function rueckkehrErkennen(einsatzId: string, eintragId: string): { abgerueckAm?
  * Bogen als Meldung in eine Sammlung legen — der einzige Weg, den die App
  * dafür nimmt. Scan, Link, Datei, Ordner, Bilderstapel und „In Einsatz
  * aufnehmen" liefen bisher teils am Erbe der Folgemeldung vorbei; dann waren
- * Zug und Auftrag je nach Eingangsweg weg (R2-K1).
+ * Auftrag und Eintreffzeit je nach Eingangsweg weg (R2-K1).
  */
 export function meldungAufnehmen(
   einsatzId: string,
@@ -806,7 +764,7 @@ export function einheitVerschieben(vonEinsatzId: string, nachEinsatzId: string, 
  * damit kein halb entfernter Zustand im Speicher landen kann.
  *
  * Rückgabe: die entfernten Einträge unverändert (Signatur, Herkunft, Zeiten,
- * Notiz, Zug, Etiketten) — für „Rückgängig". `nummern` = die Nummern vor dem Entfernen (`meldungsNummern`): Sie werden an
+ * Notiz, Etiketten) — für „Rückgängig". `nummern` = die Nummern vor dem Entfernen (`meldungsNummern`): Sie werden an
  * allen Fassungen festgeschrieben, damit die übrigen Einheiten nicht aufrücken (R18-A1).
  */
 export function einheitEntfernen(einsatzId: string, einheitSchl: string, nummern?: ReadonlyMap<string, number>): MeldeEintrag[] {
@@ -837,7 +795,7 @@ export function einheitEntfernen(einsatzId: string, einheitSchl: string, nummern
 
 /**
  * Frisch vom Papier eingelesene Meldungen markieren (R3-A2). Nur neue
- * Einheiten: eine Folgemeldung erbt Zeit, Zug und Auftrag ihrer Vorgängerin
+ * Einheiten: eine Folgemeldung erbt Zeit und Auftrag ihrer Vorgängerin
  * und braucht keinen Abgleich.
  */
 export function vomPapierMarkieren(einsatzId: string, eintragIds: string[], jetzt = Date.now()): void {
@@ -868,7 +826,6 @@ export interface PapierAbgleichZeile {
   status: MeldeStatus.ANWESEND | MeldeStatus.ABGERUECKT;
   /** Nur bei ABGERUECKT. */
   abgerueckAm?: number;
-  zug: string;
   /** Auftrag / Notiz vom Blatt; fehlt = unverändert, leer = entfernen (R4-A2). */
   notiz?: string;
   /** „Nr." vom Blatt; fehlt = keine feste Nummer (R4-A1). */
@@ -877,7 +834,7 @@ export interface PapierAbgleichZeile {
 
 /**
  * Lage vom Papier in einem Schritt übernehmen (R3-A2): je Einheit
- * Eintreffzeit, Status samt Abrückzeit und Zug, mit Vermerken wie bei der
+ * Eintreffzeit, Status samt Abrückzeit, Auftrag und Nummer, mit Vermerken wie bei der
  * Einzelkorrektur an der Karte; danach gilt die Meldung als abgeglichen.
  * Ein Schreibvorgang für alle Zeilen. Rückgabe: Zahl der abgeglichenen.
  */
@@ -907,12 +864,6 @@ export function papierAbgleichUebernehmen(einsatzId: string, zeilen: PapierAbgle
       vermerken(e, "Wieder als anwesend geführt");
       e.status = MeldeStatus.ANWESEND;
       delete e.abgerueckAm;
-    }
-    const zug = zugNormalisiert(z.zug, s.eintraege.map((x) => x.zugEtikett)) || undefined;
-    if (zug !== e.zugEtikett) {
-      const war = e.zugEtikett;
-      for (const x of s.eintraege) if (x.einheitSchluessel === e.einheitSchluessel) x.zugEtikett = zug;
-      vermerken(e, zug ? (war ? `Zug: ${zug} (war: ${war})` : `Zug: ${zug}`) : `Zug-Zuordnung entfernt (war: ${war})`);
     }
     if (z.notiz !== undefined) {
       const notiz = z.notiz.trim() || undefined;

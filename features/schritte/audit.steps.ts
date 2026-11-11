@@ -49,8 +49,8 @@ Then("zeigt der Lagemonitor {string} nicht", async function (this: EebWelt, text
  * Eine volle Lage für die Tafel liegt im Gerätespeicher und ist die zuletzt geöffnete (support/sammlung.ts). Sie
  * ersetzt, was die Grundlage des Szenarios dorthin gelegt hat; ein Neuladen im Szenario setzt sie nicht zurück.
  */
-Given("auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele mit Sofortbedarf", async function (this: EebWelt, einheiten: number, zuege: number) {
-  const { einsaetze, einsatzId } = tafelLageSpeicher("Hochwasser Hunte", einheiten, zuege);
+Given("auf dem Gerät liegt eine Lage mit {int} Einheiten aus {int} Organisationen, viele mit Sofortbedarf", async function (this: EebWelt, einheiten: number, organisationen: number) {
+  const { einsaetze, einsatzId } = tafelLageSpeicher("Hochwasser Hunte", einheiten, organisationen);
   await this.page.addInitScript(
     ([e, id]) => {
       if (sessionStorage.getItem("prüfstand.tafellage")) return;

@@ -10,7 +10,7 @@
  *
  *  - SUCHE: alle Wörter müssen treffen (UND), Groß/Klein und Akzente egal.
  *    Gesucht wird über das, was auf der Karte bzw. im Funkverkehr steht —
- *    Einheit, Organisation, Ort/Zugehörigkeit, Zug- und Teil-Etikett,
+ *    Einheit, Organisation, Ort/Zugehörigkeit, Teil-Etikett,
  *    Kennzeichen und Funkrufname, Auftrag/Notiz der Führungsstelle und der
  *    Ort/Auftrag des Bogens (Audit Runde 2, R2-K8: „Deich" fand 0 Einheiten,
  *    obwohl „Deichabschnitt Nord" auf einer Karte stand) sowie die Bemerkung
@@ -34,7 +34,7 @@ import { eintreffzeit } from "./eintrag-zeiten";
 import { angabenZeit } from "./angaben-alter";
 import { falte } from "@bos/oberflaeche/schreibweise";
 
-export type EinheitenSortierung = "nummer" | "name" | "zuletzt" | "aelteste" | "eintreffzeit" | "zug" | "organisation";
+export type EinheitenSortierung = "nummer" | "name" | "zuletzt" | "aelteste" | "eintreffzeit" | "organisation";
 
 export const SORTIERUNGEN: { wert: EinheitenSortierung; label: string }[] = [
   // Die Nummer, die am Funk genannt wird und das Lageblatt ordnet (R7-K9).
@@ -48,7 +48,6 @@ export const SORTIERUNGEN: { wert: EinheitenSortierung; label: string }[] = [
   // Wem fehlt eine frische Meldung? Die ältesten Angaben oben, gerechnet wie die Marke „Stand vor …" (R12-K2, R15-K1).
   { wert: "aelteste", label: "Älteste Angaben zuerst" },
   { wert: "eintreffzeit", label: "Eintreffzeit vor Ort (neueste zuerst)" },
-  { wert: "zug", label: "Zug" },
   { wert: "organisation", label: "Organisation" },
 ];
 
@@ -70,7 +69,6 @@ function suchtext(e: MeldeEintrag): string {
     einheitAnzeigename(einheit),
     orgLabel(einheit.organisation),
     einheit.organisationName ?? "",
-    e.zugEtikett ?? "",
     e.teilEtikett ?? "",
     ...einheit.hierarchie.flatMap((h) => [h.name, h.kurz ?? "", vokabText(h.bezeichnung, vokabularFuer(einheit.organisation, "ebene"))]),
     // Das Kürzel des Typs, wie es am Funk fällt: „ZTr", „FGr O" (R11-H3).
@@ -217,8 +215,7 @@ function nameVergleich(a: MeldeEintrag, b: MeldeEintrag): number {
 }
 
 /**
- * Sortierte Kopie der Liste. „zug" stellt Einheiten ohne Etikett ans Ende
- * (wie die Zwischensummen in auswertung.ts), „zuletzt" die zuletzt
+ * Sortierte Kopie der Liste. „zuletzt" die zuletzt
  * eingegangene Fassung oben (auch eine Folgemeldung), „eintreffzeit" die
  * zuletzt vor Ort eingetroffene Einheit.
  */
@@ -229,7 +226,7 @@ export function einheitenSortieren(
   nummern?: ReadonlyMap<string, number>,
 ): MeldeEintrag[] {
   // Anwesende zuerst, Abgerückte (und Aufgegangene) am Ende, in jeder Sortierung (R17-E6, K4): Sie standen sonst zwischen den
-  // anwesenden und zerrissen die Zugruppen. Die Reihenfolge innerhalb beider Gruppen bleibt die gewählte.
+  // anwesenden und zerrissen die Gruppen. Die Reihenfolge innerhalb beider Gruppen bleibt die gewählte.
   const sortiert = innenSortieren(eintraege, sortierung, nummern);
   const da = sortiert.filter((e) => e.status === MeldeStatus.ANWESEND);
   return da.length === sortiert.length ? sortiert : [...da, ...sortiert.filter((e) => e.status !== MeldeStatus.ANWESEND)];
@@ -266,17 +263,6 @@ function innenSortieren(
       // Papierstapel nachträgt, hat alle Bögen in derselben Minute erfasst —
       // geordnet werden soll nach dem Eintreffen der Einheit.
       return liste.sort((a, b) => eintreffzeit(b) - eintreffzeit(a) || nameVergleich(a, b));
-    case "zug":
-      return liste.sort((a, b) => {
-        const za = a.zugEtikett ?? "";
-        const zb = b.zugEtikett ?? "";
-        if (za !== zb) {
-          if (za === "") return 1; // „ohne Zug" ans Ende
-          if (zb === "") return -1;
-          return za.localeCompare(zb, "de");
-        }
-        return nameVergleich(a, b);
-      });
     case "organisation":
       return liste.sort(
         (a, b) =>
@@ -322,10 +308,10 @@ export function passtZuStatusfilter(e: MeldeEintrag, f: StatusFilter, jetzt: num
 }
 
 /** Einschränkung auf Einheiten, denen noch etwas fehlt (R7-K6). */
-export type LueckenFilter = "ohne-auftrag" | "ohne-zug";
+export type LueckenFilter = "ohne-auftrag";
 
-/** Ohne Auftrag/Notiz bzw. ohne Zug — nur anwesende Einheiten; abgerückte brauchen keinen Auftrag mehr. */
+/** Ohne Auftrag/Notiz — nur anwesende Einheiten; abgerückte brauchen keinen Auftrag mehr. */
 export function passtZuLueckenfilter(e: MeldeEintrag, f: LueckenFilter): boolean {
   if (e.status !== MeldeStatus.ANWESEND) return false;
-  return f === "ohne-auftrag" ? !(e.notiz ?? "").trim() : !(e.zugEtikett ?? "").trim();
+  return f === "ohne-auftrag" && !(e.notiz ?? "").trim();
 }

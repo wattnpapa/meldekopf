@@ -9,7 +9,7 @@
  *  1. **Nach Leseabstand gestaffelt.** Oben stehen Stärke und Uhr so groß, dass
  *     sie von draußen lesbar sind; in der Mitte die Einheiten für alle im
  *     Fahrzeug; am Rand und klein, was nur braucht, wer davor sitzt.
- *  2. **Jede Einheit hat ihren Platz.** Geordnet wird nach Zug und
+ *  2. **Jede Einheit hat ihren Platz.** Geordnet wird nach Organisation und
  *     Eintreffzeit, nicht nach der letzten Meldung. Was sich ändert, wird am
  *     Platz markiert (`lagetafel.ts`). Wer abgerückt ist, steht mit Uhrzeit
  *     in der Randspalte, unabhängig davon, wie voll die Tafel ist.
@@ -496,7 +496,7 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   const blatt = lauf.seiten === seitenZahl ? lauf.blatt : 0;
   const seite = blatt % seitenZahl;
 
-  // Welche Gruppen auf welcher Seite stehen: für die Seitenzeile („1. Zug bis 6. Zug") und die Übersicht der Randspalte.
+  // Welche Gruppen auf welcher Seite stehen: für die Seitenzeile („THW bis DRK").
   const gruppenDer = (i: number): number[] => {
     const nummern = new Set<number>();
     for (const z of (seiten[i] ?? []).flat()) if (z.art === "kopf" || z.art === "einheit") nummern.add(z.gruppe);

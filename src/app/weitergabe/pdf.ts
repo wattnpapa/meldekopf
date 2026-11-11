@@ -123,7 +123,7 @@ export async function pdfBlobUrl(b: Erfassungsbogen, herkunft?: Uint8Array | nul
 /**
  * Sammel-PDF eines Einsatzes: Übergabe-Übersicht mit Änderungsspalte, dahinter
  * die übergebenen Meldungen als vollständige Bögen (inkl. QR), plus alle Bögen
- * als eingebettetes JSON UND die komplette Einsatz-Sammlung (Züge, Status,
+ * als eingebettetes JSON UND die komplette Einsatz-Sammlung (Status,
  * Historie) — die PDF ist damit die vollständige Schichtübergabe in einer Datei.
  *
  * Erwartet die Meldungen (nicht nur die Bögen), weil die Änderungsspalte je
@@ -220,7 +220,6 @@ function uebersichtEintrag(
   return {
     bogen: m.bogen,
     vorher,
-    zugEtikett: m.zugEtikett,
     teil: m.teilEtikett,
     eingetroffenAm: eintreffzeit(m),
     empfangenAm: m.empfangenAm,
@@ -341,7 +340,7 @@ export async function einsatzPdfErzeugen(
 }
 
 /**
- * Lageblatt: nur die Übersichtsseite (Einheiten mit Zeiten, Bedarf, Züge) als
+ * Lageblatt: nur die Übersichtsseite (Einheiten mit Zeiten und Bedarf) als
  * A4 quer — ohne Bögen und ohne QR-Codes, deshalb in Sekundenbruchteilen
  * fertig. Das Blatt für die Wand (Analog-Audit A3/A4). Immer der ganze
  * Einsatz: die Wand braucht die Lage, nicht die Lieferung.

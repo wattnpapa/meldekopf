@@ -4,16 +4,16 @@
  * „Lage vom Papier abgleichen" — der Rückweg nach einem Geräteausfall, wenn
  * nur das gedruckte Übergabeblatt da ist (Audit Runde 3, R3-A2).
  *
- * Die QR-Codes tragen nur die Bögen. Eintreffzeit, Abrückvermerk und Zug
+ * Die QR-Codes tragen nur die Bögen. Eintreffzeit, Abrückvermerk und Nummer
  * stehen als Text auf Seite 1 bzw. im Kasten „Stand am Meldekopf" und
  * mussten bisher an jeder Karte einzeln nachgetragen werden (6–8 Tipps je
  * Einheit, ohne Übersicht, was schon erledigt war). Hier stehen alle frisch
  * vom Papier eingelesenen Einheiten in einer Liste mit je Eintreffzeit,
- * Status und Zug; „Abgleich übernehmen" schreibt alles in einem Schritt.
+ * Status, Nummer und Auftrag; „Abgleich übernehmen" schreibt alles in einem Schritt.
  * Bis dahin tragen die Karten „vom Papier, Zeiten prüfen".
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MeldeStatus, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { geltendeJeEinheit } from "./fassung-vorrang";
 import { einheitAnzeigename } from "./hilfen";
@@ -53,8 +53,6 @@ type Zeile = AbgleichZeile;
 export function PapierAbgleich(props: {
   einsatzId: string;
   eintraege: MeldeEintrag[];
-  /** Züge, die in der Sammlung schon vorkommen — Vorschläge fürs Zugfeld. */
-  zuege: string[];
   onGeaendert: () => void;
   /**
    * Zählt hoch, wenn der Abgleich von außen geöffnet werden soll — der Knopf im
@@ -67,7 +65,7 @@ export function PapierAbgleich(props: {
    */
   knopfImBericht?: boolean;
 }) {
-  const { einsatzId, eintraege, zuege, onGeaendert } = props;
+  const { einsatzId, eintraege, onGeaendert } = props;
   const offen = offenVomPapier(eintraege);
   const [zeilen, setZeilen] = useState<Zeile[] | null>(null);
   // Zwischenstand im Sitzungsspeicher (R7-S1): überlebt Neuladen, „Später" und die Startseite.
@@ -76,7 +74,6 @@ export function PapierAbgleich(props: {
   useEffect(() => {
     if (zeilen) abgleichEntwurfSpeichern(einsatzId, zeilen, basisRef.current);
   }, [zeilen, einsatzId]);
-  const listeId = useId();
   const karte = useRef<HTMLElement>(null);
   const letzterAnstoss = useRef(props.anstoss ?? 0);
   const anstoss = props.anstoss ?? 0;
@@ -107,7 +104,6 @@ export function PapierAbgleich(props: {
         eingetroffen: "",
         abgerueckt: e.status === MeldeStatus.ABGERUECKT,
         abgerueckAm: e.abgerueckAm != null ? zuLokal(e.abgerueckAm) : "",
-        zug: e.zugEtikett ?? "",
         notiz: e.notiz ?? "",
         nummer: "",
       }));
@@ -161,7 +157,6 @@ export function PapierAbgleich(props: {
         ...(ein != null ? { eingetroffenAm: ein } : {}),
         status: z.abgerueckt ? MeldeStatus.ABGERUECKT : MeldeStatus.ANWESEND,
         abgerueckAm: ab ?? undefined,
-        zug: z.zug,
         notiz: z.notiz,
         ...(nr != null && Number.isInteger(nr) && nr >= 1 ? { nummer: nr } : {}),
       } as const;
@@ -295,7 +290,7 @@ export function PapierAbgleich(props: {
             <strong>
               Abgeglichen bis auf die Eintreffzeit: {offen.length === 1 ? "1 Einheit" : `${offen.length} Einheiten`}.
             </strong>{" "}
-            Nr., Zug, Status und Notiz stehen; die Eintreffzeit ist noch die Zeit des Einlesens und gilt als nicht bestätigt. Sie lässt sich hier
+            Nr., Status und Notiz stehen; die Eintreffzeit ist noch die Zeit des Einlesens und gilt als nicht bestätigt. Sie lässt sich hier
             nachtragen.
           </p>
         ) : (
@@ -303,7 +298,7 @@ export function PapierAbgleich(props: {
             <strong>
               Vom Papier eingelesen, Lage noch nicht abgeglichen: {offen.length === 1 ? "1 Einheit" : `${offen.length} Einheiten`}.
             </strong>{" "}
-            Die Eintreffzeit ist die Zeit des Einlesens und gilt als nicht bestätigt, alle stehen als anwesend, ohne Zug, Auftrag und Nummer. Die Angaben vom
+            Die Eintreffzeit ist die Zeit des Einlesens und gilt als nicht bestätigt, alle stehen als anwesend, ohne Auftrag und Nummer. Die Angaben vom
             Blatt (Kopfzeile „Meldekopf“ auf Seite 1 des Bogens bzw. Kasten „Stand am Meldekopf“ der Sammel-PDF) hier in einem Schritt eintragen.
           </p>
         )}
@@ -330,11 +325,6 @@ export function PapierAbgleich(props: {
         Je Einheit, was auf dem Blatt steht — „Nr.“ aus der Kopfzeile „Meldekopf“ des Bogens, „Auftrag / Notiz“ aus dem Kasten „Stand am Meldekopf“ der Sammel-PDF.
         „Abgleich übernehmen“ schreibt alles auf einmal.
       </p>
-      <datalist id={listeId}>
-        {zuege.map((z) => (
-          <option key={z} value={z} />
-        ))}
-      </datalist>
       <ol className="papier-abgleich-liste">
         {zeilen.map((z, i) => (
           <li key={z.eintragId}>
@@ -376,10 +366,6 @@ export function PapierAbgleich(props: {
                 <input type="datetime-local" value={z.abgerueckAm} onChange={(e) => aendern(i, { abgerueckAm: e.target.value })} />
               </label>
             )}
-            <label className="feld">
-              Zug (leer = ohne)
-              <input type="text" list={listeId} value={z.zug} onChange={(e) => aendern(i, { zug: e.target.value })} />
-            </label>
             {/* Der Abgleich nimmt alles auf, was im Kasten steht: Pumpe 2 defekt
                 oder „nur für Abschnitt Nord" gingen sonst verloren (R4-A2). */}
             <label className="feld">
@@ -413,7 +399,7 @@ export function PapierAbgleich(props: {
 export function PapierMarke({ eintrag }: { eintrag: MeldeEintrag }) {
   if (eintrag.vomPapier == null) return null;
   return (
-    <span className="papier-badge" title={`Vom Papier eingelesen ${zeitKurz(eintrag.vomPapier)} — Eintreffzeit, Status und Zug noch nicht abgeglichen`}>
+    <span className="papier-badge" title={`Vom Papier eingelesen ${zeitKurz(eintrag.vomPapier)} — Eintreffzeit und Status noch nicht abgeglichen`}>
       vom Papier, Zeiten prüfen
     </span>
   );

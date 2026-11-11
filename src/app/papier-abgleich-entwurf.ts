@@ -15,7 +15,7 @@
  *
  * R15-A4: Ein vom Betriebssystem beendeter Browser oder ein leerer Akku nahm den Zwischenstand mit — die
  * Nacherfassung von 20 Zeilen vom Meldeblock begann von vorn. Derselbe Schlüssel liegt jetzt zusätzlich im
- * dauerhaften `localStorage` (Wert: `{ am, zeilen }`, nur Nr., Zeit, Zug, Notiz, Name der Einheit) und verfällt nach
+ * dauerhaften `localStorage` (Wert: `{ am, zeilen }`, nur Nr., Zeit, Notiz, Name der Einheit) und verfällt nach
  * {@link ENTWURF_FRIST_MS}; der Sitzungsspeicher bleibt die erste Quelle. „Abgleich übernehmen" und „Verwerfen"
  * löschen beide, „Alle Daten löschen" wie alles unter `eeb.`.
  */
@@ -26,7 +26,6 @@ export interface AbgleichZeile {
   eingetroffen: string;
   abgerueckt: boolean;
   abgerueckAm: string;
-  zug: string;
   notiz: string;
   nummer: string;
 }
@@ -59,7 +58,6 @@ export function zeileGeaendert(z: AbgleichZeile, basis: AbgleichZeile): boolean 
     z.eingetroffen !== basis.eingetroffen ||
     z.abgerueckt !== basis.abgerueckt ||
     z.abgerueckAm !== basis.abgerueckAm ||
-    z.zug !== basis.zug ||
     z.notiz !== basis.notiz ||
     z.nummer !== basis.nummer
   );
@@ -96,7 +94,6 @@ export function abgleichEntwurfLaden(einsatzId: string, jetzt = Date.now()): Abg
         typeof z.eingetroffen === "string" &&
         typeof z.abgerueckt === "boolean" &&
         typeof z.abgerueckAm === "string" &&
-        typeof z.zug === "string" &&
         typeof z.notiz === "string" &&
         typeof z.nummer === "string",
     );

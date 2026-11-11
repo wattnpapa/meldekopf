@@ -4,7 +4,7 @@
 /**
  * Papierkorb für einzelne entfernte Meldungen (R17-E2, R17-D6).
  *
- * „Meldung entfernen" nimmt eine Einheit samt Historie, Zeiten, Zug und Auftrag aus der Sammlung; „Rückgängig" lebte nur in
+ * „Meldung entfernen" nimmt eine Einheit samt Historie, Zeiten und Auftrag aus der Sammlung; „Rückgängig" lebte nur in
  * der Quittungsleiste im Arbeitsspeicher. Ein Telefon, das die Seite im Hintergrund verwirft, oder die Aufforderung „Neu
  * laden" nach einem App-Update kostete die Meldung endgültig — bei der Handlung mit den meisten Folgen (die Nummern rücken
  * auf). Fahrzeug und Person waren länger rückholbar, ein ganzer Einsatz 30 Tage.

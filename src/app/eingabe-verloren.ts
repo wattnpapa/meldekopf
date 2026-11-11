@@ -8,8 +8,6 @@
  */
 
 export interface OffeneEingabe {
-  /** Entwurf des Zug-Etiketts; `null` = Feld nicht offen. */
-  zug: string | null;
   /** Entwurf des Auftrags/der Notiz; `null` = Feld nicht offen. */
   notiz: string | null;
 }
@@ -18,7 +16,6 @@ export interface OffeneEingabe {
 export function verloreneEingabeText(einheit: string, e: OffeneEingabe): string {
   const teile: string[] = [];
   if (e.notiz != null && e.notiz.trim()) teile.push(`Auftrag/Notiz „${e.notiz.trim()}"`);
-  if (e.zug != null && e.zug.trim()) teile.push(`Zug „${e.zug.trim()}"`);
   if (teile.length === 0) return "";
   return `Die Einheit „${einheit}" wurde in einem anderen Fenster entfernt — deine Eingabe ${teile.join(" und ")} wurde nicht gespeichert.`;
 }

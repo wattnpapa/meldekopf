@@ -397,7 +397,7 @@ function ohneCodeZeile(namen: string[]): string {
 
 /** Kurzer Verweis auf den Abgleich, der direkt unter dem Bericht steht (R4-A6). */
 export const LAGE_ABGLEICH_KURZ =
-  "Eintreffzeit, Status, Zug und Nummer stehen nicht im Code: „Lage vom Papier abgleichen…“ trägt sie vom Blatt ein.";
+  "Eintreffzeit, Status und Nummer stehen nicht im Code: „Lage vom Papier abgleichen…“ trägt sie vom Blatt ein.";
 
 /**
  * Ein Foto zeigt Papier — und auf Papier wird mit dem Stift korrigiert. Der
@@ -411,29 +411,29 @@ export const STIFT_HINWEIS =
 
 /**
  * Was ein Bogen aus Code oder Datei NICHT mitbringt: der QR-Code trägt nur den
- * Bogen der Einheit. Eintreffzeit, Abrückvermerk, Zug und Auftrag gehören dem
+ * Bogen der Einheit. Eintreffzeit, Abrückvermerk und Auftrag gehören dem
  * Meldekopf und stehen auf dem Papier nur als Text (Übergabe-Übersicht und
  * Kasten „Stand am Meldekopf“ je Bogen). Ohne diesen Satz stand eine
  * abgerückte Einheit nach dem Einlesen still wieder als anwesend und zählend
  * da, mit der Scan-Uhrzeit als Eintreffzeit (Audit Runde 2, R2-A1).
- * Folgemeldungen erben Zeit, Zug und Auftrag ihrer Vorgängerin — der Satz
+ * Folgemeldungen erben Zeit und Auftrag ihrer Vorgängerin — der Satz
  * betrifft deshalb die neu aufgenommenen Einheiten.
  */
 export const LAGE_NACHTRAGEN_HINWEIS =
   "Eintreffzeit der neu aufgenommenen Einheiten ist die Zeit des Einlesens, und sie stehen als anwesend; " +
-  "Abrückvermerk, Zug und Auftrag stecken nicht im Bogen. Stammen die Bögen aus einer Sammel-PDF: oben in der " +
+  "Abrückvermerk und Auftrag stecken nicht im Bogen. Stammen die Bögen aus einer Sammel-PDF: oben in der " +
   "Einsatzansicht „Lage vom Papier abgleichen…“ — dort für alle eben eingelesenen Einheiten Eintreffzeit, Status " +
-  "und Zug von Seite 1 (Übergabe-Übersicht) bzw. dem Kasten „Stand am Meldekopf“ in einem Schritt eintragen. " +
+  "und Nummer von Seite 1 (Übergabe-Übersicht) bzw. dem Kasten „Stand am Meldekopf“ in einem Schritt eintragen. " +
   "Bis dahin tragen die Karten „vom Papier, Zeiten prüfen“.";
 
 /**
  * Hinweis für „Bögen einlesen…“ mit einer Sammel-PDF, die die ganze Sammlung
  * eingebettet trägt, wenn bei der Rückfrage „Nur die Bögen“ gewählt wurde:
- * Zeiten, Abrückvermerke, Züge und Siegel sind dann nicht mitgekommen (R2-A1).
+ * Zeiten, Abrückvermerke und Siegel sind dann nicht mitgekommen (R2-A1).
  * Seit R3-W3 bietet die Rückfrage die Übernahme in die offene Sammlung an.
  */
 export const SAMMLUNG_IN_PDF_HINWEIS =
-  "Die PDF enthält die vollständige Einsatz-Sammlung mit Zeiten, Abrückvermerken, Zügen und Siegeln — " +
+  "Die PDF enthält die vollständige Einsatz-Sammlung mit Zeiten, Abrückvermerken und Siegeln — " +
   "übernommen wurden nur die Bögen. Für alles die PDF erneut einlesen und „Übernehmen“ wählen.";
 
 /**

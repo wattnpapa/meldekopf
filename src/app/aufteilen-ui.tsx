@@ -89,7 +89,6 @@ export function AufteilenPanel(props: {
   const [unterbringung, setUnterbringung] = useState({ m: 0, w: 0, d: 0 });
   const [verpflegung, setVerpflegung] = useState({ vegetarisch: 0, vegan: 0 });
   const [abgerueckt, setAbgerueckt] = useState(false);
-  const [zug, setZug] = useState(eintrag.zugEtikett ?? "");
 
   const zeigeUnterbringung = nurStaerke && bogen.unterbringungManuell != null;
   const zeigeVerpflegung = nurStaerke && bogen.verpflegungManuell != null;
@@ -228,15 +227,6 @@ export function AufteilenPanel(props: {
             <option value="ab">ist abgerückt</option>
           </Auswahl>
         </label>
-        <label className="feld">
-          Zug des abgeteilten Teils
-          <input
-            type="text"
-            value={zug}
-            placeholder="ohne Zug"
-            onChange={(e) => setZug(e.target.value)}
-          />
-        </label>
       </div>
 
       {/* Kraftstoff ist nicht sinnvoll teilbar und bleibt darum ganz beim Rest —
@@ -277,7 +267,6 @@ export function AufteilenPanel(props: {
             }
             onAufteilen(wahl, {
               status: abgerueckt ? MeldeStatus.ABGERUECKT : MeldeStatus.ANWESEND,
-              zugEtikett: zug,
             });
           }}
         >

@@ -711,7 +711,6 @@ export interface TabellenZeile {
   einheit: string;
   teilEtikett: string;
   organisation: string;
-  zugEtikett: string;
   fuehrer: number;
   unterfuehrer: number;
   mannschaft: number;
@@ -762,7 +761,6 @@ export interface TabellenZeile {
 export type TabellenSpalte =
   | "einheit"
   | "organisation"
-  | "zugEtikett"
   | "fuehrer"
   | "unterfuehrer"
   | "mannschaft"
@@ -833,9 +831,9 @@ export function weicheTrennstellen(text: string): string {
 
 /**
  * Spaltenfolge der Tabelle. Vorn steht, wonach die Führung entscheidet: wer
- * (Einheit, Zug), wie stark, was gebraucht wird, seit wann da und mit welchem
+ * (Einheit), wie stark, was gebraucht wird, seit wann da und mit welchem
  * Auftrag. Vorher folgte die Tabelle dem CSV der Übersicht (Einheit, Org.,
- * Zug, F, U, M, Ges., Verpflegung, Unterbringung, Kraftstoff, …) — auf dem
+ * F, U, M, Ges., Verpflegung, Unterbringung, Kraftstoff, …) — auf dem
  * Tablet endete das Bild bei „Unt. M", Bedarf, Eintreffzeit und Auftrag
  * lagen rechts außerhalb (Audit Runde 2, R2-K5). Die Aufschlüsselung von
  * Stärke, Verpflegung, Unterbringung und Kraftstoff folgt dahinter; das CSV
@@ -843,7 +841,6 @@ export function weicheTrennstellen(text: string): string {
  */
 export const TABELLEN_SPALTEN: SpaltenDefinition[] = [
   { schluessel: "einheit", kopf: "Einheit", titel: "Einheit", zahl: false },
-  { schluessel: "zugEtikett", kopf: "Zug", titel: "Zug", zahl: false },
   // F/U/M und Kfz direkt bei der Gesamtstärke: am Laptop lagen sie erst nach
   // seitlichem Rollen im Bild (Rahmen 894 px, Tabelle 1 826 px; Audit
   // Runde 3, R3-K7). Vier schmale Zahlenspalten kosten zusammen kaum Breite.
@@ -888,7 +885,6 @@ export const TABELLEN_SPALTEN: SpaltenDefinition[] = [
 export const TELEFON_SPALTEN: readonly TabellenSpalte[] = [
   "einheit",
   "gesamt",
-  "zugEtikett",
   "bedarf",
   "eingetroffen",
   "auftrag",
@@ -933,7 +929,6 @@ export function tabellenZeilen(eintraege: MeldeEintrag[], art?: EinsatzArt, jetz
       einheit: einheitAnzeigename(b.einheit),
       teilEtikett: e.teilEtikett ?? "",
       organisation: orgLabel(b.einheit.organisation),
-      zugEtikett: e.zugEtikett ?? "",
       fuehrer: st.fuehrer,
       unterfuehrer: st.unterfuehrer,
       mannschaft: st.mannschaft,
@@ -1072,7 +1067,7 @@ export function gemerkteAnsicht(): EinheitenAnsicht {
 const SPEICHER_ALLE_SPALTEN = "eeb.einheiten-tabelle-alle-spalten";
 
 /**
- * Am Telefon zeigt die Tabelle nur die Kernspalten (R17-H8): Einheit, Stärke, Zug, Alter der Meldung, Bedarf.
+ * Am Telefon zeigt die Tabelle nur die Kernspalten (R17-H8): Einheit, Stärke, Alter der Meldung, Bedarf.
  * Wer alle Spalten will, schaltet um; die Wahl bleibt am Gerät.
  */
 export function gemerkteAlleSpalten(): boolean {

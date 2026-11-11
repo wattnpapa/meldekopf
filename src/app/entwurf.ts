@@ -43,7 +43,7 @@ const ERSETZT_SCHLUESSEL = "eeb.entwurf.ersetzt.v1";
 
 /**
  * Angaben vom Meldezettel, die bei „Einheit manuell erfassen…“ neben dem Bogen stehen: „Eingetroffen um“
- * (HH:MM), „Nr. laut Zettel“ und „Zug / Verband“. Sie wanderten nicht in den Entwurf und fehlten nach dem
+ * (HH:MM), und „Nr. laut Zettel“. Sie wanderten nicht in den Entwurf und fehlten nach dem
  * Neuladen, obwohl „Entwurf wiederhergestellt“ dastand (R9-S1).
  */
 export interface ErfassungsZettel {
@@ -51,7 +51,6 @@ export interface ErfassungsZettel {
   /** „Abgerückt um“ (HH:MM) — die Spalte „ab“ des Meldeblocks (R13-A1). */
   ab?: string;
   nr?: string;
-  zug?: string;
 }
 
 export interface Entwurf {
@@ -105,13 +104,11 @@ export function zettelPruefen(x: unknown): ErfassungsZettel | undefined {
   const z: ErfassungsZettel = {};
   const zeit = text(o.zeit, 5);
   const nr = text(o.nr, 8);
-  const zug = text(o.zug, 80);
   const ab = text(o.ab, 5);
   if (zeit && /^\d{2}:\d{2}$/.test(zeit)) z.zeit = zeit;
   if (ab && /^\d{2}:\d{2}$/.test(ab)) z.ab = ab;
   if (nr) z.nr = nr;
-  if (zug) z.zug = zug;
-  return z.zeit || z.ab || z.nr || z.zug ? z : undefined;
+  return z.zeit || z.ab || z.nr ? z : undefined;
 }
 
 export function entwurfAusJson(text: string | null): Entwurf | null {

@@ -66,7 +66,7 @@ sobald der Meldekopf sie vollständig trägt.
 ## Capabilities and Constraints
 
 - Einsatz-Sammlung: Einsätze anlegen (Einsatz, Übung, Bereitstellungsraum),
-  Bögen aufnehmen, Summen und Zwischensummen je Zug, Historie, Diff,
+  Bögen aufnehmen, Summen, Historie, Diff,
   Abrücken, Aufteilen/Zusammenführen, Papier-Abgleich, Papierkorb.
 - Schnellerfassung einer Einheit ohne Bogen (nur Stärke, Führungskraft,
   Fahrzeuge). Kein vollständiger Assistent: Für einen vollständigen Bogen

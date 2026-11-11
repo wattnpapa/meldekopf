@@ -6,7 +6,7 @@
  * Der geteilte Kern (`einsatzImportieren`, Submodul) führt nur über die
  * Eintrags-ID zusammen: Meldungen, die das Gerät noch nicht kennt, kommen
  * dazu, bekannte bleiben unberührt. Was die Führungsstelle des anderen Geräts
- * an bekannten Einheiten getan hat — Abrücken, Zug, Auftrag/Notiz,
+ * an bekannten Einheiten getan hat — Abrücken, Auftrag/Notiz,
  * Eintreffzeit —, ging beim Rückimport still verloren. Die Quittung sagte
  * „0 neue Meldung(en) ergänzt", und beide Geräte führten danach verschiedene
  * Lagen (Audit Runde 3, R3-W1).
@@ -15,7 +15,7 @@
  * Stand vor dem Import, lässt den Kern die neuen Meldungen anhängen und
  * gleicht danach je Einheit die Zusätze der Führungsstelle ab.
  *
- * Regel je Feld (Status samt Abrückzeit, Zug, Auftrag/Notiz, Eintreffzeit):
+ * Regel je Feld (Status samt Abrückzeit, Auftrag/Notiz, Eintreffzeit):
  *  1. Gleich → nichts zu tun.
  *  2. Den Verlauf der Führungsstelle (`vermerke`, mit Uhrzeit) tragen beide
  *     Stände mit. Hat nur eine Seite das Feld geändert, seit sich die Stände
@@ -23,7 +23,7 @@
  *  3. Haben beide Seiten es geändert, gilt der jüngere Vermerk — und der
  *     Abgleich nennt das als Widerspruch in der Quittung und im Verlauf der
  *     Einheit („Abgleich: …"), damit nichts still überschrieben wird.
- *  4. Ohne Vermerk (ältere Sammlungen, Zug aus einem Bündel): Ist der Wert
+ *  4. Ohne Vermerk (ältere Sammlungen): Ist der Wert
  *     hier leer, wird er übernommen. Für den Status zählt die Abrückzeit als
  *     Änderungszeitpunkt. Sonst bleibt der Wert dieses Geräts stehen, und der
  *     Unterschied wird als Widerspruch genannt.
@@ -43,26 +43,23 @@ import {
 import { staerke } from "@bos/eeb-format/model";
 import { geltendeJeEinheit, istPlatzhalterFassung } from "../fassung-vorrang";
 import { einheitAnzeigename, zeitpunktDeutsch } from "../hilfen";
-import { zugNormalisiert } from "../zug-name";
 import { sammlungenSchreiben, zeitKurz, type FuehrungsVermerk } from "../eintrag-zeiten";
 
-export type Feld = "status" | "zug" | "notiz" | "eintreffzeit";
+export type Feld = "status" | "notiz" | "eintreffzeit";
 
 const FELD_NAME: Record<Feld, string> = {
   status: "Status",
-  zug: "Zug",
   notiz: "Auftrag/Notiz",
   eintreffzeit: "Eintreffzeit",
 };
 
 /**
  * Zu welchem Feld gehört ein Vermerk? Die Texte schreibt eintrag-zeiten.ts
- * (`statusMitZeitSetzen`, `abrueckzeitSetzen`, `zugSetzen`, `notizSetzen`,
+ * (`statusMitZeitSetzen`, `abrueckzeitSetzen`, `notizSetzen`,
  * `eintreffzeitSetzen`); „Abgleich: …" gehört zu keinem Feld.
  */
 export function vermerkFeld(text: string): Feld | null {
   if (/^(Abgerückt|Wieder als anwesend geführt|Status geändert|Abrückzeit korrigiert)/.test(text)) return "status";
-  if (/^Zug/.test(text)) return "zug";
   if (/^Auftrag\/Notiz/.test(text)) return "notiz";
   if (/^Eintreffzeit korrigiert/.test(text)) return "eintreffzeit";
   return null;
@@ -116,7 +113,7 @@ interface Wert {
 }
 
 /**
- * Vergleichswert eines Felds der Einheit (Status samt Abrückzeit, Zug, Auftrag,
+ * Vergleichswert eines Felds der Einheit (Status samt Abrückzeit, Auftrag,
  * Eintreffzeit) — Grundlage der Stände „was hat sich seit dem Export
  * geändert?" (export-stand.ts, R4-K1): Es zählt der Zustand, nicht die Zahl der
  * Vermerke, damit „Abrücken" und sein „Rückgängig" nichts Neues ergeben.
@@ -154,10 +151,6 @@ function wert(feld: Feld, e: MeldeEintrag): Wert {
       if (s === MeldeStatus.AUFGEGANGEN) return { gleichheit: "2", text: "zusammengeführt", leer: false };
       return { gleichheit: "0", text: "anwesend", leer: true };
     }
-    case "zug":
-      return e.zugEtikett
-        ? { gleichheit: e.zugEtikett, text: `Zug „${e.zugEtikett}“`, leer: false }
-        : { gleichheit: "", text: "ohne Zug", leer: true };
     case "notiz":
       return e.notiz
         ? { gleichheit: e.notiz, text: `Auftrag „${e.notiz}“`, leer: false }
@@ -208,8 +201,8 @@ function entscheide(feld: Feld, hier: Seite, datei: Seite): Entscheidung | null 
   return { von: "hier", widerspruch: true };
 }
 
-/** Wert eines Felds von `quelle` auf `ziel` übertragen (Zug: alle Fassungen). */
-function uebertrage(feld: Feld, quelle: MeldeEintrag, ziel: MeldeEintrag, alleFassungen: MeldeEintrag[]): void {
+/** Wert eines Felds von `quelle` auf `ziel` übertragen. */
+function uebertrage(feld: Feld, quelle: MeldeEintrag, ziel: MeldeEintrag): void {
   switch (feld) {
     case "status":
       ziel.status = quelle.status;
@@ -217,12 +210,6 @@ function uebertrage(feld: Feld, quelle: MeldeEintrag, ziel: MeldeEintrag, alleFa
       else delete ziel.abgerueckAm;
       if (quelle.aufgegangenIn) ziel.aufgegangenIn = { ...quelle.aufgegangenIn };
       else delete ziel.aufgegangenIn;
-      break;
-    case "zug":
-      for (const e of alleFassungen) {
-        if (quelle.zugEtikett) e.zugEtikett = quelle.zugEtikett;
-        else delete e.zugEtikett;
-      }
       break;
     case "notiz":
       if (quelle.notiz) ziel.notiz = quelle.notiz;
@@ -239,7 +226,7 @@ export interface AbgleichAenderung {
   einheitSchluessel: string;
   /** Kurzname der Einheit („Ulm", sonst Anzeigename). */
   einheit: string;
-  /** Übernommene Werte, z. B. „abgerückt 20:47", „Zug „2. TZ“". */
+  /** Übernommene Werte, z. B. „abgerückt 20:47". */
   was: string[];
 }
 
@@ -293,7 +280,7 @@ function alleSammlungen(): Einsatzsammlung[] {
   return [...einsaetzeLaden(), ...einsaetzePapierkorb()];
 }
 
-export const FELDER: Feld[] = ["status", "zug", "notiz", "eintreffzeit"];
+export const FELDER: Feld[] = ["status", "notiz", "eintreffzeit"];
 
 /** Alle Felder der Stände: {@link FELDER} und die geltende Fassung (R5-W1). */
 export const STAND_FELDER: StandFeld[] = [...FELDER, "fassung"];
@@ -374,7 +361,7 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
     const fassungen = s.eintraege.filter((e) => e.einheitSchluessel === schl);
     const ziel = geltendeJeEinheit(fassungen)[0];
     if (!ziel) continue;
-    const vorZiel = JSON.stringify(ziel) + fassungen.map((e) => e.zugEtikett ?? "").join("|");
+    const vorZiel = JSON.stringify(ziel);
     const was: string[] = [];
     const notizen: FuehrungsVermerk[] = [];
     // Hat das andere Gerät entschieden, welche vorhandene Fassung gilt (Vorrang),
@@ -386,7 +373,7 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
       if (!ent) continue; // beide Köpfe gleich — der neue Kopf ist einer davon
       // Gilt der Wert dieses Geräts, muss er trotzdem auf den neuen Kopf: kam
       // mit der Datei eine Folgemeldung, trägt sie den Stand des anderen Geräts.
-      uebertrage(feld, ent.von === "hier" ? hier.kopf : datei.kopf, ziel, fassungen);
+      uebertrage(feld, ent.von === "hier" ? hier.kopf : datei.kopf, ziel);
       const hierWert = wert(feld, hier.kopf).text;
       const dateiWert = wert(feld, datei.kopf).text;
       if (ent.von === "datei") was.push(dateiWert);
@@ -412,7 +399,7 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
     const vermerke = vereinigeVermerke([hier.vermerke, datei.vermerke, ziel.vermerke ?? [], notizen]);
     if (vermerke.length > 0) ziel.vermerke = vermerke;
     if (was.length > 0) ergebnis.aktualisiert.push({ einheitSchluessel: schl, einheit: kurzname(ziel), was });
-    if (JSON.stringify(ziel) + fassungen.map((e) => e.zugEtikett ?? "").join("|") !== vorZiel) geschrieben = true;
+    if (JSON.stringify(ziel) !== vorZiel) geschrieben = true;
   }
   if (geschrieben) {
     s.geaendert = jetzt;
@@ -425,7 +412,7 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
 
 /**
  * Quittungstext für den Abgleich: „3 Meldungen aktualisiert: Ulm abgerückt
- * 20:47; Biberach Zug „2. TZ“." und — falls vorhanden — die Widersprüche.
+ * 20:47; Biberach Auftrag „Deich Nord“." und — falls vorhanden — die Widersprüche.
  * Leer, wenn nichts abzugleichen war.
  */
 export function abgleichText(r: Pick<AbgleichErgebnis, "aktualisiert" | "widersprueche">): string {
@@ -463,7 +450,7 @@ export interface Einzelheit {
 
 /**
  * Die Quittung des Abgleichs gegliedert (Audit Runde 5, R5-K3): oben das, was
- * eine Entscheidung verlangt — aktualisierte Meldungen (Abrücken, Zug, Fassung)
+ * eine Entscheidung verlangt — aktualisierte Meldungen (Abrücken, Auftrag, Fassung)
  * und inhaltliche Widersprüche, jeweils die ersten drei —, dahinter eingeklappt
  * alles Übrige und die kleinen Abweichungen der Eintreffzeit, die zwei Geräte
  * beim Empfang je selbst vergeben. Vorher war es ein Absatz von 14 Widersprüchen,
@@ -513,32 +500,12 @@ export function abgleichGliederung(r: Pick<AbgleichErgebnis, "aktualisiert" | "w
  * Übernahme in eine ANDERE, laufende Sammlung vorbereiten: dieselben
  * Meldungen mit Eintreffzeit, Status, Auftrag, Siegel und Verlauf, aber unter
  * der Kennung des Ziels — `einsatzAbgleichen` legt sie dann dort ab, statt
- * eine zweite Sammlung anzulegen (Audit Runde 3, R3-W3). Einheiten, die im
- * Ziel noch fehlen und keinen Zug tragen, bekommen `zug` (Vorschlag: der
- * Name der Quell-Sammlung, „1. TZ Albstadt"), mit Vermerk. Bekannte Einheiten
- * behalten ihren Zug — den gleicht der Abgleich nach seinen Regeln ab.
+ * eine zweite Sammlung anzulegen (Audit Runde 3, R3-W3).
  */
 export function sammlungFuerZiel(
   quelle: Einsatzsammlung,
   ziel: Einsatzsammlung,
-  zug = "",
-  jetzt = Date.now(),
 ): Einsatzsammlung {
-  const bekannt = new Set(ziel.eintraege.map((e) => e.einheitSchluessel));
   const eintraege: MeldeEintrag[] = JSON.parse(JSON.stringify(quelle.eintraege));
-  // Eine Schreibweise je Zug, auch für den vorgeschlagenen Zug aus der Quell-Sammlung (R10-S1).
-  const wert = zugNormalisiert(zug, [...ziel.eintraege, ...eintraege].map((e) => e.zugEtikett));
-  if (wert) {
-    const neueEinheiten = new Set(
-      eintraege.filter((e) => !bekannt.has(e.einheitSchluessel) && !e.zugEtikett).map((e) => e.einheitSchluessel),
-    );
-    for (const schl of neueEinheiten) {
-      const fassungen = eintraege.filter((e) => e.einheitSchluessel === schl);
-      if (fassungen.some((e) => e.zugEtikett)) continue;
-      for (const e of fassungen) e.zugEtikett = wert;
-      const kopf = geltendeJeEinheit(fassungen)[0];
-      if (kopf) (kopf.vermerke ??= []).push({ zeit: jetzt, text: `Zug: ${wert} (aus Sammlung „${quelle.name}“ übernommen)` });
-    }
-  }
   return { ...ziel, eintraege };
 }

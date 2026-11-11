@@ -22,7 +22,7 @@
  *    pivotieren. Dafür sind die Blöcke der jeweils anderen Satzarten leer.
  *
  * Damit eine gefilterte Ansicht für sich lesbar bleibt, wiederholt der
- * Kontext-Block vorne (Einsatz, Einheit, Teil, Zug, Stand, Übung) auf JEDER
+ * Kontext-Block vorne (Einsatz, Einheit, Teil, Stand, Übung) auf JEDER
  * Zeile — sonst wüsste man bei „Satzart = Person" nicht mehr, zu wem sie gehört.
  *
  * ## Auswahl
@@ -92,7 +92,6 @@ const SPALTEN = [
   "Meldung Nr.",
   "Einheit",
   "Teil",
-  "Zug",
   "Stand",
   "Übung",
   "Satzart",
@@ -246,7 +245,6 @@ interface Kontext {
   abgerueckt?: string;
   notiz?: string;
   teil?: string;
-  zug?: string;
   quelle?: string;
   status?: string;
   signatur?: string;
@@ -260,7 +258,6 @@ function kontextFelder(b: Erfassungsbogen, k: Kontext, satzart: string, nr?: num
     "Meldung Nr.": k.meldungNr ?? "",
     Einheit: einheitAnzeigename(b.einheit),
     Teil: k.teil ?? "",
-    Zug: k.zug ?? "",
     // Eine Zeitform in der ganzen Datei: „04.10.2026, 14:36" (R3-K7).
     Stand: zeitpunktDeutsch(b.stand),
     "Übung": jaNein(b.uebung === true),
@@ -403,7 +400,6 @@ function kontextAusMeldung(e: MeldeEintrag, einsatz: string, meldungNr?: number,
     abgerueckt: e.abgerueckAm != null ? zeitLang(e.abgerueckAm) : "",
     notiz: e.notiz ?? "",
     teil: e.teilEtikett,
-    zug: e.zugEtikett,
     quelle: QUELLE_TEXT[e.quelle],
     status: STATUS_TEXT[e.status],
     signatur: e.signatur

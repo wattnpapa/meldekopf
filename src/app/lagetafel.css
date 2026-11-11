@@ -212,7 +212,7 @@ main.lt .lt-vorbehalt { margin-top: calc(var(--lt-e) * 0.6); font-size: calc(var
 main.lt .lt-leer { font-size: calc(var(--lt-e) * 3.6); padding: calc(var(--lt-e) * 1) 0 0; }
 main.lt .lt-leer-zusatz { font-size: calc(var(--lt-e) * 2.5); color: var(--lt-text-2); padding: calc(var(--lt-e) * 0.6) 0 calc(var(--lt-e) * 2); }
 
-/* Gruppenkopf: Zug oder Organisation mit Zahl der Einheiten und Stärke. */
+/* Gruppenkopf: Organisation mit Zahl der Einheiten und Stärke. */
 .lt-gruppe {
   box-sizing: border-box;
   height: calc(var(--lt-kopf-h) * 1em);

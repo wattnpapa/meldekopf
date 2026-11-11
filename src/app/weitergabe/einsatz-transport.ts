@@ -273,7 +273,7 @@ export function boegenAusPdfBytes(bytes: Uint8Array): Erfassungsbogen[] {
 
 /**
  * Vollständige Einsatz-Sammlung aus den Bytes einer Sammel-PDF extrahieren —
- * der Umschlag „eeb-einsatz" (inkl. Zug-Zuordnung, Status, Historie) wird seit
+ * der Umschlag „eeb-einsatz" (inkl. Status, Historie) wird seit
  * dieser Fassung zusätzlich zu den Bögen eingebettet. `null`, wenn die PDF
  * keinen Umschlag trägt (ältere Sammel-PDFs, fremde PDFs).
  */

@@ -39,7 +39,7 @@ in [funktionsumfang.md](funktionsumfang.md), der Weg der Übernahme in
 | 2 | Feldtauglichkeit | Bedienbar bei Sonne, Nacht, Handschuhen, Zeitdruck; die Feldtauglichkeits-Ergebnisse des Erfassungsbogens (acht Audit-Runden) gehen vollständig mit. |
 | 3 | Datensparsamkeit und Fristen | Nur was die Lage braucht; Datenschutzfrist 90 Tage, Papierkorb 30 Tage, Aufräumfrist 90 Tage; Lagemonitor ohne Personennamen. |
 | 4 | Kompatibilität | Alle QR-Codes, Dateien und Sammlungen, die der Erfassungsbogen je erzeugt hat, bleiben lesbar (Schema ab Version 2, `eeb.einsaetze.v1`). |
-| 5 | Nachvollziehbarkeit | Jede Handlung der Führungsstelle (Abrücken, Zug, Auftrag, Zeitkorrektur) als Vermerk mit Uhrzeit; nichts wird still überschrieben. |
+| 5 | Nachvollziehbarkeit | Jede Handlung der Führungsstelle (Abrücken, Auftrag, Zeitkorrektur) als Vermerk mit Uhrzeit; nichts wird still überschrieben. |
 | 6 | Wartbarkeit | Geteilter Kern in Submodulen, keine Kopie von Fachlogik; CI-Gates für Kern-Kopien und Bundle-Budget. |
 
 ### 1.3 Stakeholder
@@ -224,7 +224,7 @@ flowchart TB
   app --> papier["papier-abgleich-ui.tsx"]
   app --> export["weitergabe/*<br/>Sammel-PDF, CSV, XLSX, Einsatz-Datei,<br/>Export-Stand"]
   app --> persist["speicher-browser.ts, einsaetze-lesen.ts,<br/>eintrag-zeiten.ts, fassung-vorrang.ts,<br/>entfernte-meldungen.ts, einsatz-abgleich.ts,<br/>sicherung.ts, datenschutz-uhr.ts"]
-  liste --> ausw["auswertung.ts, einheiten-liste.ts,<br/>einheiten-tabelle.ts, zug-name.ts"]
+  liste --> ausw["auswertung.ts, einheiten-liste.ts,<br/>einheiten-tabelle.ts"]
 ```
 
 Die Unterverzeichnisse `eingang/`, `schnellerfassung/`, `weitergabe/` sind
@@ -299,7 +299,10 @@ Kennfarbe), liegen unter `src/test/`.
 Unverändert aus dem Erfassungsbogen (dort Kap. 6.3): Eingang → Fingerabdruck
 → Dedupe → Revision oder neuer Eintrag → Diff → Persistieren → Summen. Alle
 Eingänge laufen über `meldungAufnehmen` (`eintrag-zeiten.ts`); eine neue
-Fassung erbt Eintreffzeit, Auftrag, Zug und Teil-Etikett der Vorgängerin.
+Fassung erbt Eintreffzeit, Auftrag und Teil-Etikett der Vorgängerin. Ein
+Zug-Etikett aus älteren Sammlungen (`zugEtikett` im Kern) bleibt in den Daten
+und reist mit Datei, Sammel-PDF und Datensicherung mit; die App zeigt und
+bearbeitet es nicht mehr (Zug-Funktion entfallen am 2026-11-11).
 
 ### 6.2 Vollständiger Bogen über den Erfassungsbogen
 
@@ -364,8 +367,8 @@ zuletzt abgerückten mit Uhrzeit, unabhängig davon, wie voll die Tafel ist
 (ein Block, der mit dem Füllstand kommt und geht, wäre kein festes Lagebild).
 Auf der Tafel stehen sie nur, wenn niemand mehr anwesend ist. Beim Blättern
 laufen die Gruppen über Spalten und Seiten weiter, statt Platz frei zu
-lassen; die Seitenzeile nennt die Züge der Seite, die Randspalte führt dann
-alle Züge mit ihrer Stärke.
+lassen; die Seitenzeile nennt die Gruppen der Seite und der nächsten. Gruppiert
+wird nach Organisation.
 
 Lässt sich der Brocken der Tafel nicht nachladen (ein lange offenes
 Monitor-Fenster nach einem Update der App), fängt eine Fehlergrenze in
@@ -731,8 +734,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | 30 Einheiten per Bilderstapel aus einem Messenger-Ordner | Alle aufgenommen, Mehrteil-Sätze zusammengefunden, Bericht nennt Doppelte und fehlende Teile; kein Speicherüberlauf (sequenziell). |
 | Einheit ohne Bogen am Tablet | Unter drei Minuten bis zum gedruckten Nur-Stärke-Bogen und zur Aufnahme in die Sammlung. |
 | Sammlung mit 5 Mio. Zeichen im Speicher | Startseite und Einsatzansicht ohne spürbare Verzögerung (Lese-Ergebnis gemerkt, solange der Text gleich ist). |
-| Ablösung mit zweitem Gerät, beide ändern Status und Zug | Rückimport ergänzt Neues, gleicht je Feld ab, nennt Widersprüche; nichts still überschrieben. |
-| Geräteausfall, nur das Lageblatt auf Papier | Bögen scannen, Zeiten und Zug in einer Liste nachtragen, Abgleich in einem Schritt. |
+| Ablösung mit zweitem Gerät, beide ändern Status und Auftrag | Rückimport ergänzt Neues, gleicht je Feld ab, nennt Widersprüche; nichts still überschrieben. |
+| Geräteausfall, nur das Lageblatt auf Papier | Bögen scannen, Zeiten, Status und Nummer in einer Liste nachtragen, Abgleich in einem Schritt. |
 | Uhr springt um ein Jahr | Keine Löschung, keine Anonymisierung, bis „Geräteuhr stimmt" bestätigt ist. |
 | Erste Nutzung ohne Netz nach Installation | Alles aus dem Vorrat; Sammel-PDF und QR entstehen offline. |
 

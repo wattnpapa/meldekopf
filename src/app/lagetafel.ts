@@ -5,8 +5,8 @@
  * (`lagebild`), damit Tafel, Zeilenansicht, Einsatzansicht und Lageblatt
  * dieselben Summen zeigen. Hier entsteht nur, was die Tafel zusätzlich braucht:
  *
- *  - **Feste Plätze.** Die Einheiten stehen nach Zug (ohne Züge: nach
- *    Organisation) und darin nach Eintreffzeit. Eine neue Einheit kommt ans
+ *  - **Feste Plätze.** Die Einheiten stehen nach Organisation und darin
+ *    nach Eintreffzeit. Eine neue Einheit kommt ans
  *    Ende ihrer Gruppe, eine Folgemeldung ändert die Zahl an Ort und Stelle;
  *    niemand rückt nach oben, weil er zuletzt gemeldet hat. Wer „seine"
  *    Einheit sucht, findet sie dort, wo sie vor fünf Minuten stand.
@@ -77,7 +77,7 @@ export interface TafelEinheit {
   marke?: TafelMarke;
 }
 
-/** Eine Gruppe der Tafel: ein Zug, „ohne Zug" oder eine Organisation. */
+/** Eine Gruppe der Tafel: eine Organisation. */
 export interface TafelGruppe {
   schluessel: string;
   titel: string;
@@ -97,8 +97,6 @@ export interface TafelAbgang {
 export interface Tafelbild {
   /** Das Lagebild der Zeilenansicht: Summen, Bedarf, Bewegungen, Datenstand. */
   bild: Lagebild;
-  /** Wonach die Gruppen gebildet sind: nach Zug, sobald eine Einheit einen trägt, sonst nach Organisation. */
-  gliederung: "zug" | "organisation";
   gruppen: TafelGruppe[];
   /** Abgerückte Einheiten, zuletzt abgerückte zuerst. */
   abgerueckt: TafelAbgang[];
@@ -111,7 +109,7 @@ export interface Tafelbild {
 /**
  * Herkunft und Typ einer Einheit getrennt. Der Anzeigename („THW Oldenburg (NI)
  * Bergungsgruppe") ist für die Tafel zu lang für eine Zeile und zu wichtig zum
- * Abschneiden: Im eigenen Zug unterscheidet nur der Typ, im Bereitstellungsraum
+ * Abschneiden: Im eigenen Ortsverband unterscheidet nur der Typ, im Bereitstellungsraum
  * nur die Herkunft. Beide bekommen deshalb ihre eigene Zeile. Die Regel gegen
  * doppelte Teile bleibt die von `einheitAnzeigename` (R5-N6).
  *
@@ -197,24 +195,22 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
   for (const b of bild.bewegungen) if (!bewegt.has(b.eintrag)) bewegt.set(b.eintrag, b);
 
   const anwesend = aktuelleMeldungen(einsatz.eintraege, einsatz.art);
-  const mitZug = anwesend.some((m) => (m.zugEtikett ?? "").trim() !== "");
   // Stelle der ersten Meldung jeder Einheit in der Sammlung: entscheidet bei gleicher Eintreffzeit (ein Stapel Bögen,
-  // in einem Zug eingelesen) und bleibt, auch wenn Folgemeldungen dazukommen.
+  // auf einmal eingelesen) und bleibt, auch wenn Folgemeldungen dazukommen.
   const ersteStelle = new Map<string, number>();
   einsatz.eintraege.forEach((e, i) => {
     if (!ersteStelle.has(e.einheitSchluessel)) ersteStelle.set(e.einheitSchluessel, i);
   });
   const stelle = new Map<string, number>(anwesend.map((m) => [m.id, ersteStelle.get(m.einheitSchluessel) ?? 0]));
-  const nach = new Map<string, { titel: string; rang: number; org: OrganisationsTyp; einheiten: TafelEinheit[] }>();
+  const nach = new Map<string, { titel: string; org: OrganisationsTyp; einheiten: TafelEinheit[] }>();
   for (const m of anwesend) {
     const z = zeilen.get(m.id);
     if (!z) continue;
-    const zug = (m.zugEtikett ?? "").trim();
     const org = m.bogen.einheit.organisation;
-    const schluessel = mitZug ? `zug:${zug}` : `org:${org}`;
+    const schluessel = `org:${org}`;
     let gruppe = nach.get(schluessel);
     if (!gruppe) {
-      gruppe = { titel: mitZug ? zug || "ohne Zug" : orgLabel(org), rang: mitZug && zug === "" ? 1 : 0, org, einheiten: [] };
+      gruppe = { titel: orgLabel(org), org, einheiten: [] };
       nach.set(schluessel, gruppe);
     }
     const neuAmPlatz = marke(bewegt.get(m.id));
@@ -234,14 +230,14 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
   }
 
   const gruppen = [...nach.entries()]
-    // Züge in Zählfolge („2. Zug" vor „10. Zug"), „ohne Zug" zuletzt; Organisationen in der festen Folge des Formats.
-    .sort(([, a], [, b]) => a.rang - b.rang || (mitZug ? a.titel.localeCompare(b.titel, "de", { numeric: true }) : a.org - b.org))
+    // Organisationen in der festen Folge des Formats.
+    .sort(([, a], [, b]) => a.org - b.org)
     .map(([schluessel, g]): TafelGruppe => {
       // Nach Eintreffzeit, bei gleicher Zeit in der Folge der Aufnahme: Die Folge hängt nicht daran, wer zuletzt gemeldet hat.
       const einheiten = g.einheiten.sort((a, b) => a.eingetroffen - b.eingetroffen || stelle.get(a.id)! - stelle.get(b.id)!);
       return { schluessel, titel: g.titel, kopf: true, staerke: summe(einheiten), einheiten };
     });
-  if (!mitZug && gruppen.length === 1) gruppen[0]!.kopf = false;
+  if (gruppen.length === 1) gruppen[0]!.kopf = false;
 
   const abgerueckt = geltendeJeEinheit(einsatz.eintraege)
     .filter((e) => e.status === MeldeStatus.ABGERUECKT)
@@ -260,7 +256,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
       for (const f of FASSUNGEN) bedarf[f] = Math.max(bedarf[f], b[f]);
     }
   }
-  return { bild, gliederung: mitZug ? "zug" : "organisation", gruppen, abgerueckt, namen, bedarf };
+  return { bild, gruppen, abgerueckt, namen, bedarf };
 }
 
 /**
@@ -495,7 +491,7 @@ const GENAU = 1e-6;
  * („Fortsetzung"). Ein Kopf steht nie allein am Spaltenende.
  *
  * Mit `fuellen` (beim Blättern) geht der Platz vor: Ein Block beginnt, wo sein Kopf und eine Zeile hinpassen, und
- * läuft in der nächsten Spalte weiter. Blieben die Gruppen dort zusammen, stünde bei Zügen zu je fünf Einheiten jede
+ * läuft in der nächsten Spalte weiter. Blieben die Gruppen dort zusammen, stünde bei Gruppen zu je fünf Einheiten jede
  * Spalte halb leer, und die Tafel bräuchte doppelt so viele Seiten.
  */
 function setzen(bloecke: readonly Block[], hoehe: number, fuellen = false): TafelZelle[][] {

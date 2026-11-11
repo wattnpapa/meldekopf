@@ -4,7 +4,7 @@
 # sie nach „Bögen einlesen…" vom Ausdruck aussieht.
 Funktionalität: Lage vom Papier abgleichen
   Nach einem Ausfall lese ich die Bögen vom Ausdruck ein und trage vom Blatt
-  nach, was nur dort steht: Nummer, Eintreffzeit, Status, Zug.
+  nach, was nur dort steht: Nummer, Eintreffzeit, Status, Auftrag.
 
   Grundlage:
     Angenommen auf dem Gerät liegt die Sammlung "Hochwasser Weser" mit dem alten Bogen, vom Papier eingelesen

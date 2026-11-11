@@ -22,7 +22,6 @@ import {
 } from "@bos/eeb-format/model";
 import { EinsatzArt, MeldeStatus, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { geltendeJeEinheit } from "./fassung-vorrang";
-import { angabenZeit } from "./angaben-alter";
 
 export interface EinsatzSummen {
   /** Anzahl anwesender Einheiten (nicht Personen). */
@@ -291,36 +290,4 @@ function summiere(meldungen: MeldeEintrag[]): EinsatzSummen {
 /** Gesamtsummen über alle aktuell anwesenden Einheiten des Einsatzes. */
 export function aggregiere(eintraege: MeldeEintrag[], art?: EinsatzArt): EinsatzSummen {
   return summiere(aktuelleMeldungen(eintraege, art));
-}
-
-export interface ZugGruppe {
-  /** Zug-/Verbands-Etikett; undefined = Einheiten ohne Etikett („Einzeln"). */
-  zugEtikett?: string;
-  summen: EinsatzSummen;
-  /** Eingang der ältesten geltenden Meldung dieser Gruppe (ms) — Altersaussage je Zug (R12-K3). */
-  aeltesteMeldungAm?: number;
-}
-
-/**
- * Summen gruppiert nach Zug-Etikett (optionale Verbands-Zwischensumme).
- * Nur aktuell anwesende Einheiten. Gruppen sind alphabetisch sortiert,
- * Einheiten ohne Etikett kommen zuletzt.
- */
-export function aggregiereNachZug(eintraege: MeldeEintrag[], art?: EinsatzArt): ZugGruppe[] {
-  const nach = new Map<string, MeldeEintrag[]>();
-  for (const m of aktuelleMeldungen(eintraege, art)) {
-    const k = m.zugEtikett ?? "";
-    (nach.get(k) ?? nach.set(k, []).get(k)!).push(m);
-  }
-  return [...nach.entries()]
-    .sort(([a], [b]) => {
-      if (a === "") return 1; // „ohne Etikett" ans Ende
-      if (b === "") return -1;
-      return a.localeCompare(b, "de");
-    })
-    .map(([k, ms]) => ({
-      zugEtikett: k || undefined,
-      summen: summiere(ms),
-      aeltesteMeldungAm: Math.min(...ms.map(angabenZeit)),
-    }));
 }
