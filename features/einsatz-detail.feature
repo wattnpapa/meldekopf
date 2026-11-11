@@ -132,7 +132,7 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Dann sehe ich den Hinweis "– aktuell"
     Wenn ich die Einheit "DLRG" "Wardenburg" manuell in den Einsatz aufnehme
     Dann sehe ich den Hinweis "– nicht mehr aktuell"
-    Und sehe ich die Schaltfläche "Übergeben, Lageblatt, Export ↓"
+    Und sehe ich die Schaltfläche "Übergeben, Lageblatt, Export, Lagemonitor ↓"
 
   Szenario: CSV-Übersicht für die Lagekarte
     Wenn ich auf "Übersicht als CSV" klicke und eine Datei erhalte

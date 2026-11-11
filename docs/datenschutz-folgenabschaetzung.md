@@ -314,8 +314,9 @@ versehentlich in Freitexten, M7), biometrische Daten, strafrechtliche Daten.
   Organisation, Heimatort, Funkrufname, Stärke und Bewegungen — keine
   Personennamen. Die Ansicht „Tafel" (seit 2026-11-10) zeigt alle Einheiten
   auf einmal, je Einheit zusätzlich taktisches Zeichen, Auftrag, Stand der
-  Angaben und Sofortbedarf als Marke, dazu die abgerückten Einheiten mit
-  Uhrzeit; ebenfalls ohne Personen.
+  Angaben und Sofortbedarf als Marke, bei abgeteilten Teilen deren Etikett
+  (Freitext des Meldekopfs, wie Auftrag und Notiz nicht für Namen gedacht),
+  dazu die abgerückten Einheiten mit Uhrzeit; ebenfalls ohne Personen.
 - **Ausgabe:** Sammel-PDF (Lageblatt + jeder Bogen mit QR, eingebettet alle
   Bögen als JSON und die ganze Sammlung samt Export-Ständen und
   Lage-Angaben), Lageblatt allein (mit Funkrufname und **Rückrufnummer der
@@ -457,7 +458,7 @@ Ergänzend:
 | Einsatz-Datei | S1-Control, zweites Meldekopf-Gerät | **Ja — Vollkopie** der Sammlung | Zweckgemäß; unverschlüsselt, unsigniert |
 | Datensicherungsdatei | Vom Nutzer gewählt (zweites Gerät, Speichermedium) | **Ja — Vollkopie des Geräts** einschließlich privatem Schlüssel und ggf. Fremdbestand | Kein Empfänger im Meldeweg; Ablage regeln (M3) |
 | QR-Codes in den PDFs | Wer die PDF bzw. den Ausdruck erhält | Ja — der Bogen der Einheit, Signaturkette, ggf. Absenderkarte (R13) | wie Sammel-PDF |
-| Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke; in der Ansicht „Tafel" je Einheit auch Auftrag, Sofortbedarf und Stand) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
+| Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke; in der Ansicht „Tafel" je Einheit auch Auftrag, Sofortbedarf, Stand und das Etikett eines abgeteilten Teils) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
 | GoatCounter-Zählimpuls | `meldekopf.goatcounter.com` | Nein — nur Pfad (Nutzungskanal, z. B. `/pwa/android`), Titel und im Browser der Referrer; keine Cookies, keine ID, kein Fragment, keine Sammlungsdaten; technisch unvermeidbar die IP-Adresse als Transportdatum | Art. 6 Abs. 1 lit. f DSGVO; Widerspruch per Kästchen „Nicht mitzählen" im Datenschutzdialog (`skipgc`, ab dem nächsten Start) |
 | Update-Prüfung (nur Desktop) | GitHub Releases | Nein, nur Verbindungsmetadaten | Berechtigtes Interesse an aktuellem Software-Stand |
 | Abruf der Webfassung | GitHub Pages (meldekopf.erfassungsbogen.app) | Nein, nur Verbindungsmetadaten | Auslieferung der Anwendung |

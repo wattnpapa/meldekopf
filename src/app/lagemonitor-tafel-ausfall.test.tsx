@@ -55,7 +55,7 @@ describe("Lagemonitor: Die Tafel fällt aus", () => {
     const id = einsatz();
     render(<Lagemonitor einsatzId={id} />);
     expect(screen.queryByRole("alert")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Ansicht: Tafel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tafel zeigen" }));
     await vi.waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/^Die Tafel lässt sich/));
     expect(document.querySelector("main.lm")).not.toBeNull();
   });
@@ -69,6 +69,6 @@ describe("Lagemonitor: Die Tafel fällt aus", () => {
     localStorage.removeItem(ANSICHT_SCHLUESSEL);
     fireEvent(window, new StorageEvent("storage", { key: ANSICHT_SCHLUESSEL }));
     await vi.waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-    expect(screen.getByRole("button", { name: "Ansicht: Tafel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tafel zeigen" })).toBeTruthy();
   });
 });

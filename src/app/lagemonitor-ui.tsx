@@ -427,13 +427,16 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
   const tafelFaelltAus = ansicht === "tafel" && tafelDefekt;
   const zeigt: LageAnsicht = ansicht === "tafel" && !tafelDefekt ? "tafel" : "zeilen";
   const andereAnsicht: LageAnsicht = zeigt === "tafel" ? "zeilen" : "tafel";
+  // Der Wechsel ist als Handlung beschriftet („Tafel zeigen"): „Ansicht: Zeilen" las sich neben „Stufe: Dunkel" wie ein Zustand.
+  // Er steht in beiden Darstellungen sichtbar bei der Helligkeit, nicht hinter „Optionen": Wer bei den Zeilen landet, soll den
+  // Weg zur Tafel sehen, und wer gewechselt hat, den Weg zurück.
+  const wechselKnopf = tafelFaelltAus ? (
+    <button type="button" className="lm-knopf lm-wechsel" onClick={() => window.location.reload()}>Neu laden</button>
+  ) : (
+    <button type="button" className="lm-knopf lm-wechsel" onClick={() => setAnsicht(andereAnsicht)}>{ANSICHT_NAME[andereAnsicht]} zeigen</button>
+  );
   const fensterKnoepfe = (
     <>
-      {tafelFaelltAus ? (
-        <button type="button" className="lm-knopf" onClick={() => window.location.reload()}>Neu laden</button>
-      ) : (
-        <button type="button" className="lm-knopf" onClick={() => setAnsicht(andereAnsicht)}>Ansicht: {ANSICHT_NAME[andereAnsicht]}</button>
-      )}
       <button type="button" className="lm-knopf" onClick={vollbild}>Vollbild</button>
       <button type="button" className="lm-knopf" onClick={schliessen}>Schließen</button>
     </>
@@ -478,7 +481,10 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
           bedienung={
             <>
               {stufenleiste}
-              <div className="lt-wahl">{fensterKnoepfe}</div>
+              <div className="lt-wahl">
+                {wechselKnopf}
+                {fensterKnoepfe}
+              </div>
             </>
           }
         />
@@ -587,7 +593,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
       )}
       {tafelFaelltAus && (
         <div className="lm-zeile lm-r3 lm-stand" role="alert">
-          <span className="lm-label lm-veraltet">Die Tafel lässt sich in diesem Fenster gerade nicht zeigen – hier stehen die Zeilen. Unter „Optionen“: „Neu laden“.</span>
+          <span className="lm-label lm-veraltet">Die Tafel lässt sich in diesem Fenster gerade nicht zeigen – hier stehen die Zeilen. „Neu laden“ holt sie zurück.</span>
         </div>
       )}
       <div className="lm-zeile lm-r3 lm-stand">
@@ -664,6 +670,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
       </details>
 
       {stufenleiste}
+      {wechselKnopf}
       <details className="lm-zeile lm-klapp">
         <summary>Optionen</summary>
         <div className="lm-optionen">{fensterKnoepfe}</div>
@@ -790,7 +797,7 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
         </label>
       </div>
       <fieldset className="lm-ansicht-wahl">
-        <legend>Ansicht am Fernseher</legend>
+        <legend>Darstellung am Fernseher</legend>
         <label>
           <input type="radio" name="lm-ansicht" checked={ansicht === "zeilen"} onChange={() => waehleAnsicht("zeilen")} />
           <span>
@@ -806,7 +813,7 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
           </span>
         </label>
       </fieldset>
-      <p className="hinweis lm-ansicht-hinweis">Die Wahl gilt für dieses Gerät. Ein offener Lagemonitor stellt sich sofort um; dort lässt sie sich auch ändern.</p>
+      <p className="hinweis lm-ansicht-hinweis">Die Wahl gilt für dieses Gerät. Ein offener Lagemonitor stellt sich sofort um; dort lässt sie sich auch ändern („Zeilen zeigen“, „Tafel zeigen“).</p>
       {/* R12-N5: Zweck und Wirkung von Feld und Knöpfen stehen vor ihnen. */}
       <p className="hinweis lm-beginn-erklaerung">
         Der Fernseher zeigt die Dauer seit dem Einsatzbeginn („seit Beginn: 2 Stunden, 5 Minuten“). „Jetzt“ setzt den
@@ -848,7 +855,7 @@ export function LagemonitorBlock({ einsatzId, alleIds }: { einsatzId: string; al
       {hinweis && <p className="hinweis warnung-text lm-beginn-hinweis" role="status">{hinweis}</p>}
       {fehler && <p className="fehler" role="status">Der Beginn konnte nicht gespeichert werden (Speicher voll oder gesperrt).</p>}
       {ansichtFehler && (
-        <p className="fehler" role="status">Die Ansicht konnte nicht gespeichert werden (Speicher voll oder gesperrt) — ein offener Lagemonitor stellt sich nicht um; dort lässt sie sich direkt wählen.</p>
+        <p className="fehler" role="status">Die Darstellung konnte nicht gespeichert werden (Speicher voll oder gesperrt) — ein offener Lagemonitor stellt sich nicht um; dort lässt sie sich direkt wählen.</p>
       )}
       {funkrufFehler && (
         <p className="fehler" role="status">Der Funkrufname konnte nicht gespeichert werden (Speicher voll oder gesperrt) — der Lagemonitor zeigt ihn nicht.</p>

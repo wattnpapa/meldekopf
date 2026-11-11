@@ -2258,7 +2258,7 @@ export function EinsatzDetail(props: {
               }
             }}
           >
-            Übergeben, Lageblatt, Export ↓
+            Übergeben, Lageblatt, Export, Lagemonitor ↓
           </button>
         </p>
       )}

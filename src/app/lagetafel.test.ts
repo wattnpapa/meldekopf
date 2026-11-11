@@ -114,8 +114,8 @@ function sammlung(eintraege: MeldeEintrag[], art = EinsatzArt.EINSATZ): Einsatzs
 
 describe("nameTeile", () => {
   it("trennt Herkunft und Typ und kennt die Kurzform des Vokabulars", () => {
-    expect(nameTeile(bogen({ ort: "Oldenburg (NI)", typ: 4 }).einheit)).toEqual({ herkunft: "THW Oldenburg (NI)", typ: "Bergungsgruppe", typKurz: "B" });
-    expect(nameTeile(bogen({ ort: "Brake", typ: 3 }).einheit)).toEqual({ herkunft: "THW Brake", typ: "Zugtrupp Technischer Zug", typKurz: "ZTr TZ" });
+    expect(nameTeile(bogen({ ort: "Oldenburg (NI)", typ: 4 }).einheit)).toEqual({ herkunft: "THW Oldenburg (NI)", ort: "Oldenburg (NI)", typ: "Bergungsgruppe", typKurz: "B" });
+    expect(nameTeile(bogen({ ort: "Brake", typ: 3 }).einheit)).toEqual({ herkunft: "THW Brake", ort: "Brake", typ: "Zugtrupp Technischer Zug", typKurz: "ZTr TZ" });
   });
 
   it("kürzt „Fachgruppe“ im ausgeschriebenen Typ zu „FGr“: Das Unterscheidende steht am Ende", () => {
@@ -126,6 +126,7 @@ describe("nameTeile", () => {
   it("nennt den Ort nicht doppelt, wenn der Name der Organisation ihn trägt", () => {
     expect(nameTeile(bogen({ org: T.FEUERWEHR, orgName: "FF Elsfleth", ort: "Elsfleth", typ: "Löschzug" }).einheit)).toEqual({
       herkunft: "FF Elsfleth",
+      ort: "",
       typ: "Löschzug",
       typKurz: "Löschzug",
     });
@@ -134,10 +135,25 @@ describe("nameTeile", () => {
   it("lässt den Typ weg, wenn die Herkunft ihn schon nennt, und kommt ohne Typ aus", () => {
     expect(nameTeile(bogen({ org: T.SONSTIGE, orgName: "Bundeswehr Panzerpionierzug", ort: "", typ: "Panzerpionierzug" }).einheit)).toEqual({
       herkunft: "Bundeswehr Panzerpionierzug",
+      ort: "",
       typ: "",
       typKurz: "",
     });
-    expect(nameTeile(bogen({ org: T.DRK, ort: "Wesermarsch" }).einheit)).toEqual({ herkunft: "DRK Wesermarsch", typ: "", typKurz: "" });
+    expect(nameTeile(bogen({ org: T.DRK, ort: "Wesermarsch" }).einheit)).toEqual({ herkunft: "DRK Wesermarsch", ort: "Wesermarsch", typ: "", typKurz: "" });
+  });
+});
+
+describe("nameTeile: Standort", () => {
+  it("nennt den Standort am Ende der Herkunft getrennt: Die Karte kürzt den längeren Teil und lässt den anderen ganz", () => {
+    const juh = nameTeile(bogen({ org: T.JUH, orgName: "Johanniter-Unfall-Hilfe Regionalverband Weser-Ems", ort: "Oldenburg", typ: "SEG" }).einheit);
+    expect(juh.herkunft).toBe("Johanniter-Unfall-Hilfe Regionalverband Weser-Ems Oldenburg");
+    expect(juh.ort).toBe("Oldenburg");
+    // Der Standort ist immer das Ende der Herkunft, durch ein Leerzeichen getrennt.
+    for (const e of [bogen({ ort: "Clausthal-Zellerfeld", typ: 4 }).einheit, bogen({ org: T.DRK, ort: "Wesermarsch", typ: "SEG Betreuung" }).einheit]) {
+      const n = nameTeile(e);
+      expect(n.ort).not.toBe("");
+      expect(n.herkunft.endsWith(" " + n.ort)).toBe(true);
+    }
   });
 });
 
@@ -145,6 +161,7 @@ describe("meldungTeile", () => {
   it("hängt das Etikett eines abgeteilten Teils an den Typ, in Lang- und Kurzform", () => {
     expect(meldungTeile(eintrag({ ort: "Oldenburg (NI)", typ: 4, teil: "Fachberater" }))).toEqual({
       herkunft: "THW Oldenburg (NI)",
+      ort: "Oldenburg (NI)",
       typ: "Bergungsgruppe (Fachberater)",
       typKurz: "B (Fachberater)",
     });
@@ -276,11 +293,14 @@ describe("tafelbild: Angaben je Einheit", () => {
     expect(bedarfKurz(eintrag({ ort: "Brake" }))).toEqual([]);
   });
 
-  it("führt den Stand der Angaben und warnt ab einer Stunde", () => {
+  it("führt den Stand der Angaben als Zeitpunkt und bewertet ihn an der Einheit nicht", () => {
     const tb = tafelbild(sammlung([eintrag({ ort: "Frisch", vorMin: 20 }), eintrag({ ort: "Alt", vorMin: 20, standVorMin: 200 })]), JETZT);
     const [frisch, alt] = tb.gruppen[0]!.einheiten;
-    expect(frisch).toMatchObject({ standAlt: false, stand: JETZT - 20 * MIN });
-    expect(alt).toMatchObject({ standAlt: true, stand: JETZT - 200 * MIN });
+    expect(frisch!.stand).toBe(JETZT - 20 * MIN);
+    expect(alt!.stand).toBe(JETZT - 200 * MIN);
+    // Kein Warnkennzeichen je Einheit: Nach einer Stunde trüge es fast jede Karte. Die Sammelwarnung bleibt im Lagebild.
+    expect(alt).not.toHaveProperty("standAlt");
+    expect(tb.bild.anwesendenAlter).not.toBeNull();
   });
 
   it("markiert am Platz, was sich in den letzten Minuten bewegt hat", () => {
@@ -299,8 +319,24 @@ describe("tafelbild: Angaben je Einheit", () => {
     expect(marken["THW Ruhig"]).toBeUndefined();
     expect(marken["THW Neu"]).toEqual({ art: "neu", text: "neu" });
     expect(marken["THW Nachtrag"]).toEqual({ art: "neu", text: "nachgetragen" });
-    expect(marken["THW Folge"]).toEqual({ art: "folge", text: "Stärke 8 → 6" });
+    // Die Folgemeldung nennt, um wie viel sich die Stärke geändert hat: Ein Verlust soll nicht wie ein Zugang aussehen.
+    expect(marken["THW Folge"]).toEqual({ art: "folge", text: "Stärke −2" });
     expect(marken["THW Zurück"]).toEqual({ art: "wieder", text: "wieder da" });
+  });
+
+  it("nennt bei einer Folgemeldung den Zuwachs mit Plus und kommt ohne geänderte Stärke aus", () => {
+    const tb = tafelbild(
+      sammlung([
+        eintrag({ ort: "Mehr", schluessel: "mehr", vorMin: 120, st: [0, 2, 5] }),
+        eintrag({ ort: "Mehr", schluessel: "mehr", vorMin: 5, daVorMin: 120, st: [0, 3, 7] }),
+        eintrag({ ort: "Gleich", schluessel: "gleich", vorMin: 120, st: [0, 2, 5] }),
+        eintrag({ ort: "Gleich", schluessel: "gleich", vorMin: 4, daVorMin: 120, st: [0, 2, 5] }),
+      ]),
+      JETZT,
+    );
+    const marken = Object.fromEntries(tb.gruppen[0]!.einheiten.map((e) => [e.herkunft, e.marke]));
+    expect(marken["THW Mehr"]).toEqual({ art: "folge", text: "Stärke +3" });
+    expect(marken["THW Gleich"]).toEqual({ art: "folge", text: "Folgemeldung" });
   });
 
   it("führt abgerückte Einheiten getrennt, zuletzt abgerückte zuerst, und zählt sie nicht", () => {
@@ -430,9 +466,12 @@ describe("Dauer und Wochentag", () => {
 
   it("kennt dieselben Fälle wie die Zeilenansicht (R6-K4, R7-K3, R7-K8)", () => {
     const ohne = { ersteMeldung: null, zeitenPruefen: false };
-    expect(dauerZeile(t0, ohne, t0 + 82 * MIN)).toBe("seit Beginn 1 Std 22 Min");
-    expect(dauerZeile(t0 + 60 * MIN, ohne, t0)).toBe("Einsatz beginnt noch");
-    expect(dauerZeile(null, { ersteMeldung: t0, zeitenPruefen: false }, t0 + 5 * MIN)).toBe("seit erster Meldung 5 Min");
+    // Die Uhrzeit steht dabei: Wer den Beginn in eine Meldung schreibt, soll ihn nicht zurückrechnen müssen.
+    expect(dauerZeile(t0, ohne, t0 + 82 * MIN)).toBe("Beginn 08:00 · seit 1 Std 22 Min");
+    expect(dauerZeile(t0 + 60 * MIN, ohne, t0)).toBe("Beginn 09:00 · Einsatz beginnt noch");
+    expect(dauerZeile(null, { ersteMeldung: t0, zeitenPruefen: false }, t0 + 5 * MIN)).toBe("erste Meldung 08:00 · seit 5 Min");
+    // Liegt der Beginn an einem anderen Tag, steht das Datum dabei.
+    expect(dauerZeile(t0, ohne, t0 + 26 * 60 * MIN)).toMatch(/^Beginn \d\d\.\d\d\. 08:00 · seit 1 Tag 2 Std$/);
     expect(dauerZeile(null, { ersteMeldung: t0 + 60 * MIN, zeitenPruefen: true }, t0)).toBe("Dauer unklar – Zeiten prüfen (Geräteuhr?)");
     expect(dauerZeile(null, ohne, t0)).toBeNull();
   });
@@ -605,8 +644,9 @@ describe("tafelSatz", () => {
   });
 
   it("hält Gruppen zusammen und lässt keinen Kopf allein am Spaltenende", () => {
-    for (const anzahlen of [[4, 3, 3, 4], [5, 5, 5, 5, 5], [7, 2, 6, 1, 4], [4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3]]) {
+    for (const anzahlen of [[4, 3, 3, 4], [5, 5, 5, 5, 5], [7, 2, 6, 1, 4]]) {
       const satz = tafelSatz(gruppen(...anzahlen), 0, FERNSEHER);
+      expect(satz.seiten, String(anzahlen)).toHaveLength(1);
       for (const spalte of satz.seiten.flat()) {
         const letzte = spalte[spalte.length - 1]!;
         expect(letzte.art, String(anzahlen)).not.toBe("kopf");
@@ -614,6 +654,24 @@ describe("tafelSatz", () => {
         expect(spalte.some((z) => z.art === "kopf" && z.fortsetzung), String(anzahlen)).toBe(false);
       }
     }
+  });
+
+  it("füllt beim Blättern die Spalten, statt Gruppen zusammenzuhalten: weniger Seiten, kürzerer Umlauf", () => {
+    // Acht Züge zu je fünf Einheiten auf der Fläche, die ein Fernseher mit 1920 × 1080 im Browser wirklich lässt (1415 × 839).
+    // Blieben die Züge zusammen, passte in jede Spalte nur einer (zwei brauchen 0,4 Schriftgrößen mehr, als unter der
+    // Seitenzeile bleibt): drei Seiten mit halb leeren Spalten. Gefüllt sind es zwei.
+    const flaeche: TafelMasse = { breite: 1415, hoehe: 839, einheit: 10.8 };
+    const anzahlen = [5, 5, 5, 5, 5, 5, 5, 5];
+    const satz = tafelSatz(gruppen(...anzahlen), 0, flaeche);
+    expect(satz.seiten).toHaveLength(2);
+    erwarteAlle(satz, anzahlen);
+    const frei = (flaeche.hoehe - SATZ.seitenzeile * flaeche.einheit) / satz.schrift;
+    const spalten = satz.seiten.flat();
+    // Jede Spalte außer der letzten ist zu mehr als drei Vierteln gefüllt.
+    for (const spalte of spalten.slice(0, -1)) expect(spaltenHoehe(spalte, satz) / frei).toBeGreaterThan(0.75);
+    // Geteilte Züge tragen ihren Kopf in der nächsten Spalte noch einmal, und kein Kopf steht allein am Spaltenende.
+    expect(spalten.flat().some((z) => z.art === "kopf" && z.fortsetzung)).toBe(true);
+    for (const spalte of spalten) expect(spalte[spalte.length - 1]!.art).toBe("einheit");
   });
 
   it("setzt eine Gruppe, die länger ist als eine Spalte, mit „Fortsetzung“ fort", () => {
@@ -649,40 +707,28 @@ describe("tafelSatz", () => {
     expect(tafelSatz(ohneKopf(36), 0, FERNSEHER).seiten).toHaveLength(1);
   });
 
-  it("stellt abgerückte Einheiten dahinter, solange die Schrift gut lesbar bleibt", () => {
-    const mit = tafelSatz(ohneKopf(5), 2, FERNSEHER);
-    expect(mit.abgaenge).toBe(2);
-    expect(mit.seiten[0]!.flat().filter((z) => z.art === "abgang")).toHaveLength(2);
-    expect(mit.seiten[0]!.flat().some((z) => z.art === "abgang-kopf")).toBe(true);
-    expect(mit.schrift).toBeGreaterThanOrEqual(SATZ.gutGenug * FERNSEHER.einheit);
-  });
-
-  it("lässt abgerückte Einheiten weg, bevor die anwesenden deutlich kleiner würden", () => {
-    const ohne = tafelSatz(gruppen(4, 3, 3, 4), 0, FERNSEHER);
-    const mit = tafelSatz(gruppen(4, 3, 3, 4), 1, FERNSEHER);
-    expect(mit.abgaenge).toBe(0);
-    expect(mit.schrift).toBe(ohne.schrift);
-    expect(mit.seiten.flat(2).some((z) => z.art === "abgang" || z.art === "abgang-kopf")).toBe(false);
-  });
-
-  it("nennt den Rest, wenn mehr abgerückt sind, als einzeln dastehen", () => {
-    const satz = tafelSatz(ohneKopf(2), 9, FERNSEHER);
-    expect(satz.abgaenge).toBeGreaterThan(0);
-    expect(satz.abgaenge).toBeLessThanOrEqual(SATZ.abgaengeMax);
-    expect(satz.seiten.flat(2).find((z) => z.art === "abgang-rest")).toEqual({ art: "abgang-rest", anzahl: 9 - satz.abgaenge });
-    // Sind alle abgerückt, stehen sie allein auf der Tafel.
-    const alleFort = tafelSatz([], 3, FERNSEHER);
-    expect(alleFort.seiten[0]!.flat().map((z) => z.art)).toEqual(["abgang-kopf", "abgang", "abgang", "abgang"]);
-  });
-
-  it("lässt abgerückte Einheiten auch beim Blättern keine Seite kosten", () => {
-    const anzahlen = [4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3];
-    const ohne = tafelSatz(gruppen(...anzahlen), 0, FERNSEHER);
-    for (const abgerueckt of [1, 4, 12]) {
-      const mit = tafelSatz(gruppen(...anzahlen), abgerueckt, FERNSEHER);
-      expect(mit.seiten.length, `${abgerueckt} abgerückt`).toBe(ohne.seiten.length);
-      erwarteAlle(mit, anzahlen);
+  it("stellt abgerückte Einheiten nicht zwischen die anwesenden: Der Satz bleibt derselbe, wie viele auch abgerückt sind", () => {
+    // Vorgefallen: Der Block „Abgerückt" stand auf der Tafel, solange Platz war. Mit 13 Einheiten war er da, mit der 14. weg,
+    // und in der Randspalte war der Abgang abgeschnitten: Wer abgerückt war, stand nirgends. Jetzt führt ihn die Randspalte.
+    for (const lage of [ohneKopf(5), gruppen(4, 3, 3), gruppen(4, 3, 3, 4), gruppen(4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3)]) {
+      const ohne = tafelSatz(lage, 0, FERNSEHER);
+      for (const abgerueckt of [1, 4, 12]) {
+        const mit = tafelSatz(lage, abgerueckt, FERNSEHER);
+        expect(mit, `${abgerueckt} abgerückt`).toEqual(ohne);
+        expect(mit.abgaenge).toBe(0);
+        expect(mit.seiten.flat(2).some((z) => z.art === "abgang" || z.art === "abgang-kopf" || z.art === "abgang-rest")).toBe(false);
+      }
     }
+  });
+
+  it("stellt die abgerückten Einheiten auf die Tafel, wenn niemand mehr anwesend ist, und nennt den Rest als Zahl", () => {
+    const alleFort = tafelSatz([], 3, FERNSEHER);
+    expect(alleFort.abgaenge).toBe(3);
+    expect(alleFort.seiten[0]!.flat().map((z) => z.art)).toEqual(["abgang-kopf", "abgang", "abgang", "abgang"]);
+    const viele = tafelSatz([], 9, FERNSEHER);
+    expect(viele.abgaenge).toBe(SATZ.abgaengeMax);
+    expect(viele.seiten).toHaveLength(1);
+    expect(viele.seiten.flat(2).find((z) => z.art === "abgang-rest")).toEqual({ art: "abgang-rest", anzahl: 9 - SATZ.abgaengeMax });
   });
 
   it("hält seine Zusagen für beliebige Lagen und Flächen: jede Einheit einmal, nichts über den Rand, nie mehr Spalten als gesetzt", () => {
@@ -695,7 +741,7 @@ describe("tafelSatz", () => {
       w = (w + Math.imul(w ^ (w >>> 7), 61 | w)) ^ w;
       return ((w ^ (w >>> 14)) >>> 0) % bis;
     };
-    const gesehen = { ohneKopf: 0, mitKopf: 0, abgerueckt: 0, ohneAbgerueckte: 0, bedarf: 0, geblaettert: 0 };
+    const gesehen = { ohneKopf: 0, mitKopf: 0, abgerueckt: 0, ohneAbgerueckte: 0, bedarf: 0, geblaettert: 0, niemandDa: 0 };
     const flaechen: TafelMasse[] = [
       FERNSEHER,
       { breite: 924, hoehe: 568, einheit: 7.2 }, // 1280 × 720
@@ -708,7 +754,10 @@ describe("tafelSatz", () => {
       // Jede vierte Lage hat nur eine Gruppe: der häufigste Fall, ein Zug oder eine Organisation, mit und ohne Kopf.
       const anzahlen = Array.from({ length: zufall(4) === 0 ? 1 : 1 + zufall(9) }, () => 1 + zufall(lauf % 7 === 0 ? 30 : 9));
       const mitKopf = anzahlen.length > 1 || zufall(2) === 0;
-      const abgerueckt = zufall(4) === 0 ? zufall(15) : 0;
+      // Jede zwölfte Lage ohne anwesende Einheit: Nur dann stehen die abgerückten auf der Tafel.
+      const niemandDa = zufall(12) === 0;
+      if (niemandDa) anzahlen.length = 0;
+      const abgerueckt = niemandDa ? 1 + zufall(15) : zufall(4) === 0 ? zufall(15) : 0;
       // Jeder dritte Lauf mit einem Bedarf des Inhalts: Die Zusagen gelten, welche Breite die Karten auch brauchen.
       const bedarf = zufall(3) === 0 ? { breit: 30 + zufall(50), drei: 14 + zufall(30), zwei: 14 + zufall(30) } : {};
       const satz = tafelSatz(anzahlen.map((anzahl) => ({ kopf: mitKopf, anzahl })), abgerueckt, masse, bedarf);
@@ -736,7 +785,8 @@ describe("tafelSatz", () => {
       // Abgerückte: so viele wie zugesagt, höchstens die Obergrenze, der Rest wird genannt.
       const zellen = satz.seiten.flat(2);
       expect(zellen.filter((z) => z.art === "abgang").length, lage).toBe(satz.abgaenge);
-      expect(satz.abgaenge, lage).toBeLessThanOrEqual(Math.min(abgerueckt, SATZ.abgaengeMax));
+      expect(satz.abgaenge, lage).toBe(niemandDa ? Math.min(abgerueckt, SATZ.abgaengeMax) : 0);
+      if (niemandDa) gesehen.niemandDa++;
       const rest = zellen.find((z) => z.art === "abgang-rest");
       if (satz.abgaenge > 0 && abgerueckt > satz.abgaenge) expect(rest, lage).toEqual({ art: "abgang-rest", anzahl: abgerueckt - satz.abgaenge });
       else expect(rest, lage).toBeUndefined();
@@ -772,17 +822,10 @@ describe("tafelSatz", () => {
 });
 
 describe("tafelFortlaufend", () => {
-  it("reiht alles in eine Spalte: Köpfe, Einheiten, dahinter die abgerückten", () => {
-    const zellen = tafelFortlaufend([{ kopf: true, anzahl: 2 }, { kopf: false, anzahl: 1 }], 8);
-    expect(zellen.map((z) => z.art)).toEqual([
-      "kopf",
-      "einheit",
-      "einheit",
-      "einheit",
-      "abgang-kopf",
-      ...Array.from({ length: SATZ.abgaengeMax }, () => "abgang"),
-      "abgang-rest",
-    ]);
+  it("reiht alles in eine Spalte: Köpfe und Einheiten; abgerückte nur, wenn niemand anwesend ist", () => {
+    expect(tafelFortlaufend([{ kopf: true, anzahl: 2 }, { kopf: false, anzahl: 1 }], 8).map((z) => z.art)).toEqual(["kopf", "einheit", "einheit", "einheit"]);
+    const zellen = tafelFortlaufend([], 8);
+    expect(zellen.map((z) => z.art)).toEqual(["abgang-kopf", ...Array.from({ length: SATZ.abgaengeMax }, () => "abgang"), "abgang-rest"]);
     expect(zellen[zellen.length - 1]).toEqual({ art: "abgang-rest", anzahl: 8 - SATZ.abgaengeMax });
   });
 });

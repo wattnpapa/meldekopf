@@ -52,7 +52,7 @@ Funktionalität: Lagemonitor für den Fernseher
     Und ich auf "Mannschaft: erhöhen" klicke
     Und ich auf "In Einsatz übernehmen" klicke
     Dann sehe ich die Überschrift "Einheiten (2 gemeldet"
-    Wenn ich für den Fernseher die Ansicht "Tafel" wähle
+    Wenn ich für den Fernseher die Darstellung "Tafel" wähle
     Und ich den Lagemonitor öffne
     Dann zeigt der Lagemonitor die Tafel
     Und zeigt der Lagemonitor "2. Zug"
@@ -68,18 +68,18 @@ Funktionalität: Lagemonitor für den Fernseher
   Szenario: Die Wahl am Arbeitsplatz stellt den offenen Fernseher um
     Wenn ich den Lagemonitor öffne
     Dann zeigt der Lagemonitor die Zeilen
-    Wenn ich für den Fernseher die Ansicht "Tafel" wähle
+    Wenn ich für den Fernseher die Darstellung "Tafel" wähle
     Dann zeigt der Lagemonitor die Tafel
-    Wenn ich im Lagemonitor auf "Ansicht: Zeilen" klicke
+    Wenn ich im Lagemonitor auf "Zeilen zeigen" klicke
     Dann zeigt der Lagemonitor die Zeilen
-    Und ist für den Fernseher die Ansicht "Zeilen" gewählt
+    Und ist für den Fernseher die Darstellung "Zeilen" gewählt
 
   # Die volle Tafel: viele Einheiten, ein langer Zugname, Sofortbedarf an den meisten Karten. Vorgefallen (Durchsicht
   # nach dem ersten Stand): Bedarfsmarken liefen über Typ und Zeichen, „(Fortsetzung)" im Gruppenkopf war nie zu sehen.
   Szenario: Auf der vollen Tafel überdeckt nichts, und geteilte Züge sind als Fortsetzung zu erkennen
     Angenommen auf dem Gerät liegt eine Lage mit 30 Einheiten in 2 Zügen, viele mit Sofortbedarf
     Dann sehe ich die Überschrift "Einheiten (30 gemeldet"
-    Wenn ich für den Fernseher die Ansicht "Tafel" wähle
+    Wenn ich für den Fernseher die Darstellung "Tafel" wähle
     Und ich den Lagemonitor öffne
     Dann zeigt der Lagemonitor die Tafel
     Und zeigt der Lagemonitor "(Fortsetzung)"

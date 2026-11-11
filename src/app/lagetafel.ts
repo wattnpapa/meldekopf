@@ -12,6 +12,9 @@
  *    Einheit sucht, findet sie dort, wo sie vor fünf Minuten stand.
  *  - **Markierung am Platz.** Was sich in den letzten Minuten bewegt hat
  *    (`Lagebild.bewegungen`), hängt als Marke an der Einheit.
+ *  - **Abgerückte Einheiten** führt die Randspalte, die letzten mit Uhrzeit.
+ *    Auf der Tafel stehen sie nur, wenn niemand mehr anwesend ist: Ein Block,
+ *    der je nach Füllstand kommt und geht, wäre kein festes Lagebild.
  *  - **Der Satz.** `tafelSatz` rechnet aus Zahl der Einheiten und Größe der
  *    Fläche die größte Schrift, bei der alles ins Bild passt, und blättert
  *    erst, wenn die Mindestgröße unterschritten würde. Reine Rechnung ohne
@@ -27,14 +30,14 @@ import { aktuelleMeldungen } from "./auswertung";
 import { bedarfMarken } from "./einheiten-tabelle";
 import { geltendeJeEinheit } from "./fassung-vorrang";
 import { einheitAnzeigename, orgLabel, vokabText, vokabularFuer } from "./hilfen";
-import { lagebild, type Bewegung, type EinheitZeile, type Lagebild } from "./lagemonitor";
+import { lagebild, uhrzeitText, type Bewegung, type EinheitZeile, type Lagebild } from "./lagemonitor";
 
 // ------------------------------------------------------------------ Inhalt
 
 /** Was an einer Einheit gerade neu ist; steht als Marke an ihrem Platz. */
 export interface TafelMarke {
   art: "neu" | "folge" | "wieder";
-  /** „neu", „nachgetragen", „Stärke 8 → 6", „wieder da". */
+  /** „neu", „nachgetragen", „Stärke −2", „wieder da". */
   text: string;
 }
 
@@ -46,6 +49,8 @@ export interface TafelEinheit {
   einheit: Einheit;
   /** Organisation und Standort: „THW Oldenburg (NI)", „FF Elsfleth". */
   herkunft: string;
+  /** Der Standort am Ende der Herkunft („Oldenburg (NI)"); leer, wenn die Herkunft nur aus einem Teil besteht. */
+  ort: string;
   /**
    * Einheitentyp ausgeschrieben: „Bergungsgruppe", „FGr Notversorgung und Notinstandsetzung" (siehe {@link nameTeile});
    * leer, wenn die Herkunft ihn schon nennt.
@@ -60,10 +65,12 @@ export interface TafelEinheit {
   staerke: Staerke;
   /** Niemand hat gezählt: Die Zahlen sind die Sollstärke der Vorbelegung. */
   soll: boolean;
-  /** Stand der Angaben (ms): Stand im Bogen, höchstens der Eingang (`angabenZeit`, R14-K1). */
+  /**
+   * Stand der Angaben (ms): Stand im Bogen, höchstens der Eingang (`angabenZeit`, R14-K1). Er steht an jeder Karte als
+   * Uhrzeit, ohne Warnfarbe: Nach einer Stunde trüge sonst fast jede Karte das Zeichen des Bedarfs. Wie viele Stände
+   * alt sind, sagt die Randspalte einmal gesammelt.
+   */
   stand: number;
-  /** Der Stand ist eine Stunde alt oder älter (dieselbe Grenze wie in der Zeilenansicht, R11-K1). */
-  standAlt: boolean;
   eingetroffen: number;
   /** Was zu entscheiden ist: „Ruhezeit", „Unterbringung", „Verpflegung 20". */
   bedarf: string[];
@@ -90,6 +97,8 @@ export interface TafelAbgang {
 export interface Tafelbild {
   /** Das Lagebild der Zeilenansicht: Summen, Bedarf, Bewegungen, Datenstand. */
   bild: Lagebild;
+  /** Wonach die Gruppen gebildet sind: nach Zug, sobald eine Einheit einen trägt, sonst nach Organisation. */
+  gliederung: "zug" | "organisation";
   gruppen: TafelGruppe[];
   /** Abgerückte Einheiten, zuletzt abgerückte zuerst. */
   abgerueckt: TafelAbgang[];
@@ -110,26 +119,30 @@ export interface Tafelbild {
  * („… Notversorgung und Notinstandsetzung", „… Wasserschaden/Pumpen (A)") und fiele sonst als Erstes der Kürzung zum
  * Opfer. „FGr" ist die Abkürzung des Vokabulars selbst.
  */
-export function nameTeile(e: Einheit): { herkunft: string; typ: string; typKurz: string } {
+export function nameTeile(e: Einheit): { herkunft: string; ort: string; typ: string; typKurz: string } {
   const tabelle = vokabularFuer(e.organisation, "einheitstyp");
   const lang = vokabText(e.einheitsTyp, tabelle, "name").trim();
   const kurz = vokabText(e.einheitsTyp, tabelle, "kurz").trim();
   const herkunft = einheitAnzeigename({ ...e, einheitsTyp: {} });
+  // Der Standort ist, was nach der Organisation kommt. Die Karte kürzt bei Platzmangel den längeren der beiden Teile:
+  // bei „Johanniter-Unfall-Hilfe … Oldenburg" die Organisation, damit der Ort bleibt, der gleichnamige Karten unterscheidet.
+  const organisation = e.organisationName?.trim() || orgLabel(e.organisation);
+  const ort = herkunft.startsWith(organisation + " ") ? herkunft.slice(organisation.length + 1) : "";
   // Nennt Organisation oder Standort den Typ schon („Bundeswehr Panzerpionierzug"), steht er nicht noch einmal da.
   const schonGenannt = lang !== "" && einheitAnzeigename(e) === herkunft;
-  return { herkunft, typ: schonGenannt ? "" : lang.replace(/^Fachgruppe(?=\s)/, "FGr"), typKurz: schonGenannt ? "" : kurz || lang };
+  return { herkunft, ort, typ: schonGenannt ? "" : lang.replace(/^Fachgruppe(?=\s)/, "FGr"), typKurz: schonGenannt ? "" : kurz || lang };
 }
 
 /**
  * Herkunft und Typ einer Meldung. Ein abgeteilter Teil der Einheit („Fachberater", „Rest") trägt sein Etikett hinter
  * dem Typ, in Klammern wie in der Einsatzansicht: Sonst stünden zwei gleichnamige Karten nebeneinander.
  */
-export function meldungTeile(m: Pick<MeldeEintrag, "bogen" | "teilEtikett">): { herkunft: string; typ: string; typKurz: string } {
+export function meldungTeile(m: Pick<MeldeEintrag, "bogen" | "teilEtikett">): { herkunft: string; ort: string; typ: string; typKurz: string } {
   const n = nameTeile(m.bogen.einheit);
   const teil = (m.teilEtikett ?? "").trim();
   if (!teil) return n;
   const mit = (typ: string) => [typ, `(${teil})`].filter(Boolean).join(" ");
-  return { herkunft: n.herkunft, typ: mit(n.typ), typKurz: mit(n.typKurz) };
+  return { ...n, typ: mit(n.typ), typKurz: mit(n.typKurz) };
 }
 
 /** Kurzer Bedarf je Einheit: nur, was zu entscheiden ist (`bedarfMarken`, dringend), ohne Füllwörter. */
@@ -142,8 +155,12 @@ export function bedarfKurz(e: MeldeEintrag): string[] {
 function marke(b: Bewegung | undefined): TafelMarke | undefined {
   if (!b) return undefined;
   if (b.art === "Eingetroffen") return { art: "neu", text: b.nachgetragen != null ? "nachgetragen" : "neu" };
-  // Der Betrag („(−2)") steht ausführlich in der Randspalte; an der Karte reicht „Stärke 8 → 6".
-  if (b.art === "Folgemeldung") return { art: "folge", text: b.detail?.replace(/ \([+−]\d+\)$/, "") ?? "Folgemeldung" };
+  // An der Karte steht die neue Stärke groß. Die Marke nennt, um wie viel sie sich geändert hat, mit Vorzeichen:
+  // Ein Verlust soll nicht wie ein Zugang aussehen. Von wo nach wo, steht in der Randspalte („Stärke 8 → 6 (−2)").
+  if (b.art === "Folgemeldung") {
+    const betrag = / \(([+−]\d+)\)$/.exec(b.detail ?? "")?.[1];
+    return { art: "folge", text: betrag ? `Stärke ${betrag}` : "Folgemeldung" };
+  }
   if (b.art === "Wieder da") return { art: "wieder", text: "wieder da" };
   return undefined;
 }
@@ -210,7 +227,6 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
       staerke: { fuehrer: z.fuehrer, unterfuehrer: z.unterfuehrer, mannschaft: z.mannschaft, gesamt: z.gesamt },
       soll: z.soll,
       stand: angabenZeit(m),
-      standAlt: z.alterMin != null,
       eingetroffen: z.eingetroffen,
       bedarf: bedarfKurz(m),
       ...(neuAmPlatz ? { marke: neuAmPlatz } : {}),
@@ -244,7 +260,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
       for (const f of FASSUNGEN) bedarf[f] = Math.max(bedarf[f], b[f]);
     }
   }
-  return { bild, gruppen, abgerueckt, namen, bedarf };
+  return { bild, gliederung: mitZug ? "zug" : "organisation", gruppen, abgerueckt, namen, bedarf };
 }
 
 /**
@@ -256,7 +272,7 @@ const ZEICHENBREITE = { fett: 0.56, normal: 0.5 } as const;
 /**
  * Breite, die eine Karte je Fassung braucht, damit nichts gekürzt wird, in Schriftgrößen der Herkunftszeile. Geschätzt
  * aus Zeichenzahlen, weil der Satz ohne Browser rechnet; die Schriftgrade sind die der Stilvorlage (Typ, Funkrufname
- * und Auftrag 0,74, in der breiten Fassung der Auftrag 0,86, Marken 0,6, Stand 0,62). Für einen Typ mit Kurzform zählt
+ * und Auftrag 0,74, in der breiten Fassung der Auftrag 0,86, Marken 0,7, Stand 0,62). Für einen Typ mit Kurzform zählt
  * die Kurzform: Sie springt ein, wo der ausgeschriebene nicht passt.
  *
  * {@link tafelSatz} wählt damit, wenn es die Schrift kaum kostet, einen Satz, in dem alles ganz dasteht: etwa die
@@ -269,9 +285,10 @@ export function kartenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
   const rand = SATZ.zeichen + 1.06;
   const s = e.staerke;
   const staerke = 0.66 * 0.42 * `${s.fuehrer}/${s.unterfuehrer}/${s.mannschaft}//`.length + 1.16 * 0.63 * String(s.gesamt).length + 0.74 + (e.soll ? 1.1 : 0);
-  const stand = 3.75 + (e.standAlt ? 0.77 : 0);
-  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.6 * (fett(t) + 0.64));
-  const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.75 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
+  // „Stand 03:21" samt Abstand; mit Datum („Stand 10.11. 22:58") braucht er mehr, das bleibt der Kürzung überlassen.
+  const stand = 3.75;
+  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
+  const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.88 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
   const kopf = fett(e.herkunft) + staerke;
   const typKurz = e.typKurz ? 0.74 * fett(e.typKurz) + 0.33 : 0;
   const ohneKurzform = e.typ !== "" && e.typKurz === e.typ;
@@ -355,15 +372,16 @@ export function dauerKurz(beginn: number, jetzt: number): string | null {
 
 /**
  * Die Dauerzeile der Tafel, mit denselben Fällen wie die Zeilenansicht (R6-K4, R7-K3, R7-K8): gesetzter Beginn,
- * sonst die erste Meldung als Vorschlag; ein Beginn in der Zukunft und unplausible Zeiten werden genannt.
+ * sonst die erste Meldung als Vorschlag; ein Beginn in der Zukunft und unplausible Zeiten werden genannt. Die Uhrzeit
+ * steht dabei: Wer den Beginn in eine Meldung schreibt, soll ihn nicht aus Uhr und Dauer zurückrechnen müssen.
  */
 export function dauerZeile(beginn: number | null, bild: Pick<Lagebild, "ersteMeldung" | "zeitenPruefen">, jetzt: number): string | null {
   if (beginn != null) {
     const d = dauerKurz(beginn, jetzt);
-    return d != null ? `seit Beginn ${d}` : "Einsatz beginnt noch";
+    return d != null ? `Beginn ${uhrzeitText(beginn, jetzt)} · seit ${d}` : `Beginn ${uhrzeitText(beginn, jetzt)} · Einsatz beginnt noch`;
   }
   const d = bild.ersteMeldung != null ? dauerKurz(bild.ersteMeldung, jetzt) : null;
-  if (d != null) return `seit erster Meldung ${d}`;
+  if (d != null) return `erste Meldung ${uhrzeitText(bild.ersteMeldung!, jetzt)} · seit ${d}`;
   return bild.zeitenPruefen ? "Dauer unklar – Zeiten prüfen (Geräteuhr?)" : null;
 }
 
@@ -429,10 +447,8 @@ export const SATZ = {
   gutGenug: 3.1,
   /** Eine Spalte mehr lohnt erst, wenn die Schrift dadurch um diesen Anteil wächst; sonst lieber breitere Karten. */
   spalteLohnt: 1.03,
-  /** So viele abgerückte Einheiten stehen höchstens einzeln da. */
+  /** So viele abgerückte Einheiten stehen höchstens einzeln auf der Tafel (wenn niemand mehr anwesend ist). */
   abgaengeMax: 6,
-  /** Abgerückte Einheiten dürfen die Schrift der anwesenden höchstens so weit drücken, solange sie unter „gut genug" liegt. */
-  abgaengeAb: 0.9,
   /** Ein Satz, in dem nichts gekürzt wird, gewinnt, solange seine Schrift gut lesbar („gut genug") oder höchstens so viel kleiner ist. */
   ungekuerztAb: 0.9,
 } as const;
@@ -477,8 +493,12 @@ const GENAU = 1e-6;
  * Blöcke der Reihe nach in Spalten der Höhe `hoehe` (in Schriftgrößen) setzen. Ein Block bleibt zusammen, wenn er in
  * eine leere Spalte passt; ein längerer läuft in die nächste weiter und bekommt dort seinen Kopf noch einmal
  * („Fortsetzung"). Ein Kopf steht nie allein am Spaltenende.
+ *
+ * Mit `fuellen` (beim Blättern) geht der Platz vor: Ein Block beginnt, wo sein Kopf und eine Zeile hinpassen, und
+ * läuft in der nächsten Spalte weiter. Blieben die Gruppen dort zusammen, stünde bei Zügen zu je fünf Einheiten jede
+ * Spalte halb leer, und die Tafel bräuchte doppelt so viele Seiten.
  */
-function setzen(bloecke: readonly Block[], hoehe: number): TafelZelle[][] {
+function setzen(bloecke: readonly Block[], hoehe: number, fuellen = false): TafelZelle[][] {
   const spalten: TafelZelle[][] = [[]];
   let belegt = 0;
   const neueSpalte = () => {
@@ -500,7 +520,7 @@ function setzen(bloecke: readonly Block[], hoehe: number): TafelZelle[][] {
         const ganzHier = bedarf(rest.length, false) <= frei + GENAU;
         const ganzOben = bedarf(rest.length, true) <= hoehe + GENAU;
         const anfangHier = bedarf(Math.min(rest.length, 1), false) <= frei + GENAU;
-        if ((!ganzHier && ganzOben) || !anfangHier) {
+        if ((!fuellen && !ganzHier && ganzOben) || !anfangHier) {
           neueSpalte();
           continue;
         }
@@ -618,8 +638,10 @@ const runden = (schrift: number) => Math.floor(schrift * 4) / 4;
  *
  * Rang der Entscheidungen:
  *  1. Alle anwesenden Einheiten stehen auf einer Seite, in der größten Schrift, die das erlaubt.
- *  2. Abgerückte Einheiten stehen dahinter, solange die Schrift der anwesenden gut lesbar bleibt oder kaum kleiner wird.
- *  3. Erst wenn die kleinste Schrift nicht reicht, blättert die Tafel; dann in der knappsten Fassung.
+ *  2. Erst wenn die kleinste Schrift nicht reicht, blättert die Tafel; dann in der knappsten Fassung, und die Gruppen
+ *     laufen über Spalten und Seiten weiter, statt Platz frei zu lassen.
+ *  3. Abgerückte Einheiten stehen nur da, wenn niemand anwesend ist (höchstens `SATZ.abgaengeMax`, der Rest als Zahl).
+ *     Sonst führt sie die Randspalte: Ein Block, der mit dem Füllstand kommt und geht, wäre kein festes Lagebild.
  *
  * `bedarf` ist die Breite, die der längste Inhalt je Fassung braucht ({@link kartenBedarf}, in Schriftgrößen). Gibt es
  * damit einen Satz, in dem nichts gekürzt wird, gewinnt er, solange seine Schrift gut lesbar bleibt oder höchstens ein
@@ -662,16 +684,9 @@ export function tafelSatz(
     return ganz && ganz.schrift >= schwelle - GENAU ? ganz : frei;
   };
 
-  const ohne = waehle(0);
-  if (ohne) {
-    for (let n = Math.min(abgaengeGesamt, SATZ.abgaengeMax); n > 0; n--) {
-      const mit = waehle(n);
-      // Wie bei den Fassungen: Bleibt die Schrift gut lesbar, stehen die abgerückten Einheiten da, auch wenn sie ohne sie größer wäre.
-      const schwelle = Math.min(ohne.schrift * SATZ.abgaengeAb, SATZ.gutGenug * masse.einheit);
-      if (mit && (einheiten === 0 || mit.schrift >= schwelle - GENAU)) return fertig(mit, n);
-    }
-    return fertig(ohne, 0);
-  }
+  const abgaenge = einheiten === 0 ? Math.min(abgaengeGesamt, SATZ.abgaengeMax) : 0;
+  const kandidat = waehle(abgaenge);
+  if (kandidat) return fertig(kandidat, abgaenge);
 
   // Blättern: knappste Fassung in der kleinsten Schrift, so viele Spalten wie die Breite trägt.
   const fassung: KartenFassung = "zwei";
@@ -681,19 +696,7 @@ export function tafelSatz(
   const spaltenBreite = (masse.breite - (spalten - 1) * abstand) / spalten;
   const schrift = runden(Math.min(kleinste, spaltenBreite / SATZ.karte[fassung].breite));
   const hoehe = Math.max(masse.hoehe - SATZ.seitenzeile * masse.einheit, schrift * SATZ.karte[fassung].hoehe);
-  const gesetzt = (abgaenge: number) => setzen(bloecke(gruppen, fassung, abgaengeGesamt, abgaenge), hoehe / schrift);
-  const seitenZahl = (spaltenGesetzt: readonly unknown[]) => Math.ceil(spaltenGesetzt.length / spalten);
-  // Auch beim Blättern kosten abgerückte Einheiten keine Seite: Sie stehen nur da, wo auf der letzten Seite Platz ist.
-  let abgaenge = 0;
-  let alle = gesetzt(0);
-  for (let n = Math.min(abgaengeGesamt, SATZ.abgaengeMax); n > 0; n--) {
-    const mit = gesetzt(n);
-    if (seitenZahl(mit) <= seitenZahl(alle)) {
-      abgaenge = n;
-      alle = mit;
-      break;
-    }
-  }
+  const alle = setzen(bloecke(gruppen, fassung, abgaengeGesamt, abgaenge), hoehe / schrift, true);
   const seiten: TafelZelle[][][] = [];
   for (let i = 0; i < alle.length; i += spalten) seiten.push(alle.slice(i, i + spalten));
   return { fassung, schrift, spalten, seiten, abgaenge };
@@ -715,10 +718,11 @@ export function werBreite(bedarf: { herkunft: number; typ: number; frei: number 
   return Math.min(Math.max(breite, platz * SATZ.wer.min), platz * SATZ.wer.max);
 }
 
-/** Alle Zellen in einer Spalte, ohne Rechnung: für das Telefon und überall, wo die Fläche mitwächst. */
+/** Alle Zellen in einer Spalte, ohne Rechnung: für das Telefon und überall, wo die Fläche mitwächst. Abgerückte wie in {@link tafelSatz}. */
 export function tafelFortlaufend(gruppen: readonly { kopf: boolean; anzahl: number }[], abgaengeGesamt: number): TafelZelle[] {
   const aus: TafelZelle[] = [];
-  for (const b of bloecke(gruppen, "drei", abgaengeGesamt, Math.min(abgaengeGesamt, SATZ.abgaengeMax))) {
+  const einheiten = gruppen.reduce((n, g) => n + g.anzahl, 0);
+  for (const b of bloecke(gruppen, "drei", abgaengeGesamt, einheiten === 0 ? Math.min(abgaengeGesamt, SATZ.abgaengeMax) : 0)) {
     if (b.kopf) aus.push(b.kopf(false));
     aus.push(...b.zeilen);
   }

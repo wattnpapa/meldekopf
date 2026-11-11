@@ -64,12 +64,12 @@ Given("auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele
 });
 
 /** Die Wahl in der Einsatzansicht, Block „Lagemonitor für den Fernseher". */
-When("ich für den Fernseher die Ansicht {string} wähle", async function (this: EebWelt, name: string) {
-  await this.page.getByRole("group", { name: "Ansicht am Fernseher" }).getByRole("radio", { name: new RegExp(`^${name}`) }).check();
+When("ich für den Fernseher die Darstellung {string} wähle", async function (this: EebWelt, name: string) {
+  await this.page.getByRole("group", { name: "Darstellung am Fernseher" }).getByRole("radio", { name: new RegExp(`^${name}`) }).check();
 });
 
-Then("ist für den Fernseher die Ansicht {string} gewählt", async function (this: EebWelt, name: string) {
-  const wahl = this.page.getByRole("group", { name: "Ansicht am Fernseher" }).getByRole("radio", { name: new RegExp(`^${name}`) });
+Then("ist für den Fernseher die Darstellung {string} gewählt", async function (this: EebWelt, name: string) {
+  const wahl = this.page.getByRole("group", { name: "Darstellung am Fernseher" }).getByRole("radio", { name: new RegExp(`^${name}`) });
   // Die Wahl kommt über das Speicher-Ereignis aus dem Monitor-Fenster: kurz warten, statt sofort zu lesen.
   await this.page.waitForFunction((el) => (el as HTMLInputElement | null)?.checked === true, await wahl.elementHandle());
 });
@@ -116,7 +116,8 @@ Then("stehen alle Einheiten der Tafel ganz im Bild", async function (this: EebWe
       if (r.top < flaeche.top - 1 || r.bottom > flaeche.bottom + 1 || r.left < flaeche.left - 1 || r.right > flaeche.right + 1) {
         fehler.push(`„${name.textContent}“ ragt aus der Fläche`);
       }
-      if (name.scrollWidth > name.clientWidth + 1) fehler.push(`„${name.textContent}“ ist abgeschnitten`);
+      // Der Name besteht aus Teilen (Organisation und Standort); gekürzt wird der „weiche", erkennbar an seinem Überlauf.
+      if (Array.from(name.querySelectorAll<HTMLElement>(".lt-teil-weich")).some((teil) => teil.scrollWidth > teil.clientWidth + 1)) fehler.push(`„${name.textContent}“ ist abgeschnitten`);
     }
     // Rechnung und Stilvorlage müssen dieselben Maße ergeben: Höhe jeder Zelle und ihr Abstand zur Zelle darüber.
     // Ohne benannte Hilfsfunktion: tsx hängt solchen einen Helfer an, den es im Browser nicht gibt (siehe support/haken.ts).

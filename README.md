@@ -3,7 +3,7 @@
 Eintreffende Einheiten erfassen, zählen, weitermelden. Für Meldeköpfe,
 Bereitstellungsräume und kleine Führungsstellen im ELW.
 
-> **Stand:** 2026-11-10, Phasen 0 bis 6 umgesetzt (Phase 6: Rollenaudit, alle P0/P1 behoben), abgeglichen mit dem Erfassungsbogen `1d7ed5f` (Prüfrunden 10 bis 21, Schema 12):
+> **Stand:** 2026-11-11, Phasen 0 bis 6 umgesetzt (Phase 6: Rollenaudit, alle P0/P1 behoben), abgeglichen mit dem Erfassungsbogen `1d7ed5f` (Prüfrunden 10 bis 21, Schema 12):
 > Einsatz-Sammlungen anlegen und führen, Summen, Einheitenliste und -tabelle,
 > Zug, Abrücken, Aufteilen und Zusammenführen, Papierkorb, Fristen,
 > Lagemonitor (als Zeilen oder als Tafel), Ausgabe als Sammel-PDF, Lageblatt, CSV und Excel, Datensicherung
@@ -46,7 +46,8 @@ Tage oder Aufträge braucht, ist S1-Control.
   Einsatzdauer, Stärke, Bedarf, Stärke je Zug, Einheitentabelle mit Zug und
   Gesamt, ohne Personennamen. Wahlweise als Tafel für den großen Fernseher im
   Führungsfahrzeug: alle Einheiten mit taktischem Zeichen an festem Platz nach
-  Zug, Stärkemeldung und Uhr groß für die Ferne.
+  Zug, Stärkemeldung und Uhr groß für die Ferne, Sofortbedarf als Marke an der
+  Einheit, abgerückte Einheiten und letzte Bewegungen in der Randspalte.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
   Daten, Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.

@@ -11,7 +11,8 @@
  *     Fahrzeug; am Rand und klein, was nur braucht, wer davor sitzt.
  *  2. **Jede Einheit hat ihren Platz.** Geordnet wird nach Zug und
  *     Eintreffzeit, nicht nach der letzten Meldung. Was sich ändert, wird am
- *     Platz markiert (`lagetafel.ts`).
+ *     Platz markiert (`lagetafel.ts`). Wer abgerückt ist, steht mit Uhrzeit
+ *     in der Randspalte, unabhängig davon, wie voll die Tafel ist.
  *  3. **Das taktische Zeichen ist das Bild der Einheit**, auf heller Unterlage
  *     wie die Karte an der Magnettafel.
  *  4. **Die Tafel füllt sich.** Die Schrift ist so groß, wie die Zahl der
@@ -48,13 +49,16 @@ import { zeichenLaden } from "./zeichen-bild";
 
 /** So lange steht eine Seite, bevor die Tafel weiterblättert. */
 export const SEITEN_TAKT_MS = 12_000;
+/** So viele abgerückte Einheiten nennt die Randspalte mit Uhrzeit, die zuletzt abgerückten zuerst; der Rest steht als Zahl da. */
+const ABGAENGE_AM_RAND = 3;
 /** Ab diesem Alter der letzten Meldung wird der Datenstand abgesetzt (wie in der Zeilenansicht, R7-K8). */
 const VERALTET_MS = 60 * 60_000;
 /**
- * Unter dieser Fenstergröße läuft die Tafel als eine Spalte zum Rollen: Telefon, flaches Querformat und Hochformat
- * (im Hochformat schrumpfte das am Querformat bemessene Bild sonst auf unlesbare Schrift). Dieselbe Abfrage wie in lagetafel.css.
+ * Unter dieser Fenstergröße läuft die Tafel als eine Spalte zum Rollen: Telefon, kleines Fenster, flaches Querformat und
+ * Hochformat (dort schrumpfte das am Querformat bemessene Bild sonst auf unlesbare Schrift). Die Grenze liegt unter dem
+ * kleinsten Fernseher (1280 × 720). Dieselbe Abfrage wie in lagetafel.css.
  */
-const SCHMAL = "(max-width: 640px), (max-height: 480px), (max-aspect-ratio: 6/5)";
+const SCHMAL = "(max-width: 960px), (max-height: 560px), (max-aspect-ratio: 6/5)";
 
 export interface LagetafelProps {
   einsatz: Einsatzsammlung;
@@ -137,8 +141,14 @@ function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): n
     const stil = getComputedStyle(erste);
     const platz = erste.clientWidth - px(stil.paddingLeft) - px(stil.paddingRight) - SATZ.zeichen * px(stil.fontSize);
     const messung = document.createRange();
+    // Besteht ein Feld aus Teilen (Organisation und Standort, Kennwort und Kennziffer), zählt jeder Teil in voller Länge
+    // und der Abstand dazwischen: Ein gekürzter Teil ragt unter seinen Nachbarn, die Hülle allein mäße zu wenig.
     const text = (teil: Element | null | undefined): number => {
       if (!teil) return 0;
+      const kinder = Array.from(teil.children);
+      if (kinder.length > 1 && getComputedStyle(teil).display.includes("flex")) {
+        return kinder.reduce((summe, kind) => summe + text(kind), 0) + px(getComputedStyle(teil).columnGap) * (kinder.length - 1);
+      }
       messung.selectNodeContents(teil);
       return messung.getBoundingClientRect().width;
     };
@@ -162,6 +172,39 @@ function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): n
     setBreite((alt) => (alt === neu ? alt : neu));
   });
   return breite;
+}
+
+/**
+ * Wie viele Einträge einer Liste ganz zu sehen sind; `null`, solange es nichts zu messen gibt (kein Layout). Die Liste
+ * „Zuletzt" zeigt nur ganze Einträge, der Rest liegt in einer unsichtbaren Spalte (lagetafel.css): Wie viele es sind,
+ * weiß erst der Browser, und die Überschrift soll es sagen, statt still abzuschneiden.
+ */
+function useGanzSichtbar(liste: RefObject<HTMLElement | null>): number | null {
+  const [zahl, setZahl] = useState<number | null>(null);
+  const zaehlen = () => {
+    const el = liste.current;
+    const rahmen = el?.getBoundingClientRect();
+    // Ohne Breite gibt es kein Layout (Testumgebung). Eine Liste ohne Höhe dagegen ist gemessen: Es passt kein Eintrag.
+    // Die Unterscheidung ist nötig: Sonst spränge die Überschrift zwischen „unbekannt" und „keiner" hin und her.
+    if (!el || !rahmen || !(rahmen.width > 0)) return setZahl(null);
+    let ganz = 0;
+    for (const kind of Array.from(el.children)) {
+      const k = kind.getBoundingClientRect();
+      if (k.left < rahmen.right - 1 && k.bottom <= rahmen.bottom + 0.5) ganz++;
+    }
+    setZahl((alt) => (alt === ganz ? alt : ganz));
+  };
+  // Nach jedem Durchgang (neue Bewegung, andere Höhe der Nachbarn) und bei jeder Größenänderung der Liste.
+  useLayoutEffect(zaehlen);
+  useEffect(() => {
+    const el = liste.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const beobachter = new ResizeObserver(zaehlen);
+    beobachter.observe(el);
+    return () => beobachter.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liste.current]);
+  return zahl;
 }
 
 const einheitenWort = (n: number) => (n === 1 ? "Einheit" : "Einheiten");
@@ -253,6 +296,48 @@ function Typ({ e, fassung }: { e: TafelEinheit; fassung: KartenFassung }) {
   );
 }
 
+/**
+ * Herkunft in zwei Teilen, Organisation und Standort. Reicht die Zeile nicht, wird der längere Teil gekürzt und der
+ * kürzere bleibt ganz: bei „Johanniter-Unfall-Hilfe … Oldenburg" die Organisation, damit der Ort bleibt, der sonst
+ * gleichnamige Karten unterscheidet; bei „THW Clausthal-Zellerfeld" der Ort.
+ */
+function Herkunft({ e }: { e: TafelEinheit }) {
+  const organisation = e.ort ? e.herkunft.slice(0, e.herkunft.length - e.ort.length - 1) : "";
+  if (!organisation) {
+    return (
+      <span className="lt-herkunft">
+        <span className="lt-teil-weich">{e.herkunft}</span>
+      </span>
+    );
+  }
+  const ortWeich = e.ort.length > organisation.length;
+  return (
+    <span className="lt-herkunft">
+      <span className={ortWeich ? "lt-teil-fest" : "lt-teil-weich"}>{organisation}</span>{" "}
+      <span className={ortWeich ? "lt-teil-weich" : "lt-teil-fest"}>{e.ort}</span>
+    </span>
+  );
+}
+
+/**
+ * Funkrufname. Die Kennziffer am Ende unterscheidet die Fahrzeuge („22/51"); Kennwort und Ort davor wiederholen meist
+ * die Herkunft. Gekürzt wird deshalb vorn, die Kennziffer bleibt stehen.
+ */
+function Funkruf({ name }: { name: string }) {
+  const teile = /^(.*\S)\s+(\S*\d\S*)$/.exec(name);
+  return (
+    <span className="lt-funkruf">
+      {teile ? (
+        <>
+          <span className="lt-teil-weich">{teile[1]}</span> <span className="lt-teil-fest">{teile[2]}</span>
+        </>
+      ) : (
+        <span className="lt-teil-weich">{name}</span>
+      )}
+    </span>
+  );
+}
+
 function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung; jetzt: number }) {
   return (
     <li className="lt-karte" data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined}>
@@ -261,14 +346,14 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
       </span>
       {/* Name und Stärke teilen sich die erste Zeile unter sich: Der Name reicht bis an die Stärke, wie breit der Stand darunter auch ist. */}
       <span className="lt-kopfzeile">
-        <span className="lt-herkunft">{e.herkunft}</span>
+        <Herkunft e={e} />
         <StaerkeKlein s={e.staerke} soll={e.soll} />
       </span>
       <Typ e={e} fassung={fassung} />
       {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, sonst je ein Feld der Karte (lagetafel.css). */}
       {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0) && (
         <span className="lt-wie">
-          {e.funkruf && <span className="lt-funkruf">{e.funkruf}</span>}
+          {e.funkruf && <Funkruf name={e.funkruf} />}
           {e.auftrag && (
             <span className="lt-auftrag">
               <span className="lt-auftrag-text">{e.auftrag}</span>
@@ -282,8 +367,10 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
           )}
         </span>
       )}
-      {/* Der Stand der Angaben steht an jeder Einheit; ab einer Stunde in Warnfarbe und mit Zeichen (wie R11-K1, R14-K1). */}
-      <span className={`lt-stand${e.standAlt ? " lt-stand-alt" : ""}`} title={e.standAlt ? "Der Stand der Angaben ist älter als eine Stunde" : undefined}>
+      {/* Der Stand der Angaben steht an jeder Einheit, immer mit seinem Wort (eine nackte Uhrzeit neben „Ruhezeit" läse sich
+          als deren Beginn) und ohne Warnfarbe: Bernstein mit Zeichen gehört dem Bedarf. Wie viele Stände alt sind, sagt die
+          Randspalte einmal gesammelt. */}
+      <span className="lt-stand">
         <span className="lt-stand-wort">Stand </span>
         {uhrzeitText(e.stand, jetzt)}
       </span>
@@ -357,11 +444,10 @@ function BewegungZeile({ b, name, jetzt }: { b: Bewegung; name: string; jetzt: n
   return (
     <li className="lt-bewegung">
       <span className="lt-bewegung-zeit">{uhrzeitText(b.zeit, jetzt)}</span>
-      <span className="lt-bewegung-art">{b.art}</span>
+      {/* Eine Folgemeldung nennt gleich, was sich geändert hat („Stärke 8 → 6 (−2)"): zwei Zeilen statt drei, damit mehr Einträge in die Spalte passen. */}
+      <span className="lt-bewegung-art">{b.detail ?? b.art}</span>
       <span className="lt-bewegung-name">{name}</span>
-      {/* Der Zusatz steht in eigener Zeile: „Stärke 8 → 6 (−2)" bricht sonst mitten im Pfeil um. */}
       {b.nachgetragen != null && <span className="lt-bewegung-zusatz">nachgetragen, da seit {uhrzeitText(b.nachgetragen, jetzt)}</span>}
-      {b.detail && <span className="lt-bewegung-zusatz">{b.detail}</span>}
     </li>
   );
 }
@@ -410,6 +496,32 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   const blatt = lauf.seiten === seitenZahl ? lauf.blatt : 0;
   const seite = blatt % seitenZahl;
 
+  // Welche Gruppen auf welcher Seite stehen: für die Seitenzeile („1. Zug bis 6. Zug") und die Übersicht der Randspalte.
+  const gruppenDer = (i: number): number[] => {
+    const nummern = new Set<number>();
+    for (const z of (seiten[i] ?? []).flat()) if (z.art === "kopf" || z.art === "einheit") nummern.add(z.gruppe);
+    return [...nummern].sort((a, b) => a - b);
+  };
+  const spanne = (i: number): string | null => {
+    const mitKopf = gruppenDer(i).filter((g) => tb.gruppen[g]?.kopf);
+    if (mitKopf.length === 0) return null;
+    const von = tb.gruppen[mitKopf[0]!]!.titel;
+    const bis = tb.gruppen[mitKopf[mitKopf.length - 1]!]!.titel;
+    return von === bis ? von : `${von} bis ${bis}`;
+  };
+  const aufSeite = new Set(gruppenDer(seite));
+  const hier = seitenZahl > 1 ? spanne(seite) : null;
+  const weiter = seitenZahl > 1 ? spanne((seite + 1) % seitenZahl) : null;
+  // Beim Blättern steht die Stärke eines Zuges nur da, solange seine Seite steht: Die Randspalte führt dann alle Züge.
+  const uebersicht = seitenZahl > 1 && tb.gruppen.filter((g) => g.kopf).length > 1;
+
+  // Abgerückte Einheiten: Sind noch Einheiten da, nennt die Randspalte die letzten mit Uhrzeit; sonst stehen sie auf der Tafel.
+  const abgaengeAmRand = s.einheiten > 0 ? tb.abgerueckt.slice(0, ABGAENGE_AM_RAND) : [];
+  // „Zuletzt" führt, was am Platz markiert ist und wieder kam; Abgänge stehen im eigenen Block darüber.
+  const bewegungen = bild.bewegungen.filter((b) => b.art !== "Abgerückt");
+  const zuletzt = useRef<HTMLUListElement>(null);
+  const zuletztSichtbar = useGanzSichtbar(zuletzt);
+
   const dauer = dauerZeile(beginn, bild, jetzt);
   const uebungTeil = bild.uebungenDaneben > 0 ? `${bild.uebungenDaneben} ${bild.uebungenDaneben === 1 ? "Übungsmeldung" : "Übungsmeldungen"} nicht gezählt` : "";
   const letzteAlt = bild.letzteMeldung != null && jetzt - bild.letzteMeldung >= VERALTET_MS;
@@ -431,6 +543,8 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
     "--lt-seitenzeile": SATZ.seitenzeile,
     "--lt-zeichen": SATZ.zeichen,
     "--lt-wer": wer != null ? `${wer}px` : `${SATZ.wer.vorgabe * 100}%`,
+    // Für die schmale Darstellung: Die Stärkemeldung richtet ihre Schrift nach der Zahl ihrer Ziffern, statt aus dem Bild zu ragen.
+    "--lt-m-ziffern": `${s.staerke.fuehrer}${s.staerke.unterfuehrer}${s.staerke.mannschaft}${s.staerke.gesamt}`.length,
     ...(satz ? { "--lt-f": `${satz.schrift}px` } : {}),
   } as CSSProperties;
 
@@ -461,6 +575,8 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
         </div>
         <div className="lt-staerke-gross">
           <StaerkeGross s={s.staerke} />
+          {/* Nur in der schmalen Darstellung: Dort stehen die Wörter nicht unter den Zahlen (sie liefen ineinander), sondern als eine Zeile darunter. */}
+          <p className="lt-m-legende" aria-hidden="true">Führer / Unterführer / Mannschaft // gesamt</p>
           {/* Reine Sollstärke steckt in der Gesamtstärke: Der Vorbehalt gehört an die Zahl, die vorgelesen wird (R9-K1). */}
           {bild.sollstaerke.einheiten > 0 && <p className="lt-vorbehalt">davon {bild.sollstaerke.personen} Sollstärke (S), nicht gemeldet</p>}
         </div>
@@ -501,7 +617,14 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
             <p className="lt-seitenzeile" role="status" key={`${seitenZahl}:${blatt}`}>
               <span className="lt-seitenlauf" style={{ animationDuration: `${SEITEN_TAKT_MS}ms` }} aria-hidden="true" />
               Seite {seite + 1} von {seiten.length}
-              <span className="lt-seitenhinweis"> – die Tafel blättert von selbst</span>
+              {hier ? (
+                <span className="lt-seitenhinweis">
+                  : {hier}
+                  {weiter && weiter !== hier && <> · weiter mit {weiter}</>}
+                </span>
+              ) : (
+                <span className="lt-seitenhinweis"> – die Tafel blättert von selbst</span>
+              )}
             </p>
           )}
         </div>
@@ -517,7 +640,7 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
             <dt>{s.fahrzeuge === 1 ? "Fahrzeug" : "Fahrzeuge"}</dt>
             <dd>{s.fahrzeuge}</dd>
           </div>
-          {bild.abgerueckt > 0 && (
+          {bild.abgerueckt > 0 && abgaengeAmRand.length === 0 && (
             <div className="lt-zaehler-ab">
               <dt>abgerückt</dt>
               <dd>{bild.abgerueckt}</dd>
@@ -538,15 +661,57 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
           </section>
         )}
 
-        {bild.bewegungen.length > 0 && (
+        {/* Wer abgerückt ist, steht hier verlässlich mit Uhrzeit: unabhängig davon, wie voll die Tafel ist, und länger als
+            die Viertelstunde von „Zuletzt". Sonst ließe sich „Ist die Fachgruppe noch da?" nicht von der Tafel beantworten. */}
+        {abgaengeAmRand.length > 0 && (
+          <section className="lt-block lt-block-ab" aria-labelledby="lt-ab-titel">
+            <h2 id="lt-ab-titel">
+              Abgerückt <span className="lt-block-zusatz">{tb.abgerueckt.length} {einheitenWort(tb.abgerueckt.length)}</span>
+            </h2>
+            <ul className="lt-abgaenge">
+              {abgaengeAmRand.map((a) => (
+                <li key={a.id}>
+                  <span className="lt-ab-zeit">{a.zeit != null ? uhrzeitText(a.zeit, jetzt) : "–"}</span>
+                  <span className="lt-ab-name">{a.name}</span>
+                </li>
+              ))}
+              {tb.abgerueckt.length > abgaengeAmRand.length && <li className="lt-ab-rest">+ {tb.abgerueckt.length - abgaengeAmRand.length} weitere</li>}
+            </ul>
+          </section>
+        )}
+
+        {/* Beim Blättern: alle Züge mit ihrer Stärke, die der laufenden Seite fett. Die Stärke eines Zuges stünde sonst
+            nur da, solange seine Seite steht; ein Zug mit Bedarf trägt das Warnzeichen auch, wenn er gerade nicht zu sehen ist. */}
+        {uebersicht && (
+          <section className="lt-block lt-block-zuege" aria-labelledby="lt-zuege-titel">
+            <h2 id="lt-zuege-titel">
+              {tb.gliederung === "zug" ? "Züge" : "Organisationen"} <span className="lt-block-zusatz">fett: auf dieser Seite</span>
+            </h2>
+            <ul className="lt-zuege">
+              {tb.gruppen.map((g, i) => (
+                <li key={g.schluessel} data-hier={aufSeite.has(i) || undefined} data-achtung={g.einheiten.some((e) => e.bedarf.length > 0) || undefined}>
+                  <span className="lt-zug-name">{g.titel}</span>
+                  <b>{g.staerke.gesamt}</b>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {bewegungen.length > 0 && (
           <section className="lt-block lt-block-zuletzt" aria-labelledby="lt-zuletzt-titel">
-            {/* Die Zahl steht dabei, weil nur so viele Einträge zu sehen sind, wie in die Spalte passen. */}
+            {/* Zu sehen sind nur so viele Einträge, wie in die Spalte passen: Die Überschrift sagt, wie viele von wie vielen. */}
             <h2 id="lt-zuletzt-titel">
-              Zuletzt <span className="lt-block-zusatz">{bild.bewegungen.length} in {BEWEGUNG_FENSTER_MS / 60_000} Min</span>
+              Zuletzt{" "}
+              <span className="lt-block-zusatz">
+                {zuletztSichtbar != null && zuletztSichtbar > 0 && zuletztSichtbar < bewegungen.length ? `${zuletztSichtbar} von ${bewegungen.length}` : bewegungen.length} in {BEWEGUNG_FENSTER_MS / 60_000} Min
+                {/* Passt kein Eintrag in die Spalte, verweist die Überschrift auf die Karten: Jede dieser Bewegungen ist dort markiert. */}
+                {zuletztSichtbar === 0 && " · siehe Karten"}
+              </span>
             </h2>
             {/* Was nicht mehr in die Spalte passt, bricht in eine zweite um, die nicht zu sehen ist: Es stehen nur ganze Einträge da. */}
-            <ul className="lt-bewegungen">
-              {bild.bewegungen.map((b) => (
+            <ul className="lt-bewegungen" ref={zuletzt}>
+              {bewegungen.map((b) => (
                 <BewegungZeile key={b.id} b={b} name={tb.namen.get(b.eintrag) ?? b.name} jetzt={jetzt} />
               ))}
             </ul>

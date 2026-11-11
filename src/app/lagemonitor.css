@@ -90,6 +90,8 @@ main.lm.lm-hell {
 .lm-stufenleiste { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0.15em 0.4em; text-align: left; font-size: max(var(--lm-min), min(2.9vh, 2.2vw)); }
 .lm-stufenleiste .lm-stufe { flex: 1 1 auto; }
 .lm-stufenleiste .lm-knopf { font-size: inherit; min-height: 44px; }
+/* Neu im Meldekopf: Der Wechsel zur Tafel steht sichtbar neben der Helligkeit, nicht hinter „Optionen". */
+.lm-fuss > .lm-wechsel { flex: none; min-height: 44px; font-size: max(var(--lm-min), min(2.9vh, 2.2vw)); }
 .lm-soll { text-decoration: none; font-weight: 700; color: var(--lm-warn); border: 1px solid var(--lm-warn); border-radius: 0.2em; padding: 0 0.25em; margin-left: 0.25em; }
 /* Dauer und Bedarf teilen sich eine Zeile, etwas kleiner als die übrigen r2-Zeilen (R10-K5). */
 .lm-dauer { font-size: min(3.2vh, 3.6vw); }

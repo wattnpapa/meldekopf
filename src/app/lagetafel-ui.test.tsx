@@ -163,15 +163,22 @@ describe("Lagetafel", () => {
     expect(ruhig.hasAttribute("data-achtung")).toBe(false);
   });
 
-  it("setzt den Stand einer Einheit ab einer Stunde in Warnfarbe ab und nennt weiter die Uhrzeit", () => {
-    const { sammlung } = einsatzMit([{ ort: "Alt" }, { ort: "Frisch" }]);
+  it("nennt den Stand jeder Einheit mit seinem Wort und ohne Warnzeichen; wie viele Stände alt sind, sagt die Randspalte", () => {
+    const { sammlung } = einsatzMit([{ ort: "Alt", ruhezeit: true }, { ort: "Frisch" }]);
     const liste = structuredClone(einsaetzeLaden());
     liste[0]!.eintraege[0]!.empfangenAm = Date.now() - 5 * 3_600_000;
     einsaetzeSpeichern(liste);
     tafel(sammlung());
-    expect(karte("THW Alt").querySelector(".lt-stand")!.className).toContain("lt-stand-alt");
-    expect(karte("THW Alt").querySelector(".lt-stand")!.textContent).toMatch(/^Stand /);
-    expect(karte("THW Frisch").querySelector(".lt-stand")!.className).not.toContain("lt-stand-alt");
+    // Alt oder frisch: An der Karte steht „Stand hh:mm" in derselben Gestalt. Bernstein mit Zeichen gehört dem Bedarf;
+    // nach einer Stunde trüge sonst fast jede Karte das Warnzeichen.
+    for (const name of ["THW Alt", "THW Frisch"]) {
+      const stand = karte(name).querySelector(".lt-stand")!;
+      expect(stand.className).toBe("lt-stand");
+      expect(stand.textContent).toMatch(/^Stand \d\d:\d\d$/);
+    }
+    // Auch neben einer Bedarfsmarke bleibt das Wort stehen: Eine nackte Uhrzeit neben „Ruhezeit" läse sich als deren Beginn.
+    expect(karte("THW Alt").querySelector(".lt-marke-achtung")!.textContent).toBe("Ruhezeit");
+    expect(karte("THW Alt").querySelector(".lt-stand-wort")!.textContent).toBe("Stand ");
     // Die Randspalte sagt, wie viele es sind (R11-K1).
     expect(document.querySelector(".lt-datenstand.lt-warnung")!.textContent).toMatch(/älteste Meldung vor 5 Std 0 Min, 1 von 2 älter als 1 Std/);
   });
@@ -182,27 +189,75 @@ describe("Lagetafel", () => {
     tafel(sammlung(), { beginn: Date.now() - 95 * 60_000 });
     const rand = screen.getByRole("complementary");
     const zaehler = Array.from(rand.querySelectorAll(".lt-zaehler > div")).map((d) => `${d.querySelector("dd")!.textContent} ${d.querySelector("dt")!.textContent}`);
-    expect(zaehler).toEqual(["1 Einheit", "0 Fahrzeuge", "1 abgerückt"]);
-    expect(rand.querySelector(".lt-dauer")!.textContent).toBe("seit Beginn 1 Std 35 Min");
+    // Die abgerückte Einheit steht im eigenen Block darunter; der Zähler nennt, was da ist.
+    expect(zaehler).toEqual(["1 Einheit", "0 Fahrzeuge"]);
+    expect(rand.querySelector(".lt-dauer")!.textContent).toMatch(/^Beginn \d\d:\d\d · seit 1 Std 35 Min$/);
     const bedarf = Array.from(rand.querySelectorAll(".lt-bedarf li"));
     expect(bedarf.map((b) => b.textContent)).toEqual(["Verpflegung 9", "Ruhezeit 1×"]);
     expect(bedarf[1]!.className).toBe("lt-dringend");
-    expect(within(rand).getByRole("heading", { name: /^Zuletzt/ }).textContent).toBe("Zuletzt 2 in 15 Min");
+    // „Zuletzt" führt, was am Platz markiert ist; der Abgang steht im Block „Abgerückt".
+    expect(within(rand).getByRole("heading", { name: /^Zuletzt/ }).textContent).toBe("Zuletzt 1 in 15 Min");
     const bewegungen = Array.from(rand.querySelectorAll(".lt-bewegung")).map((b) => b.textContent!);
-    expect(bewegungen.some((b) => /^\d\d:\d\dAbgerücktTHW Fort$/.test(b))).toBe(true);
-    expect(bewegungen.some((b) => /^\d\d:\d\dEingetroffenTHW Müde B$/.test(b))).toBe(true);
+    expect(bewegungen).toHaveLength(1);
+    expect(bewegungen[0]).toMatch(/^\d\d:\d\dEingetroffenTHW Müde B$/);
+    expect(within(rand).getByRole("heading", { name: /^Abgerückt/ }).textContent).toBe("Abgerückt 1 Einheit");
   });
 
-  it("listet abgerückte Einheiten hinter den anwesenden, mit Uhrzeit", () => {
-    const { sammlung, id } = einsatzMit([{ ort: "Da", typ: 4 }, { ort: "Fort", typ: 6 }]);
-    statusMitZeitSetzen(id, sammlung().eintraege[1]!.id, MeldeStatus.ABGERUECKT);
+  it("nennt eine Folgemeldung in der Randspalte in zwei Zeilen: was sich geändert hat, dann wer", () => {
+    const { id, sammlung } = einsatzMit([{ ort: "Brake", typ: 4, st: [0, 2, 6] }]);
+    // Die Einheit ist seit zwei Stunden da und meldet sich jetzt mit geänderter Stärke noch einmal.
+    const liste = structuredClone(einsaetzeLaden());
+    liste.find((l) => l.id === id)!.eintraege[0]!.empfangenAm = Date.now() - 2 * 3_600_000;
+    einsaetzeSpeichern(liste);
+    const b = structuredClone(sammlung().eintraege[0]!.bogen);
+    b.staerkeManuell = { fuehrer: 0, unterfuehrer: 2, mannschaft: 4, gesamt: 6 };
+    meldungHinzufuegen(id, b);
     tafel(sammlung());
+    const eintrag = screen.getByRole("complementary").querySelector(".lt-bewegung")!;
+    expect(Array.from(eintrag.children).map((k) => k.textContent)).toEqual([expect.stringMatching(/^\d\d:\d\d$/), "Stärke 8 → 6 (−2)", "THW Brake B"]);
+    // An der Karte steht die neue Stärke groß; die Marke nennt den Unterschied mit Vorzeichen, nicht in Grün.
+    const marke = karte("THW Brake").querySelector(".lt-marke")!;
+    expect(marke.textContent).toBe("Stärke −2");
+    expect(marke.className).toBe("lt-marke lt-marke-folge");
+    expect(karte("THW Brake").getAttribute("data-marke")).toBe("folge");
+  });
+
+  it("führt abgerückte Einheiten in der Randspalte, die letzten mit Uhrzeit, unabhängig davon, wie voll die Tafel ist", () => {
+    const orte = ["Da", "Erste", "Zweite", "Dritte", "Vierte"];
+    const { sammlung, id } = einsatzMit(orte.map((ort, i) => ({ ort, typ: [4, 6, 9, 16, 27][i]! })));
+    // Vier Einheiten rücken nacheinander ab; die zuletzt abgerückte steht oben.
+    const basis = Date.now();
+    vi.useFakeTimers({ now: basis });
+    for (let i = 1; i <= 4; i++) {
+      vi.setSystemTime(basis + i * 60_000);
+      statusMitZeitSetzen(id, sammlung().eintraege[i]!.id, MeldeStatus.ABGERUECKT);
+    }
+    vi.useRealTimers();
+    tafel(sammlung(), { jetzt: basis + 5 * 60_000 });
+    // Auf der Tafel stehen die anwesenden Einheiten, kein Block „Abgerückt" dazwischen.
     expect(karten().map((k) => k.querySelector(".lt-herkunft")!.textContent)).toEqual(["THW Da"]);
-    const kopf = document.querySelector(".lt-gruppe-ab")!;
-    expect(kopf.textContent).toBe("Abgerückt1 Einheit");
-    const abgang = document.querySelector(".lt-abgang")!;
+    expect(document.querySelector(".lt-flaeche .lt-abgang, .lt-flaeche .lt-gruppe-ab")).toBeNull();
+    const block = within(screen.getByRole("complementary")).getByRole("heading", { name: /^Abgerückt/ }).closest("section")!;
+    expect(block.querySelector("h2")!.textContent).toBe("Abgerückt 4 Einheiten");
+    const zeilen = Array.from(block.querySelectorAll(".lt-abgaenge li"));
+    expect(zeilen.map((z) => z.querySelector(".lt-ab-name")?.textContent ?? z.textContent)).toEqual(["THW Vierte FGr WP (A)", "THW Dritte FGr N", "THW Zweite FGr W (A)", "+ 1 weitere"]);
+    expect(zeilen[0]!.querySelector(".lt-ab-zeit")!.textContent).toMatch(/^\d\d:\d\d$/);
+  });
+
+  it("stellt die abgerückten Einheiten auf die Tafel, wenn niemand mehr anwesend ist", () => {
+    const { sammlung, id } = einsatzMit([{ ort: "Fort", typ: 6 }]);
+    statusMitZeitSetzen(id, sammlung().eintraege[0]!.id, MeldeStatus.ABGERUECKT);
+    tafel(sammlung());
+    expect(karten()).toHaveLength(0);
+    const kopf = document.querySelector(".lt-flaeche .lt-gruppe-ab")!;
+    expect(kopf.textContent).toBe("Abgerückt 1 Einheit".replace(" 1", "1"));
+    const abgang = document.querySelector(".lt-flaeche .lt-abgang")!;
     expect(abgang.querySelector(".lt-abgang-name")!.textContent).toBe("THW Fort FGr R (A)");
     expect(abgang.querySelector(".lt-abgang-zeit")!.textContent).toMatch(/^\d\d:\d\d$/);
+    // Die Randspalte wiederholt die Liste dann nicht; ihr Zähler nennt die Zahl.
+    const rand = screen.getByRole("complementary");
+    expect(within(rand).queryByRole("heading", { name: /^Abgerückt/ })).toBeNull();
+    expect(rand.querySelector(".lt-zaehler-ab")!.textContent).toBe("abgerückt1");
   });
 
   it("kennzeichnet eine Übung über die ganze Breite und unterscheidet leer von „alle abgerückt“", () => {
@@ -240,6 +295,61 @@ describe("Lagetafel", () => {
     tafel(sammlung());
     expect(karte("THW Oldenburg (NI)").querySelector(".lt-typ-lang")!.textContent).toBe("Bergungsgruppe (Rest)");
     expect(karte("THW Varel").querySelector(".lt-typ-kurz")!.textContent).toBe("B (Fachberater)");
+  });
+
+  it("teilt die Herkunft in Organisation und Standort: Bei Platzmangel wird der längere Teil gekürzt, der kürzere bleibt", () => {
+    const { id, sammlung } = einsatzMit([{ ort: "Clausthal-Zellerfeld", typ: 4 }, { ort: "Oldenburg", typ: 4 }]);
+    const liste = structuredClone(einsaetzeLaden());
+    liste.find((l) => l.id === id)!.eintraege[1]!.bogen.einheit.organisationName = "Johanniter-Unfall-Hilfe Regionalverband Weser-Ems";
+    einsaetzeSpeichern(liste);
+    tafel(sammlung());
+    const teile = (name: string) => Array.from(karte(name).querySelectorAll(".lt-herkunft > span")).map((s) => [s.className, s.textContent]);
+    // Kurze Organisation, langer Ort: Der Ort darf gekürzt werden, „THW" bleibt.
+    expect(teile("THW Clausthal-Zellerfeld")).toEqual([["lt-teil-fest", "THW"], ["lt-teil-weich", "Clausthal-Zellerfeld"]]);
+    // Lange Organisation: Sie wird gekürzt, der Ort bleibt stehen. Er unterscheidet die Karten derselben Organisation.
+    expect(teile("Johanniter-Unfall-Hilfe Regionalverband Weser-Ems Oldenburg")).toEqual([
+      ["lt-teil-weich", "Johanniter-Unfall-Hilfe Regionalverband Weser-Ems"],
+      ["lt-teil-fest", "Oldenburg"],
+    ]);
+  });
+
+  it("lässt beim Funkrufnamen die Kennziffer stehen: Gekürzt wird davor", () => {
+    const { sammlung } = einsatzMit([{ ort: "Brake", typ: 4, funk: [22, 51] }]);
+    tafel(sammlung());
+    const funkruf = karte("THW Brake").querySelector(".lt-funkruf")!;
+    expect(funkruf.textContent).toBe("Heros Brake 22/51");
+    expect(Array.from(funkruf.children).map((s) => [s.className, s.textContent])).toEqual([["lt-teil-weich", "Heros Brake"], ["lt-teil-fest", "22/51"]]);
+  });
+
+  it("sagt in der Überschrift von „Zuletzt“, wie viele Einträge zu sehen sind, statt still abzuschneiden", () => {
+    const { sammlung } = einsatzMit([{ ort: "Eins", typ: 4 }, { ort: "Zwei", typ: 6 }]);
+    const titel = () => within(screen.getByRole("complementary")).getByRole("heading", { name: /^Zuletzt/ }).textContent;
+    const kasten = (links: number, oben: number, breite: number, hoehe: number) => ({ left: links, top: oben, right: links + breite, bottom: oben + hoehe, width: breite, height: hoehe }) as DOMRect;
+    // Ohne Layout (Testumgebung) steht die Zahl der Bewegungen da.
+    const erste = tafel(sammlung());
+    expect(titel()).toBe("Zuletzt 2 in 15 Min");
+    erste.unmount();
+
+    // Die Liste ist 100 px hoch: Der erste Eintrag passt, der zweite liegt in der unsichtbaren Spalte daneben.
+    const messung = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      if (this.classList.contains("lt-bewegungen")) return kasten(0, 0, 300, 100);
+      if (this.classList.contains("lt-bewegung")) return this.previousElementSibling ? kasten(340, 0, 300, 60) : kasten(0, 0, 300, 60);
+      return kasten(0, 0, 0, 0);
+    });
+    const zweite = tafel(sammlung());
+    expect(titel()).toBe("Zuletzt 1 von 2 in 15 Min");
+    zweite.unmount();
+
+    // Die Liste hat gar keine Höhe (kleiner Fernseher, volle Randspalte): Die Überschrift verweist auf die Marken an den Karten.
+    // Vorgefallen: Dieser Fall galt als „nicht gemessen", die Überschrift sprang hin und her, und die Tafel fiel aus.
+    messung.mockImplementation(function (this: Element) {
+      if (this.classList.contains("lt-bewegungen")) return kasten(0, 0, 300, 0);
+      if (this.classList.contains("lt-bewegung")) return kasten(340, 0, 300, 60);
+      return kasten(0, 0, 0, 0);
+    });
+    tafel(sammlung());
+    expect(titel()).toBe("Zuletzt 2 in 15 Min · siehe Karten");
+    messung.mockRestore();
   });
 
   it("meldet eine unlesbare Sammlung mit der Uhrzeit des letzten Stands", () => {
@@ -388,6 +498,44 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(sichtbar()).toEqual(erste);
   });
 
+  it("nennt beim Blättern, welche Züge die Seite zeigt, und führt in der Randspalte alle Züge mit ihrer Stärke", () => {
+    fernseher();
+    vi.useFakeTimers();
+    // Zwölf Züge mit je vier Einheiten; im 3. Zug hat eine Einheit Bedarf.
+    const { sammlung } = einsatzMit(
+      Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number], ruhezeit: i === 9 })),
+    );
+    tafel(sammlung());
+    const status = () => screen.getByRole("status").textContent!;
+    const seite1 = /^Seite 1 von (\d): 1\. Zug bis (\d+)\. Zug · weiter mit (\d+)\. Zug bis \d+\. Zug$/.exec(status());
+    expect(seite1, status()).not.toBeNull();
+    const letzter = Number(seite1![2]);
+    expect(Number(seite1![3])).toBeGreaterThanOrEqual(letzter);
+
+    const block = within(screen.getByRole("complementary")).getByRole("heading", { name: /^Züge/ }).closest("section")!;
+    expect(block.querySelector("h2")!.textContent).toBe("Züge fett: auf dieser Seite");
+    const zeilen = Array.from(block.querySelectorAll(".lt-zuege li"));
+    // Alle zwölf Züge mit ihrer Gesamtstärke, auch die der anderen Seite.
+    expect(zeilen.map((z) => z.textContent)).toEqual(Array.from({ length: 12 }, (_, i) => `${i + 1}. Zug32`));
+    // Fett steht, was die laufende Seite zeigt.
+    const hier = () => zeilen.filter((z) => z.hasAttribute("data-hier")).map((z) => z.querySelector(".lt-zug-name")!.textContent);
+    expect(hier()).toEqual(Array.from({ length: letzter }, (_, i) => `${i + 1}. Zug`));
+    // Der Zug mit Bedarf ist markiert, auch wenn seine Seite gerade nicht steht.
+    expect(zeilen.filter((z) => z.hasAttribute("data-achtung")).map((z) => z.querySelector(".lt-zug-name")!.textContent)).toEqual(["3. Zug"]);
+    act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
+    expect(status()).toMatch(/^Seite 2 von/);
+    expect(hier()).toContain("12. Zug");
+    expect(hier()).not.toContain("1. Zug");
+  });
+
+  it("zeigt die Übersicht der Züge nur beim Blättern: Auf einer Seite stehen ihre Köpfe ohnehin alle da", () => {
+    fernseher();
+    const { sammlung } = einsatzMit(Array.from({ length: 8 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug` })));
+    tafel(sammlung());
+    expect(document.querySelector(".lt-seitenzeile")).toBeNull();
+    expect(within(screen.getByRole("complementary")).queryByRole("heading", { name: /^Züge/ })).toBeNull();
+  });
+
   it("beginnt vorn, wenn sich die Zahl der Seiten ändert: Takt und Balken laufen dann gemeinsam neu los", () => {
     fernseher();
     vi.useFakeTimers();
@@ -440,7 +588,7 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
     expect((await screen.findByRole("heading", { level: 1 })).textContent).toBe("Heros Brake 21/10");
     expect(document.querySelector("main.lt")!.className).toBe("lt lt-gedimmt");
     expect(document.querySelector("main.lm")).toBeNull();
-    expect(document.querySelector(".lt-dauer")!.textContent).toBe("seit Beginn 30 Min");
+    expect(document.querySelector(".lt-dauer")!.textContent).toMatch(/^Beginn \d\d:\d\d · seit 30 Min$/);
     expect(document.title).toBe("Lage – Hochwasser Weser");
     // Dieselbe Leiter wie in der Zeilenansicht: aus Gedimmt führt ein Tipp auf Dunkel.
     expect(document.querySelector(".lm-stufe")!.textContent).toBe("Stufe: Gedimmt");
@@ -452,15 +600,30 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
   it("wechselt im Monitor zwischen den Ansichten und merkt die Wahl", async () => {
     const { id } = einsatzMit([{ ort: "Brake" }]);
     render(<Lagemonitor einsatzId={id} />);
-    fireEvent.click(screen.getByRole("button", { name: "Ansicht: Tafel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tafel zeigen" }));
     await vi.waitFor(() => expect(document.querySelector("main.lt")).not.toBeNull());
     expect(localStorage.getItem(ANSICHT_SCHLUESSEL)).toBe("tafel");
     expect(screen.getByRole("button", { name: "Vollbild" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Schließen" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Ansicht: Zeilen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zeilen zeigen" }));
     expect(document.querySelector("main.lm")).not.toBeNull();
     expect(document.querySelector("main.lt")).toBeNull();
     expect(localStorage.getItem(ANSICHT_SCHLUESSEL)).toBeNull();
+  });
+
+  it("bietet den Wechsel in beiden Darstellungen sichtbar an, als Handlung beschriftet und nicht hinter „Optionen“", async () => {
+    const { id } = einsatzMit([{ ort: "Brake" }]);
+    render(<Lagemonitor einsatzId={id} />);
+    // Vorgefallen: In den Zeilen steckte der Knopf im zugeklappten Bereich „Optionen"; wer gewechselt hatte, fand nicht zurück.
+    const zurTafel = screen.getByRole("button", { name: "Tafel zeigen" });
+    expect(zurTafel.closest("details")).toBeNull();
+    expect(zurTafel.closest(".lm-fuss")).not.toBeNull();
+    fireEvent.click(zurTafel);
+    await vi.waitFor(() => expect(document.querySelector("main.lt")).not.toBeNull());
+    const zuDenZeilen = screen.getByRole("button", { name: "Zeilen zeigen" });
+    expect(zuDenZeilen.closest(".lt-bedienung")).not.toBeNull();
+    // „Ansicht: …" las sich neben „Stufe: Dunkel" wie ein Zustand: Diese Schreibweise gibt es nicht mehr.
+    expect(screen.queryByRole("button", { name: /^Ansicht:/ })).toBeNull();
   });
 
   it("folgt der Wahl aus dem anderen Fenster, ohne dass jemand an den Fernseher muss", async () => {
@@ -485,7 +648,7 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
 
   it("lässt die Ansicht in der Einsatzansicht wählen, wo gearbeitet wird", () => {
     render(<LagemonitorBlock einsatzId="e1" alleIds={["e1"]} />);
-    const gruppe = screen.getByRole("group", { name: "Ansicht am Fernseher" });
+    const gruppe = screen.getByRole("group", { name: "Darstellung am Fernseher" });
     const zeilen = within(gruppe).getByRole("radio", { name: /^Zeilen/ }) as HTMLInputElement;
     const tafelWahl = within(gruppe).getByRole("radio", { name: /^Tafel/ }) as HTMLInputElement;
     expect(zeilen.checked).toBe(true);
@@ -498,7 +661,7 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
 
   it("meldet in der Einsatzansicht, wenn sich die Wahl nicht speichern lässt, und zeigt sie nicht als getroffen", () => {
     render(<LagemonitorBlock einsatzId="e1" alleIds={["e1"]} />);
-    const gruppe = screen.getByRole("group", { name: "Ansicht am Fernseher" });
+    const gruppe = screen.getByRole("group", { name: "Darstellung am Fernseher" });
     const zeilen = within(gruppe).getByRole("radio", { name: /^Zeilen/ }) as HTMLInputElement;
     const tafelWahl = within(gruppe).getByRole("radio", { name: /^Tafel/ }) as HTMLInputElement;
     const voll = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
@@ -509,7 +672,7 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
     // Die Wahl wirkt nur über den Speicher: Ohne ihn stellt sich kein Monitor um, also steht sie auch hier nicht als gewählt da.
     expect(tafelWahl.checked).toBe(false);
     expect(zeilen.checked).toBe(true);
-    expect(screen.getByRole("status").textContent).toMatch(/^Die Ansicht konnte nicht gespeichert werden/);
+    expect(screen.getByRole("status").textContent).toMatch(/^Die Darstellung konnte nicht gespeichert werden/);
     // Gelingt das Speichern wieder, verschwindet die Meldung.
     fireEvent.click(tafelWahl);
     expect(tafelWahl.checked).toBe(true);
@@ -522,7 +685,7 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
     const voll = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("voll", "QuotaExceededError");
     });
-    fireEvent.click(screen.getByRole("button", { name: "Ansicht: Tafel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tafel zeigen" }));
     await vi.waitFor(() => expect(document.querySelector("main.lt")).not.toBeNull());
     voll.mockRestore();
     expect(localStorage.getItem(ANSICHT_SCHLUESSEL)).toBeNull();
@@ -586,10 +749,24 @@ describe("Lagetafel, Stil", () => {
     expect(daempfung(stufen.gedimmt)).toBeLessThan(daempfung(stufen.dunkel));
   });
 
-  it("trägt Zustand nie allein über Farbe: Warnzeichen an Bedarf und altem Stand (R9-K6)", () => {
-    for (const regel of [".lt-marke-achtung::before", ".lt-stand-alt::before", ".lt-bedarf li.lt-dringend::before", ".lt-datenstand.lt-warnung::before"]) {
+  it("trägt Zustand nie allein über Farbe: Warnzeichen am Bedarf und an den Sammelwarnungen (R9-K6)", () => {
+    for (const regel of [".lt-marke-achtung::before", ".lt-bedarf li.lt-dringend::before", ".lt-datenstand.lt-warnung::before"]) {
       expect(css, regel).toContain(`${regel} { content: "\\26A0`);
     }
+  });
+
+  it("behält Bernstein mit Warnzeichen dem Bedarf vor: Der Stand einer Einheit und eine geänderte Stärke stehen in Schriftfarbe", () => {
+    // Vorgefallen: Jeder Stand über einer Stunde trug Bernstein und Dreieck, in der großen Lage 44 von 44 Karten. Die eine
+    // Einheit mit Ruhezeit stand zwischen lauter gleichen Zeichen. In Fassung „zwei" entfiel neben einer Marke dazu das Wort
+    // „Stand": „⚠ Ruhezeit ⚠ 01:13" las sich als Ruhezeit ab 01:13.
+    expect(css).not.toContain("lt-stand-alt");
+    expect(css).not.toMatch(/\.lt-stand-wort \{ display: none/);
+    expect(css).toMatch(/^\.lt-stand \{[^}]*color: var\(--lt-text-2\);/m);
+    expect(css).toMatch(/^\.lt-marke-folge \{ color: var\(--lt-text\); \}/m);
+    // Der Balken des Bedarfs ist breiter als die anderen: zu unterscheiden auch ohne Farbe.
+    expect(css).toMatch(/\.lt-karte\[data-achtung\] \{ border-left-color: var\(--lt-achtung\); box-shadow: inset 0\.14em 0 0 var\(--lt-achtung\); \}/);
+    // Marken so groß wie die Zeile des Auftrags.
+    expect(css).toMatch(/^\.lt-marke \{[^}]*font-size: 0\.7em;/m);
   });
 
   it("rechnet das Grundmaß wie die Messung in lagetafel-ui.tsx und füllt genau das Bild", () => {
@@ -647,6 +824,26 @@ describe("Lagetafel, Stil", () => {
     expect(css).toMatch(/@container \(max-width: 4em\) \{\s*\.lt-auftrag-text \{ display: none; \}/);
   });
 
+  it("hält die Knöpfe der Helligkeit an ihrer Stelle und die Überschriften der Randspalte einzeilig", () => {
+    // „Heller (weiß)" heißt auf der hellen Stufe „Heller": Ohne feste Breiten rückte „Dunkler" beim Wechsel 56 px zur Seite.
+    expect(css).toMatch(/\.lt-bedienung \.lm-stufenleiste \.lm-knopf \{ flex: none; width: 4\.9em;/);
+    expect(css).toMatch(/\.lt-bedienung \.lm-stufenleiste \.lm-knopf \+ \.lm-knopf \{ width: 7\.6em; \}/);
+    expect(css).toMatch(/\.lt-bedienung \.lm-stufenleiste \{[^}]*flex-wrap: nowrap;/);
+    // Die Überschrift von „Zuletzt" beschreibt die Liste darunter; bräche sie um, änderte sie deren Höhe.
+    expect(css).toMatch(/main\.lt \.lt-block h2 \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;/);
+  });
+
+  it("kürzt im Kopf den Namen des Einsatzes vor dem Ort und setzt am Telefon die Wörter der Stärkemeldung als eine Zeile", () => {
+    expect(css).toMatch(/\.lt-einsatz-name \{ flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; \}/);
+    expect(css).toMatch(/\.lt-einsatz-name \+ \.lt-ort \{ flex: none; max-width: 75%; \}/);
+    const telefon = css.slice(css.indexOf("@media (max-width: 960px)"));
+    // Die Schrift der Meldung richtet sich nach der Zahl der Ziffern; die Wörter stehen als Legende darunter.
+    expect(telefon).toMatch(/var\(--lt-m-ziffern, 8\) \* 0\.62 \+ 1\.5/);
+    expect(telefon).toMatch(/\.lt-m-wort \{ display: none; \}/);
+    expect(telefon).toMatch(/main\.lt \.lt-m-legende \{ display: block;/);
+    expect(css).toMatch(/^\.lt-m-legende \{ display: none; \}/m);
+  });
+
   it("bewegt nur den Balken beim Blättern und schaltet ihn bei reduzierter Bewegung ab", () => {
     expect(css.match(/animation:/g)).toHaveLength(2);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.lt-seitenlauf \{ animation: none; \}/);
@@ -654,7 +851,7 @@ describe("Lagetafel, Stil", () => {
   });
 
   it("rollt am Telefon als eine Spalte und hält dort die Mindestschrift des Monitors (R8-L5)", () => {
-    const abfrage = "(max-width: 640px), (max-height: 480px), (max-aspect-ratio: 6/5)";
+    const abfrage = "(max-width: 960px), (max-height: 560px), (max-aspect-ratio: 6/5)";
     const telefon = css.slice(css.indexOf(`@media ${abfrage}`));
     // Stilvorlage und Komponente entscheiden mit derselben Abfrage, wann die Tafel rollt statt zu setzen.
     expect(css).toContain(`@media ${abfrage} {`);

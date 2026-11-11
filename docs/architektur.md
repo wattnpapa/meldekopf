@@ -359,10 +359,19 @@ Namens (`--lt-wer`), nach der sich die linke Spalte aller Karten richtet. Die
 Summen kommen unverändert aus `lagebild` (`lagemonitor.ts`); beide Ansichten
 zeigen dieselben Zahlen.
 
+Abgerückte Einheiten gehören nicht in diesen Satz: Die Randspalte führt die
+zuletzt abgerückten mit Uhrzeit, unabhängig davon, wie voll die Tafel ist
+(ein Block, der mit dem Füllstand kommt und geht, wäre kein festes Lagebild).
+Auf der Tafel stehen sie nur, wenn niemand mehr anwesend ist. Beim Blättern
+laufen die Gruppen über Spalten und Seiten weiter, statt Platz frei zu
+lassen; die Seitenzeile nennt die Züge der Seite, die Randspalte führt dann
+alle Züge mit ihrer Stärke.
+
 Lässt sich der Brocken der Tafel nicht nachladen (ein lange offenes
 Monitor-Fenster nach einem Update der App), fängt eine Fehlergrenze in
 `lagemonitor-ui.tsx` das ab: Der Monitor zeigt die Zeilen, sagt es und bietet
-„Neu laden“ an, statt leer zu bleiben.
+„Neu laden“ an, statt leer zu bleiben. Dieselbe Grenze fängt einen Fehler
+beim Zeichnen der Tafel.
 
 ### 6.5 Offline-Start, Auto-Update
 
@@ -577,6 +586,11 @@ Die Tafel liegt als eigener Brocken hinter dem Monitor (`lagetafel-ui`, rund
 gewählt ist; das Startbündel wächst um 0,4 KB (Kennung der Meldung an jeder
 Bewegung, Verweis auf den neuen Brocken). Die taktischen Zeichen kommen aus
 dem schon vorhandenen Brocken `taktische-zeichen-bogen`.
+**Tafel nach Durchsicht und Rollenaudit (2026-11-11):** 4.365.378 / 596.910
+Byte. Der Brocken der Tafel wächst auf rund 27 KB JavaScript und 21 KB
+Stilvorlage (Satz nach Platzbedarf des Inhalts, Randspalte mit abgerückten
+Einheiten und Zug-Übersicht, Namensteile); das Startbündel wächst um 36 Byte
+(Fehlergrenze und sichtbarer Wechselknopf im Monitor).
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

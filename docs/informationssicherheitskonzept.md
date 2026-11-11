@@ -580,7 +580,9 @@ Echtlage" und kennt die Stufen hell, dunkel, gedimmt.
 
 Seit 2026-11-10 gibt es daneben die Ansicht **Tafel** (`lagetafel-ui.tsx`,
 `lagetafel.ts`). Sie zeigt dieselbe Klasse von Angaben, aber alle Einheiten
-auf einmal und je Einheit mehr: taktisches Zeichen, Herkunft, Typ,
+auf einmal und je Einheit mehr: taktisches Zeichen, Herkunft, Typ (bei einem
+abgeteilten Teil mit dessen Etikett, einem Freitext des Meldekopfs wie
+„Fachberater“),
 Funkrufname des ersten Fahrzeugs, Auftrag oder Notiz des Meldekopfs, Stärke,
 Uhrzeit des Stands der Angaben, den Sofortbedarf als Marke (Ruhezeit,
 Unterbringung, abweichende Verpflegung) und die abgerückten Einheiten mit
