@@ -161,7 +161,8 @@ import {
   eintreffzeitUnbestaetigt,
   einheitEntfernen,
   einheitVerschieben,
-  einsatzKopfSetzen,
+  einsatzArtSetzen,
+  einsatzKopfMitArtSetzen,
   notizSetzen,
   meldungAufnehmen,
   zugSetzen,
@@ -266,7 +267,7 @@ import {
 /** Zeichen des Auftrags auf der zugeklappten Karte (R8-K3): der Auftrag steht bis hierhin ungekürzt da. */
 const AUFTRAG_KARTE_MAX = 80;
 
-import { ART_LABEL } from "./einsaetze-konstanten";
+import { ART_LABEL, ART_WAHL } from "./einsaetze-konstanten";
 import { WORD_DATEI_ARTEN } from "./eingang/word-bogen-fehler";
 
 /** Überschrift über den nicht anwesenden Karten am Ende der Liste: „Abgerückt (2)" bzw. mit zusammengeführten Einheiten (R17-K4). */
@@ -1188,10 +1189,14 @@ const SCHMAL_ABFRAGE = "(max-width: 600px)";
 /** So lange steht „Zuletzt abgelegt/eingelesen … jetzt n Einheiten" (R17-S8): zehn Minuten, dann ist „jetzt" nicht mehr wahr. */
 export const EINGANG_QUITTUNG_MS = 10 * 60_000;
 
-/** Was am Kopf des Einsatzes geändert wurde, mit Alt und Neu: „Name: „A" → „B"" (R17-S4). */
-export function kopfAenderungText(vorher: { name: string; ort: string }, name: string, ort: string): string {
+/**
+ * Was am Kopf des Einsatzes geändert wurde, mit Alt und Neu: „Name: „A" → „B"" (R17-S4). Neu im Meldekopf: auch die Art
+ * („Art „Einsatz" → „Übung""), wenn sie mitgegeben und geändert ist.
+ */
+export function kopfAenderungText(vorher: { name: string; ort: string; art?: EinsatzArt }, name: string, ort: string, art?: EinsatzArt): string {
   const teile: string[] = [];
   if (vorher.name !== name) teile.push(`Name „${vorher.name}" → „${name}"`);
+  if (vorher.art != null && art != null && vorher.art !== art) teile.push(`Art „${ART_LABEL[vorher.art]}" → „${ART_LABEL[art]}"`);
   if (vorher.ort !== ort) teile.push(`Ort ${vorher.ort ? `„${vorher.ort}"` : "(leer)"} → ${ort ? `„${ort}"` : "(leer)"}`);
   return teile.join(" · ");
 }
@@ -1780,8 +1785,8 @@ export function EinsatzDetail(props: {
   const [verschobenQuittung, setVerschobenQuittung] = useState<Verschoben | null>(null);
   // Auftrag/Notiz an einer Karte gespeichert: Quittung mit „Rückgängig" (R15-W3).
   const [auftragGesetzt, setAuftragGesetzt] = useState<AuftragGesetzt | null>(null);
-  // Name oder Ort des Einsatzes geändert: Quittung mit „Rückgängig" (R16-K1).
-  const [kopfGeaendert, setKopfGeaendert] = useState<{ vorher: { name: string; ort: string }; nachher: string; nonce: number } | null>(null);
+  // Name, Ort oder Art des Einsatzes geändert: Quittung mit „Rückgängig" (R16-K1; die Art neu im Meldekopf).
+  const [kopfGeaendert, setKopfGeaendert] = useState<{ vorher: { name: string; ort: string; art: EinsatzArt }; nachher: string; nonce: number } | null>(null);
   useEffect(() => {
     setZugGesetzt(null);
     setVerschobenQuittung(null);
@@ -1789,14 +1794,16 @@ export function EinsatzDetail(props: {
     setKopfGeaendert(null);
   }, [einsatz.id]);
 
-  /** Name und Ort/Auftrag am Kopf ändern oder nachtragen (R16-K1). */
+  /** Name, Art und Ort/Auftrag am Kopf ändern oder nachtragen (R16-K1; die Art neu im Meldekopf). */
   async function kopfAendern() {
     const w = await frageFelder({
       titel: "Einsatz bearbeiten",
-      hinweis: "Name und Ort stehen auf Lageblatt, Sammel-PDF und Lagemonitor. Einheiten, Zeiten und Aufträge bleiben, wie sie sind.",
+      hinweis:
+        "Name und Ort stehen auf Lageblatt, Sammel-PDF und Lagemonitor. Die Art entscheidet, ob Übungsmeldungen zählen: in einer Übung wie jede andere Einheit, sonst nicht. Einheiten, Zeiten und Aufträge bleiben, wie sie sind.",
       ok: "Übernehmen",
       felder: [
         { name: "name", label: "Name", vorgabe: einsatz.name },
+        { name: "art", label: "Art", auswahl: ART_WAHL, vorgabe: String(einsatz.art) },
         // Der Knopf „Ort eintragen…" setzt den Cursor in das Feld, das er nennt (R17-S4).
         { name: "ort", label: "Ort / Auftrag (optional)", vorgabe: einsatz.ort ?? "", optional: true, platzhalter: "z. B. Deichabschnitt Nord", fokus: !einsatz.ort },
       ],
@@ -1804,20 +1811,61 @@ export function EinsatzDetail(props: {
     if (!w) return;
     const name = (w.name ?? "").trim() || einsatz.name;
     const ort = (w.ort ?? "").trim();
-    if (name === einsatz.name && ort === (einsatz.ort ?? "")) return;
-    const alt: { werte: { name: string; ort: string } | null } = { werte: null };
+    // Nur eine Art, die es gibt: Ein leerer oder fremder Wert lässt die bisherige stehen.
+    const art = ART_WAHL.some((a) => a.wert === w.art) ? (Number(w.art) as EinsatzArt) : einsatz.art;
+    if (name === einsatz.name && ort === (einsatz.ort ?? "") && art === einsatz.art) return;
+    const alt: { werte: { name: string; ort: string; art: EinsatzArt } | null } = { werte: null };
     // R20-O3: Der Dialog ist zu; was eingegeben war, steht in der Meldung zum Abschreiben.
-    if (!(await gesichert("Nicht geändert", () => (alt.werte = einsatzKopfSetzen(einsatz.id, name, ort)), `Eingegeben war: Name „${name}"${ort ? `, Ort „${ort}"` : ""}. Nach dem Platzschaffen noch einmal unter „Einsatz bearbeiten“ eintragen.`))) return;
+    if (
+      !(await gesichert(
+        "Nicht geändert",
+        // Ein Schreibvorgang für alle drei Angaben: Bei vollem Speicher bleibt der Kopf ganz, wie er war.
+        () => (alt.werte = einsatzKopfMitArtSetzen(einsatz.id, name, ort, art)),
+        `Eingegeben war: Name „${name}", Art „${ART_LABEL[art]}"${ort ? `, Ort „${ort}"` : ""}. Nach dem Platzschaffen noch einmal unter „Einsatz bearbeiten“ eintragen.`,
+      ))
+    )
+      return;
     if (!alt.werte) return;
-    setKopfGeaendert({ vorher: alt.werte, nachher: kopfAenderungText(alt.werte, name, ort), nonce: Date.now() });
+    setKopfGeaendert({ vorher: alt.werte, nachher: kopfAenderungText(alt.werte, name, ort, art), nonce: Date.now() });
+    onGeaendert();
+  }
+
+  /**
+   * Die Sammlung nachträglich als Übung führen (neu im Meldekopf). Anlass: Eine Übung wird als „Einsatz" angelegt, die
+   * Übungsbögen zählen dann nicht, und die Null ließ sich nur mit einer neuen Sammlung beheben. Der Weg steht dort, wo
+   * die Null erklärt wird; die Rückfrage sagt, was sich ändert, die Quittung bietet „Rückgängig".
+   */
+  async function alsUebungFuehren() {
+    if (einsatz.art === EinsatzArt.UEBUNG) return;
+    const ja = await frageJaNein({
+      titel: "Als Übung führen?",
+      text: `„${einsatz.name}" wird dann als Übung geführt: Übungsmeldungen zählen wie jede andere Einheit, und der Lagemonitor zeigt „ÜBUNG – keine Echtlage“. Unter „Einsatz bearbeiten“ lässt sich die Art wieder umstellen.`,
+      ok: "Als Übung führen",
+    });
+    if (!ja) return;
+    const alt: { art: EinsatzArt | null } = { art: null };
+    if (!(await gesichert("Nicht geändert", () => (alt.art = einsatzArtSetzen(einsatz.id, EinsatzArt.UEBUNG)), undefined, false, `„${einsatz.name}" wird weiter als ${ART_LABEL[einsatz.art]} geführt.`))) return;
+    if (alt.art == null) return;
+    const vorher = { name: einsatz.name, ort: einsatz.ort ?? "", art: alt.art };
+    setKopfGeaendert({ vorher, nachher: kopfAenderungText(vorher, vorher.name, vorher.ort, EinsatzArt.UEBUNG), nonce: Date.now() });
     onGeaendert();
   }
 
   async function kopfZurueck() {
     if (!kopfGeaendert) return;
     const { vorher } = kopfGeaendert;
-    if (!(await gesichert("Rückgängig", () => einsatzKopfSetzen(einsatz.id, vorher.name, vorher.ort)))) return;
-    zurueckQuittieren(`Zurückgenommen: Der Einsatz heißt wieder „${vorher.name}".`);
+    const artZurueck = vorher.art !== einsatz.art;
+    const nameZurueck = vorher.name !== einsatz.name;
+    if (
+      !(await gesichert("Rückgängig", () => einsatzKopfMitArtSetzen(einsatz.id, vorher.name, vorher.ort, vorher.art)))
+    )
+      return;
+    // Genannt wird, was sich für den Leser ändert: der Name, sonst die Art; ein zurückgenommener Ort steht im Kopf darunter.
+    zurueckQuittieren(
+      nameZurueck || !artZurueck
+        ? `Zurückgenommen: Der Einsatz heißt wieder „${vorher.name}"${artZurueck ? ` und wird wieder als ${ART_LABEL[vorher.art]} geführt` : ""}.`
+        : `Zurückgenommen: „${vorher.name}" wird wieder als ${ART_LABEL[vorher.art]} geführt.`,
+    );
     setKopfGeaendert(null);
     onGeaendert();
   }
@@ -2265,7 +2313,9 @@ export function EinsatzDetail(props: {
       {/* R19-N6: Lauter Übungsmeldungen ergeben 0 — das steht gleich unter der Null, nicht erst im Kasten weiter unten. */}
       {sum.einheiten === 0 && uebungenDaneben.length > 0 && (
         <p className="hinweis nur-uebung" role="status">
-          Nichts gezählt: {uebungenDaneben.length === 1 ? "die eine eingegangene Meldung ist Übung und zählt" : `alle ${uebungenDaneben.length} eingegangenen Meldungen sind Übung und zählen`} nicht in diese Lage.
+          Nichts gezählt: {uebungenDaneben.length === 1 ? "die eine eingegangene Meldung ist Übung und zählt" : `alle ${uebungenDaneben.length} eingegangenen Meldungen sind Übung und zählen`} nicht in diese Lage.{" "}
+          {/* Neu im Meldekopf: der Ausweg gleich an der Null. Eine Übung wird leicht als „Einsatz" angelegt; in einer Übung zählen die Bögen. */}
+          <button type="button" className="link" onClick={() => void alsUebungFuehren()}>Als Übung führen…</button>
         </p>
       )}
       {/* Eine nicht gezählte Sollstärke steckt in der Summe: Die Summe sagt, wie viel davon (R8-A1). */}
@@ -2555,7 +2605,9 @@ export function EinsatzDetail(props: {
           <p>
             {uebungenDaneben.map((e) => einheitAnzeigename(e.bogen.einheit)).join(", ")}.{" "}
             {uebungenDaneben.length === 1 ? "Sie zählt" : "Sie zählen"} nicht in diese Lage; die Summen oben sind ohne{" "}
-            sie gerechnet.
+            sie gerechnet.{" "}
+            {/* Neu im Meldekopf: Ist das Ganze eine Übung, zählt nach dem Umstellen jede Meldung. */}
+            <button type="button" className="link" onClick={() => void alsUebungFuehren()}>Als Übung führen…</button>
           </p>
         </details>
       )}
@@ -3506,7 +3558,7 @@ export function EinsatzDetail(props: {
           sperreKurz
           kurz="Einsatz geändert"
           onRueckgaengig={() => void kopfZurueck()}
-          rueckgaengigName="Änderung an Name und Ort rückgängig machen"
+          rueckgaengigName="Änderung am Einsatz rückgängig machen"
           onSchliessen={() => setKopfGeaendert(null)}
         >
           <strong>Einsatz geändert:</strong> {kopfGeaendert.nachher}

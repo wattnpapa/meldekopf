@@ -15,6 +15,11 @@
  *  - **Abgerückte Einheiten** führt die Randspalte, die letzten mit Uhrzeit.
  *    Auf der Tafel stehen sie nur, wenn niemand mehr anwesend ist: Ein Block,
  *    der je nach Füllstand kommt und geht, wäre kein festes Lagebild.
+ *  - **Übungsmeldungen in einer echten Lage** stehen als eigene, letzte Gruppe
+ *    da, gekennzeichnet und ohne zu zählen (`zaehltInLage`): Wer anwesend ist,
+ *    soll auf der Tafel zu finden sein, und eine versehentlich als Übung
+ *    gemeldete Einheit fällt so auf. In die Stärke im Kopf, in Bedarf und
+ *    Bewegungen gehen sie nicht ein, wie überall sonst in der App.
  *  - **Der Satz.** `tafelSatz` rechnet aus Zahl der Einheiten und Größe der
  *    Fläche die größte Schrift, bei der alles ins Bild passt, und blättert
  *    erst, wenn die Mindestgröße unterschritten würde. Reine Rechnung ohne
@@ -23,14 +28,15 @@
  * Wie der Monitor überhaupt: Einheitsnamen und Zahlen, keine Personen.
  */
 
-import type { Einheit, OrganisationsTyp, Staerke } from "@bos/eeb-format/model";
+import { staerke as staerkeAusBogen, type Einheit, type OrganisationsTyp, type Staerke } from "@bos/eeb-format/model";
 import { MeldeStatus, type Einsatzsammlung, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { angabenZeit } from "./angaben-alter";
-import { aktuelleMeldungen } from "./auswertung";
+import { aktuelleMeldungen, uebungenAusserhalbDerLage } from "./auswertung";
 import { bedarfMarken } from "./einheiten-tabelle";
+import { eintreffzeit } from "./eintrag-zeiten";
 import { geltendeJeEinheit } from "./fassung-vorrang";
-import { einheitAnzeigename, orgLabel, vokabText, vokabularFuer } from "./hilfen";
-import { lagebild, uhrzeitText, type Bewegung, type EinheitZeile, type Lagebild } from "./lagemonitor";
+import { einheitAnzeigename, funkrufText, nurSollstaerke, orgLabel, vokabText, vokabularFuer } from "./hilfen";
+import { auftragKurz, lagebild, uhrzeitText, type Bewegung, type EinheitZeile, type Lagebild } from "./lagemonitor";
 
 // ------------------------------------------------------------------ Inhalt
 
@@ -72,20 +78,31 @@ export interface TafelEinheit {
    */
   stand: number;
   eingetroffen: number;
-  /** Was zu entscheiden ist: „Ruhezeit", „Unterbringung", „Verpflegung 20". */
+  /** Was zu entscheiden ist: „Ruhezeit", „Unterbringung", „Verpflegung 20". Leer bei einer Übungsmeldung, die nicht zählt. */
   bedarf: string[];
   marke?: TafelMarke;
+  /**
+   * Übungsmeldung in einer echten Lage: anwesend, aber nicht gezählt (`zaehltInLage`). Die Karte trägt das Wort
+   * {@link UEBUNG_WORT}; ihre Stärke steckt weder in der Gesamtstärke noch in einer Zwischensumme.
+   */
+  uebung: boolean;
 }
 
-/** Eine Gruppe der Tafel: ein Zug, „ohne Zug" oder eine Organisation. */
+/** Eine Gruppe der Tafel: ein Zug, „ohne Zug", eine Organisation oder die Übungsmeldungen, die nicht zählen. */
 export interface TafelGruppe {
   schluessel: string;
   titel: string;
   /** Ohne Kopf steht die einzige Organisation: Ihre Summe ist die Gesamtstärke im Kopf der Tafel. */
   kopf: boolean;
+  /** Summe der Einheiten der Gruppe. Bei {@link uebung} zählt sie nicht in die Lage und steht nirgends als Zahl da. */
   staerke: Staerke;
   einheiten: TafelEinheit[];
+  /** Die Gruppe der Übungsmeldungen einer echten Lage: immer die letzte, immer mit Kopf. Die Summen aller übrigen Gruppen ergeben die Gesamtstärke. */
+  uebung: boolean;
 }
+
+/** Das Wort an Gruppe und Karte einer Übungsmeldung, die in der Lage nicht zählt. */
+export const UEBUNG_WORT = "Übung";
 
 /** Eine abgerückte Einheit: Name und, wenn bekannt, wann. */
 export interface TafelAbgang {
@@ -99,6 +116,7 @@ export interface Tafelbild {
   bild: Lagebild;
   /** Wonach die Gruppen gebildet sind: nach Zug, sobald eine Einheit einen trägt, sonst nach Organisation. */
   gliederung: "zug" | "organisation";
+  /** Die Gruppen in Lesefolge; als letzte, wenn es sie gibt, die Übungsmeldungen, die nicht zählen ({@link TafelGruppe.uebung}). */
   gruppen: TafelGruppe[];
   /** Abgerückte Einheiten, zuletzt abgerückte zuerst. */
   abgerueckt: TafelAbgang[];
@@ -197,6 +215,8 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
   for (const b of bild.bewegungen) if (!bewegt.has(b.eintrag)) bewegt.set(b.eintrag, b);
 
   const anwesend = aktuelleMeldungen(einsatz.eintraege, einsatz.art);
+  // Anwesend, aber als Übung nicht in dieser Lage; in einer Übung selbst ist die Liste leer, dort zählt jede Meldung.
+  const daneben = uebungenAusserhalbDerLage(einsatz.eintraege, einsatz.art);
   const mitZug = anwesend.some((m) => (m.zugEtikett ?? "").trim() !== "");
   // Stelle der ersten Meldung jeder Einheit in der Sammlung: entscheidet bei gleicher Eintreffzeit (ein Stapel Bögen,
   // in einem Zug eingelesen) und bleibt, auch wenn Folgemeldungen dazukommen.
@@ -204,7 +224,9 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
   einsatz.eintraege.forEach((e, i) => {
     if (!ersteStelle.has(e.einheitSchluessel)) ersteStelle.set(e.einheitSchluessel, i);
   });
-  const stelle = new Map<string, number>(anwesend.map((m) => [m.id, ersteStelle.get(m.einheitSchluessel) ?? 0]));
+  const stelle = new Map<string, number>([...anwesend, ...daneben].map((m) => [m.id, ersteStelle.get(m.einheitSchluessel) ?? 0]));
+  // Nach Eintreffzeit, bei gleicher Zeit in der Folge der Aufnahme: Die Folge hängt nicht daran, wer zuletzt gemeldet hat.
+  const nachEintreffen = (a: TafelEinheit, b: TafelEinheit) => a.eingetroffen - b.eingetroffen || stelle.get(a.id)! - stelle.get(b.id)!;
   const nach = new Map<string, { titel: string; rang: number; org: OrganisationsTyp; einheiten: TafelEinheit[] }>();
   for (const m of anwesend) {
     const z = zeilen.get(m.id);
@@ -230,6 +252,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
       eingetroffen: z.eingetroffen,
       bedarf: bedarfKurz(m),
       ...(neuAmPlatz ? { marke: neuAmPlatz } : {}),
+      uebung: false,
     });
   }
 
@@ -237,11 +260,36 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
     // Züge in Zählfolge („2. Zug" vor „10. Zug"), „ohne Zug" zuletzt; Organisationen in der festen Folge des Formats.
     .sort(([, a], [, b]) => a.rang - b.rang || (mitZug ? a.titel.localeCompare(b.titel, "de", { numeric: true }) : a.org - b.org))
     .map(([schluessel, g]): TafelGruppe => {
-      // Nach Eintreffzeit, bei gleicher Zeit in der Folge der Aufnahme: Die Folge hängt nicht daran, wer zuletzt gemeldet hat.
-      const einheiten = g.einheiten.sort((a, b) => a.eingetroffen - b.eingetroffen || stelle.get(a.id)! - stelle.get(b.id)!);
-      return { schluessel, titel: g.titel, kopf: true, staerke: summe(einheiten), einheiten };
+      const einheiten = g.einheiten.sort(nachEintreffen);
+      return { schluessel, titel: g.titel, kopf: true, staerke: summe(einheiten), einheiten, uebung: false };
     });
   if (!mitZug && gruppen.length === 1) gruppen[0]!.kopf = false;
+
+  // Übungsmeldungen einer echten Lage: eine eigene Gruppe am Ende, über alle Züge hinweg. Stünden sie in ihrem Zug,
+  // ergäben dessen Karten nicht mehr dessen Summe. Die Angaben entstehen wie in `lagebild` für die zählenden Einheiten.
+  if (daneben.length > 0) {
+    const einheiten = daneben
+      .map((m): TafelEinheit => {
+        const e = m.bogen.einheit;
+        const st = staerkeAusBogen(m.bogen);
+        return {
+          id: m.id,
+          einheit: e,
+          ...meldungTeile(m),
+          funkruf: m.bogen.fahrzeuge.map((f) => funkrufText(f, e)).find((t) => t !== "") ?? "",
+          auftrag: m.notiz?.trim() ? auftragKurz(m.notiz) : "",
+          staerke: { fuehrer: st.fuehrer, unterfuehrer: st.unterfuehrer, mannschaft: st.mannschaft, gesamt: st.gesamt },
+          soll: nurSollstaerke(m.bogen),
+          stand: angabenZeit(m),
+          eingetroffen: eintreffzeit(m),
+          // Ihr Bedarf gehört nicht in diese Lage: Die Randspalte zählt ihn nicht, also steht er auch nicht als Warnung an der Karte.
+          bedarf: [],
+          uebung: true,
+        };
+      })
+      .sort(nachEintreffen);
+    gruppen.push({ schluessel: "uebung", titel: UEBUNG_WORT, kopf: true, staerke: summe(einheiten), einheiten, uebung: true });
+  }
 
   const abgerueckt = geltendeJeEinheit(einsatz.eintraege)
     .filter((e) => e.status === MeldeStatus.ABGERUECKT)
@@ -287,7 +335,8 @@ export function kartenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
   const staerke = 0.66 * 0.42 * `${s.fuehrer}/${s.unterfuehrer}/${s.mannschaft}//`.length + 1.16 * 0.63 * String(s.gesamt).length + 0.74 + (e.soll ? 1.1 : 0);
   // „Stand 03:21" samt Abstand; mit Datum („Stand 10.11. 22:58") braucht er mehr, das bleibt der Kürzung überlassen.
   const stand = 3.75;
-  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
+  // Eine Übungsmeldung, die nicht zählt, trägt ihr Wort als Marke; eine Bewegung oder Bedarf hat sie nicht.
+  const marken = [e.uebung ? UEBUNG_WORT : e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
   const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.88 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
   const kopf = fett(e.herkunft) + staerke;
   const typKurz = e.typKurz ? 0.74 * fett(e.typKurz) + 0.33 : 0;
@@ -640,8 +689,9 @@ const runden = (schrift: number) => Math.floor(schrift * 4) / 4;
  *  1. Alle anwesenden Einheiten stehen auf einer Seite, in der größten Schrift, die das erlaubt.
  *  2. Erst wenn die kleinste Schrift nicht reicht, blättert die Tafel; dann in der knappsten Fassung, und die Gruppen
  *     laufen über Spalten und Seiten weiter, statt Platz frei zu lassen.
- *  3. Abgerückte Einheiten stehen nur da, wenn niemand anwesend ist (höchstens `SATZ.abgaengeMax`, der Rest als Zahl).
- *     Sonst führt sie die Randspalte: Ein Block, der mit dem Füllstand kommt und geht, wäre kein festes Lagebild.
+ *  3. Abgerückte Einheiten stehen nur da, wenn sonst keine Karte auf der Tafel steht (höchstens `SATZ.abgaengeMax`, der
+ *     Rest als Zahl). Sonst führt sie die Randspalte: Ein Block, der mit dem Füllstand kommt und geht, wäre kein
+ *     festes Lagebild. Übungsmeldungen, die nicht zählen, sind Karten wie andere.
  *
  * `bedarf` ist die Breite, die der längste Inhalt je Fassung braucht ({@link kartenBedarf}, in Schriftgrößen). Gibt es
  * damit einen Satz, in dem nichts gekürzt wird, gewinnt er, solange seine Schrift gut lesbar bleibt oder höchstens ein

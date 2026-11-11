@@ -260,10 +260,70 @@ describe("tafelbild: feste Plätze", () => {
     expect(gesamt).toBe(42);
   });
 
-  it("zählt Übungsmeldungen in einem Einsatz nicht und stellt sie nicht auf die Tafel", () => {
-    const tb = tafelbild(sammlung([eintrag({ ort: "Echt" }), eintrag({ ort: "Geübt", uebung: true })]), JETZT);
-    expect(tb.gruppen.flatMap((g) => g.einheiten).map((e) => e.herkunft)).toEqual(["THW Echt"]);
-    expect(tb.bild.uebungenDaneben).toBe(1);
+  it("stellt Übungsmeldungen in einem Einsatz als eigene, letzte Gruppe auf die Tafel, ohne sie zu zählen", () => {
+    const tb = tafelbild(
+      sammlung([
+        eintrag({ ort: "Echt", zug: "1. Zug", st: [0, 2, 7] }),
+        eintrag({ ort: "Geübt", zug: "1. Zug", uebung: true, st: [1, 1, 4], vorMin: 20, notiz: "Ausbildung Deichbau", funk: [22, 51], bedarf: { ruhezeitErforderlich: true } }),
+        eintrag({ ort: "Früher", uebung: true, st: [0, 1, 3], vorMin: 50 }),
+      ]),
+      JETZT,
+    );
+    // Über die Züge hinweg: Stünde „Geübt" in ihrem Zug, ergäben dessen Karten nicht mehr dessen Summe.
+    expect(tb.gruppen.map((g) => [g.titel, g.uebung, g.kopf])).toEqual([
+      ["1. Zug", false, true],
+      ["Übung", true, true],
+    ]);
+    const uebung = tb.gruppen[1]!;
+    // Nach Eintreffzeit wie jede Gruppe.
+    expect(uebung.einheiten.map((e) => e.herkunft)).toEqual(["THW Früher", "THW Geübt"]);
+    // Weder Bedarf noch Bewegung: Beides gehört nicht in diese Lage, obwohl „Geübt" vor 20 Minuten kam und Ruhezeit meldet.
+    expect(uebung.einheiten.every((e) => e.uebung && e.bedarf.length === 0 && e.marke === undefined)).toBe(true);
+    expect(uebung.einheiten[1]).toMatchObject({ auftrag: "Ausbildung Deichbau", soll: false, staerke: { fuehrer: 1, unterfuehrer: 1, mannschaft: 4, gesamt: 6 } });
+    expect(uebung.einheiten[1]!.funkruf).toMatch(/22\/51$/);
+    expect(uebung.staerke.gesamt).toBe(10);
+    // Gezählt wird nur, was zählt: Kopf, Zwischensummen und Bedarf bleiben ohne die Übung.
+    expect(tb.bild.summen.staerke.gesamt).toBe(9);
+    expect(tb.gruppen.filter((g) => !g.uebung).reduce((n, g) => n + g.staerke.gesamt, 0)).toBe(tb.bild.summen.staerke.gesamt);
+    expect(tb.gruppen[0]!.einheiten.map((e) => [e.herkunft, e.uebung])).toEqual([["THW Echt", false]]);
+    expect(tb.bild.uebungenDaneben).toBe(2);
+    expect(tb.bild.bedarf.ruhezeit).toBe(0);
+    expect(tb.bild.bewegungen).toEqual([]);
+    // Für die Randspalte hat jede Karte ihren kurzen Namen.
+    expect(tb.namen.get(uebung.einheiten[0]!.id)).toBe("THW Früher");
+  });
+
+  it("führt in einer Übung keine eigene Gruppe: Dort zählt jede Meldung", () => {
+    const tb = tafelbild(sammlung([eintrag({ ort: "Echt" }), eintrag({ ort: "Geübt", uebung: true })], EinsatzArt.UEBUNG), JETZT);
+    expect(tb.gruppen.some((g) => g.uebung)).toBe(false);
+    expect(tb.gruppen.flatMap((g) => g.einheiten).map((e) => [e.herkunft, e.uebung])).toEqual([
+      ["THW Echt", false],
+      ["THW Geübt", false],
+    ]);
+    expect(tb.bild.summen.einheiten).toBe(2);
+    expect(tb.bild.uebungenDaneben).toBe(0);
+  });
+
+  it("lässt die einzige Organisation ohne Kopf, auch wenn Übungsmeldungen danebenstehen; abgerückte Übungsmeldungen sind keine Karte", () => {
+    const tb = tafelbild(
+      sammlung([eintrag({ ort: "Echt" }), eintrag({ ort: "Geübt", uebung: true }), eintrag({ ort: "Weg", uebung: true, status: MeldeStatus.ABGERUECKT, abgeruecktVorMin: 10 })]),
+      JETZT,
+    );
+    expect(tb.gruppen.map((g) => [g.titel, g.kopf, g.einheiten.length])).toEqual([
+      ["THW", false, 1],
+      ["Übung", true, 1],
+    ]);
+    expect(tb.abgerueckt.map((a) => a.name)).toEqual(["THW Weg"]);
+  });
+
+  it("stellt Übungsmeldungen auch dann hin, wenn sonst niemand in der Lage ist", () => {
+    const tb = tafelbild(sammlung([eintrag({ ort: "A", uebung: true, zug: "1. Zug" }), eintrag({ ort: "B", uebung: true })]), JETZT);
+    expect(tb.gruppen.map((g) => [g.titel, g.einheiten.length])).toEqual([["Übung", 2]]);
+    // Die Gliederung richtet sich nach den zählenden Einheiten; ohne sie bleibt es bei der Vorgabe.
+    expect(tb.gliederung).toBe("organisation");
+    expect(tb.bild.summen.einheiten).toBe(0);
+    expect(tb.bild.summen.staerke.gesamt).toBe(0);
+    expect(tb.bedarf.zwei).toBeGreaterThan(0);
   });
 });
 
@@ -393,6 +453,15 @@ describe("tafelbild: Teile und Abrückzeit", () => {
 
 describe("kartenBedarf", () => {
   const einheit = (a: Angaben): TafelEinheit => tafelbild(sammlung([eintrag(a)]), JETZT).gruppen[0]!.einheiten[0]!;
+
+  it("rechnet die Marke „Übung“ in die Breite: Die Karte einer Übungsmeldung braucht mehr Platz als dieselbe Einheit ohne sie", () => {
+    const ohne = kartenBedarf(einheit({ ort: "Brake", typ: 4, notiz: "Sandsackfüllplatz Nord", vorMin: 40 }));
+    const mit = kartenBedarf(einheit({ ort: "Brake", typ: 4, notiz: "Sandsackfüllplatz Nord", vorMin: 40, uebung: true }));
+    // In „zwei" und „drei" steht die Marke in der Zeile des Auftrags, in „breit" neben dem Funkrufnamen (hier keiner: dort bestimmt der Auftrag).
+    expect(mit.zwei).toBeGreaterThan(ohne.zwei);
+    expect(mit.drei).toBeGreaterThan(ohne.drei);
+    expect(mit.breit).toBeGreaterThanOrEqual(ohne.breit);
+  });
 
   it("wächst mit dem Namen: Jede Fassung braucht dann mehr Breite", () => {
     const kurz = kartenBedarf(einheit({ ort: "Brake", typ: 4 }));

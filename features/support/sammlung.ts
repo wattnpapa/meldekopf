@@ -14,7 +14,7 @@
  */
 
 import { deflateRaw, inflateRaw } from "pako";
-import { decodePayloadUrl } from "../../vendor/eeb-format/src/codec";
+import { decodePayloadUrl, encodePayloadUrl, fragmentInhalt } from "../../vendor/eeb-format/src/codec";
 import { OrganisationsTyp, PersonalErfassung, type Erfassungsbogen } from "../../vendor/eeb-format/src/model";
 import { EinsatzArt, einsatzAnlegen, meldungHinzufuegen, speicherhuelleSetzen } from "../../vendor/bos-meldekopf/src/einsaetze";
 import { V2_FRAGMENT } from "../fixtures";
@@ -122,4 +122,22 @@ export function tafelLageSpeicher(name: string, einheiten: number, zuege: number
   } finally {
     speicherhuelleSetzen(null);
   }
+}
+
+/**
+ * Übungsbögen (neu im Meldekopf): THW-Einheiten mit Typen des Vokabulars, jede als Übung gekennzeichnet, Stärke
+ * 1/1/4//6. In einer Sammlung der Art „Einsatz" zählen sie nicht in die Lage; in einer Übung wie jede andere Einheit.
+ */
+export function uebungsBoegen(anzahl: number): Erfassungsbogen[] {
+  const typen = [3, 4, 16, 27, 9, 6];
+  return Array.from({ length: anzahl }, (_, i): Erfassungsbogen => ({
+    ...weitereEinheit(OrganisationsTyp.THW, ""),
+    einheit: { organisation: OrganisationsTyp.THW, einheitsTyp: { code: typen[i % typen.length]! }, hierarchie: [{ bezeichnung: { code: 1 }, name: `Übungsort ${i + 1}` }] },
+    uebung: true,
+  }));
+}
+
+/** Datenteil eines Bogen-Links (hinter „#") für einen Übungsbogen, wie ihn der Erfassungsbogen teilt. */
+export function uebungsBogenFragment(): string {
+  return fragmentInhalt(encodePayloadUrl(uebungsBoegen(1)[0]!, KOMPRESSOR));
 }

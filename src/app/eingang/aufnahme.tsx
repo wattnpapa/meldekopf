@@ -59,6 +59,7 @@ import { einsaetzeLaden, einsaetzePapierkorb } from "../einsaetze-lesen";
 import { einsatzErfragen } from "../einsatz-erfragen";
 import {
   SpeicherVollFehler,
+  einsatzArtSetzen,
   istSpeicherVoll,
   meldungAufnehmen,
   speicherVollMeldung,
@@ -452,22 +453,41 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     // Das gehört in dieselbe Zeile, die die Aufnahme quittiert — sonst steht die
     // Meldung scheinbar normal in der Liste und der Meldekopf rechnet mit ihr.
     const uebungDaneben = einsatz != null && !!b.uebung && einsatz.art !== EinsatzArt.UEBUNG;
-    const uebungZusatz = uebungDaneben ? " Achtung: als ÜBUNG gekennzeichnet — zählt nicht in die Lage." : "";
+    // Neu im Meldekopf: Auf die Rückfrage hin wird die Sammlung selbst zur Übung, dann zählt der Bogen wie jeder andere.
+    let alsUebung = false;
     // Prüfrunde Beispielbögen (BB-D3, BB-W7): Ein Übungsbogen ging mit einem Tipp
     // in eine echte Sammlung und bekam dort eine Nummer. Jetzt fragt die App
     // vorher; im Kiosk-Scan genügt die Quittung (kein Dialog im Scanstapel).
     if (uebungDaneben && !kiosk && !schonDa) {
-      const ja = await frageJaNein({
+      // Neu im Meldekopf: Zählt in der Sammlung noch keine Einheit, ist sie womöglich selbst die Übung und nur als
+      // „Einsatz" angelegt (die Vorgabe beim Anlegen). Dann steht der Weg dorthin in derselben Rückfrage. Sobald echte
+      // Einheiten in der Lage zählen, bleibt es bei „Trotzdem ablegen": Die Art einer laufenden Lage stellt niemand
+      // nebenbei beim Einlesen um; dafür gibt es „Einsatz bearbeiten".
+      const nochKeineZaehlt = aktuelleMeldungen(einsatz!.eintraege, einsatz!.art).length === 0;
+      const wahl = await frageWahl({
         titel: "Übungsbogen in diese Sammlung?",
         text: `„${einheitAnzeigename(b.einheit)}" ist als ÜBUNG gekennzeichnet. In „${einsatz!.name}" zählt er nicht in die Lage, bekommt aber eine Nummer. Für Übungen gibt es Sammlungen der Art „Übung“.`,
-        ok: "Trotzdem ablegen",
+        wege: nochKeineZaehlt
+          ? [
+              { wert: "uebung", label: "Als Übung führen und ablegen", hinweis: `„${einsatz!.name}" wird zur Übung: Übungsmeldungen zählen dann wie jede andere Einheit.` },
+              { wert: "ja", label: "Trotzdem ablegen", hinweis: "Der Bogen bekommt eine Nummer, zählt aber nicht in die Lage." },
+            ]
+          : [{ wert: "ja", label: "Trotzdem ablegen" }],
         fokus: "abbruch",
       });
-      if (!ja) {
+      if (!wahl) {
         setMeldung(`„${einheitAnzeigename(b.einheit)}" nicht aufgenommen.`);
         return false;
       }
+      // Umgestellt wird erst unmittelbar vor dem Ablegen (weiter unten): Bricht eine der folgenden Rückfragen ab, bleibt
+      // die Sammlung, wie sie war. Der Knopf heißt „… und ablegen", nicht „umstellen".
+      alsUebung = wahl === "uebung";
     }
+    const uebungZusatz = alsUebung
+      ? ` „${einsatz!.name}" wird jetzt als Übung geführt; Übungsmeldungen zählen.`
+      : uebungDaneben
+        ? " Achtung: als ÜBUNG gekennzeichnet — zählt nicht in die Lage."
+        : "";
     let override: string | undefined;
     const bekannt = einsatz?.eintraege.some((e) => e.einheitSchluessel === schl) ?? false;
     // Im Kiosk-Stapel keine Fachfrage: Eine veränderte Fassung derselben
@@ -662,6 +682,9 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     const vorherEintraege = einsatz?.eintraege ?? [];
     let r;
     try {
+      // Neu im Meldekopf: Auf „Als Übung führen und ablegen" wird die Sammlung jetzt zur Übung, im selben Schritt wie
+      // das Ablegen. Scheitert das Schreiben (voller Speicher), steht unten, dass nichts aufgenommen wurde.
+      if (alsUebung) einsatzArtSetzen(zielId, EinsatzArt.UEBUNG);
       // meldungAufnehmen: legt ab und lässt die Folgemeldung Zug, Auftrag und
       // Eintreffzeit der Vorgängerin erben (eintrag-zeiten.ts, R2-K1).
       r = meldungAufnehmen(zielId, aufzunehmen, {

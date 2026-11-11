@@ -7,7 +7,7 @@
  */
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { Page } from "playwright";
-import { tafelLageSpeicher } from "../support/sammlung";
+import { sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment } from "../support/sammlung";
 import type { EebWelt } from "../support/welt";
 
 const MONITOR = new WeakMap<EebWelt, Page>();
@@ -61,6 +61,53 @@ Given("auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele
     [einsaetze, einsatzId] as const,
   );
   await this.oeffneApp();
+});
+
+/**
+ * Eine Sammlung der Art „Einsatz" (die Vorgabe beim Anlegen) nur aus Übungsbögen: der Fall, in dem überall null steht.
+ * Sie ist die zuletzt geöffnete; ein Neuladen im Szenario setzt sie nicht zurück.
+ */
+Given("auf dem Gerät liegt die Sammlung {string} mit {int} Übungsbögen", async function (this: EebWelt, name: string, anzahl: number) {
+  const { einsaetze, einsatzId } = sammlungSpeicher(name, uebungsBoegen(anzahl));
+  await this.page.addInitScript(
+    ([e, id]) => {
+      if (sessionStorage.getItem("prüfstand.uebung")) return;
+      sessionStorage.setItem("prüfstand.uebung", "1");
+      localStorage.setItem("eeb.einsaetze.v1", e);
+      localStorage.setItem("eeb.letzterEinsatz.v1", JSON.stringify({ id, um: Date.now() }));
+    },
+    [einsaetze, einsatzId] as const,
+  );
+  await this.oeffneApp();
+});
+
+/** Ein Bogen-Link, wie ihn der Erfassungsbogen teilt, für einen als Übung gekennzeichneten Bogen. */
+When("ich einen geteilten Bogen-Link eines Übungsbogens öffne", async function (this: EebWelt) {
+  await this.oeffneApp(uebungsBogenFragment());
+});
+
+Then("zeigt die Tafel {int} Karten mit der Marke {string}", async function (this: EebWelt, anzahl: number, marke: string) {
+  const seite = monitor(this);
+  await seite.waitForFunction(
+    ([n, wort]) => {
+      const karten = Array.from(document.querySelectorAll("main.lt .lt-karte"));
+      return karten.length === n && karten.every((k) => Array.from(k.querySelectorAll(".lt-marke")).some((m) => m.textContent === wort));
+    },
+    [anzahl, marke] as const,
+  );
+});
+
+Then("zeigt die Tafel keine Karte mit der Marke {string}", async function (this: EebWelt, marke: string) {
+  const seite = monitor(this);
+  await seite.waitForFunction((wort) => {
+    const marken = Array.from(document.querySelectorAll("main.lt .lt-karte .lt-marke"));
+    return document.querySelectorAll("main.lt .lt-karte").length > 0 && marken.every((m) => m.textContent !== wort);
+  }, marke);
+});
+
+/** Die Gesamtstärke im Kopf der Tafel, die Zahl, die vorgelesen wird. */
+Then("zeigt die Tafel die Gesamtstärke {int}", async function (this: EebWelt, gesamt: number) {
+  await monitor(this).waitForFunction((g) => document.querySelector("main.lt .lt-m-gesamt .lt-m-ziffern")?.textContent === String(g), gesamt);
 });
 
 /** Die Wahl in der Einsatzansicht, Block „Lagemonitor für den Fernseher". */

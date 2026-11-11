@@ -445,7 +445,9 @@ Ergänzend:
 > nicht. Im Kern entscheidet nur der Haken „Übung" am Bogen; eine Sammlung der
 > Art „Übung" nimmt ihre Meldungen nicht aus. Es gilt der Code — das ist die
 > datenschutzfreundlichere Lesart, verdient aber eine Klarstellung in der
-> Funktionsumfang-Doku.
+> Funktionsumfang-Doku. Die Klarstellung steht dort seit 2026-11-11. Seit
+> demselben Tag lässt sich die Art einer Sammlung nachträglich ändern; die
+> Frist hängt nicht an der Art und bleibt davon unberührt.
 
 ### 5.8 Empfänger und Datenübermittlung an Dritte
 
@@ -458,7 +460,7 @@ Ergänzend:
 | Einsatz-Datei | S1-Control, zweites Meldekopf-Gerät | **Ja — Vollkopie** der Sammlung | Zweckgemäß; unverschlüsselt, unsigniert |
 | Datensicherungsdatei | Vom Nutzer gewählt (zweites Gerät, Speichermedium) | **Ja — Vollkopie des Geräts** einschließlich privatem Schlüssel und ggf. Fremdbestand | Kein Empfänger im Meldeweg; Ablage regeln (M3) |
 | QR-Codes in den PDFs | Wer die PDF bzw. den Ausdruck erhält | Ja — der Bogen der Einheit, Signaturkette, ggf. Absenderkarte (R13) | wie Sammel-PDF |
-| Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke; in der Ansicht „Tafel" je Einheit auch Auftrag, Sofortbedarf, Stand und das Etikett eines abgeteilten Teils) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
+| Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke; in der Ansicht „Tafel" je Einheit auch Auftrag, Sofortbedarf, Stand und das Etikett eines abgeteilten Teils; seit 2026-11-11 dort auch Übungsmeldungen einer echten Lage, mit denselben Angaben ohne Bedarf) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
 | GoatCounter-Zählimpuls | `meldekopf.goatcounter.com` | Nein — nur Pfad (Nutzungskanal, z. B. `/pwa/android`), Titel und im Browser der Referrer; keine Cookies, keine ID, kein Fragment, keine Sammlungsdaten; technisch unvermeidbar die IP-Adresse als Transportdatum | Art. 6 Abs. 1 lit. f DSGVO; Widerspruch per Kästchen „Nicht mitzählen" im Datenschutzdialog (`skipgc`, ab dem nächsten Start) |
 | Update-Prüfung (nur Desktop) | GitHub Releases | Nein, nur Verbindungsmetadaten | Berechtigtes Interesse an aktuellem Software-Stand |
 | Abruf der Webfassung | GitHub Pages (meldekopf.erfassungsbogen.app) | Nein, nur Verbindungsmetadaten | Auslieferung der Anwendung |

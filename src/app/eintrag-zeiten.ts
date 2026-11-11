@@ -20,6 +20,7 @@ import {
   MeldeStatus,
   einsaetzeSpeichern,
   meldungHinzufuegen,
+  type EinsatzArt,
   type Einsatzsammlung,
   type MeldeEintrag,
   type MeldeQuelle,
@@ -370,6 +371,43 @@ export function einsatzKopfSetzen(einsatzId: string, name: string, ort: string):
   const vorher = { name: s.name, ort: s.ort ?? "" };
   s.name = name.trim() || s.name;
   s.ort = ort.trim() || undefined;
+  s.geaendert = Date.now();
+  sammlungenSchreiben(liste);
+  return vorher;
+}
+
+/**
+ * Art einer Sammlung nachträglich ändern. Neu im Meldekopf (kein Gegenstück im Erfassungsbogen): Wer eine Übung als
+ * „Einsatz" angelegt hat, bekam die Übungsbögen nicht gezählt (`zaehltInLage`) und konnte die Art nicht mehr umstellen.
+ * Der Kern bietet dafür keinen Setter. Meldungen, Zeiten und Aufträge bleiben unberührt; was zählt, rechnet jede
+ * Ansicht aus der Art neu. Liefert die Art davor (für „Rückgängig"); `null`, wenn es den Einsatz nicht gibt.
+ */
+export function einsatzArtSetzen(einsatzId: string, art: EinsatzArt): EinsatzArt | null {
+  const liste = alleSammlungen();
+  const s = liste.find((x) => x.id === einsatzId);
+  if (!s) return null;
+  const vorher = s.art;
+  if (vorher === art) return vorher;
+  s.art = art;
+  s.geaendert = Date.now();
+  sammlungenSchreiben(liste);
+  return vorher;
+}
+
+/**
+ * Name, Ort/Auftrag und Art in einem Schreibvorgang ändern. Neu im Meldekopf, für „Einsatz bearbeiten" und dessen
+ * „Rückgängig": Zwei Schreibvorgänge hintereinander ließen bei vollem Speicher einen halb geänderten Kopf zurück (Name
+ * neu, Art alt), und die Meldung „Nicht geändert" stimmte dann nicht. Regeln wie {@link einsatzKopfSetzen} und
+ * {@link einsatzArtSetzen}; liefert die Werte davor, `null`, wenn es den Einsatz nicht gibt.
+ */
+export function einsatzKopfMitArtSetzen(einsatzId: string, name: string, ort: string, art: EinsatzArt): { name: string; ort: string; art: EinsatzArt } | null {
+  const liste = alleSammlungen();
+  const s = liste.find((x) => x.id === einsatzId);
+  if (!s) return null;
+  const vorher = { name: s.name, ort: s.ort ?? "", art: s.art };
+  s.name = name.trim() || s.name;
+  s.ort = ort.trim() || undefined;
+  s.art = art;
   s.geaendert = Date.now();
   sammlungenSchreiben(liste);
   return vorher;

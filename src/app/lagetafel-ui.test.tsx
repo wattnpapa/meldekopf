@@ -23,6 +23,8 @@ interface Einheit {
   auftrag?: string;
   /** Etikett eines abgeteilten Teils der Einheit. */
   teil?: string;
+  /** Der Bogen ist als Übung gekennzeichnet. */
+  uebung?: boolean;
 }
 
 /** Einsatz mit Einheiten anlegen, wie die App es tut; liefert die gespeicherte Sammlung. */
@@ -33,6 +35,7 @@ function einsatzMit(einheiten: Einheit[], art = EinsatzArt.EINSATZ, name = "Hoch
     const b = neuerBogen();
     b.einheit.hierarchie[0]!.name = x.ort;
     if (x.typ != null) b.einheit.einheitsTyp = typeof x.typ === "number" ? { code: x.typ } : { freitext: x.typ };
+    if (x.uebung) b.uebung = true;
     const st = x.st ?? [0, 2, 7];
     b.staerkeManuell = { fuehrer: st[0], unterfuehrer: st[1], mannschaft: st[2], gesamt: st[0] + st[1] + st[2] };
     if (x.ruhezeit) {
@@ -274,6 +277,76 @@ describe("Lagetafel", () => {
     tafel(fort.sammlung());
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByText("Alle Einheiten sind abgerückt.")).toBeTruthy();
+  });
+
+  it("stellt Übungsmeldungen in einer echten Lage als letzte Gruppe hin: gekennzeichnet, ohne Summe, und die Stärke oben bleibt ohne sie", () => {
+    const { sammlung } = einsatzMit([
+      { ort: "Oldenburg (NI)", typ: 4, st: [0, 3, 6], zug: "1. Zug" },
+      { ort: "Brake", typ: 4, st: [0, 2, 7], zug: "1. Zug", uebung: true, ruhezeit: true, auftrag: "Ausbildung Deichbau" },
+    ]);
+    tafel(sammlung());
+    expect(document.querySelector(".lt-meldung")!.getAttribute("aria-label")).toBe("Stärke: 0 Führer, 3 Unterführer, 6 Mannschaft, gesamt 9");
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["1. Zug", "Übung"]);
+    const kopf = document.querySelector<HTMLElement>(".lt-gruppe-uebung")!;
+    expect(kopf.textContent).toBe("Übung1 Einheitnicht gezählt");
+    // Keine Summe am Kopf: Niemand soll sie zur Stärke oben dazurechnen.
+    expect(kopf.querySelector(".lt-staerke")).toBeNull();
+
+    const uebung = karte("THW Brake");
+    expect(uebung.hasAttribute("data-uebung")).toBe(true);
+    expect(Array.from(uebung.querySelectorAll(".lt-marke")).map((m) => [m.className, m.textContent])).toEqual([["lt-marke lt-marke-uebung", "Übung"]]);
+    // Bedarf und „neu" gehören nicht in diese Lage: Die Karte warnt nicht, obwohl der Bogen Ruhezeit meldet und eben erst kam.
+    expect(uebung.hasAttribute("data-achtung")).toBe(false);
+    expect(uebung.hasAttribute("data-marke")).toBe(false);
+    // Ihre Angaben stehen da wie bei jeder Einheit.
+    expect(within(uebung).getByRole("group").getAttribute("aria-label")).toBe("Stärke: 0 Führer, 2 Unterführer, 7 Mannschaft, gesamt 9");
+    expect(uebung.querySelector(".lt-auftrag")!.textContent).toBe("Ausbildung Deichbau");
+    expect(uebung.querySelector(".lt-stand")!.textContent).toMatch(/^Stand /);
+    expect(karte("THW Oldenburg (NI)").hasAttribute("data-uebung")).toBe(false);
+
+    // Die Randspalte zählt und warnt ohne sie. Eigens nennt sie die Übungsmeldung nicht: Das sagt die Gruppe auf der Tafel.
+    const rand = screen.getByRole("complementary");
+    expect(rand.querySelector(".lt-zaehler dd")!.textContent).toBe("1");
+    expect(rand.querySelector(".lt-bedarf")!.textContent).not.toContain("Ruhezeit");
+    expect(rand.textContent).not.toMatch(/Übung/);
+    expect(document.querySelector(".lt-leer-block")).toBeNull();
+  });
+
+  it("zeigt eine Lage nur aus Übungsmeldungen: Der Hinweis nennt den Weg, die Karten stehen darunter, wer abgerückt ist, führt die Randspalte", () => {
+    const { id, ids, sammlung } = einsatzMit([{ ort: "Alpha", uebung: true }, { ort: "Bravo", uebung: true }, { ort: "Fort" }]);
+    statusMitZeitSetzen(id, ids[2]!, MeldeStatus.ABGERUECKT);
+    tafel(sammlung());
+    expect(document.querySelector(".lt-meldung")!.getAttribute("aria-label")).toBe("Stärke: 0 Führer, 0 Unterführer, 0 Mannschaft, gesamt 0");
+    // Der Satz erklärt die Null und hat Vorrang vor „Alle Einheiten sind abgerückt": Es stehen ja Karten da.
+    const hinweis = screen.getByText("Keine Einheit in der Lage (2 Übung, nicht gezählt).");
+    expect(hinweis.closest(".lt-flaeche")).toBeNull();
+    expect(screen.getByText("Übungsmeldungen zählen nur in einer Übung. Im Hauptfenster: „Als Übung führen…“")).toBeTruthy();
+    expect(screen.queryByText("Alle Einheiten sind abgerückt.")).toBeNull();
+    expect(karten().map((k) => k.querySelector(".lt-herkunft")!.textContent)).toEqual(["THW Alpha", "THW Bravo"]);
+    expect(karten().every((k) => k.hasAttribute("data-uebung"))).toBe(true);
+    // Auf der Tafel stehen Karten: Die abgerückte Einheit steht in der Randspalte, nicht als Block in der Fläche, und nicht nur als Zahl.
+    expect(document.querySelector(".lt-flaeche .lt-abgang")).toBeNull();
+    const rand = screen.getByRole("complementary");
+    expect(within(rand).getByRole("heading", { name: /^Abgerückt/ })).toBeTruthy();
+    expect(Array.from(rand.querySelectorAll(".lt-ab-name")).map((n) => n.textContent)).toEqual(["THW Fort"]);
+    expect(rand.querySelector(".lt-zaehler-ab")).toBeNull();
+  });
+
+  it("führt in einer Übung keine eigene Gruppe: Jede Meldung zählt, und die Tafel trägt die Zeile „ÜBUNG“", () => {
+    const { sammlung } = einsatzMit(
+      [
+        { ort: "Alpha", uebung: true, st: [0, 1, 4] },
+        { ort: "Bravo", st: [0, 1, 3] },
+      ],
+      EinsatzArt.UEBUNG,
+    );
+    tafel(sammlung());
+    expect(screen.getByRole("status").textContent).toBe("ÜBUNG – keine Echtlage");
+    expect(document.querySelector(".lt-meldung")!.getAttribute("aria-label")).toBe("Stärke: 0 Führer, 2 Unterführer, 7 Mannschaft, gesamt 9");
+    expect(karten()).toHaveLength(2);
+    expect(document.querySelector(".lt-gruppe-uebung")).toBeNull();
+    expect(document.querySelector(".lt-karte[data-uebung], .lt-marke-uebung")).toBeNull();
+    expect(screen.queryByText(/nicht gezählt/)).toBeNull();
   });
 
   it("stellt die Hinweise der leeren Tafel über die vermessene Fläche: Der Satz rechnet mit der Höhe, die den Zellen bleibt", () => {
@@ -528,6 +601,70 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(hier()).not.toContain("1. Zug");
   });
 
+  it("führt die Übungsmeldungen beim Blättern in der Übersicht ohne Zahl und nennt sie in der Seitenzeile", () => {
+    fernseher();
+    vi.useFakeTimers();
+    const { sammlung } = einsatzMit([
+      ...Array.from({ length: 44 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number] })),
+      { ort: "Geübt 1", typ: 4, uebung: true },
+      { ort: "Geübt 2", typ: 4, uebung: true },
+    ]);
+    tafel(sammlung());
+    const status = () => screen.getByRole("status").textContent!;
+    expect(status()).toMatch(/^Seite 1 von \d: 1\. Zug bis/);
+    const block = within(screen.getByRole("complementary")).getByRole("heading", { name: /^Züge/ }).closest("section")!;
+    const zeilen = Array.from(block.querySelectorAll(".lt-zuege li"));
+    expect(zeilen).toHaveLength(12);
+    // Elf Züge mit ihrer Stärke; die Übungsmeldungen ohne Zahl, damit niemand sie dazurechnet.
+    expect(zeilen.slice(0, 11).map((z) => z.querySelector("b")?.textContent)).toEqual(Array.from({ length: 11 }, () => "32"));
+    const letzte = zeilen[11]!;
+    expect(letzte.textContent).toBe("Übungnicht gezählt");
+    expect(letzte.querySelector("b")).toBeNull();
+    // Die Stärke oben ist die der elf Züge.
+    expect(document.querySelector(".lt-meldung")!.getAttribute("aria-label")).toBe("Stärke: 0 Führer, 88 Unterführer, 264 Mannschaft, gesamt 352");
+    // Die Seite davor kündigt sie an („weiter mit … bis Übung"); auf der letzten Seite stehen ihre Karten, und die Seitenzeile nennt die Gruppe.
+    const seiten = Number(/von (\d)/.exec(status())![1]);
+    expect(letzte.hasAttribute("data-hier")).toBe(false);
+    for (let i = 1; i < seiten; i++) act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
+    const hier = /^Seite (\d) von \1: (.*?)(?: · weiter mit .*)?$/.exec(status());
+    expect(hier, status()).not.toBeNull();
+    expect(hier![2]).toMatch(/(^| bis )Übung$/);
+    expect(block.querySelector(".lt-zuege li:last-child")!.hasAttribute("data-hier")).toBe(true);
+    expect(karten().filter((k) => k.hasAttribute("data-uebung")).map((k) => k.querySelector(".lt-herkunft")!.textContent)).toEqual(["THW Geübt 1", "THW Geübt 2"]);
+  });
+
+  it("lässt die Übersicht der Züge nachgeben: Zu sehen sind nur ganze Zeilen, die Überschrift nennt, wie viele, und der Fuß steht außerhalb", () => {
+    fernseher();
+    vi.useFakeTimers();
+    const { sammlung } = einsatzMit(
+      Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number] })),
+    );
+    // Dem DOM ohne Layout eine Liste geben, in die nur die ersten drei Zeilen (sechs Züge) ganz hineinpassen; die vierte ist angeschnitten.
+    const zeile = 20;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const kasten = (top: number, hoehe: number, links = 0, breite = 300) => ({ x: links, y: top, left: links, top, width: breite, height: hoehe, right: links + breite, bottom: top + hoehe, toJSON: () => ({}) }) as DOMRect;
+      if (this.classList.contains("lt-zuege")) return kasten(0, 3 * zeile + 8);
+      const liste = this.parentElement;
+      if (liste?.classList.contains("lt-zuege")) {
+        const i = Array.from(liste.children).indexOf(this);
+        return kasten(Math.floor(i / 2) * zeile, zeile, (i % 2) * 150, 150);
+      }
+      return kasten(0, 0, 0, 0);
+    });
+    tafel(sammlung());
+    const rand = screen.getByRole("complementary");
+    const block = within(rand).getByRole("heading", { name: /^Züge/ }).closest("section")!;
+    expect(block.querySelector("h2")!.textContent).toBe("Züge 6 von 12 · fett: auf dieser Seite");
+    const zeilen = Array.from(block.querySelectorAll<HTMLElement>(".lt-zuege li"));
+    expect(zeilen).toHaveLength(12);
+    expect(zeilen.map((z) => z.style.visibility)).toEqual([...Array.from({ length: 6 }, () => ""), ...Array.from({ length: 6 }, () => "hidden")]);
+    // Datenstand und Bedienung stehen unter der Hülle, die misst und abschneidet, nicht in ihr.
+    const huelle = rand.querySelector(".lt-rand-inhalt")!;
+    expect(huelle.contains(block)).toBe(true);
+    expect(rand.querySelector(".lt-fuss")!.parentElement).toBe(rand);
+    expect(huelle.contains(rand.querySelector(".lt-fuss"))).toBe(false);
+  });
+
   it("zeigt die Übersicht der Züge nur beim Blättern: Auf einer Seite stehen ihre Köpfe ohnehin alle da", () => {
     fernseher();
     const { sammlung } = einsatzMit(Array.from({ length: 8 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug` })));
@@ -731,6 +868,9 @@ describe("Lagetafel, Stil", () => {
       expect(kontrast(farbe(stufe, "--lt-linie"), grund), `${name} Linie`).toBeGreaterThanOrEqual(3);
       // Die Übung steht als gefüllte Zeile da: Ihre Schrift muss auf dem Rot tragen.
       expect(kontrast(farbe(stufe, "--lt-auf-uebung"), farbe(stufe, "--lt-uebung")), `${name} Übung`).toBeGreaterThanOrEqual(4.5);
+      // Übungsmeldungen in einer echten Lage tragen das Rot als Schrift (Gruppenkopf, Marke). Ihre Karten sind hohl und
+      // stehen auf dem Grund der Tafel: Auf der Kartenfläche reichte es in „Gedimmt" nicht.
+      expect(kontrast(farbe(stufe, "--lt-uebung"), grund), `${name} Übung als Schrift`).toBeGreaterThanOrEqual(4.5);
     }
   });
 

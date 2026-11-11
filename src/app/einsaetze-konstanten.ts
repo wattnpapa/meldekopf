@@ -18,3 +18,10 @@ export const ART_LABEL: Record<EinsatzArt, string> = {
   [EinsatzArt.UEBUNG]: "Übung",
   [EinsatzArt.VERANSTALTUNG]: "Veranstaltung",
 };
+
+/**
+ * Die Arten als Auswahl für die Dialoge „Neue Einsatz-Sammlung anlegen" und „Einsatz bearbeiten". Im Erfassungsbogen
+ * stand die Liste in `app.tsx` neben `einsatzErfragen`; hier braucht sie auch die Einsatzansicht (Art nachträglich
+ * ändern, neu im Meldekopf).
+ */
+export const ART_WAHL: { wert: string; label: string }[] = Object.entries(ART_LABEL).map(([wert, label]) => ({ wert, label }));

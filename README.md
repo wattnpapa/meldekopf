@@ -48,6 +48,12 @@ Tage oder Aufträge braucht, ist S1-Control.
   Führungsfahrzeug: alle Einheiten mit taktischem Zeichen an festem Platz nach
   Zug, Stärkemeldung und Uhr groß für die Ferne, Sofortbedarf als Marke an der
   Einheit, abgerückte Einheiten und letzte Bewegungen in der Randspalte.
+  Übungsbögen in einer echten Lage stehen dort als eigene Gruppe, ohne zu
+  zählen.
+- Übungen: In einer Sammlung der Art „Übung“ zählt jeder Bogen. Eine als
+  „Einsatz“ angelegte Sammlung lässt sich nachträglich als Übung führen: am
+  Hinweis „Nichts gezählt“, unter „Einsatz bearbeiten“ oder beim Aufnehmen
+  des ersten Übungsbogens.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
   Daten, Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.

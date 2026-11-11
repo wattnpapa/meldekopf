@@ -13,6 +13,8 @@
  *     Eintreffzeit, nicht nach der letzten Meldung. Was sich ändert, wird am
  *     Platz markiert (`lagetafel.ts`). Wer abgerückt ist, steht mit Uhrzeit
  *     in der Randspalte, unabhängig davon, wie voll die Tafel ist.
+ *     Übungsmeldungen in einer echten Lage stehen als letzte Gruppe da,
+ *     gekennzeichnet und ohne zu zählen.
  *  3. **Das taktische Zeichen ist das Bild der Einheit**, auf heller Unterlage
  *     wie die Karte an der Magnettafel.
  *  4. **Die Tafel füllt sich.** Die Schrift ist so groß, wie die Zahl der
@@ -32,6 +34,7 @@ import { BEWEGUNG_FENSTER_MS, alterText, anwesendenAlterText, dtgTeile, uhrTeile
 import { bedarfTeile } from "./lagemonitor-ui";
 import {
   SATZ,
+  UEBUNG_WORT,
   dauerZeile,
   tafelFortlaufend,
   tafelSatz,
@@ -340,7 +343,7 @@ function Funkruf({ name }: { name: string }) {
 
 function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung; jetzt: number }) {
   return (
-    <li className="lt-karte" data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined}>
+    <li className="lt-karte" data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined} data-uebung={e.uebung || undefined}>
       <span className="lt-zeichen">
         <TafelZeichen einheit={e.einheit} />
       </span>
@@ -351,7 +354,7 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
       </span>
       <Typ e={e} fassung={fassung} />
       {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, sonst je ein Feld der Karte (lagetafel.css). */}
-      {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0) && (
+      {(e.funkruf || e.auftrag || e.uebung || e.marke || e.bedarf.length > 0) && (
         <span className="lt-wie">
           {e.funkruf && <Funkruf name={e.funkruf} />}
           {e.auftrag && (
@@ -359,8 +362,10 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
               <span className="lt-auftrag-text">{e.auftrag}</span>
             </span>
           )}
-          {(e.marke || e.bedarf.length > 0) && (
+          {(e.uebung || e.marke || e.bedarf.length > 0) && (
             <span className="lt-marken">
+              {/* Jede Karte einer Übungsmeldung trägt ihr Wort selbst: Der Kopf ihrer Gruppe kann eine Spalte weiter stehen. */}
+              {e.uebung && <span className="lt-marke lt-marke-uebung">{UEBUNG_WORT}</span>}
               {e.marke && <span className={`lt-marke lt-marke-${e.marke.art}`}>{e.marke.text}</span>}
               {e.bedarf.length > 0 && <span className="lt-marke lt-marke-achtung">{e.bedarf.join(", ")}</span>}
             </span>
@@ -383,14 +388,15 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
     case "kopf": {
       const g = tb.gruppen[zelle.gruppe]!;
       return (
-        <li className="lt-gruppe">
+        <li className={g.uebung ? "lt-gruppe lt-gruppe-uebung" : "lt-gruppe"}>
           {/* Ein langer Name wird gekürzt, „(Fortsetzung)" bleibt stehen: Es sagt, dass die Gruppe weiter vorn beginnt. */}
           <h3>
             <span className="lt-gruppe-name">{g.titel}</span>
             {zelle.fortsetzung && <> <span className="lt-fortsetzung">(Fortsetzung)</span></>}
           </h3>
           <span className="lt-gruppe-zahl">{g.einheiten.length} {einheitenWort(g.einheiten.length)}</span>
-          <StaerkeKlein s={g.staerke} />
+          {/* Wo bei einem Zug dessen Stärke steht, sagt die Gruppe der Übungsmeldungen, dass ihre Zahlen nicht in der Lage stecken. */}
+          {g.uebung ? <span className="lt-gruppe-ohne">nicht gezählt</span> : <StaerkeKlein s={g.staerke} />}
         </li>
       );
     }
@@ -515,23 +521,36 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   // Beim Blättern steht die Stärke eines Zuges nur da, solange seine Seite steht: Die Randspalte führt dann alle Züge.
   const uebersicht = seitenZahl > 1 && tb.gruppen.filter((g) => g.kopf).length > 1;
 
-  // Abgerückte Einheiten: Sind noch Einheiten da, nennt die Randspalte die letzten mit Uhrzeit; sonst stehen sie auf der Tafel.
-  const abgaengeAmRand = s.einheiten > 0 ? tb.abgerueckt.slice(0, ABGAENGE_AM_RAND) : [];
+  // Abgerückte Einheiten: Stehen Karten auf der Tafel (auch nur Übungsmeldungen, die nicht zählen), nennt die Randspalte
+  // die letzten mit Uhrzeit; sonst stehen sie auf der Tafel. Dieselbe Bedingung wie im Satz (`tafelSatz`, Regel 3).
+  const karten = tb.gruppen.reduce((n, g) => n + g.einheiten.length, 0);
+  const abgaengeAmRand = karten > 0 ? tb.abgerueckt.slice(0, ABGAENGE_AM_RAND) : [];
   // „Zuletzt" führt, was am Platz markiert ist und wieder kam; Abgänge stehen im eigenen Block darüber.
   const bewegungen = bild.bewegungen.filter((b) => b.art !== "Abgerückt");
   const zuletzt = useRef<HTMLUListElement>(null);
   const zuletztSichtbar = useGanzSichtbar(zuletzt);
+  // Die Übersicht der Züge gibt nach, wenn die Randspalte voll ist (viele Züge, viel Bedarf): Zu sehen sind dann nur
+  // ganze Zeilen, und die Überschrift nennt, wie viele. Datenstand und Bedienung darunter bleiben so immer im Bild.
+  const zuegeListe = useRef<HTMLUListElement>(null);
+  const zuegeSichtbar = useGanzSichtbar(zuegeListe);
 
   const dauer = dauerZeile(beginn, bild, jetzt);
-  const uebungTeil = bild.uebungenDaneben > 0 ? `${bild.uebungenDaneben} ${bild.uebungenDaneben === 1 ? "Übungsmeldung" : "Übungsmeldungen"} nicht gezählt` : "";
   const letzteAlt = bild.letzteMeldung != null && jetzt - bild.letzteMeldung >= VERALTET_MS;
   const alterAnwesende = bild.zeitenPruefen ? null : anwesendenAlterText(bild.anwesendenAlter, jetzt);
+  // Übungsmeldungen zuerst: Sie stehen als Karten darunter, und der Satz erklärt, warum oben trotzdem null steht. Wer
+  // abgerückt ist, führt in diesem Fall die Randspalte.
   const leerText =
-    bild.abgerueckt > 0
-      ? "Alle Einheiten sind abgerückt."
-      : bild.uebungenDaneben > 0
-        ? `Keine Einheit in der Lage (${bild.uebungenDaneben} Übung, nicht gezählt).`
+    bild.uebungenDaneben > 0
+      ? `Keine Einheit in der Lage (${bild.uebungenDaneben} Übung, nicht gezählt).`
+      : bild.abgerueckt > 0
+        ? "Alle Einheiten sind abgerückt."
         : "Noch keine Einheit gemeldet.";
+  const leerZusatz =
+    bild.uebungenDaneben > 0
+      ? // Der Ausweg steht im Hauptfenster an derselben Null (einsaetze-ui.tsx): Dort lässt sich die Sammlung als Übung führen.
+        "Übungsmeldungen zählen nur in einer Übung. Im Hauptfenster: „Als Übung führen…“"
+      : // Der Monitor ist reine Anzeige: Wer davorsteht, soll wissen, dass er nichts tun muss.
+        "Was im Hauptfenster aufgenommen wird, erscheint hier von selbst.";
 
   const stil = {
     "--lt-karte-h": SATZ.karte[fassung].hoehe,
@@ -594,8 +613,7 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
         {s.einheiten === 0 && (
           <div className="lt-leer-block">
             <p className="lt-leer">{leerText}</p>
-            {/* Der Monitor ist reine Anzeige: Wer davorsteht, soll wissen, dass er nichts tun muss. */}
-            <p className="lt-leer-zusatz">Was im Hauptfenster aufgenommen wird, erscheint hier von selbst.</p>
+            <p className="lt-leer-zusatz">{leerZusatz}</p>
           </div>
         )}
         <div className="lt-flaeche" ref={flaeche}>
@@ -631,6 +649,9 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
       </section>
 
       <aside className="lt-rand" aria-label="Lage, Bedarf und letzte Bewegungen">
+        {/* Alles über dem Fuß steht in einer eigenen Hülle: Wird die Randspalte zu voll, weicht erst „Zuletzt", dann die Übersicht
+            der Züge; was dann noch übersteht, schneidet die Hülle ab. Datenstand und Bedienung darunter bleiben immer im Bild. */}
+        <div className="lt-rand-inhalt">
         <dl className="lt-zaehler">
           <div>
             <dt>{einheitenWort(s.einheiten)}</dt>
@@ -648,7 +669,8 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
           )}
         </dl>
         {dauer && <p className="lt-dauer">{dauer}</p>}
-        {uebungTeil && <p className="lt-dauer">{uebungTeil}</p>}
+        {/* Übungsmeldungen, die nicht zählen, nennt die Randspalte nicht eigens: Sie stehen als Gruppe „Übung · nicht gezählt" auf der
+            Tafel und beim Blättern in der Übersicht der Züge. */}
 
         {bild.einheiten.length > 0 && (
           <section className="lt-block" aria-labelledby="lt-bedarf-titel">
@@ -685,13 +707,26 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
         {uebersicht && (
           <section className="lt-block lt-block-zuege" aria-labelledby="lt-zuege-titel">
             <h2 id="lt-zuege-titel">
-              {tb.gliederung === "zug" ? "Züge" : "Organisationen"} <span className="lt-block-zusatz">fett: auf dieser Seite</span>
+              {tb.gliederung === "zug" ? "Züge" : "Organisationen"}{" "}
+              <span className="lt-block-zusatz">
+                {zuegeSichtbar === 0
+                  ? // Passt keine Zeile, sagt die Überschrift wenigstens, dass es die Züge gibt und wo sie stehen.
+                    `${tb.gruppen.length} · siehe Seiten`
+                  : `${zuegeSichtbar != null && zuegeSichtbar < tb.gruppen.length ? `${zuegeSichtbar} von ${tb.gruppen.length} · ` : ""}fett: auf dieser Seite`}
+              </span>
             </h2>
-            <ul className="lt-zuege">
+            <ul className="lt-zuege" ref={zuegeListe}>
               {tb.gruppen.map((g, i) => (
-                <li key={g.schluessel} data-hier={aufSeite.has(i) || undefined} data-achtung={g.einheiten.some((e) => e.bedarf.length > 0) || undefined}>
+                // Was nicht ganz in die Liste passt, bleibt unsichtbar an seinem Platz: Eine halbe Zeile stünde sonst angeschnitten da,
+                // und die Zählung der sichtbaren Einträge hängt so nicht an dem, was sie selbst ausblendet.
+                <li
+                  key={g.schluessel}
+                  data-hier={aufSeite.has(i) || undefined}
+                  data-achtung={g.einheiten.some((e) => e.bedarf.length > 0) || undefined}
+                  style={zuegeSichtbar != null && i >= zuegeSichtbar ? { visibility: "hidden" } : undefined}
+                >
                   <span className="lt-zug-name">{g.titel}</span>
-                  <b>{g.staerke.gesamt}</b>
+                  {g.uebung ? <span className="lt-zug-ohne">nicht gezählt</span> : <b>{g.staerke.gesamt}</b>}
                 </li>
               ))}
             </ul>
@@ -717,6 +752,8 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
             </ul>
           </section>
         )}
+
+        </div>
 
         <div className="lt-fuss">
           {(bild.zeitenPruefen || bild.letzteMeldung != null) && (

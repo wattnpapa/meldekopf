@@ -367,6 +367,20 @@ laufen die Gruppen über Spalten und Seiten weiter, statt Platz frei zu
 lassen; die Seitenzeile nennt die Züge der Seite, die Randspalte führt dann
 alle Züge mit ihrer Stärke.
 
+Übungsmeldungen einer echten Lage zählen nicht (`zaehltInLage` in
+`auswertung.ts`), stehen aber auf der Tafel: als eigene, letzte Gruppe über
+alle Züge hinweg, mit „nicht gezählt“ am Kopf statt einer Summe. Stünden sie
+in ihrem Zug, ergäben dessen Karten nicht mehr dessen Summe. Ihr Bedarf und
+ihre Bewegungen gehen wie in `lagebild` in nichts ein. Die Zeilenansicht
+nennt sie weiter nur als Zahl.
+
+Die Randspalte hat eine Rangfolge. Alles über dem Fuß steht in einer Hülle,
+die die Höhe nimmt, die der Fuß lässt. Wird es eng, weicht erst „Zuletzt“
+(bis auf seine Überschrift), dann die Übersicht der Züge, zeilenweise; was
+dann noch übersteht, schneidet die Hülle ab. Datenstand und Bedienung
+bleiben so immer im Bild. Vorher drückten zwölf und mehr Züge mit vollem
+Bedarf die Knöpfe aus dem Bild.
+
 Lässt sich der Brocken der Tafel nicht nachladen (ein lange offenes
 Monitor-Fenster nach einem Update der App), fängt eine Fehlergrenze in
 `lagemonitor-ui.tsx` das ab: Der Monitor zeigt die Zeilen, sagt es und bietet
@@ -484,7 +498,8 @@ gibt; korrigiert.
 
 Fristen: Datenschutzfrist 90 Tage nach `stand` (Übungsbögen ausgenommen; der
 Kern prüft den Haken am Bogen, eine Sammlung der Art „Übung" nimmt ihre
-Meldungen nicht aus),
+Meldungen nicht aus; deshalb ändert auch das nachträgliche Umstellen der Art,
+`einsatzArtSetzen` in `eintrag-zeiten.ts`, an keiner Frist etwas),
 Papierkorb 30 Tage, Aufräumfrist ruhender Sammlungen 90 Tage; alle über die
 geprüfte Geräteuhr (`datenschutz-uhr.ts`), nie durch bloßen Zeitablauf nach
 einem Uhrsprung.
@@ -591,6 +606,12 @@ Byte. Der Brocken der Tafel wächst auf rund 27 KB JavaScript und 21 KB
 Stilvorlage (Satz nach Platzbedarf des Inhalts, Randspalte mit abgerückten
 Einheiten und Zug-Übersicht, Namensteile); das Startbündel wächst um 36 Byte
 (Fehlergrenze und sichtbarer Wechselknopf im Monitor).
+**Übungsbögen auf der Tafel, Art nachträglich ändern (2026-11-11):**
+4.368.532 / 598.692 Byte, beides im Spielraum; das Budget bleibt. Das
+Startbündel wächst um rund 1,8 KB (Einsatzansicht und Aufnahme liegen dort:
+Feld „Art“, „Als Übung führen…“, die Rückfrage beim Übungsbogen und die
+Setter für die Art), der Brocken der Tafel auf rund 29 KB JavaScript und
+22 KB Stilvorlage (Gruppe der Übungsmeldungen, Rangfolge der Randspalte).
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

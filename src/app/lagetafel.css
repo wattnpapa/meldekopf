@@ -10,7 +10,8 @@
  *           Fläche aus; alle Maße einer Karte sind Vielfache davon (em).
  *
  * Farbe steht nur für Zustand: Bernstein mit Warnzeichen für Bedarf (und für die Sammelwarnungen der Randspalte), Grün
- * für „neu am Platz", Rot für die Übung. Jede Farbe trägt zusätzlich ein Wort oder Zeichen (R9-K6). Der Stand einer
+ * für „neu am Platz", Rot für die Übung (die ganze Lage oder einzelne Übungsmeldungen, die in einer echten Lage nicht
+ * zählen). Jede Farbe trägt zusätzlich ein Wort oder Zeichen (R9-K6). Der Stand einer
  * Einheit und eine geänderte Stärke sind keine Warnung und stehen in der Schriftfarbe. Linien in aufgehelltem Petrol,
  * der Kennfarbe des Meldekopfs.
  */
@@ -93,7 +94,8 @@ main.lt :is(ul, ol) { list-style: none; }
 
 /* ------------------------------------------------------------ Hinweise ganz oben */
 .lt-hinweise { grid-area: hinweise; display: grid; gap: calc(var(--lt-e) * 0.8); padding-bottom: calc(var(--lt-e) * 1.4); }
-/* Übung: als volle Zeile in Rot, mit Wortlaut. Nichts anderes auf der Tafel ist rot. */
+/* Die ganze Lage ist eine Übung: volle Zeile in Rot, mit Wortlaut. Rot trägt sonst nur noch, was als Übungsmeldung in einer
+   echten Lage nicht zählt (Gruppenkopf, Balken und Marke der Karte, weiter unten). */
 .lt-uebung {
   background: var(--lt-uebung);
   color: var(--lt-auf-uebung);
@@ -234,6 +236,11 @@ main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; display: flex; align-items
 .lt-gruppe .lt-staerke { flex: none; }
 .lt-gruppe .lt-staerke b { font-size: 0.96em; }
 .lt-gruppe-ab { border-bottom-style: dashed; color: var(--lt-text-2); }
+/* Übungsmeldungen in einer echten Lage: Der Kopf steht in der Farbe der Übung, und wo bei einem Zug die Stärke steht, steht
+   „nicht gezählt". Eine Summe hat diese Gruppe auf der Tafel nicht: Niemand soll sie zur Stärke oben dazurechnen. */
+.lt-gruppe-uebung { border-bottom-color: var(--lt-uebung); }
+main.lt .lt-gruppe-uebung h3 { color: var(--lt-uebung); }
+.lt-gruppe-ohne { flex: none; font-size: 0.74em; font-weight: 700; color: var(--lt-uebung); }
 
 /* Karte einer Einheit. Der Inhalt ist in allen Fassungen derselbe, die Anordnung folgt dem Platz (KartenFassung, lagetafel.ts). */
 .lt-karte {
@@ -255,6 +262,11 @@ main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; display: flex; align-items
 .lt-karte[data-marke] { border-left-color: var(--lt-neu); }
 .lt-karte[data-marke="folge"] { border-left-color: var(--lt-text-2); }
 .lt-karte[data-achtung] { border-left-color: var(--lt-achtung); box-shadow: inset 0.14em 0 0 var(--lt-achtung); }
+/* Übungsmeldung, die in der Lage nicht zählt: Die Karte ist hohl (nur eine Linie, keine Fläche) und trägt den Balken in der
+   Farbe der Übung; ihre Stärke steht mager in der zweiten Schriftfarbe. Von weitem ist zu sehen, welche Karten nicht in der
+   Stärke oben stecken, auch ohne die Farbe: an der fehlenden Fläche und am Wort der Marke. */
+.lt-karte[data-uebung] { background: transparent; border-left-color: var(--lt-uebung); box-shadow: inset 0 0 0 1px var(--lt-linie); }
+.lt-karte[data-uebung] .lt-staerke b { font-weight: 400; color: var(--lt-text-2); }
 .lt-karte > *, .lt-kopfzeile > *, .lt-wie > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Zwei Hüllen ordnen die Karte, wo eine Zeile ihren Platz unter sich aufteilt; wo sie nicht zählen, ist jedes ihrer Kinder ein eigenes Feld.
    .lt-kopfzeile: Name und Stärke. In „zwei" und „drei" eine Zeile für sich: Der Name reicht bis an die Stärke und hängt nicht an der Breite
@@ -279,6 +291,8 @@ main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; display: flex; align-items
 .lt-typ-kurz { position: absolute; top: 0; left: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lt-typ-anker { display: inline-block; width: 0; }
 .lt-typ-lang { position: relative; display: inline-block; white-space: nowrap; background: var(--lt-flaeche); }
+/* Die hohle Karte der Übungsmeldung steht auf dem Grund der Tafel: Der ausgeschriebene Typ deckt die Kurzform in dessen Farbe zu. */
+.lt-karte[data-uebung] .lt-typ-lang { background: var(--lt-grund); }
 .lt-funkruf { grid-area: funkruf; display: flex; gap: 0.26em; font-size: 0.74em; line-height: 1.3; color: var(--lt-text-2); }
 .lt-auftrag { grid-area: auftrag; font-size: 0.74em; line-height: 1.3; }
 /* Bleiben dem Auftrag neben Typ und Marken weniger als vier Schriftbreiten, entfällt er ganz: „· Bo…" sagt nichts und sieht nach Fehler aus.
@@ -304,6 +318,8 @@ main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-auftrag { container
 .lt-marke { flex: none; padding: 0 0.3em; font-size: 0.7em; font-weight: 700; line-height: 1.25; border: 1px solid currentColor; color: var(--lt-neu); white-space: nowrap; }
 /* Eine geänderte Stärke ist eine Nachricht, kein Zugang: in Schriftfarbe, mit Vorzeichen („Stärke −2"). */
 .lt-marke-folge { color: var(--lt-text); }
+/* Übungsmeldung, die nicht zählt: das Wort in der Farbe der Übung. */
+.lt-marke-uebung { color: var(--lt-uebung); }
 .lt-marke-achtung { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--lt-achtung); }
 .lt-marke-achtung::before { content: "\26A0\FE0E\00A0"; }
 
@@ -402,6 +418,10 @@ main.lt .lt-seitenzeile {
   border-left: 2px solid var(--lt-linie);
   overflow: hidden;
 }
+/* Alles über dem Fuß. Die Hülle nimmt die Höhe, die der Fuß lässt, und schneidet ab, was nicht hineinpasst: Datenstand und Bedienung
+   stehen so immer im Bild, wie voll die Lage auch ist. Vorher weichen der Reihe nach „Zuletzt" (bis auf seine Überschrift) und die
+   Übersicht der Züge (zeilenweise); abgeschnitten wird nur, was dann noch übersteht. */
+.lt-rand-inhalt { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--lt-e) * 1.6); overflow: hidden; }
 /* Einheiten, Fahrzeuge, abgerückt: eine Zeile, die Zahl vor ihrem Wort. Für Vorlesesoftware bleibt das Wort die Benennung (dt). */
 .lt-zaehler { flex: none; display: flex; flex-wrap: wrap; column-gap: calc(var(--lt-e) * 2); row-gap: calc(var(--lt-e) * 0.2); }
 .lt-zaehler > div { display: flex; align-items: baseline; gap: calc(var(--lt-e) * 0.7); white-space: nowrap; }
@@ -428,19 +448,26 @@ main.lt .lt-abgaenge li { display: flex; gap: calc(var(--lt-e) * 1); font-size: 
 .lt-ab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 main.lt .lt-abgaenge li.lt-ab-rest { color: var(--lt-text-2); }
 
-/* Übersicht der Züge beim Blättern: zwei Spalten, Name und Gesamtstärke. Fett steht, was die laufende Seite zeigt. */
-.lt-block-zuege { min-height: 0; overflow: hidden; }
-.lt-zuege { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: calc(var(--lt-e) * 2); row-gap: calc(var(--lt-e) * 0.25); }
+/* Übersicht der Züge beim Blättern: zwei Spalten, Name und Gesamtstärke. Fett steht, was die laufende Seite zeigt.
+   Der Block gibt nach, wenn die Randspalte voll ist (nach „Zuletzt", das zuerst weicht): Bei sechzehn Zügen mit Bedarf drückte er
+   sonst Datenstand und Bedienung aus dem Bild. Zu sehen sind dann nur ganze Zeilen (lagetafel-ui.tsx blendet aus, was nicht ganz
+   hineinpasst), und die Überschrift nennt, wie viele. */
+.lt-block-zuege { flex: 0 1 auto; min-height: 0; overflow: hidden; }
+.lt-zuege { flex: 0 1 auto; min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: calc(var(--lt-e) * 2); row-gap: calc(var(--lt-e) * 0.25); }
 main.lt .lt-zuege li { display: flex; align-items: baseline; gap: calc(var(--lt-e) * 0.8); font-size: calc(var(--lt-e) * 2.1); line-height: 1.2; color: var(--lt-text-2); white-space: nowrap; }
 .lt-zug-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lt-zuege b { flex: none; font-weight: 400; }
+/* Die Gruppe der Übungsmeldungen hat in der Übersicht keine Zahl: Dort steht, dass sie nicht zählt. */
+.lt-zug-ohne { flex: none; font-size: 0.86em; }
 main.lt .lt-zuege li[data-hier] { color: var(--lt-text); font-weight: 700; }
 .lt-zuege li[data-hier] b { font-weight: 800; }
 /* Ein Zug mit Bedarf trägt das Warnzeichen auch, wenn seine Seite gerade nicht steht. */
 .lt-zuege li[data-achtung] .lt-zug-name::before { content: "\26A0\FE0E\00A0"; color: var(--lt-achtung); }
 
-/* „Zuletzt" nimmt, was übrig ist. Die Liste bricht in Spalten um; zu sehen ist nur die erste, also nur ganze Einträge. */
-.lt-block-zuletzt { flex: 1 1 0; }
+/* „Zuletzt" nimmt, was übrig ist. Die Liste bricht in Spalten um; zu sehen ist nur die erste, also nur ganze Einträge.
+   Der Block behält mindestens seine Überschrift (Abstand, Linie und eine Zeile): Sie nennt die Zahl der Bewegungen und verweist auf die
+   Karten, wenn kein Eintrag hineinpasst. Ohne die Mindesthöhe schrumpfte er auf null, und die Überschrift lag über dem Fuß. */
+.lt-block-zuletzt { flex: 1 1 0; min-height: calc(var(--lt-e) * 3.8 + 1px); overflow: hidden; }
 .lt-bewegungen {
   flex: 1 1 0;
   min-height: 0;
@@ -469,7 +496,7 @@ main.lt .lt-bewegung {
 /* Der Name steht unter Uhrzeit und Art über die ganze Breite: „THW Oldenburg (NI) FGr WP (A)" passt so in eine Zeile. */
 .lt-bewegung-name { grid-column: 1 / -1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 
-.lt-fuss { flex: none; margin-top: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(var(--lt-e) * 0.5); padding-top: calc(var(--lt-e) * 1.2); border-top: 1px solid var(--lt-linie); }
+.lt-fuss { flex: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(var(--lt-e) * 0.5); padding-top: calc(var(--lt-e) * 1.2); border-top: 1px solid var(--lt-linie); }
 main.lt .lt-datenstand { font-size: calc(var(--lt-e) * 2.1); line-height: 1.2; color: var(--lt-text-2); }
 /* Alter Datenstand (ab einer Stunde) oder unplausible Zeiten: Warnfarbe, Zeichen, Fettschrift (R7-K8). */
 main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; padding-left: 1.25em; text-indent: -1.25em; }
@@ -583,6 +610,8 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   .lt-abgang { height: auto; min-height: calc(var(--lt-abgang-h) * 1em); white-space: normal; }
 
   .lt-rand { min-height: auto; border-left: 0; padding: calc(var(--lt-b) * 0.8) 0 0; border-top: 2px solid var(--lt-linie); gap: calc(var(--lt-b) * 0.9); overflow: visible; }
+  /* Die Seite rollt: Die Hülle über dem Fuß misst und schneidet hier nichts. */
+  .lt-rand-inhalt { flex: none; gap: calc(var(--lt-b) * 0.9); overflow: visible; }
   .lt-zaehler { column-gap: calc(var(--lt-b) * 1); }
   .lt-zaehler > div { gap: calc(var(--lt-b) * 0.35); }
   main.lt .lt-zaehler dd { font-size: calc(var(--lt-b) * 1.15); }
@@ -591,7 +620,8 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   .lt-block { padding-top: calc(var(--lt-b) * 0.6); gap: calc(var(--lt-b) * 0.3); }
   main.lt .lt-block h2 { font-size: calc(var(--lt-b) * 0.9375); }
   main.lt .lt-bedarf li { font-size: var(--lt-b); }
-  .lt-block-zuletzt { flex: none; }
+  .lt-block-zuletzt { flex: none; min-height: 0; overflow: visible; }
+  .lt-block-zuege, .lt-zuege { flex: none; overflow: visible; }
   .lt-bewegungen { flex: none; flex-wrap: nowrap; overflow: visible; row-gap: calc(var(--lt-b) * 0.5); }
   .lt-bewegungen::before { content: none; }
   main.lt .lt-bewegung { font-size: var(--lt-b); }

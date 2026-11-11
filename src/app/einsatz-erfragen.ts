@@ -6,19 +6,18 @@
  * `einsatzErfragen`, `ART_WAHL` und `SAMMLUNG_GESPERRT_TEXT`. Eigenes Modul,
  * weil Startseite und Eingänge (Bogen ohne passende Sammlung, Datei ohne
  * Sammlung) dasselbe fragen. Der Satz zum eigenen Bogen im Hinweis entfällt:
- * Den gibt es nur im Erfassungsbogen.
+ * Den gibt es nur im Erfassungsbogen. `ART_WAHL` steht in
+ * `einsaetze-konstanten.ts`, weil auch „Einsatz bearbeiten" sie braucht.
  */
 
 import { EinsatzArt, einsatzAnlegen, type Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { frageFelder, frageWahl, zeigeHinweis } from "@bos/oberflaeche/dialoge";
-import { ART_LABEL } from "./einsaetze-konstanten";
+import { ART_WAHL } from "./einsaetze-konstanten";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 import { anzahlEinheiten } from "./einheiten-tabelle";
 import { SpeicherVollFehler, istSpeicherVoll } from "./eintrag-zeiten";
 import { fehlerText } from "./nachladen";
 import { browserSpeicherhuelle } from "./speicher-browser";
-
-const ART_WAHL = Object.entries(ART_LABEL).map(([wert, label]) => ({ wert, label }));
 
 /** „Einsatz anlegen" bei gesperrtem Browser-Speicher: Grund und Ausweg dort, wo getippt wurde (R18-O1). */
 export const SAMMLUNG_GESPERRT_TEXT =

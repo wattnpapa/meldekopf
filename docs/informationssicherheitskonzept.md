@@ -551,7 +551,10 @@ Signatur und kommt als „unsigniert" in die Sammlung (5.2 gilt unverändert).
 > Datenschutzfrist nicht. Im Kern entscheidet allein der Haken `uebung` am
 > Bogen (`datenschutzfristEnde`); eine Sammlung der Art „Übung" nimmt ihre
 > Meldungen nicht von der Frist aus. Es gilt der Code; für die Bewertung ist
-> das die strengere Lesart.
+> das die strengere Lesart. Die Zeile ist seit 2026-11-11 so gefasst. Seit
+> demselben Tag lässt sich die Art einer Sammlung nachträglich ändern
+> (`einsatzArtSetzen`); an der Frist ändert das nichts, weil sie nicht an der
+> Art hängt.
 
 > *Entfällt gegenüber der Vorlage:* Rückholplatz des eigenen Bogens und
 > Fensterabgleich des Entwurfs als Bedienweg, Musterung, Vorlagen-Papierkorb
@@ -590,7 +593,11 @@ Uhrzeit. Personen, Namen und Erreichbarkeiten zeigt sie wie die Zeilen nicht;
 das prüft ein Test (`lagetafel-ui.test.tsx`). Für die Sichtbarkeit heißt das:
 Wer den Fernseher sieht, liest die Lage vollständiger ab als bisher, auch aus
 größerer Entfernung (Stärke und Uhr sind dafür groß gesetzt). M12 gilt
-unverändert und mit mehr Gewicht.
+unverändert und mit mehr Gewicht. Seit 2026-11-11 stehen auf der Tafel auch
+Übungsmeldungen einer echten Lage, als eigene Gruppe „Übung · nicht gezählt“
+mit denselben Angaben je Einheit, aber ohne Bedarf; die Zeilen nennen sie
+weiter nur als Zahl. Die Klasse der gezeigten Angaben ändert sich dadurch
+nicht.
 
 Sicherheitsrelevant ist die **Sichtbarkeit für Umstehende**: Ein Fernseher im
 Raum oder im ELW zeigt die Lage jedem, der vorbeikommt, auch Presse,
