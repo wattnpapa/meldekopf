@@ -7,7 +7,8 @@
  */
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { Page } from "playwright";
-import { sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment } from "../support/sammlung";
+import { EinsatzArt } from "../../vendor/bos-meldekopf/src/einsaetze";
+import { fernseherBoegen, sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment } from "../support/sammlung";
 import type { EebWelt } from "../support/welt";
 
 const MONITOR = new WeakMap<EebWelt, Page>();
@@ -91,6 +92,42 @@ Given("auf dem Gerät liegt die Sammlung {string} mit {int} Übungsbögen", asyn
     [einsaetze, einsatzId] as const,
   );
   await this.oeffneApp();
+});
+
+/** Die Übung vom Foto des Fernsehers (support/sammlung.ts), als Übung geführt; die zuletzt geöffnete Sammlung. */
+Given("auf dem Gerät liegt die Übung vom Fernseher mit ihren langen Namen", async function (this: EebWelt) {
+  const { einsaetze, einsatzId } = sammlungSpeicher("Übung Monitor 2", fernseherBoegen(), { art: EinsatzArt.UEBUNG });
+  await this.page.addInitScript(
+    ([e, id]) => {
+      if (sessionStorage.getItem("prüfstand.fernseher")) return;
+      sessionStorage.setItem("prüfstand.fernseher", "1");
+      localStorage.setItem("eeb.einsaetze.v1", e);
+      localStorage.setItem("eeb.letzterEinsatz.v1", JSON.stringify({ id, um: Date.now() }));
+    },
+    [einsaetze, einsatzId] as const,
+  );
+  await this.oeffneApp();
+});
+
+/**
+ * Was von einem Namen auf der Tafel zu lesen ist: der volle Name, wenn er in seine Zeile passt, sonst seine Kurzform
+ * (lagetafel-ui.tsx, `Herkunft`). Geprüft wird, dass der gesuchte so dasteht, ganz und ohne Auslassung.
+ */
+Then("steht auf der Tafel der Name {string}", async function (this: EebWelt, gesucht: string) {
+  const namen = await monitor(this).evaluate<string[]>(`(() => {
+    const messung = document.createRange();
+    const ganz = (el) => { messung.selectNodeContents(el); return messung.getBoundingClientRect().width <= el.getBoundingClientRect().width + 0.01; };
+    return Array.from(document.querySelectorAll("main.lt .lt-karte .lt-herkunft")).map((h) => {
+      const lang = h.querySelector(".lt-herkunft-lang");
+      const kasten = h.getBoundingClientRect();
+      // Der volle Name steht in der ersten Zeile, wenn er passt; sonst ist er in die zweite umgebrochen, die nicht zu sehen ist.
+      const form = lang && lang.getBoundingClientRect().top < kasten.bottom - 1 ? lang : (h.querySelector(".lt-herkunft-kurz") || h);
+      const teile = Array.from(form.querySelectorAll(".lt-teil-weich, .lt-teil-fest"));
+      if (!teile.every(ganz)) return "(gekürzt) " + form.textContent;
+      return (form.textContent || "").replace(/\\s+/g, " ").trim();
+    });
+  })()`);
+  if (!namen.includes(gesucht)) throw new Error(`„${gesucht}“ steht nicht ganz auf der Tafel. Zu lesen: ${namen.join(" | ")}`);
 });
 
 /** Ein Bogen-Link, wie ihn der Erfassungsbogen teilt, für einen als Übung gekennzeichneten Bogen. */

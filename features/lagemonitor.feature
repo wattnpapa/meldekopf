@@ -81,6 +81,26 @@ Funktionalität: Lagemonitor für den Fernseher
     Und stehen alle Einheiten der Tafel ganz im Bild
     Und überdeckt auf der Tafel keine Angabe eine andere
 
+  # Namen bleiben erkennbar. Vorgefallen (Foto vom Fernseher bei einer Übung): Es
+  # standen „T… (Fortsetzung)“, dreimal „DRK-Kreisverband B…“, „Freiwilli… Lenglern“,
+  # „Bundeswehr Panz…“ und „THW Gieboldehau…“ da. Passt der volle Name nicht, steht
+  # die übliche Kurzform da; fehlt nur wenig, läuft der Name etwas kleiner.
+  Szenario: Auf der Tafel sind alle Namen erkennbar
+    Angenommen auf dem Gerät liegt die Übung vom Fernseher mit ihren langen Namen
+    Wenn ich für den Fernseher die Darstellung "Tafel" wähle
+    Und ich den Lagemonitor öffne
+    Und ich den Fernseher auf 2000 x 1127 stelle
+    Dann zeigt der Lagemonitor die Tafel
+    Und steht auf der Tafel der Name "FF Lenglern"
+    Und steht auf der Tafel der Name "DRK-KV Buchenrode"
+    Und steht auf der Tafel der Name "Bw Panzerpionierzug"
+    Und steht auf der Tafel der Name "THW Gieboldehausen"
+    Und stehen alle Einheiten der Tafel ganz im Bild
+    Und überdeckt auf der Tafel keine Angabe eine andere
+    Wenn ich den Fernseher auf 1280 x 720 stelle
+    Dann stehen alle Einheiten der Tafel ganz im Bild
+    Und überdeckt auf der Tafel keine Angabe eine andere
+
   # Die volle Randspalte: Bedarf, abgerückte Einheiten und frische Bewegungen
   # zugleich, die Tafel blättert. Vorgefallen (Gegenprüfung): Von „Zuletzt" blieb
   # ein Textrest über dem Fuß. „Zuletzt" weicht ganz oder behält seine

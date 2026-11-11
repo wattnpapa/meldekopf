@@ -51,12 +51,12 @@ export function weitereEinheit(organisation: OrganisationsTyp, ort: string): Erf
 export function sammlungSpeicher(
   name: string,
   boegen: Erfassungsbogen[],
-  opt: { vomPapier?: boolean } = {},
+  opt: { vomPapier?: boolean; art?: EinsatzArt } = {},
 ): { einsaetze: string; einsatzId: string } {
   const ablage = new Map<string, string>();
   speicherhuelleSetzen({ getItem: (k) => ablage.get(k) ?? null, setItem: (k, v) => void ablage.set(k, v) });
   try {
-    const s = einsatzAnlegen(name, EinsatzArt.EINSATZ);
+    const s = einsatzAnlegen(name, opt.art ?? EinsatzArt.EINSATZ);
     for (const b of boegen) meldungHinzufuegen(s.id, b, { quelle: "scan" });
     // In der Reihenfolge eingetroffen, eine Minute auseinander — sonst trügen
     // alle denselben Zeitpunkt, und „nach Eintreffzeit" sortierte zufällig.
@@ -156,6 +156,46 @@ export function uebungsBoegen(anzahl: number): Erfassungsbogen[] {
   return Array.from({ length: anzahl }, (_, i): Erfassungsbogen => ({
     ...weitereEinheit(OrganisationsTyp.THW, ""),
     einheit: { organisation: OrganisationsTyp.THW, einheitsTyp: { code: typen[i % typen.length]! }, hierarchie: [{ bezeichnung: { code: 1 }, name: `Übungsort ${i + 1}` }] },
+    uebung: true,
+  }));
+}
+
+/**
+ * Die Übung vom Foto des Fernsehers (neu im Meldekopf): 17 Übungsbögen, Namen und Stärken wie dort, darunter die, die
+ * auf der Tafel nur angeschnitten standen („Freiwilli… Lenglern", dreimal „DRK-Kreisverband B…", „Bundeswehr Panz…",
+ * „THW Gieboldehau…" neben „0/4/13// 17"). Elf THW-Einheiten: Die Gruppe läuft in die zweite Spalte weiter.
+ */
+export function fernseherBoegen(): Erfassungsbogen[] {
+  type Angabe = [OrganisationsTyp, string, string, number | string, [number, number, number]];
+  const T = OrganisationsTyp;
+  const angaben: Angabe[] = [
+    [T.THW, "", "Albstadt", 3, [1, 1, 2]],
+    [T.THW, "", "Crailsheim", 9, [0, 3, 9]],
+    [T.THW, "", "Müllheim", 19, [0, 3, 9]],
+    [T.THW, "", "Kirchehrenbach", 4, [0, 2, 7]],
+    [T.THW, "", "Oldenburg (NI)", 43, [0, 1, 2]],
+    [T.THW, "", "Rathenow", 4, [0, 2, 7]],
+    [T.THW, "", "Oldenburg (NI)", "Verstärkter Bergungszug", [1, 9, 28]],
+    [T.THW, "", "Gieboldehausen", 30, [0, 4, 13]],
+    [T.THW, "", "Peine", 20, [0, 1, 2]],
+    [T.THW, "", "Bad Segeberg", 26, [0, 3, 15]],
+    [T.THW, "", "Schleswig", 6, [0, 2, 9]],
+    [T.FEUERWEHR, "Freiwillige Feuerwehr", "Lenglern", "Schwerpunktfeuerwehr (Zug, erweitert)", [4, 18, 24]],
+    [T.DRK, "DRK-Kreisverband Buchenrode e. V.", "", "Behandlung Kat. GRÜN (BHP 50)", [0, 1, 4]],
+    [T.DRK, "DRK-Kreisverband Buchenrode e. V.", "", "Schnelleinsatzgruppe Sanität (Behandlung)", [1, 1, 8]],
+    [T.DRK, "DRK-Kreisverband Buchenrode e. V.", "", "Sichtung und Registrierung (Betreuungsplatz)", [2, 1, 2]],
+    [T.DLRG, "", "Baden", "Wasserrettungsverband — Führungstrupp", [2, 1, 1]],
+    [T.BUNDESWEHR, "Bundeswehr Panzerpionierzug", "", "Panzerpionierzug", [1, 4, 38]],
+  ];
+  return angaben.map(([organisation, organisationName, ort, typ, [fuehrer, unterfuehrer, mannschaft]]): Erfassungsbogen => ({
+    ...weitereEinheit(organisation, ort),
+    einheit: {
+      organisation,
+      ...(organisationName ? { organisationName } : {}),
+      einheitsTyp: typeof typ === "number" ? { code: typ } : { freitext: typ },
+      hierarchie: [{ bezeichnung: { code: 1 }, name: ort }],
+    },
+    staerkeManuell: { fuehrer, unterfuehrer, mannschaft, gesamt: fuehrer + unterfuehrer + mannschaft },
     uebung: true,
   }));
 }

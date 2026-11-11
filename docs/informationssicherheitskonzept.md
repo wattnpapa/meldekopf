@@ -594,10 +594,13 @@ das prüft ein Test (`lagetafel-ui.test.tsx`). Für die Sichtbarkeit heißt das:
 Wer den Fernseher sieht, liest die Lage vollständiger ab als bisher, auch aus
 größerer Entfernung (Stärke und Uhr sind dafür groß gesetzt). M12 gilt
 unverändert und mit mehr Gewicht. Seit 2026-11-11 stehen auf der Tafel auch
-Übungsmeldungen einer echten Lage, als eigene Gruppe „Übung · nicht gezählt“
-mit denselben Angaben je Einheit, aber ohne Bedarf; die Zeilen nennen sie
-weiter nur als Zahl. Die Klasse der gezeigten Angaben ändert sich dadurch
-nicht.
+Übungsmeldungen einer echten Lage, als eigene Gruppe „Übung“ mit dem
+Vermerk „nicht gezählt“, jede als knappe Zeile mit Name, Typ und Stärke
+(ohne Zeichen, Auftrag, Funkrufname und Bedarf); die Zeilen nennen sie weiter
+nur als Zahl. Lange Namen stehen dort, wo sie nicht passen, in der üblichen
+Kurzform („FF Lenglern“); gekürzt werden nur feste Bezeichnungen der
+Organisationen, nie ein Ortsname oder ein Freitext. Die Klasse der gezeigten
+Angaben ändert sich dadurch nicht.
 
 Sicherheitsrelevant ist die **Sichtbarkeit für Umstehende**: Ein Fernseher im
 Raum oder im ELW zeigt die Lage jedem, der vorbeikommt, auch Presse,

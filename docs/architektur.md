@@ -351,16 +351,39 @@ Die Tafel rechnet ihren Satz selbst (`tafelSatz` in `lagetafel.ts`, reine
 Rechnung ohne Browser): aus Zahl und Gliederung der Einheiten und der
 gemessenen Fläche die größte Schrift, bei der alles auf eine Seite passt, in
 einer von drei Fassungen der Einheitenkarte. Dazu kommt der Platzbedarf des
-Inhalts (`kartenBedarf`, geschätzt aus Zeichenzahlen): Gibt es einen Satz, in
-dem nichts gekürzt wird, gewinnt er, solange seine Schrift gut lesbar bleibt
-oder höchstens ein Zehntel kleiner ist. Sonst wird ein langer Name gekürzt,
-statt allen die Schrift zu nehmen oder die Tafel blättern zu lassen. Die
-Stilvorlage bekommt dieselben Maße als CSS-Eigenschaften hineingereicht, es
+Inhalts (`kartenBedarf`): Gibt es einen Satz, in dem nichts gekürzt wird,
+gewinnt er, solange seine Schrift gut lesbar bleibt oder höchstens ein
+Zehntel kleiner ist; sonst gilt dasselbe für die Namen allein
+(`namenBedarf`), denn sie sagen, wer da ist. Erst wenn auch das zu viel
+kostet, wird gekürzt, statt allen die Schrift zu nehmen oder die Tafel
+blättern zu lassen. Geschätzt wird ohne Browser, aus einer Tabelle der
+Zeichenbreiten der Tafelschrift (`textBreite`, im Browser gemessen und im
+Zweifel nach oben gerundet; geprüft an Namen einer Übung, nie zu knapp,
+höchstens 6 % zu weit). Ein fester Mittelwert je Zeichen lag bei Namen
+zwischen 10 % zu knapp und 15 % zu weit.
+
+Namen bleiben erkennbar, in dieser Folge: Passt der volle Name nicht, steht
+seine übliche Kurzform da (`kurzName`, `herkunftKurzform`: „FF Lenglern“,
+„DRK-KV Buchenrode“, „Bw“, „OV“ …). Die Wahl trifft die Stilvorlage ohne
+Messung wie beim Typ: Der volle Name liegt hinter einem Anker ohne Breite über
+der Kurzform und bricht, wenn er nicht passt, in eine Zeile um, die nicht zu
+sehen ist. Fehlt der Form, die dann steht, nur wenig, läuft sie bis auf neun
+Zehntel kleiner (`--lt-name-em` mit einer Container-Abfrage, nur in den
+Fassungen, in denen die Breite des Namens nicht an seinem Inhalt hängt).
+Erst danach wird der längere Teil gekürzt (Organisation oder Standort). Der
+Satz rechnet mit der Kurzform. Im Gruppenkopf bekommt die Zahl der Einheiten
+nur den Platz, der neben Name und Stärke übrig bleibt: Ein Schwundfaktor
+allein nahm dem Namen Bruchteile eines Pixels, und schon die lösten die
+Auslassung aus („T… (Fortsetzung)“).
+
+Die Stilvorlage bekommt dieselben Maße als CSS-Eigenschaften hineingereicht, es
 gibt eine Quelle für Rechnung und Satz. Im Browser gemessen wird nur
-zweierlei: die Fläche und, in der breiten Fassung, die Breite des längsten
-Namens (`--lt-wer`), nach der sich die linke Spalte aller Karten richtet. Die
-Summen kommen unverändert aus `lagebild` (`lagemonitor.ts`); beide Ansichten
-zeigen dieselben Zahlen.
+zweierlei: die Fläche und, in der breiten Fassung, die Breite der Namen
+(`--lt-wer`), nach der sich die linke Spalte aller Karten richtet: so breit,
+dass jede Kurzform ganz dasteht, und so breit wie der längste volle Name,
+soweit Auftrag und Funkrufname daneben nicht gekürzt werden. Die Summen
+kommen unverändert aus `lagebild` (`lagemonitor.ts`); beide Ansichten zeigen
+dieselben Zahlen.
 
 Abgerückte Einheiten gehören nicht in diesen Satz: Die Randspalte führt die
 zuletzt abgerückten mit Uhrzeit, unabhängig davon, wie voll die Tafel ist
@@ -372,19 +395,19 @@ wird nach Organisation.
 
 Übungsmeldungen einer echten Lage zählen nicht (`zaehltInLage` in
 `auswertung.ts`), stehen aber auf der Tafel: als eigene, letzte Gruppe über
-alle Züge hinweg, mit „nicht gezählt“ am Kopf statt einer Summe. Stünden sie
-in ihrem Zug, ergäben dessen Karten nicht mehr dessen Summe. Ihr Bedarf und
-ihre Bewegungen gehen wie in `lagebild` in nichts ein; die Randspalte nennt
-sie bei der Zahl der Einheiten, damit sie beim Blättern auf jeder Seite
-erwähnt sind. Die Zeilenansicht nennt sie weiter nur als Zahl.
+alle Organisationen hinweg, mit „nicht gezählt“ am Kopf statt einer Summe,
+jede als knappe Zeile. Stünden sie bei ihrer Organisation, ergäben deren
+Karten nicht mehr deren Summe. Ihr Bedarf und ihre Bewegungen gehen wie in
+`lagebild` in nichts ein; die Randspalte nennt sie bei der Zahl der
+Einheiten, damit sie beim Blättern auf jeder Seite erwähnt sind. Die
+Zeilenansicht nennt sie weiter nur als Zahl.
 
 Die Randspalte hat eine Rangfolge. Alles über dem Fuß steht in einer Hülle,
-die die Höhe nimmt, die der Fuß lässt. Wird es eng, weicht erst „Zuletzt“
-(bis auf seine Überschrift), dann die Übersicht der Züge, zeilenweise und
-so verschoben, dass die Züge der laufenden Seite zu sehen sind; was dann
-noch übersteht, schneidet die Hülle ab. Datenstand und Bedienung
-bleiben so immer im Bild. Vorher drückten zwölf und mehr Züge mit vollem
-Bedarf die Knöpfe aus dem Bild.
+die die Höhe nimmt, die der Fuß lässt. Die festen Blöcke (Zähler, Dauer,
+Bedarf, Abgerückt) stehen immer; „Zuletzt“ steht nur, wenn danach noch
+seine Überschrift Platz hat, sonst entfällt es samt Linie. Was dann noch
+übersteht, schneidet die Hülle ab. Datenstand und Bedienung bleiben so
+immer im Bild.
 
 Lässt sich der Brocken der Tafel nicht nachladen (ein lange offenes
 Monitor-Fenster nach einem Update der App), fängt eine Fehlergrenze in
@@ -495,7 +518,11 @@ zeigt nur empfangene Absenderkarten an). `eeb.feldmodus.v1` ist der
 Altschlüssel des Anzeigemodus und wird nur gelesen.
 
 Der Papierkorb der Sammlungen ist kein eigener Schlüssel, sondern
-`geloeschtAm` an der Sammlung in `eeb.einsaetze.v1`. `eeb.offline-zusatz.v1`
+`geloeschtAm` an der Sammlung in `eeb.einsaetze.v1`. Ebenso `artSeit`
+(seit 2026-11-11, neu im Meldekopf): der Zeitpunkt, zu dem die Art der
+Sammlung zuletzt umgestellt wurde. Beim Abgleich zweier Geräte gewinnt die
+jüngere Umstellung; eine Sammlung ohne das Feld (ältere Stände, der
+Erfassungsbogen) bleibt lesbar und ändert die Art eines anderen Geräts nie. `eeb.offline-zusatz.v1`
 schreibt `offline-bereit.ts` (seit Phase 5), `eeb.wartet.fragment`
 `wartender-link.ts` (seit Phase 3). Prüfvermerk 2026-10-25 (ISK/DSFA): Die Tabelle nannte
 `eeb.einsaetze-papierkorb.v1` und `eeb.signieren.v1`, die es im Code nicht
@@ -617,6 +644,16 @@ Startbündel wächst um rund 1,8 KB (Einsatzansicht und Aufnahme liegen dort:
 Feld „Art“, „Als Übung führen…“, die Rückfrage beim Übungsbogen und die
 Setter für die Art), der Brocken der Tafel auf rund 29 KB JavaScript und
 22 KB Stilvorlage (Gruppe der Übungsmeldungen, Rangfolge der Randspalte).
+**Erkennbare Namen, Art zwischen Geräten, nach dem Wegfall der Zug-Funktion
+(2026-11-11):** 4.355.986 / 633.315 Byte, Budget neu gesetzt. Das
+Startbündel wächst rechnerisch um 36,4 KB, geladen wird beim Start aber nur
+1,8 KB mehr als in `main` (859.742 statt 857.914 Byte samt der vorgeladenen
+Brocken): Der Bundler legt `eintrag-zeiten` und `einheiten-tabelle` samt
+Abhängigkeiten jetzt ins Startbündel, statt sie als zwei eigene Brocken
+(zusammen rund 46 KB) beim Start vorzuladen. Gemessen mit Quellkarten an den
+Ständen `4a1d2b6` und `d17c99c`; neuer Code kam dabei nicht in den Start. Der
+Brocken der Tafel wächst auf rund 31 KB JavaScript und 22 KB Stilvorlage
+(Kurzformen der Namen, Tabelle der Zeichenbreiten, Namensstufe des Satzes).
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab
