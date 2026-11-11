@@ -509,11 +509,8 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
     const bis = tb.gruppen[mitKopf[mitKopf.length - 1]!]!.titel;
     return von === bis ? von : `${von} bis ${bis}`;
   };
-  const aufSeite = new Set(gruppenDer(seite));
   const hier = seitenZahl > 1 ? spanne(seite) : null;
   const weiter = seitenZahl > 1 ? spanne((seite + 1) % seitenZahl) : null;
-  // Beim Blättern steht die Stärke eines Zuges nur da, solange seine Seite steht: Die Randspalte führt dann alle Züge.
-  const uebersicht = seitenZahl > 1 && tb.gruppen.filter((g) => g.kopf).length > 1;
 
   // Abgerückte Einheiten: Sind noch Einheiten da, nennt die Randspalte die letzten mit Uhrzeit; sonst stehen sie auf der Tafel.
   const abgaengeAmRand = s.einheiten > 0 ? tb.abgerueckt.slice(0, ABGAENGE_AM_RAND) : [];
@@ -676,24 +673,6 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
                 </li>
               ))}
               {tb.abgerueckt.length > abgaengeAmRand.length && <li className="lt-ab-rest">+ {tb.abgerueckt.length - abgaengeAmRand.length} weitere</li>}
-            </ul>
-          </section>
-        )}
-
-        {/* Beim Blättern: alle Züge mit ihrer Stärke, die der laufenden Seite fett. Die Stärke eines Zuges stünde sonst
-            nur da, solange seine Seite steht; ein Zug mit Bedarf trägt das Warnzeichen auch, wenn er gerade nicht zu sehen ist. */}
-        {uebersicht && (
-          <section className="lt-block lt-block-zuege" aria-labelledby="lt-zuege-titel">
-            <h2 id="lt-zuege-titel">
-              {tb.gliederung === "zug" ? "Züge" : "Organisationen"} <span className="lt-block-zusatz">fett: auf dieser Seite</span>
-            </h2>
-            <ul className="lt-zuege">
-              {tb.gruppen.map((g, i) => (
-                <li key={g.schluessel} data-hier={aufSeite.has(i) || undefined} data-achtung={g.einheiten.some((e) => e.bedarf.length > 0) || undefined}>
-                  <span className="lt-zug-name">{g.titel}</span>
-                  <b>{g.staerke.gesamt}</b>
-                </li>
-              ))}
             </ul>
           </section>
         )}

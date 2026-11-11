@@ -498,10 +498,10 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(sichtbar()).toEqual(erste);
   });
 
-  it("nennt beim Blättern, welche Züge die Seite zeigt, und führt in der Randspalte alle Züge mit ihrer Stärke", () => {
+  it("nennt beim Blättern, welche Züge die Seite zeigt und welche die nächste", () => {
     fernseher();
     vi.useFakeTimers();
-    // Zwölf Züge mit je vier Einheiten; im 3. Zug hat eine Einheit Bedarf.
+    // Zwölf Züge mit je vier Einheiten.
     const { sammlung } = einsatzMit(
       Array.from({ length: 48 }, (_, i) => ({ ort: `Ort ${String(i + 1).padStart(2, "0")}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug`, st: [0, 2, 6] as [number, number, number], ruhezeit: i === 9 })),
     );
@@ -512,28 +512,17 @@ describe("Lagetafel: Satz und Blättern", () => {
     const letzter = Number(seite1![2]);
     expect(Number(seite1![3])).toBeGreaterThanOrEqual(letzter);
 
-    const block = within(screen.getByRole("complementary")).getByRole("heading", { name: /^Züge/ }).closest("section")!;
-    expect(block.querySelector("h2")!.textContent).toBe("Züge fett: auf dieser Seite");
-    const zeilen = Array.from(block.querySelectorAll(".lt-zuege li"));
-    // Alle zwölf Züge mit ihrer Gesamtstärke, auch die der anderen Seite.
-    expect(zeilen.map((z) => z.textContent)).toEqual(Array.from({ length: 12 }, (_, i) => `${i + 1}. Zug32`));
-    // Fett steht, was die laufende Seite zeigt.
-    const hier = () => zeilen.filter((z) => z.hasAttribute("data-hier")).map((z) => z.querySelector(".lt-zug-name")!.textContent);
-    expect(hier()).toEqual(Array.from({ length: letzter }, (_, i) => `${i + 1}. Zug`));
-    // Der Zug mit Bedarf ist markiert, auch wenn seine Seite gerade nicht steht.
-    expect(zeilen.filter((z) => z.hasAttribute("data-achtung")).map((z) => z.querySelector(".lt-zug-name")!.textContent)).toEqual(["3. Zug"]);
     act(() => void vi.advanceTimersByTime(SEITEN_TAKT_MS));
     expect(status()).toMatch(/^Seite 2 von/);
-    expect(hier()).toContain("12. Zug");
-    expect(hier()).not.toContain("1. Zug");
+    // Eine eigene Aufstellung der Züge mit Stärke führt die Randspalte nicht.
+    expect(within(screen.getByRole("complementary")).queryByRole("heading", { name: /^Züge/ })).toBeNull();
   });
 
-  it("zeigt die Übersicht der Züge nur beim Blättern: Auf einer Seite stehen ihre Köpfe ohnehin alle da", () => {
+  it("zeigt ohne Blättern keine Seitenzeile", () => {
     fernseher();
     const { sammlung } = einsatzMit(Array.from({ length: 8 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 4, zug: `${Math.floor(i / 4) + 1}. Zug` })));
     tafel(sammlung());
     expect(document.querySelector(".lt-seitenzeile")).toBeNull();
-    expect(within(screen.getByRole("complementary")).queryByRole("heading", { name: /^Züge/ })).toBeNull();
   });
 
   it("beginnt vorn, wenn sich die Zahl der Seiten ändert: Takt und Balken laufen dann gemeinsam neu los", () => {

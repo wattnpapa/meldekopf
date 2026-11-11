@@ -428,17 +428,6 @@ main.lt .lt-abgaenge li { display: flex; gap: calc(var(--lt-e) * 1); font-size: 
 .lt-ab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 main.lt .lt-abgaenge li.lt-ab-rest { color: var(--lt-text-2); }
 
-/* Übersicht der Züge beim Blättern: zwei Spalten, Name und Gesamtstärke. Fett steht, was die laufende Seite zeigt. */
-.lt-block-zuege { min-height: 0; overflow: hidden; }
-.lt-zuege { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: calc(var(--lt-e) * 2); row-gap: calc(var(--lt-e) * 0.25); }
-main.lt .lt-zuege li { display: flex; align-items: baseline; gap: calc(var(--lt-e) * 0.8); font-size: calc(var(--lt-e) * 2.1); line-height: 1.2; color: var(--lt-text-2); white-space: nowrap; }
-.lt-zug-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.lt-zuege b { flex: none; font-weight: 400; }
-main.lt .lt-zuege li[data-hier] { color: var(--lt-text); font-weight: 700; }
-.lt-zuege li[data-hier] b { font-weight: 800; }
-/* Ein Zug mit Bedarf trägt das Warnzeichen auch, wenn seine Seite gerade nicht steht. */
-.lt-zuege li[data-achtung] .lt-zug-name::before { content: "\26A0\FE0E\00A0"; color: var(--lt-achtung); }
-
 /* „Zuletzt" nimmt, was übrig ist. Die Liste bricht in Spalten um; zu sehen ist nur die erste, also nur ganze Einträge. */
 .lt-block-zuletzt { flex: 1 1 0; }
 .lt-bewegungen {
@@ -574,8 +563,7 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   .lt-teil-weich, .lt-teil-fest { flex: 0 1 auto; min-width: 0; overflow: visible; overflow-wrap: anywhere; }
   main.lt .lt-einsatz { flex-wrap: wrap; }
   .lt-einsatz-name, .lt-ort, .lt-einsatz-name + .lt-ort { max-width: 100%; min-width: 0; overflow: visible; }
-  main.lt .lt-abgaenge li, main.lt .lt-zuege li { font-size: var(--lt-b); }
-  .lt-zuege { column-gap: calc(var(--lt-b) * 1); }
+  main.lt .lt-abgaenge li { font-size: var(--lt-b); }
   .lt-bedienung .lm-stufenleiste { flex-wrap: wrap; }
   .lt-bedienung .lm-stufenleiste .lm-knopf, .lt-bedienung .lm-stufenleiste .lm-knopf + .lm-knopf { flex: 1 1 auto; width: auto; padding-inline: 0.55em; }
   main.lt .lt-seitenzeile { white-space: normal; }
