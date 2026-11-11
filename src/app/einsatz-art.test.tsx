@@ -5,17 +5,17 @@
  * Lage (`zaehltInLage`), überall steht null, und beheben ließ sich das nur mit einer neuen Sammlung. Die Regel bleibt,
  * wie sie ist; neu ist der Weg, die Sammlung selbst als Übung zu führen. Geprüft werden der Speicherweg und die Stellen
  * der Einsatzansicht: der Knopf am Hinweis „Nichts gezählt", derselbe im aufgeklappten Hinweis neben echten Meldungen
- * und das Feld „Art" unter „Einsatz bearbeiten", jeweils mit Quittung und „Rückgängig".
+ * und das Feld „Art" unter „Einsatz bearbeiten…", jeweils mit Quittung und „Rückgängig".
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Erfassungsbogen } from "@bos/eeb-format/model";
 import { Dialogschicht } from "@bos/oberflaeche/dialoge";
-import { EinsatzArt, einsaetzeLaden, einsatzAnlegen, meldungHinzufuegen } from "@bos/meldekopf/einsaetze";
+import { EinsatzArt, MeldeStatus, einsaetzeLaden, einsatzAnlegen, meldungHinzufuegen } from "@bos/meldekopf/einsaetze";
 import { aggregiere, uebungenAusserhalbDerLage } from "./auswertung";
 import { EinsatzDetail, kopfAenderungText } from "./einsaetze-ui";
-import { SpeicherVollFehler, einsatzArtSetzen, einsatzKopfMitArtSetzen } from "./eintrag-zeiten";
+import { SpeicherVollFehler, einsatzArtSetzen, einsatzKopfMitArtSetzen, statusMitZeitSetzen } from "./eintrag-zeiten";
 import { neuerBogen } from "./hilfen";
 import { lagebild } from "./lagemonitor";
 
@@ -167,8 +167,11 @@ describe("Sammlung nachträglich als Übung führen", () => {
     await nutzer.click(within(hinweis).getByRole("button", { name: "Als Übung führen…" }));
     let frage = dialog("Als Übung führen?")!;
     expect(frage.textContent).toContain("„Tafel Test\" wird dann als Übung geführt");
-    expect(frage.textContent).toContain("Übungsmeldungen zählen wie jede andere Einheit");
+    expect(frage.textContent).toContain("Übungsmeldungen zählen dann wie jede andere Einheit");
     expect(frage.textContent).toContain("ÜBUNG – keine Echtlage");
+    // Der Rückweg nennt den Knopf, den es gibt.
+    expect(frage.textContent).toContain("Über „Einsatz bearbeiten…“ im Kopf lässt sich die Art wieder umstellen.");
+    expect(screen.getByRole("button", { name: "Einsatz bearbeiten…" })).toBeTruthy();
     await nutzer.click(within(frage).getByRole("button", { name: "Abbrechen" }));
     expect(sammlung(s.id).art).toBe(EinsatzArt.EINSATZ);
     expect(einheitenLeiste()).toBe("0Einheiten (+2 Übung)");
@@ -205,7 +208,12 @@ describe("Sammlung nachträglich als Übung führen", () => {
     const hinweis = document.querySelector<HTMLDetailsElement>("details.uebung-ausgenommen")!;
     await nutzer.click(hinweis.querySelector("summary")!);
     await nutzer.click(within(hinweis).getByRole("button", { name: "Als Übung führen…" }));
-    await nutzer.click(within(dialog("Als Übung führen?")!).getByRole("button", { name: "Als Übung führen" }));
+    // Eine echte Einheit steht in der Sammlung: Die Rückfrage sagt das, nennt den Weg je Bogen, und der Fokus liegt auf „Abbrechen".
+    const frage = dialog("Als Übung führen?")!;
+    expect(frage.textContent).toContain("„Wattsturm\" führt auch eine Einheit ohne Übungskennzeichen.");
+    expect(frage.textContent).toContain("an seiner Karte unter „Mehr…“: „Als Einsatzmeldung zählen…“");
+    await waitFor(() => expect(document.activeElement).toBe(within(frage).getByRole("button", { name: "Abbrechen" })));
+    await nutzer.click(within(frage).getByRole("button", { name: "Als Übung führen" }));
     await waitFor(() => expect(einheitenLeiste()).toBe("2Einheiten"));
     expect(sammlung(s.id).art).toBe(EinsatzArt.UEBUNG);
   });
@@ -229,6 +237,20 @@ describe("Sammlung nachträglich als Übung führen", () => {
     expect(einheitenLeiste()).toBe("0Einheiten (+1 Übung)");
   });
 
+  it("bietet den Weg nicht an der Null an, wenn echte Einheiten da waren und abgerückt sind; der Satz nennt dann die anwesenden", async () => {
+    const s = einsatzAnlegen("Hochwasser Weser", EinsatzArt.EINSATZ);
+    const echt = meldungHinzufuegen(s.id, bogen("Echt"))!.eintrag;
+    meldungHinzufuegen(s.id, bogen("Alpha", true));
+    meldungHinzufuegen(s.id, bogen("Bravo", true));
+    statusMitZeitSetzen(s.id, echt.id, MeldeStatus.ABGERUECKT);
+    ansicht(s.id);
+    const hinweis = document.querySelector<HTMLElement>(".nur-uebung")!;
+    expect(hinweis.textContent).toBe("Nichts gezählt: alle 2 anwesenden Meldungen sind Übung und zählen nicht in diese Lage.");
+    expect(within(hinweis).queryByRole("button")).toBeNull();
+    // Im aufgeklappten Hinweis bleibt der Weg, mit der Rückfrage, die die echte Einheit nennt.
+    expect(within(document.querySelector<HTMLElement>("details.uebung-ausgenommen")!).getByRole("button", { name: "Als Übung führen…" })).toBeTruthy();
+  });
+
   it("bietet in einer Übung nichts an: Dort zählt schon alles", () => {
     const s = einsatzAnlegen("Wattsturm", EinsatzArt.UEBUNG);
     meldungHinzufuegen(s.id, bogen("Geübt", true));
@@ -246,7 +268,8 @@ describe("Einsatz bearbeiten: Art", () => {
     const s = einsatzAnlegen("Wattsturm", EinsatzArt.EINSATZ, "Hooksiel");
     meldungHinzufuegen(s.id, bogen("Geübt", true));
     ansicht(s.id);
-    await nutzer.click(screen.getByRole("button", { name: "Name / Ort ändern…" }));
+    // Der Knopf heißt wie der Dialog und wie die Texte, die auf ihn verweisen.
+    await nutzer.click(screen.getByRole("button", { name: "Einsatz bearbeiten…" }));
     const bearbeiten = dialog("Einsatz bearbeiten")!;
     expect(bearbeiten.textContent).toContain("Die Art entscheidet, ob Übungsmeldungen zählen");
     const art = within(bearbeiten).getByLabelText("Art") as HTMLSelectElement;
@@ -272,16 +295,17 @@ describe("Einsatz bearbeiten: Art", () => {
     const nutzer = userEvent.setup();
     const s = einsatzAnlegen("Wattsturm", EinsatzArt.VERANSTALTUNG);
     ansicht(s.id);
-    // Ohne Ort heißt der Knopf „Ort eintragen…" und setzt den Cursor ins Feld Ort (R17-S4); das Feld „Art" steht trotzdem da.
-    await nutzer.click(screen.getByRole("button", { name: "Ort eintragen…" }));
+    // Ohne Ort steht der Cursor im Feld Ort (R17-S4); das Feld „Art" steht trotzdem da.
+    await nutzer.click(screen.getByRole("button", { name: "Einsatz bearbeiten…" }));
     let bearbeiten = dialog("Einsatz bearbeiten")!;
+    expect(document.activeElement).toBe(within(bearbeiten).getByLabelText(/^Ort/));
     expect((within(bearbeiten).getByLabelText("Art") as HTMLSelectElement).selectedOptions[0]!.textContent).toBe("Veranstaltung");
     const geaendert = sammlung(s.id).geaendert;
     await nutzer.click(within(bearbeiten).getByRole("button", { name: "Übernehmen" }));
     expect(sammlung(s.id).geaendert).toBe(geaendert);
     expect(screen.queryByText(/Einsatz geändert/)).toBeNull();
 
-    await nutzer.click(screen.getByRole("button", { name: "Ort eintragen…" }));
+    await nutzer.click(screen.getByRole("button", { name: "Einsatz bearbeiten…" }));
     bearbeiten = dialog("Einsatz bearbeiten")!;
     await nutzer.type(within(bearbeiten).getByLabelText(/^Ort/), "Marktplatz");
     await nutzer.click(within(bearbeiten).getByRole("button", { name: "Übernehmen" }));

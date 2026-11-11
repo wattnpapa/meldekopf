@@ -50,8 +50,20 @@ Then("zeigt der Lagemonitor {string} nicht", async function (this: EebWelt, text
  * ersetzt, was die Grundlage des Szenarios dorthin gelegt hat; ein Neuladen im Szenario setzt sie nicht zurück.
  */
 Given("auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele mit Sofortbedarf", async function (this: EebWelt, einheiten: number, zuege: number) {
-  const { einsaetze, einsatzId } = tafelLageSpeicher("Hochwasser Hunte", einheiten, zuege);
-  await this.page.addInitScript(
+  await tafelLageAufDemGeraet(this, einheiten, zuege, 0);
+});
+
+/** Dieselbe Lage, die zuerst eingetroffenen Einheiten abgerückt: für die volle Randspalte (Bedarf, Abgerückt, Züge, Zuletzt). */
+Given(
+  "auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele mit Sofortbedarf, {int} davon abgerückt",
+  async function (this: EebWelt, einheiten: number, zuege: number, abgerueckt: number) {
+    await tafelLageAufDemGeraet(this, einheiten, zuege, abgerueckt);
+  },
+);
+
+async function tafelLageAufDemGeraet(welt: EebWelt, einheiten: number, zuege: number, abgerueckt: number): Promise<void> {
+  const { einsaetze, einsatzId } = tafelLageSpeicher("Hochwasser Hunte", einheiten, zuege, abgerueckt);
+  await welt.page.addInitScript(
     ([e, id]) => {
       if (sessionStorage.getItem("prüfstand.tafellage")) return;
       sessionStorage.setItem("prüfstand.tafellage", "1");
@@ -60,8 +72,8 @@ Given("auf dem Gerät liegt eine Lage mit {int} Einheiten in {int} Zügen, viele
     },
     [einsaetze, einsatzId] as const,
   );
-  await this.oeffneApp();
-});
+  await welt.oeffneApp();
+}
 
 /**
  * Eine Sammlung der Art „Einsatz" (die Vorgabe beim Anlegen) nur aus Übungsbögen: der Fall, in dem überall null steht.
@@ -86,28 +98,73 @@ When("ich einen geteilten Bogen-Link eines Übungsbogens öffne", async function
   await this.oeffneApp(uebungsBogenFragment());
 });
 
-Then("zeigt die Tafel {int} Karten mit der Marke {string}", async function (this: EebWelt, anzahl: number, marke: string) {
-  const seite = monitor(this);
-  await seite.waitForFunction(
-    ([n, wort]) => {
-      const karten = Array.from(document.querySelectorAll("main.lt .lt-karte"));
-      return karten.length === n && karten.every((k) => Array.from(k.querySelectorAll(".lt-marke")).some((m) => m.textContent === wort));
-    },
-    [anzahl, marke] as const,
+/** Übungsmeldungen einer echten Lage stehen als knappe Zeilen in der Gruppe „Übung" (lagetafel-ui.tsx), nicht als Karten. */
+Then("zeigt die Tafel {int} Übungsmeldungen als Zeilen", async function (this: EebWelt, anzahl: number) {
+  await monitor(this).waitForFunction(
+    (n) => document.querySelectorAll("main.lt .lt-uebung-zeile").length === n && document.querySelector("main.lt .lt-gruppe-uebung") != null,
+    anzahl,
   );
 });
 
-Then("zeigt die Tafel keine Karte mit der Marke {string}", async function (this: EebWelt, marke: string) {
-  const seite = monitor(this);
-  await seite.waitForFunction((wort) => {
-    const marken = Array.from(document.querySelectorAll("main.lt .lt-karte .lt-marke"));
-    return document.querySelectorAll("main.lt .lt-karte").length > 0 && marken.every((m) => m.textContent !== wort);
-  }, marke);
+Then("zeigt die Tafel keine Übungsmeldung", async function (this: EebWelt) {
+  await monitor(this).waitForFunction(
+    () => document.querySelectorAll("main.lt .lt-karte").length > 0 && document.querySelector("main.lt .lt-uebung-zeile, main.lt .lt-gruppe-uebung") == null,
+  );
 });
 
 /** Die Gesamtstärke im Kopf der Tafel, die Zahl, die vorgelesen wird. */
 Then("zeigt die Tafel die Gesamtstärke {int}", async function (this: EebWelt, gesamt: number) {
   await monitor(this).waitForFunction((g) => document.querySelector("main.lt .lt-m-gesamt .lt-m-ziffern")?.textContent === String(g), gesamt);
+});
+
+/** Ein kleinerer Fernseher: Das Monitor-Fenster bekommt eine andere Größe; die Tafel setzt sich neu. */
+When("ich den Fernseher auf {int} x {int} stelle", async function (this: EebWelt, breite: number, hoehe: number) {
+  const seite = monitor(this);
+  await seite.setViewportSize({ width: breite, height: hoehe });
+  // Der Satz rechnet nach der neuen Größe; die Randspalte misst nach. Kurz warten, bis zwei Bilder gleich sind.
+  await seite.evaluate(() => new Promise((fertig) => requestAnimationFrame(() => requestAnimationFrame(() => fertig(true)))));
+  await seite.waitForTimeout(300);
+});
+
+/**
+ * Die Randspalte der Tafel hat eine Rangfolge: Datenstand und Bedienung stehen immer im Bild; von den weichenden Blöcken
+ * (Übersicht der Züge, „Zuletzt") steht keiner angeschnitten da, jeder mindestens mit seiner Überschrift, und in keiner
+ * Liste der Randspalte steht eine Zeile halb.
+ *
+ * Vorgefallen (Gegenprüfung): Bei voller Lage schrumpfte die Übersicht der Züge auf ihre Linie, und von „Zuletzt" blieben
+ * sechs Pixel Text über dem Fuß. Als Text übergeben, nicht als Funktion mit inneren Hilfsfunktionen (support/haken.ts).
+ */
+Then("steht die Randspalte der Tafel geordnet im Bild", async function (this: EebWelt) {
+  const befund = await monitor(this).evaluate<string[]>(`(() => {
+    const fehler = [];
+    const kasten = (el) => el.getBoundingClientRect();
+    const huelle = document.querySelector("main.lt .lt-rand-inhalt");
+    if (!huelle) return ["keine Randspalte"];
+    const h = kasten(huelle);
+    for (const knopf of document.querySelectorAll("main.lt .lt-bedienung button")) {
+      const k = kasten(knopf);
+      if (k.bottom > window.innerHeight + 0.5 || k.right > window.innerWidth + 0.5) fehler.push("Knopf „" + knopf.textContent + "“ liegt außerhalb des Bilds");
+    }
+    for (const block of huelle.querySelectorAll(".lt-block")) {
+      const titel = block.querySelector("h2");
+      const k = kasten(titel);
+      if (k.height < 1 || k.top < h.top - 0.5 || k.bottom > h.bottom + 0.5) fehler.push("Überschrift „" + titel.textContent + "“ ist angeschnitten");
+      if (kasten(block).bottom > h.bottom + 0.5 && !block.classList.contains("lt-block-zuletzt") && !block.classList.contains("lt-block-zuege")) fehler.push("Block „" + titel.textContent + "“ ragt unter die Randspalte");
+    }
+    for (const liste of huelle.querySelectorAll(".lt-abgaenge, .lt-zuege, .lt-bewegungen")) {
+      const fenster = kasten(liste.closest(".lt-zuege-fenster") || liste);
+      const unten = Math.min(fenster.bottom, h.bottom);
+      for (const eintrag of liste.children) {
+        if (eintrag.style && eintrag.style.visibility === "hidden") continue;
+        const k = kasten(eintrag);
+        // In „Zuletzt" bricht, was nicht passt, in eine zweite Spalte rechts außerhalb um: Die zählt nicht.
+        if (k.left >= fenster.right - 1 || k.top >= unten - 1) continue;
+        if (k.bottom > unten + 0.6) fehler.push("Eintrag „" + eintrag.textContent.trim().slice(0, 40) + "“ steht halb da");
+      }
+    }
+    return fehler;
+  })()`);
+  if (befund.length > 0) throw new Error(`Randspalte nicht geordnet: ${befund.slice(0, 8).join("; ")}${befund.length > 8 ? ` (und ${befund.length - 8} weitere)` : ""}`);
 });
 
 /** Die Wahl in der Einsatzansicht, Block „Lagemonitor für den Fernseher". */
@@ -157,14 +214,30 @@ Then("stehen alle Einheiten der Tafel ganz im Bild", async function (this: EebWe
   const befund = await monitor(this).evaluate(() => {
     const flaeche = document.querySelector("main.lt .lt-flaeche")!.getBoundingClientRect();
     const fehler: string[] = [];
-    for (const karte of Array.from(document.querySelectorAll<HTMLElement>("main.lt .lt-karte"))) {
+    // Gekürzt ist ein Feld, dessen Text breiter ist als sein Kasten, auch nur um Bruchteile eines Pixels: Schon die lösen die
+    // Auslassung aus, „scrollWidth" rundet sie weg.
+    const messung = document.createRange();
+    // Karten und die Zeilen der Übungsmeldungen stehen in der Fläche; abgeschnitten sein darf der Name nur in einer Zeile.
+    for (const karte of Array.from(document.querySelectorAll<HTMLElement>("main.lt .lt-karte, main.lt .lt-uebung-zeile"))) {
       const r = karte.getBoundingClientRect();
       const name = karte.querySelector<HTMLElement>(".lt-herkunft")!;
+      // Hat der Name eine Kurzform, steht sie in der Hülle neben dem vollen Namen; genannt wird der volle.
+      const text = (name.querySelector(".lt-herkunft-lang") ?? name).textContent;
       if (r.top < flaeche.top - 1 || r.bottom > flaeche.bottom + 1 || r.left < flaeche.left - 1 || r.right > flaeche.right + 1) {
-        fehler.push(`„${name.textContent}“ ragt aus der Fläche`);
+        fehler.push(`„${text}“ ragt aus der Fläche`);
       }
       // Der Name besteht aus Teilen (Organisation und Standort); gekürzt wird der „weiche", erkennbar an seinem Überlauf.
-      if (Array.from(name.querySelectorAll<HTMLElement>(".lt-teil-weich")).some((teil) => teil.scrollWidth > teil.clientWidth + 1)) fehler.push(`„${name.textContent}“ ist abgeschnitten`);
+      // Mit Kurzform zählt deren Teil: Der volle Name weicht ihr ganz, gekürzt wäre erst sie.
+      const weich = Array.from(name.querySelectorAll<HTMLElement>(".lt-teil-weich"));
+      if (
+        karte.classList.contains("lt-karte") &&
+        weich.some((teil) => {
+          messung.selectNodeContents(teil);
+          return messung.getBoundingClientRect().width > teil.getBoundingClientRect().width + 0.01;
+        })
+      ) {
+        fehler.push(`„${text}“ ist abgeschnitten`);
+      }
     }
     // Rechnung und Stilvorlage müssen dieselben Maße ergeben: Höhe jeder Zelle und ihr Abstand zur Zelle darüber.
     // Ohne benannte Hilfsfunktion: tsx hängt solchen einen Helfer an, den es im Browser nicht gibt (siehe support/haken.ts).
@@ -304,9 +377,26 @@ Then("überdeckt auf der Tafel keine Angabe eine andere", async function (this: 
     const sichtbar = (el) => { const k = kasten(el); return k.width > 0 && k.height > 0; };
     const schneidet = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.6 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.6;
     const karten = Array.from(document.querySelectorAll("main.lt .lt-karte"));
-    if (karten.length === 0) fehler.push("keine Karte auf der Tafel");
+    const zeilen = Array.from(document.querySelectorAll("main.lt .lt-uebung-zeile"));
+    if (karten.length + zeilen.length === 0) fehler.push("weder Karte noch Zeile auf der Tafel");
+    // Der volle Name; hat er eine Kurzform, steht sie daneben in derselben Hülle.
+    const nameVon = (el) => (el.querySelector(".lt-herkunft-lang") || el.querySelector(".lt-herkunft")).textContent;
+    // Gekürzt ist ein Feld, dessen Text breiter ist als sein Kasten, auch nur um Bruchteile eines Pixels: Schon die lösen die
+    // Auslassung aus („T… (Fortsetzung)“ stand bei 0,03 px da), „scrollWidth“ rundet sie weg.
+    const messung = document.createRange();
+    const gekuerzt = (el) => { messung.selectNodeContents(el); return messung.getBoundingClientRect().width > kasten(el).width + 0.01; };
+    for (const zeile of zeilen) {
+      const name = nameVon(zeile);
+      const teile = Array.from(zeile.querySelectorAll(".lt-herkunft, .lt-uebung-typ, .lt-uebung-zug, .lt-staerke")).filter(sichtbar);
+      const rand = kasten(zeile);
+      teile.forEach((teil, i) => {
+        const k = kasten(teil);
+        if (k.left < rand.left - 0.6 || k.right > rand.right + 0.6 || k.top < rand.top - 0.6 || k.bottom > rand.bottom + 0.6) fehler.push(teil.className + " ragt aus der Zeile „" + name + "“");
+        for (const anderes of teile.slice(i + 1)) if (schneidet(k, kasten(anderes))) fehler.push(teil.className + " und " + anderes.className + " überdecken sich in der Zeile „" + name + "“");
+      });
+    }
     for (const karte of karten) {
-      const name = karte.querySelector(".lt-herkunft").textContent + " " + (karte.querySelector(".lt-typ")?.textContent ?? "");
+      const name = nameVon(karte) + " " + (karte.querySelector(".lt-typ-lang")?.textContent ?? karte.querySelector(".lt-typ")?.textContent ?? "");
       const teile = Array.from(karte.querySelectorAll(".lt-zeichen, .lt-herkunft, .lt-staerke, .lt-typ, .lt-funkruf, .lt-auftrag-text, .lt-marke, .lt-stand")).filter(sichtbar);
       const rand = kasten(karte);
       teile.forEach((teil, i) => {
@@ -321,9 +411,13 @@ Then("überdeckt auf der Tafel keine Angabe eine andere", async function (this: 
     }
     for (const kopf of document.querySelectorAll("main.lt .lt-gruppe")) {
       const rand = kasten(kopf);
-      const teile = Array.from(kopf.querySelectorAll(".lt-gruppe-name, .lt-fortsetzung, .lt-gruppe-zahl, .lt-staerke")).filter(sichtbar);
+      const teile = Array.from(kopf.querySelectorAll(".lt-gruppe-name, .lt-fortsetzung, .lt-gruppe-zahl, .lt-staerke, .lt-gruppe-ohne")).filter(sichtbar);
       const titel = kopf.querySelector("h3").textContent;
       if (kopf.querySelector(".lt-fortsetzung") && !teile.some((t) => t.classList.contains("lt-fortsetzung"))) fehler.push("„(Fortsetzung)“ fehlt im Kopf „" + titel + "“");
+      // Die Zahl der Einheiten weicht vor dem Namen: Auf dem Fernseher stand „T… (Fortsetzung)“ neben „11 Einheiten“.
+      const gruppe = kopf.querySelector(".lt-gruppe-name");
+      const zahl = kopf.querySelector(".lt-gruppe-zahl");
+      if (gruppe && gekuerzt(gruppe) && zahl && kasten(zahl).width > 2) fehler.push("Im Kopf „" + titel + "“ ist der Name gekürzt, während die Zahl der Einheiten daneben steht");
       teile.forEach((teil, i) => {
         const k = kasten(teil);
         if (k.bottom > rand.bottom + 0.6 || k.right > rand.right + 0.6) fehler.push(teil.className + " liegt außerhalb des Kopfs „" + titel + "“");

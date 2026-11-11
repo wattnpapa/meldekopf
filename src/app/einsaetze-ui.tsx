@@ -1449,6 +1449,9 @@ export function EinsatzDetail(props: {
   // Was die Lage NICHT enthält, gehört genauso sichtbar gemacht wie das, was
   // sie enthält (siehe zaehltInLage).
   const uebungenDaneben = uebungenAusserhalbDerLage(einsatz.eintraege, einsatz.art);
+  // Neu im Meldekopf: Die Sammlung führt nur Übungsbögen (auch keine abgerückte echte Einheit). Dann ist sie womöglich selbst die
+  // Übung, nur als „Einsatz" angelegt, und der Weg dorthin steht gleich an der Null (siehe alsUebungFuehren).
+  const nurUebung = einsatz.eintraege.length > 0 && einsatz.eintraege.every((e) => !!e.bogen.uebung);
   // Zuletzt Entferntes — solange es hier steht, gibt es einen Rückweg. Beim
   // Entfernen einer Einheit ALLE ihre Fassungen, beim Verwerfen einer Fassung
   // nur diese (Audit Runde 2, R2-D1).
@@ -1804,7 +1807,7 @@ export function EinsatzDetail(props: {
       felder: [
         { name: "name", label: "Name", vorgabe: einsatz.name },
         { name: "art", label: "Art", auswahl: ART_WAHL, vorgabe: String(einsatz.art) },
-        // Der Knopf „Ort eintragen…" setzt den Cursor in das Feld, das er nennt (R17-S4).
+        // Ohne Ort setzt der Knopf den Cursor ins Feld Ort: Das fehlt am häufigsten (R17-S4; der Knopf hieß damals „Ort eintragen…").
         { name: "ort", label: "Ort / Auftrag (optional)", vorgabe: einsatz.ort ?? "", optional: true, platzhalter: "z. B. Deichabschnitt Nord", fokus: !einsatz.ort },
       ],
     });
@@ -1837,10 +1840,19 @@ export function EinsatzDetail(props: {
    */
   async function alsUebungFuehren() {
     if (einsatz.art === EinsatzArt.UEBUNG) return;
+    // Führt die Sammlung auch Einheiten ohne Übungskennzeichen (anwesend oder abgerückt), ist sie womöglich eine echte Lage
+    // mit einzelnen falsch gekennzeichneten Bögen. Dann sagt die Rückfrage das, nennt den Weg je Bogen und legt den Fokus
+    // auf „Abbrechen": Eine echte Lage als Übung zu führen, stellte den Fernseher auf „ÜBUNG – keine Echtlage".
+    const echte = geltendeJeEinheit(einsatz.eintraege).filter((e) => !e.bogen.uebung).length;
+    const folge = `Übungsmeldungen zählen dann wie jede andere Einheit, und der Lagemonitor zeigt „ÜBUNG – keine Echtlage“. Über „Einsatz bearbeiten…“ im Kopf lässt sich die Art wieder umstellen.`;
     const ja = await frageJaNein({
       titel: "Als Übung führen?",
-      text: `„${einsatz.name}" wird dann als Übung geführt: Übungsmeldungen zählen wie jede andere Einheit, und der Lagemonitor zeigt „ÜBUNG – keine Echtlage“. Unter „Einsatz bearbeiten“ lässt sich die Art wieder umstellen.`,
+      text:
+        echte === 0
+          ? `„${einsatz.name}" wird dann als Übung geführt. ${folge}`
+          : `„${einsatz.name}" führt auch ${echte === 1 ? "eine Einheit" : `${echte} Einheiten`} ohne Übungskennzeichen. Als Übung geführt, ist die ganze Sammlung eine Übung: ${folge} Ist nur ein Bogen versehentlich als Übung gekennzeichnet, besser an seiner Karte unter „Mehr…“: „Als Einsatzmeldung zählen…“.`,
       ok: "Als Übung führen",
+      ...(echte === 0 ? {} : { fokus: "abbruch" as const }),
     });
     if (!ja) return;
     const alt: { art: EinsatzArt | null } = { art: null };
@@ -2210,8 +2222,11 @@ export function EinsatzDetail(props: {
       </div>
       <div className="titelzeile">
         <h1>{einsatz.name}</h1>
+        {/* Neu im Meldekopf: ein Name für Knopf und Dialog. Der Knopf hieß „Name / Ort ändern…" bzw. „Ort eintragen…"; seit der Dialog
+            auch die Art führt, hätte niemand sie dahinter vermutet, und die Texte, die auf „Einsatz bearbeiten" verweisen, fänden ihn nicht.
+            Ohne Ort steht der Cursor weiter im Feld Ort (R17-S4). */}
         <button type="button" className="kopf-aendern" onClick={() => void kopfAendern()}>
-          {einsatz.ort ? "Name / Ort ändern…" : "Ort eintragen…"}
+          Einsatz bearbeiten…
         </button>
       </div>
       <p className="hinweis">
@@ -2313,9 +2328,26 @@ export function EinsatzDetail(props: {
       {/* R19-N6: Lauter Übungsmeldungen ergeben 0 — das steht gleich unter der Null, nicht erst im Kasten weiter unten. */}
       {sum.einheiten === 0 && uebungenDaneben.length > 0 && (
         <p className="hinweis nur-uebung" role="status">
-          Nichts gezählt: {uebungenDaneben.length === 1 ? "die eine eingegangene Meldung ist Übung und zählt" : `alle ${uebungenDaneben.length} eingegangenen Meldungen sind Übung und zählen`} nicht in diese Lage.{" "}
-          {/* Neu im Meldekopf: der Ausweg gleich an der Null. Eine Übung wird leicht als „Einsatz" angelegt; in einer Übung zählen die Bögen. */}
-          <button type="button" className="link" onClick={() => void alsUebungFuehren()}>Als Übung führen…</button>
+          {/* Neu im Meldekopf: Hat die Sammlung auch echte Einheiten geführt (heute abgerückt), sind nicht alle eingegangenen
+              Meldungen Übung, nur die anwesenden. */}
+          Nichts gezählt:{" "}
+          {nurUebung
+            ? uebungenDaneben.length === 1
+              ? "die eine eingegangene Meldung ist Übung und zählt"
+              : `alle ${uebungenDaneben.length} eingegangenen Meldungen sind Übung und zählen`
+            : uebungenDaneben.length === 1
+              ? "die eine anwesende Meldung ist Übung und zählt"
+              : `alle ${uebungenDaneben.length} anwesenden Meldungen sind Übung und zählen`}{" "}
+          nicht in diese Lage.
+          {/* Neu im Meldekopf: der Ausweg gleich an der Null, solange die Sammlung keine echte Meldung führt. Eine Übung wird leicht
+              als „Einsatz" angelegt; in einer Übung zählen die Bögen. Hat sie echte Einheiten geführt, steht der Weg nur im Hinweis
+              weiter unten, mit einer Rückfrage, die das sagt. */}
+          {nurUebung && (
+            <>
+              {" "}
+              <button type="button" className="link" onClick={() => void alsUebungFuehren()}>Als Übung führen…</button>
+            </>
+          )}
         </p>
       )}
       {/* Eine nicht gezählte Sollstärke steckt in der Summe: Die Summe sagt, wie viel davon (R8-A1). */}

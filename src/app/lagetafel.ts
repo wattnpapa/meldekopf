@@ -16,9 +16,11 @@
  *    Auf der Tafel stehen sie nur, wenn niemand mehr anwesend ist: Ein Block,
  *    der je nach Füllstand kommt und geht, wäre kein festes Lagebild.
  *  - **Übungsmeldungen in einer echten Lage** stehen als eigene, letzte Gruppe
- *    da, gekennzeichnet und ohne zu zählen (`zaehltInLage`): Wer anwesend ist,
- *    soll auf der Tafel zu finden sein, und eine versehentlich als Übung
- *    gemeldete Einheit fällt so auf. In die Stärke im Kopf, in Bedarf und
+ *    da, ohne zu zählen (`zaehltInLage`): Wer anwesend ist, soll auf der Tafel
+ *    zu finden sein, und eine versehentlich als Übung gemeldete Einheit fällt
+ *    so auf. Sie stehen als knappe Zeilen wie die abgerückten, nicht als
+ *    Karten: Was nicht zählt, soll der Lage weder Platz noch Schrift nehmen
+ *    und kein Blättern auslösen. In die Stärke im Kopf, in Bedarf und
  *    Bewegungen gehen sie nicht ein, wie überall sonst in der App.
  *  - **Der Satz.** `tafelSatz` rechnet aus Zahl der Einheiten und Größe der
  *    Fläche die größte Schrift, bei der alles ins Bild passt, und blättert
@@ -57,6 +59,8 @@ export interface TafelEinheit {
   herkunft: string;
   /** Der Standort am Ende der Herkunft („Oldenburg (NI)"); leer, wenn die Herkunft nur aus einem Teil besteht. */
   ort: string;
+  /** Die Herkunft in der üblichen Kurzform („FF Lenglern"); steht, wo der volle Name nicht passt ({@link herkunftKurzform}). */
+  herkunftKurz: string;
   /**
    * Einheitentyp ausgeschrieben: „Bergungsgruppe", „FGr Notversorgung und Notinstandsetzung" (siehe {@link nameTeile});
    * leer, wenn die Herkunft ihn schon nennt.
@@ -82,10 +86,12 @@ export interface TafelEinheit {
   bedarf: string[];
   marke?: TafelMarke;
   /**
-   * Übungsmeldung in einer echten Lage: anwesend, aber nicht gezählt (`zaehltInLage`). Die Karte trägt das Wort
-   * {@link UEBUNG_WORT}; ihre Stärke steckt weder in der Gesamtstärke noch in einer Zwischensumme.
+   * Übungsmeldung in einer echten Lage: anwesend, aber nicht gezählt (`zaehltInLage`). Sie steht als knappe Zeile in
+   * der Gruppe {@link UEBUNG_WORT}; ihre Stärke steckt weder in der Gesamtstärke noch in einer Zwischensumme.
    */
   uebung: boolean;
+  /** Nur bei einer Übungsmeldung: ihr Zug, falls sie einen trägt. Die Gruppe geht über alle Züge, die Zugehörigkeit stünde sonst nirgends. */
+  zug?: string;
 }
 
 /** Eine Gruppe der Tafel: ein Zug, „ohne Zug", eine Organisation oder die Übungsmeldungen, die nicht zählen. */
@@ -97,11 +103,14 @@ export interface TafelGruppe {
   /** Summe der Einheiten der Gruppe. Bei {@link uebung} zählt sie nicht in die Lage und steht nirgends als Zahl da. */
   staerke: Staerke;
   einheiten: TafelEinheit[];
-  /** Die Gruppe der Übungsmeldungen einer echten Lage: immer die letzte, immer mit Kopf. Die Summen aller übrigen Gruppen ergeben die Gesamtstärke. */
+  /**
+   * Die Gruppe der Übungsmeldungen einer echten Lage: immer die letzte, immer mit Kopf, ihre Einheiten als knappe
+   * Zeilen. Die Summen aller übrigen Gruppen ergeben die Gesamtstärke.
+   */
   uebung: boolean;
 }
 
-/** Das Wort an Gruppe und Karte einer Übungsmeldung, die in der Lage nicht zählt. */
+/** Das Wort an der Gruppe der Übungsmeldungen, die in der Lage nicht zählen, und an einer abgerückten Übungsmeldung. */
 export const UEBUNG_WORT = "Übung";
 
 /** Eine abgerückte Einheit: Name und, wenn bekannt, wann. */
@@ -109,6 +118,8 @@ export interface TafelAbgang {
   id: string;
   name: string;
   zeit: number | null;
+  /** Eine Übungsmeldung, die in dieser Lage nie gezählt hat: Ohne Kennzeichen läse sie sich wie eine Einheit, die der Lage jetzt fehlt. */
+  uebung: boolean;
 }
 
 export interface Tafelbild {
@@ -122,8 +133,13 @@ export interface Tafelbild {
   abgerueckt: TafelAbgang[];
   /** Kurzer Name je Meldung (Herkunft und Typ in Kurzform), für die Bewegungen in der Randspalte. */
   namen: Map<string, string>;
-  /** Breite, die die breiteste Karte je Fassung braucht, damit nichts gekürzt wird, in Schriftgrößen ({@link kartenBedarf}); 0 ohne Einheiten. */
+  /**
+   * Breite, die die breiteste Karte je Fassung braucht, damit nichts gekürzt wird, in Schriftgrößen ({@link kartenBedarf});
+   * 0 ohne Karten. Die Zeilen der Übungsmeldungen zählen nicht mit: Sie werden gekürzt, nicht die Karten verbreitert.
+   */
   bedarf: Record<KartenFassung, number>;
+  /** Dasselbe nur für die Namen ({@link namenBedarf}): Passt nicht alles, sollen wenigstens sie ganz dastehen. */
+  bedarfNamen: Record<KartenFassung, number>;
 }
 
 /**
@@ -148,7 +164,55 @@ export function nameTeile(e: Einheit): { herkunft: string; ort: string; typ: str
   const ort = herkunft.startsWith(organisation + " ") ? herkunft.slice(organisation.length + 1) : "";
   // Nennt Organisation oder Standort den Typ schon („Bundeswehr Panzerpionierzug"), steht er nicht noch einmal da.
   const schonGenannt = lang !== "" && einheitAnzeigename(e) === herkunft;
-  return { herkunft, ort, typ: schonGenannt ? "" : lang.replace(/^Fachgruppe(?=\s)/, "FGr"), typKurz: schonGenannt ? "" : kurz || lang };
+  // Ein Freitext-Typ hat keine Kurzform im Vokabular (beide Formen sind sein Text); die übliche Kürzung („SEG" für
+  // „Schnelleinsatzgruppe") springt dann ein.
+  const typKurz = e.einheitsTyp?.code == null ? kurzName(lang) : kurz;
+  return { herkunft, ort, typ: schonGenannt ? "" : lang.replace(/^Fachgruppe(?=\s)/, "FGr"), typKurz: schonGenannt ? "" : typKurz };
+}
+
+/**
+ * Übliche Kurzformen der Organisationen und ihrer Gliederungen, wie sie auch auf der Lagekarte stehen. Die Tafel zeigt
+ * sie nur, wo der volle Name nicht in die Zeile passt (lagetafel-ui.tsx): „Freiwillige Feuerwehr Lenglern" wird
+ * „FF Lenglern", „DRK-Kreisverband Buchenrode e. V." wird „DRK-KV Buchenrode". So bleibt erkennbar, was sonst mit
+ * Auslassung endete, oft gerade vor dem Teil, der zwei Einheiten unterscheidet. Ohne Rückwärtsblick in den Mustern:
+ * Ältere Browser kennen ihn nicht und lehnten das ganze Skript ab.
+ */
+const KURZFORMEN: readonly [RegExp, string][] = [
+  // „e. V." trägt nichts zur Unterscheidung bei, am Ende wie mitten im Namen („Johanniter-Unfall-Hilfe e.V. Regionalverband …").
+  [/\s*,?\s*\be\.\s?V\.?(?=$|[\s,;)])/gu, ""],
+  [/(^|[\s-])Deutsches Rotes Kreuz(?=$|[\s,.-])/gu, "$1DRK"],
+  [/(^|[\s-])Johanniter-Unfall-Hilfe(?=$|[\s,.-])/gu, "$1JUH"],
+  [/(^|[\s-])Malteser Hilfsdienst(?=$|[\s,.-])/gu, "$1MHD"],
+  [/(^|[\s-])Arbeiter-Samariter-Bund(?=$|[\s,.-])/gu, "$1ASB"],
+  [/(^|[\s-])Deutsche Lebens-Rettungs-Gesellschaft(?=$|[\s,.-])/gu, "$1DLRG"],
+  [/(^|[\s-])Technisches Hilfswerk(?=$|[\s,.-])/gu, "$1THW"],
+  [/(^|[\s-])Freiwillige Feuerwehr(?=$|[\s,.-])/gu, "$1FF"],
+  [/(^|[\s-])Berufsfeuerwehr(?=$|[\s,.-])/gu, "$1BF"],
+  [/(^|[\s-])Werkfeuerwehr(?=$|[\s,.-])/gu, "$1WF"],
+  [/(^|[\s-])Bundeswehr(?=$|[\s,.-])/gu, "$1Bw"],
+  [/(^|[\s-])Landesverband(?=$|[\s,.-])/gu, "$1LV"],
+  [/(^|[\s-])Bezirksverband(?=$|[\s,.-])/gu, "$1BV"],
+  [/(^|[\s-])Regionalverband(?=$|[\s,.-])/gu, "$1RV"],
+  [/(^|[\s-])Kreisverband(?=$|[\s,.-])/gu, "$1KV"],
+  [/(^|[\s-])Ortsverband(?=$|[\s,.-])/gu, "$1OV"],
+  [/(^|[\s-])Ortsverein(?=$|[\s,.-])/gu, "$1OV"],
+  [/(^|[\s-])Ortsgruppe(?=$|[\s,.-])/gu, "$1OG"],
+  // Für Einheitentypen im Freitext, die keine Kurzform im Vokabular haben.
+  [/(^|[\s-])Schnelleinsatzgruppe(?=$|[\s,.-])/gu, "$1SEG"],
+  [/(^|[\s-])Technische Einsatzleitung(?=$|[\s,.-])/gu, "$1TEL"],
+];
+
+/** Ein Name in seiner üblichen Kurzform ({@link KURZFORMEN}); unverändert, wenn keine passt. */
+export function kurzName(name: string): string {
+  let kurz = name.trim();
+  for (const [muster, ersatz] of KURZFORMEN) kurz = kurz.replace(muster, ersatz);
+  return kurz.replace(/\s+/g, " ").trim() || name.trim();
+}
+
+/** Kurzform der Herkunft aus ihren Teilen (Organisation und Standort, siehe {@link nameTeile}); Teile einzeln gekürzt. */
+export function herkunftKurzform(herkunft: string, ort: string): string {
+  const organisation = ort ? herkunft.slice(0, herkunft.length - ort.length).trim() : herkunft;
+  return [kurzName(organisation), ort ? kurzName(ort) : ""].filter(Boolean).join(" ");
 }
 
 /**
@@ -207,6 +271,11 @@ function abrueckzeit(e: MeldeEintrag): number | null {
   return vermerke.length > 0 ? Math.max(...vermerke.map((v) => v.zeit)) : null;
 }
 
+/** Die Teile des Namens samt Kurzform der Herkunft. */
+function mitKurzform<T extends { herkunft: string; ort: string }>(n: T): T & { herkunftKurz: string } {
+  return { ...n, herkunftKurz: herkunftKurzform(n.herkunft, n.ort) };
+}
+
 export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): Tafelbild {
   const bild = lagebild(einsatz, jetzt);
   const zeilen = new Map<string, EinheitZeile>(bild.einheiten.map((z) => [z.id, z]));
@@ -243,7 +312,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
     gruppe.einheiten.push({
       id: m.id,
       einheit: m.bogen.einheit,
-      ...meldungTeile(m),
+      ...mitKurzform(meldungTeile(m)),
       funkruf: z.funkruf,
       auftrag: z.auftrag ?? "",
       staerke: { fuehrer: z.fuehrer, unterfuehrer: z.unterfuehrer, mannschaft: z.mannschaft, gesamt: z.gesamt },
@@ -275,17 +344,18 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
         return {
           id: m.id,
           einheit: e,
-          ...meldungTeile(m),
+          ...mitKurzform(meldungTeile(m)),
           funkruf: m.bogen.fahrzeuge.map((f) => funkrufText(f, e)).find((t) => t !== "") ?? "",
-          // Die Gruppe geht über alle Züge: Zu welchem Zug die Einheit gehört, stünde sonst nirgends. Der Zug steht vor dem Auftrag.
-          auftrag: [(m.zugEtikett ?? "").trim(), m.notiz?.trim() ? auftragKurz(m.notiz) : ""].filter(Boolean).join(" · "),
+          auftrag: m.notiz?.trim() ? auftragKurz(m.notiz) : "",
           staerke: { fuehrer: st.fuehrer, unterfuehrer: st.unterfuehrer, mannschaft: st.mannschaft, gesamt: st.gesamt },
           soll: nurSollstaerke(m.bogen),
           stand: angabenZeit(m),
           eingetroffen: eintreffzeit(m),
-          // Ihr Bedarf gehört nicht in diese Lage: Die Randspalte zählt ihn nicht, also steht er auch nicht als Warnung an der Karte.
+          // Ihr Bedarf gehört nicht in diese Lage: Die Randspalte zählt ihn nicht, also steht er auch nicht als Warnung an der Zeile.
           bedarf: [],
           uebung: true,
+          // Die Gruppe geht über alle Züge: Zu welchem Zug die Einheit gehört, stünde sonst nirgends.
+          ...((m.zugEtikett ?? "").trim() ? { zug: m.zugEtikett!.trim() } : {}),
         };
       })
       .sort(nachEintreffen);
@@ -297,54 +367,106 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
     .map((e): TafelAbgang => {
       const n = meldungTeile(e);
       // Eine Übungsmeldung, die in dieser Lage nie gezählt hat, trägt auch als abgerückte ihr Wort: Sonst läse sie sich
-      // wie eine Einheit, die der Lage jetzt fehlt.
-      const uebung = zaehltInLage(einsatz.art, e.bogen) ? "" : `(${UEBUNG_WORT})`;
-      return { id: e.id, name: [n.herkunft, n.typKurz, uebung].filter(Boolean).join(" "), zeit: abrueckzeit(e) };
+      // wie eine Einheit, die der Lage jetzt fehlt. Das Wort steht neben dem Namen, nicht in ihm: Gekürzt wird der Name.
+      // In den Listen (Abgerückt, Randspalte) steht der Name kurz wie der Typ: Dort ist eine Zeile schmal und endet sonst mit
+      // Auslassung, oft vor dem Standort, der zwei Einheiten unterscheidet.
+      return { id: e.id, name: [herkunftKurzform(n.herkunft, n.ort), n.typKurz].filter(Boolean).join(" "), zeit: abrueckzeit(e), uebung: !zaehltInLage(einsatz.art, e.bogen) };
     })
     .sort((a, b) => (b.zeit ?? 0) - (a.zeit ?? 0) || a.id.localeCompare(b.id));
 
   const namen = new Map<string, string>(abgerueckt.map((a) => [a.id, a.name]));
-  for (const g of gruppen) for (const e of g.einheiten) namen.set(e.id, [e.herkunft, e.typKurz].filter(Boolean).join(" "));
+  for (const g of gruppen) for (const e of g.einheiten) namen.set(e.id, [e.herkunftKurz, e.typKurz].filter(Boolean).join(" "));
   const bedarf: Record<KartenFassung, number> = { breit: 0, drei: 0, zwei: 0 };
+  const bedarfNamen: Record<KartenFassung, number> = { breit: 0, drei: 0, zwei: 0 };
   for (const g of gruppen) {
+    if (g.uebung) continue;
     for (const e of g.einheiten) {
       const b = kartenBedarf(e);
-      for (const f of FASSUNGEN) bedarf[f] = Math.max(bedarf[f], b[f]);
+      const n = namenBedarf(e);
+      for (const f of FASSUNGEN) {
+        bedarf[f] = Math.max(bedarf[f], b[f]);
+        bedarfNamen[f] = Math.max(bedarfNamen[f], n[f]);
+      }
     }
   }
-  return { bild, gliederung: mitZug ? "zug" : "organisation", gruppen, abgerueckt, namen, bedarf };
+  return { bild, gliederung: mitZug ? "zug" : "organisation", gruppen, abgerueckt, namen, bedarf, bedarfNamen };
 }
 
 /**
- * Mittlere Breite eines Zeichens der Tafelschrift (Archivo) in Schriftgrößen, gemessen an typischen Namen, Aufträgen
- * und Funkrufnamen: fett 0,46 bis 0,59, normal 0,44 bis 0,55. Gerechnet wird mit Werten am oberen Rand der Mitte.
+ * Breite der Zeichen der Tafelschrift (Archivo) in Schriftgrößen, fett gesetzt: im Browser gemessen (jedes Zeichen
+ * zehnfach, ohne Unterschneidung) und zu Gruppen gerundet, im Zweifel nach oben. Ein Zeichen, das in keiner Gruppe
+ * steht, zählt wie ein Kleinbuchstabe (0,52 bis 0,61). Ein fester Mittelwert reichte nicht: Die Namen auf der Tafel
+ * liegen zwischen 0,52 („Freiwillige Feuerwehr …") und 0,62 („DLRG Baden") je Zeichen; mit 0,56 passte „THW
+ * Gieboldehausen" nach der Rechnung, auf dem Fernseher fehlten ihm 8 px.
  */
-const ZEICHENBREITE = { fett: 0.56, normal: 0.5 } as const;
+const ZEICHENGRUPPEN: readonly (readonly [string, number])[] = [
+  [" ", 0.2],
+  ["iljI'!.,:;|", 0.31],
+  ["ftr()/-", 0.38],
+  ["FJLPSTZ", 0.66],
+  ["ABCDEGHKNOQRUVXYÄÖÜ&+", 0.76],
+  ["mwM", 0.89],
+  ["W—", 1],
+];
+const ZEICHENBREITE = new Map<string, number>(ZEICHENGRUPPEN.flatMap(([zeichen, breite]) => Array.from(zeichen, (z): [string, number] => [z, breite])));
+/** Normal gesetzt ist die Schrift etwas schmaler als fett (gemessen 0,93 bis 1,0). */
+const NORMAL_ZU_FETT = 0.96;
+
+/** Geschätzte Breite eines Textes in fetter Tafelschrift, in Schriftgrößen ({@link ZEICHENGRUPPEN}). */
+export function textBreite(text: string): number {
+  let summe = 0;
+  for (const zeichen of text) summe += ZEICHENBREITE.get(zeichen) ?? 0.61;
+  return summe;
+}
+
+/** Zeichen, Polster und Balken der Karte (0,36 + 0,5 + 0,2), in Schriftgrößen der Herkunftszeile. */
+const kartenRand = () => SATZ.zeichen + 1.06;
+
+/** „Stand 03:21" samt Abstand; mit Datum („Stand 10.11. 22:58") braucht er mehr, das bleibt der Kürzung überlassen. */
+const STAND_BREITE = 3.75;
+
+/** Die Stärke an der Karte („0/3/6// 9", mit Soll-Marke) samt Abstand zum Namen, in Schriftgrößen der Herkunftszeile. */
+function staerkeBreite(e: TafelEinheit): number {
+  const s = e.staerke;
+  return 0.66 * 0.42 * `${s.fuehrer}/${s.unterfuehrer}/${s.mannschaft}//`.length + 1.16 * 0.63 * String(s.gesamt).length + 0.74 + (e.soll ? 1.1 : 0);
+}
+
+/**
+ * Breite, die eine Karte je Fassung braucht, damit ihr Name ganz dasteht (in der Kurzform, {@link herkunftKurzform}),
+ * in Schriftgrößen der Herkunftszeile. In „zwei" und „drei" teilt er sich die erste Zeile mit der Stärke; in „breit"
+ * steht er in der Spalte „wer", die höchstens `SATZ.wer.max` des Platzes neben dem Zeichen bekommt.
+ */
+export function namenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
+  const rand = kartenRand();
+  const name = textBreite(e.herkunftKurz);
+  const staerke = staerkeBreite(e);
+  return {
+    zwei: rand + name + staerke,
+    drei: rand + name + staerke,
+    breit: rand + Math.max((name + 0.8) / SATZ.wer.max, name + 0.8 + Math.max(staerke, STAND_BREITE)),
+  };
+}
 
 /**
  * Breite, die eine Karte je Fassung braucht, damit nichts gekürzt wird, in Schriftgrößen der Herkunftszeile. Geschätzt
- * aus Zeichenzahlen, weil der Satz ohne Browser rechnet; die Schriftgrade sind die der Stilvorlage (Typ, Funkrufname
- * und Auftrag 0,74, in der breiten Fassung der Auftrag 0,86, Marken 0,7, Stand 0,62). Für einen Typ mit Kurzform zählt
- * die Kurzform: Sie springt ein, wo der ausgeschriebene nicht passt.
+ * aus den Breiten der Zeichen ({@link textBreite}), weil der Satz ohne Browser rechnet; die Schriftgrade sind die der Stilvorlage (Typ, Funkrufname
+ * und Auftrag 0,74, in der breiten Fassung der Auftrag 0,86, Marken 0,7, Stand 0,62). Für Herkunft und Typ zählt die
+ * Kurzform („FF Lenglern", „B"): Sie springt ein, wo die volle Form nicht passt, und muss selbst ganz dastehen.
  *
  * {@link tafelSatz} wählt damit, wenn es die Schrift kaum kostet, einen Satz, in dem alles ganz dasteht: etwa die
  * dreizeilige Fassung, wo in der breiten Name und Auftrag nicht nebeneinander passen.
  */
 export function kartenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
-  const fett = (text: string) => text.length * ZEICHENBREITE.fett;
-  const normal = (text: string) => text.length * ZEICHENBREITE.normal;
-  // Zeichen, Polster und Balken der Karte (0,36 + 0,5 + 0,2).
-  const rand = SATZ.zeichen + 1.06;
-  const s = e.staerke;
-  const staerke = 0.66 * 0.42 * `${s.fuehrer}/${s.unterfuehrer}/${s.mannschaft}//`.length + 1.16 * 0.63 * String(s.gesamt).length + 0.74 + (e.soll ? 1.1 : 0);
-  // „Stand 03:21" samt Abstand; mit Datum („Stand 10.11. 22:58") braucht er mehr, das bleibt der Kürzung überlassen.
-  const stand = 3.75;
-  // Eine Übungsmeldung, die nicht zählt, trägt ihr Wort als Marke; eine Bewegung oder Bedarf hat sie nicht.
-  const marken = [e.uebung ? UEBUNG_WORT : e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
+  const fett = textBreite;
+  const normal = (text: string) => textBreite(text) * NORMAL_ZU_FETT;
+  const rand = kartenRand();
+  const staerke = staerkeBreite(e);
+  const stand = STAND_BREITE;
+  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
   const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.88 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
-  const kopf = fett(e.herkunft) + staerke;
+  // Wie beim Typ zählt die Kurzform: Sie springt ein, wo der volle Name nicht passt („FF Lenglern"), und bleibt ganz.
+  const kopf = fett(e.herkunftKurz) + staerke;
   const typKurz = e.typKurz ? 0.74 * fett(e.typKurz) + 0.33 : 0;
-  const ohneKurzform = e.typ !== "" && e.typKurz === e.typ;
   const funk = e.funkruf ? 0.74 * normal(e.funkruf) + 0.33 : 0;
   const auftrag = e.auftrag ? 0.74 * (normal(e.auftrag) + 0.8) : 0;
   return {
@@ -352,8 +474,9 @@ export function kartenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
     zwei: rand + Math.max(kopf, typKurz + auftrag + markenBreite + stand),
     // Drei Zeilen: Name und Stärke; Typ und Stand; Funkrufname, Auftrag und Marken.
     drei: rand + Math.max(kopf, typKurz + stand, funk + auftrag + markenBreite),
-    // Breit: links Name (und ein Typ ohne Kurzform), rechts Auftrag oder Funkrufname mit Marken, dahinter Stärke und Stand.
-    breit: rand + Math.max(fett(e.herkunft), ohneKurzform ? typKurz : 0) + 0.8 + Math.max(e.auftrag ? 0.86 * normal(e.auftrag) : 0, funk + markenBreite) + Math.max(staerke, stand),
+    // Breit: links Name und Typ, rechts Auftrag oder Funkrufname mit Marken, dahinter Stärke und Stand. Ein Typ aus dem
+    // Vokabular ist kurz („B"); ins Gewicht fällt hier der Freitext, auch in seiner Kurzform („SEG Betreuung …").
+    breit: rand + Math.max(fett(e.herkunftKurz), typKurz) + 0.8 + Math.max(e.auftrag ? 0.86 * normal(e.auftrag) : 0, funk + markenBreite) + Math.max(staerke, stand),
   };
 }
 
@@ -514,6 +637,16 @@ export type TafelZelle =
   | { art: "abgang"; index: number }
   | { art: "abgang-rest"; anzahl: number };
 
+/**
+ * Eine Gruppe, wie der Satz sie sieht: ob sie einen Kopf hat, wie viele Einheiten sie führt und ob diese als knappe
+ * Zeile stehen statt als Karte (die Übungsmeldungen, die nicht zählen).
+ */
+export interface SatzGruppe {
+  kopf: boolean;
+  anzahl: number;
+  zeile?: boolean;
+}
+
 export interface TafelSatz {
   fassung: KartenFassung;
   /** Schriftgröße der Herkunftszeile in Pixeln. */
@@ -600,11 +733,12 @@ function setzen(bloecke: readonly Block[], hoehe: number, fuellen = false): Tafe
   return spalten;
 }
 
-function bloecke(gruppen: readonly { kopf: boolean; anzahl: number }[], fassung: KartenFassung, abgaengeGesamt: number, abgaenge: number): Block[] {
+function bloecke(gruppen: readonly SatzGruppe[], fassung: KartenFassung, abgaengeGesamt: number, abgaenge: number): Block[] {
   const aus: Block[] = gruppen.map((g, gruppe) => ({
     kopf: g.kopf ? (fortsetzung) => ({ art: "kopf", gruppe, fortsetzung }) : null,
     zeilen: Array.from({ length: g.anzahl }, (_, index): TafelZelle => ({ art: "einheit", gruppe, index })),
-    zeilenHoehe: SATZ.karte[fassung].hoehe,
+    // Die Übungsmeldungen stehen als Zeile, so hoch wie die einer abgerückten Einheit, in jeder Fassung gleich.
+    zeilenHoehe: g.zeile ? SATZ.abgang : SATZ.karte[fassung].hoehe,
   }));
   if (abgaenge > 0) {
     const zeilen: TafelZelle[] = Array.from({ length: abgaenge }, (_, index) => ({ art: "abgang", index }));
@@ -640,7 +774,7 @@ function groessteSchrift(bl: readonly Block[], spalten: number, masse: TafelMass
 }
 
 function besterSatz(
-  gruppen: readonly { kopf: boolean; anzahl: number }[],
+  gruppen: readonly SatzGruppe[],
   abgaengeGesamt: number,
   abgaenge: number,
   masse: TafelMasse,
@@ -693,20 +827,24 @@ const runden = (schrift: number) => Math.floor(schrift * 4) / 4;
  *  1. Alle anwesenden Einheiten stehen auf einer Seite, in der größten Schrift, die das erlaubt.
  *  2. Erst wenn die kleinste Schrift nicht reicht, blättert die Tafel; dann in der knappsten Fassung, und die Gruppen
  *     laufen über Spalten und Seiten weiter, statt Platz frei zu lassen.
- *  3. Abgerückte Einheiten stehen nur da, wenn sonst keine Karte auf der Tafel steht (höchstens `SATZ.abgaengeMax`, der
+ *  3. Abgerückte Einheiten stehen nur da, wenn sonst nichts auf der Tafel steht (höchstens `SATZ.abgaengeMax`, der
  *     Rest als Zahl). Sonst führt sie die Randspalte: Ein Block, der mit dem Füllstand kommt und geht, wäre kein
- *     festes Lagebild. Übungsmeldungen, die nicht zählen, sind Karten wie andere.
+ *     festes Lagebild. Übungsmeldungen, die nicht zählen, stehen als knappe Zeilen (`SatzGruppe.zeile`).
  *
  * `bedarf` ist die Breite, die der längste Inhalt je Fassung braucht ({@link kartenBedarf}, in Schriftgrößen). Gibt es
  * damit einen Satz, in dem nichts gekürzt wird, gewinnt er, solange seine Schrift gut lesbar bleibt oder höchstens ein
- * Zehntel kleiner ist als ohne diese Rücksicht. Sonst gelten die Mindestbreiten der Fassungen: Dann wird ein langer
- * Name gekürzt, statt allen die Schrift zu nehmen oder die Tafel blättern zu lassen.
+ * Zehntel kleiner ist als ohne diese Rücksicht. Sonst gilt dasselbe für `namen`, die Breite, die allein die Namen
+ * brauchen ({@link namenBedarf}): Sie sagen, wer da ist; Typ, Auftrag und Marken dürfen eher gekürzt werden. Ein
+ * einziger langer Auftrag soll nicht dazu führen, dass auch ein Name gekürzt wird, dem eine Drittel Schriftbreite fehlt.
+ * Erst wenn auch das zu viel kostet, gelten die Mindestbreiten der Fassungen: Dann wird ein langer Name gekürzt, statt
+ * allen die Schrift zu nehmen oder die Tafel blättern zu lassen.
  */
 export function tafelSatz(
-  gruppen: readonly { kopf: boolean; anzahl: number }[],
+  gruppen: readonly SatzGruppe[],
   abgaengeGesamt: number,
   masse: TafelMasse,
   bedarf: Partial<Record<KartenFassung, number>> = {},
+  namen: Partial<Record<KartenFassung, number>> = {},
 ): TafelSatz {
   const leer: TafelSatz = { fassung: "drei", schrift: runden(SATZ.schriftMax * masse.einheit), spalten: 1, seiten: [[]], abgaenge: 0 };
   const einheiten = gruppen.reduce((n, g) => n + g.anzahl, 0);
@@ -724,18 +862,22 @@ export function tafelSatz(
   };
 
   const mindestens: Record<KartenFassung, number> = { breit: SATZ.karte.breit.breite, drei: SATZ.karte.drei.breite, zwei: SATZ.karte.zwei.breite };
-  const ungekuerzt: Record<KartenFassung, number> = {
-    breit: Math.max(mindestens.breit, bedarf.breit ?? 0),
-    drei: Math.max(mindestens.drei, bedarf.drei ?? 0),
-    zwei: Math.max(mindestens.zwei, bedarf.zwei ?? 0),
-  };
+  const mitBedarf = (b: Partial<Record<KartenFassung, number>>): Record<KartenFassung, number> => ({
+    breit: Math.max(mindestens.breit, b.breit ?? 0),
+    drei: Math.max(mindestens.drei, b.drei ?? 0),
+    zwei: Math.max(mindestens.zwei, b.zwei ?? 0),
+  });
   const waehle = (abgaenge: number): Kandidat | null => {
     const frei = besterSatz(gruppen, abgaengeGesamt, abgaenge, masse, mindestens);
     if (!frei) return null;
-    const ganz = besterSatz(gruppen, abgaengeGesamt, abgaenge, masse, ungekuerzt);
-    // Wie bei den Fassungen: Ist die Schrift des ungekürzten Satzes gut lesbar, gewinnt er immer; darunter nur, wenn er kaum kleiner ist.
+    // Wie bei den Fassungen: Ist die Schrift eines ungekürzten Satzes gut lesbar, gewinnt er immer; darunter nur, wenn er kaum
+    // kleiner ist. Erst alles ganz, dann wenigstens die Namen.
     const schwelle = Math.min(frei.schrift * SATZ.ungekuerztAb, SATZ.gutGenug * masse.einheit);
-    return ganz && ganz.schrift >= schwelle - GENAU ? ganz : frei;
+    for (const stufe of [bedarf, namen]) {
+      const ganz = besterSatz(gruppen, abgaengeGesamt, abgaenge, masse, mitBedarf(stufe));
+      if (ganz && ganz.schrift >= schwelle - GENAU) return ganz;
+    }
+    return frei;
   };
 
   const abgaenge = einheiten === 0 ? Math.min(abgaengeGesamt, SATZ.abgaengeMax) : 0;
@@ -760,20 +902,26 @@ export function tafelSatz(
  * Breite der Spalte „wer" in der breiten Fassung. Dort steht links, wer die Einheit ist (Herkunft, Typ), rechts, was
  * sie tut (Auftrag, Funkrufname). Ein fester Anteil passt selten: Bei „THW Brake" bliebe die halbe Zeile leer, während
  * der Auftrag daneben gekürzt würde; bei „Johanniter-Unfall-Hilfe Regionalverband …" würde der Name gekürzt. Die Spalte
- * ist deshalb so breit wie der längste Name der Tafel (`bedarf.herkunft`, gemessen in `lagetafel-ui.tsx`), für alle
- * Karten gleich, damit die Spalten fluchten. Dem Auftrag bleibt immer ein Rest: Mehr als `SATZ.wer.max` des Platzes
- * neben dem Zeichen (`platz`) bekommt der Name nicht.
+ * richtet sich deshalb nach den Namen der Tafel (gemessen in `lagetafel-ui.tsx`), für alle Karten gleich, damit die
+ * Spalten fluchten:
+ *
+ * - `ganz`: was ganz dastehen muss, der längste Name oder Typ ohne Kurzform und die längste Kurzform;
+ * - `lang`: was dastehen soll, soweit Platz ist, die längste volle Form, für die eine Kurzform einspringt
+ *   („Freiwillige Feuerwehr Lenglern", „Bergungsgruppe");
+ * - `frei`: was Auftrag und Funkrufname daneben übrig lassen.
+ *
+ * Dem Auftrag bleibt immer ein Rest: Mehr als `SATZ.wer.max` des Platzes neben dem Zeichen (`platz`) bekommt der Name nicht.
  */
-export function werBreite(bedarf: { herkunft: number; typ: number; frei: number }, platz: number): number {
+export function werBreite(bedarf: { ganz: number; lang: number; frei: number }, platz: number): number {
   if (!(platz > 0)) return 0;
-  // Der Name zuerst. Für einen ausgeschriebenen Typ wächst die Spalte nur so weit, wie dafür weder ein Auftrag noch
-  // ein Funkrufname gekürzt wird (`frei`): Der Typ hat eine Kurzform, die beiden haben keine.
-  const breite = Math.max(bedarf.herkunft, Math.min(bedarf.typ, bedarf.frei));
+  // Was ganz dastehen muss, zuerst. Für eine volle Form wächst die Spalte nur so weit, wie dafür weder ein Auftrag noch
+  // ein Funkrufname gekürzt wird (`frei`): Name und Typ haben eine Kurzform, die beiden nicht.
+  const breite = Math.max(bedarf.ganz, Math.min(bedarf.lang, bedarf.frei));
   return Math.min(Math.max(breite, platz * SATZ.wer.min), platz * SATZ.wer.max);
 }
 
 /** Alle Zellen in einer Spalte, ohne Rechnung: für das Telefon und überall, wo die Fläche mitwächst. Abgerückte wie in {@link tafelSatz}. */
-export function tafelFortlaufend(gruppen: readonly { kopf: boolean; anzahl: number }[], abgaengeGesamt: number): TafelZelle[] {
+export function tafelFortlaufend(gruppen: readonly SatzGruppe[], abgaengeGesamt: number): TafelZelle[] {
   const aus: TafelZelle[] = [];
   const einheiten = gruppen.reduce((n, g) => n + g.anzahl, 0);
   for (const b of bloecke(gruppen, "drei", abgaengeGesamt, einheiten === 0 ? Math.min(abgaengeGesamt, SATZ.abgaengeMax) : 0)) {

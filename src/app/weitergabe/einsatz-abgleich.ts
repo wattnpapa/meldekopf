@@ -30,6 +30,13 @@
  *
  * Kein Schemawechsel: die Felder sind die App-Zusätze aus eintrag-zeiten.ts,
  * die schon heute mit Sammel-PDF und Einsatz-Transport reisen.
+ *
+ * Neu im Meldekopf: die Art der Sammlung. Sie lässt sich nachträglich ändern
+ * (`einsatzArtSetzen`) und entscheidet, ob Übungsbögen zählen; zwei Geräte
+ * mit verschiedener Art zählen dieselbe Lage verschieden. Es gilt die zuletzt
+ * umgestellte (`artSeit`); hat nur ein Gerät umgestellt, dessen Art. Haben
+ * beide umgestellt oder lässt es sich nicht entscheiden, nennt die Quittung
+ * es als Widerspruch.
  */
 
 import {
@@ -37,9 +44,11 @@ import {
   einsaetzeLaden,
   einsaetzePapierkorb,
   einsatzImportieren,
+  type EinsatzArt,
   type Einsatzsammlung,
   type MeldeEintrag,
 } from "@bos/meldekopf/einsaetze";
+import { ART_LABEL } from "../einsaetze-konstanten";
 import { staerke } from "@bos/eeb-format/model";
 import { geltendeJeEinheit, istPlatzhalterFassung } from "../fassung-vorrang";
 import { einheitAnzeigename, zeitpunktDeutsch } from "../hilfen";
@@ -254,6 +263,16 @@ export interface AbgleichWiderspruch {
   gilt: "hier" | "datei";
 }
 
+/** Die Art der Sammlung war auf beiden Geräten verschieden (neu im Meldekopf). */
+export interface ArtAbgleich {
+  hier: EinsatzArt;
+  datei: EinsatzArt;
+  /** Welche jetzt gilt: die zuletzt umgestellte. */
+  gilt: "hier" | "datei";
+  /** Beide Geräte haben umgestellt, oder keines trägt eine Zeit: Die Quittung nennt es, damit nichts still kippt. */
+  widerspruch: boolean;
+}
+
 export interface AbgleichErgebnis {
   neuerEinsatz: boolean;
   /** Neu angehängte Meldungen (Kern). */
@@ -270,14 +289,41 @@ export interface AbgleichErgebnis {
    * hier behalten), fehlt das Feld: das hat das andere Gerät noch nicht.
    */
   bekannt: Record<string, Partial<Record<StandFeld, string>>>;
+  /** Nur wenn die Art auf beiden Geräten verschieden war. */
+  art?: ArtAbgleich;
 }
 
 /**
  * Hat das Einspielen einer Datei etwas verändert? Neue Meldungen oder aktualisierte Werte ja; eine ältere Datei,
- * deren Inhalt hier schon steht (oder überholt ist), nicht (R13-A4).
+ * deren Inhalt hier schon steht (oder überholt ist), nicht (R13-A4). Eine von dort übernommene Art zählt mit.
  */
-export function importUebernahm(r: Pick<AbgleichErgebnis, "neuerEinsatz" | "hinzugefuegt" | "aktualisiert">): boolean {
-  return r.neuerEinsatz || r.hinzugefuegt > 0 || r.aktualisiert.length > 0;
+export function importUebernahm(r: Pick<AbgleichErgebnis, "neuerEinsatz" | "hinzugefuegt" | "aktualisiert"> & Partial<Pick<AbgleichErgebnis, "art">>): boolean {
+  return r.neuerEinsatz || r.hinzugefuegt > 0 || r.aktualisiert.length > 0 || r.art?.gilt === "datei";
+}
+
+/**
+ * Welche Art gilt, wenn sie auf beiden Geräten verschieden ist: die zuletzt umgestellte (`artSeit`). Hat nur eine Seite
+ * umgestellt, gilt deren Art ohne Widerspruch; die andere kennt die Umstellung nur noch nicht.
+ */
+export function artEntscheiden(hier: Pick<Einsatzsammlung, "art" | "artSeit">, datei: Pick<Einsatzsammlung, "art" | "artSeit">): ArtAbgleich | null {
+  if (hier.art === datei.art) return null;
+  const h = hier.artSeit;
+  const d = datei.artSeit;
+  if (d != null && (h == null || d > h)) return { hier: hier.art, datei: datei.art, gilt: "datei", widerspruch: h != null };
+  return { hier: hier.art, datei: datei.art, gilt: "hier", widerspruch: h == null || d != null };
+}
+
+/** Der Satz der Quittung zur Art; leer, wenn nichts zu sagen ist (die Art dieses Geräts ist die jüngere). */
+export function artText(a: ArtAbgleich | undefined): string {
+  if (!a) return "";
+  if (a.gilt === "datei") {
+    return a.widerspruch
+      ? `Widerspruch bei der Art der Sammlung: hier „${ART_LABEL[a.hier]}“, in der Datei „${ART_LABEL[a.datei]}“; die jüngere Umstellung aus der Datei gilt. Bitte prüfen.`
+      : `Art der Sammlung vom anderen Gerät übernommen: jetzt „${ART_LABEL[a.datei]}“ (vorher „${ART_LABEL[a.hier]}“).`;
+  }
+  return a.widerspruch
+    ? `Widerspruch bei der Art der Sammlung: hier „${ART_LABEL[a.hier]}“, in der Datei „${ART_LABEL[a.datei]}“; die Art dieses Geräts bleibt. Bitte prüfen.`
+    : "";
 }
 
 /** Satz der Quittung, wenn die Datei nichts Neueres enthielt. */
@@ -357,6 +403,17 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
 
   const einheiten = new Set(importiert.eintraege.map((e) => e.einheitSchluessel));
   let geschrieben = false;
+  // Die Art der Sammlung (neu im Meldekopf): Es gilt die zuletzt umgestellte. Eine Sammlung, die für ein ANDERES Ziel
+  // zugeschnitten wurde (`sammlungFuerZiel`), trägt schon Art und Zeit des Ziels und kommt hier nicht an.
+  const art = artEntscheiden(vorher, importiert);
+  if (art) {
+    ergebnis.art = art;
+    if (art.gilt === "datei") {
+      s.art = importiert.art;
+      if (importiert.artSeit != null) s.artSeit = importiert.artSeit;
+      geschrieben = true;
+    }
+  }
   // Welche Fassung gilt, hat womöglich das andere Gerät entschieden (R4-W1):
   // ein dort bestätigter Vorrang kommt mit, solange hier keiner gesetzt ist.
   for (const e of importiert.eintraege) {
@@ -428,8 +485,10 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
  * 20:47; Biberach Zug „2. TZ“." und — falls vorhanden — die Widersprüche.
  * Leer, wenn nichts abzugleichen war.
  */
-export function abgleichText(r: Pick<AbgleichErgebnis, "aktualisiert" | "widersprueche">): string {
+export function abgleichText(r: Pick<AbgleichErgebnis, "aktualisiert" | "widersprueche"> & Partial<Pick<AbgleichErgebnis, "art">>): string {
   const teile: string[] = [];
+  const artSatz = artText(r.art);
+  if (artSatz) teile.push(artSatz);
   if (r.aktualisiert.length > 0) {
     const n = r.aktualisiert.length;
     teile.push(
@@ -478,13 +537,18 @@ export function widerspruchZeile(w: AbgleichWiderspruch): string {
 }
 
 /** Die Widersprüche, die gemerkt werden: ohne die kleinen Eintreffzeit-Abweichungen. */
-export function widerspruecheZumMerken(r: Pick<AbgleichErgebnis, "widersprueche">): string[] {
-  return r.widersprueche.filter((w) => w.feld !== FELD_NAME.eintreffzeit).map(widerspruchZeile);
+export function widerspruecheZumMerken(r: Pick<AbgleichErgebnis, "widersprueche"> & Partial<Pick<AbgleichErgebnis, "art">>): string[] {
+  const zeilen = r.widersprueche.filter((w) => w.feld !== FELD_NAME.eintreffzeit).map(widerspruchZeile);
+  // Ein Widerspruch bei der Art der Sammlung bleibt wie die der Einheiten an der Einsatzansicht stehen (neu im Meldekopf).
+  return r.art?.widerspruch ? [artText(r.art), ...zeilen] : zeilen;
 }
 
-export function abgleichGliederung(r: Pick<AbgleichErgebnis, "aktualisiert" | "widersprueche">): { kurz: string[]; einzelheiten: Einzelheit[] } {
+export function abgleichGliederung(r: Pick<AbgleichErgebnis, "aktualisiert" | "widersprueche"> & Partial<Pick<AbgleichErgebnis, "art">>): { kurz: string[]; einzelheiten: Einzelheit[] } {
   const kurz: string[] = [];
   const einzelheiten: Einzelheit[] = [];
+  // Die Art zuerst: Sie ändert, was in der ganzen Lage zählt.
+  const artSatz = artText(r.art);
+  if (artSatz) kurz.push(artSatz);
   const BIS = 3;
   if (r.aktualisiert.length > 0) {
     const n = r.aktualisiert.length;

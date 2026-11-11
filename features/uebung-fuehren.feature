@@ -9,6 +9,8 @@ Funktionalität: Eine Sammlung nachträglich als Übung führen
   Das will ich dort beheben können, wo die Null steht, ohne die Sammlung neu
   anzulegen; bis dahin sollen die Einheiten am Fernseher trotzdem zu sehen sein.
 
+  # Auf der Tafel stehen sie als knappe Zeilen in der Gruppe „Übung", nicht als
+  # Karten: Was nicht zählt, soll der Lage weder Platz noch Schrift nehmen.
   Szenario: Übungsbögen in einer Einsatz-Sammlung stehen auf der Tafel, ohne zu zählen
     Angenommen auf dem Gerät liegt die Sammlung "Tafel Test" mit 4 Übungsbögen
     Dann sehe ich die Überschrift "Einheiten (4 gemeldet"
@@ -16,11 +18,11 @@ Funktionalität: Eine Sammlung nachträglich als Übung führen
     Wenn ich für den Fernseher die Darstellung "Tafel" wähle
     Und ich den Lagemonitor öffne
     Dann zeigt der Lagemonitor die Tafel
-    Und zeigt der Lagemonitor "Keine Einheit in der Lage (4 Übung, nicht gezählt)."
+    Und zeigt der Lagemonitor "Keine Einheit in der Lage: 4 Übungsmeldungen, nicht gezählt."
     Und zeigt der Lagemonitor "Als Übung führen…"
+    Und zeigt der Lagemonitor "Als Einsatzmeldung zählen…"
     Und zeigt die Tafel die Gesamtstärke 0
-    Und zeigt die Tafel 4 Karten mit der Marke "Übung"
-    Und trägt jede Einheit der Tafel ihr taktisches Zeichen
+    Und zeigt die Tafel 4 Übungsmeldungen als Zeilen
     Und stehen alle Einheiten der Tafel ganz im Bild
     Und überdeckt auf der Tafel keine Angabe eine andere
 
@@ -36,17 +38,17 @@ Funktionalität: Eine Sammlung nachträglich als Übung führen
     Und sehe ich den Hinweis "Nichts gezählt" nicht
     Und zeigt der Lagemonitor "ÜBUNG – keine Echtlage"
     Und zeigt die Tafel die Gesamtstärke 24
-    Und zeigt die Tafel keine Karte mit der Marke "Übung"
+    Und zeigt die Tafel keine Übungsmeldung
     Und zeigt der Lagemonitor "nicht gezählt" nicht
     # Der Rückweg steht an der Quittung.
     Wenn ich auf "Änderung am Einsatz rückgängig machen" klicke
     Dann sehe ich den Hinweis "Nichts gezählt: alle 4 eingegangenen Meldungen sind Übung"
     Und zeigt die Tafel die Gesamtstärke 0
-    Und zeigt die Tafel 4 Karten mit der Marke "Übung"
+    Und zeigt die Tafel 4 Übungsmeldungen als Zeilen
 
   Szenario: Die Art steht unter „Einsatz bearbeiten" und lässt sich dort umstellen
     Angenommen auf dem Gerät liegt die Sammlung "Tafel Test" mit 4 Übungsbögen
-    Wenn ich auf "Ort eintragen…" klicke
+    Wenn ich auf "Einsatz bearbeiten…" klicke
     Dann sehe ich den Dialog "Einsatz bearbeiten"
     Wenn ich im Dialog "Art" auf "Übung" stelle
     Und ich im Dialog auf "Übernehmen" klicke

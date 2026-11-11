@@ -436,3 +436,86 @@ describe("abgleichGliederung (Audit Runde 5, R5-K3)", () => {
     expect(g.einzelheiten[0]!.zeilen).toHaveLength(13);
   });
 });
+
+/**
+ * Neu im Meldekopf: Die Art der Sammlung lässt sich nachträglich ändern und entscheidet, ob Übungsbögen zählen.
+ * Vorgefallen (Gegenprüfung): Gerät B las die Übergabe von A ein, nachdem A die Art umgestellt hatte; B behielt die
+ * alte Art, zählte dieselbe Lage anders, und die Quittung sagte, die Datei sei älter.
+ */
+describe("einsatzAbgleichen — Art der Sammlung", () => {
+  /** Eine Lage auf A, als Übergabe an B gegangen; ein Übungsbogen darin. */
+  function lage() {
+    auf(geraetA);
+    const s = einsatzAnlegen("Wattsturm", EinsatzArt.EINSATZ);
+    meldungAufnehmen(s.id, bogen("Echt"), { quelle: "scan" });
+    const uebung = bogen("Geübt");
+    uebung.uebung = true;
+    meldungAufnehmen(s.id, uebung, { quelle: "scan" });
+    const datei = weitergeben(s.id);
+    auf(geraetB);
+    einsatzAbgleichen(datei);
+    return s.id;
+  }
+
+  it("übernimmt die Art, die das andere Gerät umgestellt hat, und sagt es, statt „Datei war älter oder gleich“", async () => {
+    const { einsatzArtSetzen } = await import("../eintrag-zeiten");
+    const { importUebernahm, abgleichGliederung } = await import("./einsatz-abgleich");
+    const id = lage();
+    auf(geraetA);
+    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    const datei = weitergeben(id);
+    auf(geraetB);
+    expect(sammlung(id).art).toBe(EinsatzArt.EINSATZ);
+    const r = einsatzAbgleichen(datei);
+    expect(sammlung(id).art).toBe(EinsatzArt.UEBUNG);
+    expect(sammlung(id).artSeit).toBe(datei.artSeit);
+    expect(r.art).toEqual({ hier: EinsatzArt.EINSATZ, datei: EinsatzArt.UEBUNG, gilt: "datei", widerspruch: false });
+    expect(importUebernahm(r)).toBe(true);
+    expect(abgleichText(r)).toBe("Art der Sammlung vom anderen Gerät übernommen: jetzt „Übung“ (vorher „Einsatz“).");
+    expect(abgleichGliederung(r).kurz[0]).toBe("Art der Sammlung vom anderen Gerät übernommen: jetzt „Übung“ (vorher „Einsatz“).");
+  });
+
+  it("behält die eigene Umstellung, wenn die Datei sie noch nicht kennt, ohne Widerspruch", async () => {
+    const { einsatzArtSetzen } = await import("../eintrag-zeiten");
+    const id = lage();
+    // A gibt weiter, bevor B umstellt: Die Datei trägt die alte Art ohne Zeit.
+    auf(geraetA);
+    const alt = weitergeben(id);
+    auf(geraetB);
+    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    const r = einsatzAbgleichen(alt);
+    expect(sammlung(id).art).toBe(EinsatzArt.UEBUNG);
+    expect(r.art).toEqual({ hier: EinsatzArt.UEBUNG, datei: EinsatzArt.EINSATZ, gilt: "hier", widerspruch: false });
+    expect(abgleichText(r)).toBe("");
+  });
+
+  it("lässt bei zwei Umstellungen die jüngere gelten und nennt es als Widerspruch, der an der Einsatzansicht stehen bleibt", async () => {
+    const { einsatzArtSetzen } = await import("../eintrag-zeiten");
+    const { widerspruecheZumMerken } = await import("./einsatz-abgleich");
+    const id = lage();
+    auf(geraetB);
+    einsatzArtSetzen(id, EinsatzArt.VERANSTALTUNG);
+    auf(geraetA);
+    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    // Die Umstellung auf A ist die jüngere.
+    const datei = weitergeben(id);
+    datei.artSeit = (datei.artSeit ?? 0) + 60_000;
+    auf(geraetB);
+    const r = einsatzAbgleichen(datei);
+    expect(sammlung(id).art).toBe(EinsatzArt.UEBUNG);
+    expect(r.art).toMatchObject({ gilt: "datei", widerspruch: true });
+    expect(abgleichText(r)).toBe("Widerspruch bei der Art der Sammlung: hier „Veranstaltung“, in der Datei „Übung“; die jüngere Umstellung aus der Datei gilt. Bitte prüfen.");
+    expect(widerspruecheZumMerken(r)[0]).toBe(abgleichText(r));
+  });
+
+  it("lässt die Art des Ziels stehen, wenn eine fremde Sammlung in eine laufende Lage übernommen wird", () => {
+    auf(geraetA);
+    const quelle = einsatzAnlegen("Übung Zugführer", EinsatzArt.UEBUNG);
+    meldungAufnehmen(quelle.id, bogen("Fremd"), { quelle: "scan" });
+    const ziel = einsatzAnlegen("Hochwasser", EinsatzArt.EINSATZ);
+    meldungAufnehmen(ziel.id, bogen("Echt"), { quelle: "scan" });
+    const r = einsatzAbgleichen(sammlungFuerZiel(sammlung(quelle.id), sammlung(ziel.id)));
+    expect(r.art).toBeUndefined();
+    expect(sammlung(ziel.id).art).toBe(EinsatzArt.EINSATZ);
+  });
+});

@@ -94,6 +94,15 @@ declare module "@bos/meldekopf/einsaetze" {
      */
     rueckkehr?: { abgerueckAm?: number };
   }
+  interface Einsatzsammlung {
+    /**
+     * Wann die Art zuletzt umgestellt wurde (Geräteuhr, Date.now()); fehlt, solange sie gilt, wie die Sammlung angelegt
+     * wurde. Neu im Meldekopf: Die Art lässt sich nachträglich ändern (`einsatzArtSetzen`). Das Feld reist mit der
+     * Sammlung (Einsatz-Datei, Sammel-PDF) und entscheidet beim Abgleich zweier Geräte, welche Art gilt
+     * (`einsatzAbgleichen`): die zuletzt umgestellte.
+     */
+    artSeit?: number;
+  }
 }
 
 /** Ein Eintrag im Verlauf der Führungsstelle: Zeitpunkt (Date.now()) und Text. */
@@ -389,7 +398,8 @@ export function einsatzArtSetzen(einsatzId: string, art: EinsatzArt): EinsatzArt
   const vorher = s.art;
   if (vorher === art) return vorher;
   s.art = art;
-  s.geaendert = Date.now();
+  s.artSeit = Date.now();
+  s.geaendert = s.artSeit;
   sammlungenSchreiben(liste);
   return vorher;
 }
@@ -407,8 +417,11 @@ export function einsatzKopfMitArtSetzen(einsatzId: string, name: string, ort: st
   const vorher = { name: s.name, ort: s.ort ?? "", art: s.art };
   s.name = name.trim() || s.name;
   s.ort = ort.trim() || undefined;
-  s.art = art;
   s.geaendert = Date.now();
+  if (s.art !== art) {
+    s.art = art;
+    s.artSeit = s.geaendert;
+  }
   sammlungenSchreiben(liste);
   return vorher;
 }

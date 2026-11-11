@@ -87,3 +87,20 @@ Funktionalität: Lagemonitor für den Fernseher
     Und trägt jede Einheit der Tafel ihr taktisches Zeichen
     Und stehen alle Einheiten der Tafel ganz im Bild
     Und überdeckt auf der Tafel keine Angabe eine andere
+
+  # Die volle Randspalte: Bedarf, abgerückte Einheiten, Übersicht der Züge beim
+  # Blättern und frische Bewegungen zugleich. Vorgefallen (Gegenprüfung): Die
+  # Übersicht schrumpfte auf ihre Linie, von „Zuletzt" blieb ein Textrest über
+  # dem Fuß. Erst weicht „Zuletzt", dann die Übersicht; Datenstand und Knöpfe
+  # bleiben im Bild, auch auf dem kleinsten Fernseher.
+  Szenario: Auf der vollen Tafel bleibt die Randspalte geordnet
+    Angenommen auf dem Gerät liegt eine Lage mit 64 Einheiten in 16 Zügen, viele mit Sofortbedarf, 4 davon abgerückt
+    Dann sehe ich die Überschrift "Einheiten (64 gemeldet"
+    Wenn ich für den Fernseher die Darstellung "Tafel" wähle
+    Und ich den Lagemonitor öffne
+    Dann zeigt der Lagemonitor die Tafel
+    Und zeigt der Lagemonitor "Seite 1 von"
+    Und steht die Randspalte der Tafel geordnet im Bild
+    Wenn ich den Fernseher auf 1280 x 720 stelle
+    Dann steht die Randspalte der Tafel geordnet im Bild
+    Und stehen alle Einheiten der Tafel ganz im Bild

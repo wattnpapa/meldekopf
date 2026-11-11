@@ -13,8 +13,8 @@
  *     Eintreffzeit, nicht nach der letzten Meldung. Was sich ändert, wird am
  *     Platz markiert (`lagetafel.ts`). Wer abgerückt ist, steht mit Uhrzeit
  *     in der Randspalte, unabhängig davon, wie voll die Tafel ist.
- *     Übungsmeldungen in einer echten Lage stehen als letzte Gruppe da,
- *     gekennzeichnet und ohne zu zählen.
+ *     Übungsmeldungen in einer echten Lage stehen als letzte Gruppe da, als
+ *     knappe Zeilen und ohne zu zählen.
  *  3. **Das taktische Zeichen ist das Bild der Einheit**, auf heller Unterlage
  *     wie die Karte an der Magnettafel.
  *  4. **Die Tafel füllt sich.** Die Schrift ist so groß, wie die Zahl der
@@ -45,6 +45,8 @@ import {
   type TafelMasse,
   type TafelZelle,
   type Tafelbild,
+  kurzName,
+  textBreite,
   werBreite,
   zeichenFuerTafel,
 } from "./lagetafel";
@@ -155,15 +157,20 @@ function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): n
       messung.selectNodeContents(teil);
       return messung.getBoundingClientRect().width;
     };
-    const bedarf = { herkunft: 0, typ: 0, frei: platz };
+    const bedarf = { ganz: 0, lang: 0, frei: platz };
     for (const karte of el.querySelectorAll<HTMLElement>(".lt-karte")) {
-      const herkunft = karte.querySelector<HTMLElement>(".lt-herkunft");
-      const typ = karte.querySelector<HTMLElement>(".lt-typ");
-      if (herkunft) bedarf.herkunft = Math.max(bedarf.herkunft, text(herkunft) + px(getComputedStyle(herkunft).paddingRight));
-      // Ein Typ ohne Kurzform zählt wie der Name; sonst der ausgeschriebene Typ, soweit Platz ist (für ihn springt die Kurzform ein).
-      const lang = typ?.querySelector(".lt-typ-lang");
-      if (typ && !lang) bedarf.herkunft = Math.max(bedarf.herkunft, text(typ) + px(getComputedStyle(typ).paddingRight));
-      if (typ && lang) bedarf.typ = Math.max(bedarf.typ, text(lang) + px(getComputedStyle(typ).paddingRight));
+      // Name und Typ: Ohne Kurzform muss das Feld ganz dastehen. Mit Kurzform muss sie es, und die volle Form soll es,
+      // soweit Platz ist (für sie springt die Kurzform ein). Gemessen werden die Formen einzeln: Die Hülle mäße die
+      // Kurzform mit, die über ihre ganze Breite steht, also ihre eigene Breite.
+      for (const feld of karte.querySelectorAll<HTMLElement>(".lt-herkunft, .lt-typ")) {
+        const rand = px(getComputedStyle(feld).paddingRight);
+        const lang = feld.querySelector(".lt-herkunft-lang, .lt-typ-lang");
+        const kurz = feld.querySelector(".lt-herkunft-kurz, .lt-typ-kurz");
+        if (lang && kurz) {
+          bedarf.ganz = Math.max(bedarf.ganz, text(kurz) + rand);
+          bedarf.lang = Math.max(bedarf.lang, text(lang) + rand);
+        } else bedarf.ganz = Math.max(bedarf.ganz, text(feld) + rand);
+      }
       // Was die rechte Seite dieser Karte braucht: oben der Auftrag, unten Funkrufname und Marken, dahinter Stärke und Stand.
       const spuren = getComputedStyle(karte).gridTemplateColumns.split(" ").map(px);
       const rechts = (spuren[4] ?? 0) + Math.max(text(karte.querySelector(".lt-auftrag")), text(karte.querySelector(".lt-funkruf")) + (spuren[3] ?? 0));
@@ -171,7 +178,7 @@ function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): n
     }
     // Bruchteile gehen zugunsten dessen, was nicht gekürzt werden soll: Der Bedarf von Name und Typ wird aufgerundet,
     // der Platz, den Auftrag und Funkrufname lassen, abgerundet.
-    const neu = werBreite({ herkunft: Math.ceil(bedarf.herkunft), typ: Math.ceil(bedarf.typ), frei: Math.floor(bedarf.frei) - 1 }, platz);
+    const neu = werBreite({ ganz: Math.ceil(bedarf.ganz), lang: Math.ceil(bedarf.lang), frei: Math.floor(bedarf.frei) - 1 }, platz);
     setBreite((alt) => (alt === neu ? alt : neu));
   });
   return breite;
@@ -211,6 +218,37 @@ function useGanzSichtbar(liste: RefObject<HTMLElement | null>): number | null {
 }
 
 /**
+ * Platz der Randspalte unter ihren festen Blöcken (Zähler, Dauer, Bedarf, Abgerückt), in Pixeln, samt `--lt-e` in Pixeln;
+ * `null`, solange es nichts zu messen gibt (kein Layout) und in der schmalen Darstellung, wo die Randspalte mitwächst.
+ * Gemessen werden nur Dinge, die nicht davon abhängen, welche der weichenden Blöcke dastehen: Die festen Blöcke stehen
+ * oben, und die Hülle ist so hoch, wie der Fuß ihr lässt. So läuft die Entscheidung sich nicht selbst hinterher.
+ */
+function useRandFrei(huelle: RefObject<HTMLElement | null>, fest: RefObject<HTMLElement | null>, aktiv: boolean): { px: number; einheit: number } | null {
+  const [frei, setFrei] = useState<{ px: number; einheit: number } | null>(null);
+  const messen = () => {
+    const h = huelle.current;
+    const f = fest.current;
+    const rahmen = h?.getBoundingClientRect();
+    if (!aktiv || !h || !f || !rahmen || !(rahmen.width > 0 && rahmen.height > 0)) return setFrei(null);
+    const px = Math.floor(rahmen.bottom - f.getBoundingClientRect().bottom);
+    const einheit = Math.min(window.innerHeight, window.innerWidth * 0.5625) / 100;
+    setFrei((alt) => (alt && alt.px === px && alt.einheit === einheit ? alt : { px, einheit }));
+  };
+  useLayoutEffect(messen);
+  useEffect(() => {
+    const h = huelle.current;
+    const f = fest.current;
+    if (!h || !f || typeof ResizeObserver === "undefined") return;
+    const beobachter = new ResizeObserver(messen);
+    beobachter.observe(h);
+    beobachter.observe(f);
+    return () => beobachter.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [huelle.current, fest.current, aktiv]);
+  return frei;
+}
+
+/**
  * Wie viele Zeilen einer Liste in ihr Fenster passen und wie hoch eine Zeile samt Abstand ist; `null`, solange es nichts
  * zu messen gibt (kein Layout). Das Fenster ist das Element um die Liste, das die Höhe begrenzt. Gemessen werden Höhen,
  * nicht die Lage der Einträge: Die Übersicht der Züge wird im Fenster verschoben, damit die Züge der laufenden Seite zu
@@ -243,6 +281,14 @@ function useZeilenPlatz(fenster: RefObject<HTMLElement | null>): { zeilen: numbe
 }
 
 const einheitenWort = (n: number) => (n === 1 ? "Einheit" : "Einheiten");
+
+/**
+ * Mindesthöhe der weichenden Blöcke der Randspalte in Vielfachen von `--lt-e` (plus ein Pixel für die Linie), wie in
+ * lagetafel.css: Abstand über der Linie 1,2, Überschrift 2,1 × 1,2; bei der Übersicht der Züge dazu der Abstand zur
+ * Liste (0,6) und eine Zeile (2,1 × 1,2).
+ */
+const ZULETZT_MINDESTENS_E = 3.8;
+const ZUEGE_MINDESTENS_E = 6.9;
 
 type Zeichensammlung = Awaited<ReturnType<typeof zeichenLaden>>;
 /** Die nachgeladene Zeichensammlung und die schon zugerichteten Zeichen: Jedes Zeichen wird einmal gebaut. */
@@ -336,20 +382,47 @@ function Typ({ e, fassung }: { e: TafelEinheit; fassung: KartenFassung }) {
  * kürzere bleibt ganz: bei „Johanniter-Unfall-Hilfe … Oldenburg" die Organisation, damit der Ort bleibt, der sonst
  * gleichnamige Karten unterscheidet; bei „THW Clausthal-Zellerfeld" der Ort.
  */
+function HerkunftTeile({ herkunft, ort }: { herkunft: string; ort: string }) {
+  const organisation = ort ? herkunft.slice(0, herkunft.length - ort.length).trim() : "";
+  if (!organisation) return <span className="lt-teil-weich">{herkunft}</span>;
+  const ortWeich = ort.length > organisation.length;
+  return (
+    <>
+      <span className={ortWeich ? "lt-teil-fest" : "lt-teil-weich"}>{organisation}</span>{" "}
+      <span className={ortWeich ? "lt-teil-weich" : "lt-teil-fest"}>{ort}</span>
+    </>
+  );
+}
+
+/**
+ * Geschätzte Breite eines Namens in Schriftgrößen, wie er in der Karte steht: Organisation und Standort mit dem Abstand
+ * der Teile (0,26 statt eines Leerzeichens, 0,2). Die Stilvorlage lässt damit einen Namen, dem wenig Platz fehlt, etwas
+ * kleiner laufen, statt ihn zu kürzen (`--lt-name-em` in lagetafel.css).
+ */
+const nameEm = (name: string, ort: string): string => (textBreite(name) + (ort && name !== ort ? 0.06 : 0)).toFixed(2);
+
+/**
+ * Herkunft der Einheit. Hat sie eine übliche Kurzform („Freiwillige Feuerwehr Lenglern" → „FF Lenglern"), wählt die
+ * Stilvorlage ohne Messung wie beim Typ: Der volle Name deckt die Kurzform zu, solange er in die Zeile passt; sonst
+ * steht die Kurzform da. Fehlt auch ihr nur wenig, läuft sie etwas kleiner; erst wenn das nicht reicht, wird ihr
+ * längerer Teil gekürzt. Vorgelesen wird der volle Name.
+ */
 function Herkunft({ e }: { e: TafelEinheit }) {
-  const organisation = e.ort ? e.herkunft.slice(0, e.herkunft.length - e.ort.length - 1) : "";
-  if (!organisation) {
+  if (e.herkunftKurz === e.herkunft) {
     return (
-      <span className="lt-herkunft">
-        <span className="lt-teil-weich">{e.herkunft}</span>
+      <span className="lt-herkunft" style={{ "--lt-name-em": nameEm(e.herkunft, e.ort) } as CSSProperties}>
+        <HerkunftTeile herkunft={e.herkunft} ort={e.ort} />
       </span>
     );
   }
-  const ortWeich = e.ort.length > organisation.length;
+  const ortKurz = e.ort ? kurzName(e.ort) : "";
   return (
-    <span className="lt-herkunft">
-      <span className={ortWeich ? "lt-teil-fest" : "lt-teil-weich"}>{organisation}</span>{" "}
-      <span className={ortWeich ? "lt-teil-weich" : "lt-teil-fest"}>{e.ort}</span>
+    <span className="lt-herkunft lt-herkunft-wahl" style={{ "--lt-name-em": nameEm(e.herkunftKurz, ortKurz) } as CSSProperties}>
+      <span className="lt-typ-anker" />
+      <span className="lt-herkunft-lang">{e.herkunft}</span>
+      <span className="lt-herkunft-kurz" aria-hidden="true">
+        <HerkunftTeile herkunft={e.herkunftKurz} ort={ortKurz} />
+      </span>
     </span>
   );
 }
@@ -375,7 +448,7 @@ function Funkruf({ name }: { name: string }) {
 
 function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung; jetzt: number }) {
   return (
-    <li className="lt-karte" data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined} data-uebung={e.uebung || undefined}>
+    <li className="lt-karte" data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined}>
       <span className="lt-zeichen">
         <TafelZeichen einheit={e.einheit} />
       </span>
@@ -386,7 +459,7 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
       </span>
       <Typ e={e} fassung={fassung} />
       {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, sonst je ein Feld der Karte (lagetafel.css). */}
-      {(e.funkruf || e.auftrag || e.uebung || e.marke || e.bedarf.length > 0) && (
+      {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0) && (
         <span className="lt-wie">
           {e.funkruf && <Funkruf name={e.funkruf} />}
           {e.auftrag && (
@@ -394,10 +467,8 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
               <span className="lt-auftrag-text">{e.auftrag}</span>
             </span>
           )}
-          {(e.uebung || e.marke || e.bedarf.length > 0) && (
+          {(e.marke || e.bedarf.length > 0) && (
             <span className="lt-marken">
-              {/* Jede Karte einer Übungsmeldung trägt ihr Wort selbst: Der Kopf ihrer Gruppe kann eine Spalte weiter stehen. */}
-              {e.uebung && <span className="lt-marke lt-marke-uebung">{UEBUNG_WORT}</span>}
               {e.marke && <span className={`lt-marke lt-marke-${e.marke.art}`}>{e.marke.text}</span>}
               {e.bedarf.length > 0 && <span className="lt-marke lt-marke-achtung">{e.bedarf.join(", ")}</span>}
             </span>
@@ -411,6 +482,22 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
         <span className="lt-stand-wort">Stand </span>
         {uhrzeitText(e.stand, jetzt)}
       </span>
+    </li>
+  );
+}
+
+/**
+ * Eine Übungsmeldung, die in der Lage nicht zählt: eine knappe Zeile wie die einer abgerückten Einheit, in der zweiten
+ * Schriftfarbe. Name, Typ in Kurzform, ihr Zug (die Gruppe geht über alle Züge) und die Stärke; kein Zeichen, kein
+ * Bedarf, keine Bewegung. Das Wort „Übung" trägt der Kopf der Gruppe, der in jeder Spalte, in der sie weiterläuft, wiederkehrt.
+ */
+function UebungZeile({ e }: { e: TafelEinheit }) {
+  return (
+    <li className="lt-abgang lt-uebung-zeile" data-uebung="">
+      <Herkunft e={e} />
+      {e.typKurz && <span className="lt-uebung-typ">{e.typKurz}</span>}
+      {e.zug && <span className="lt-uebung-zug">{e.zug}</span>}
+      <StaerkeKlein s={e.staerke} soll={e.soll} />
     </li>
   );
 }
@@ -432,8 +519,11 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
         </li>
       );
     }
-    case "einheit":
-      return <Karte e={tb.gruppen[zelle.gruppe]!.einheiten[zelle.index]!} fassung={fassung} jetzt={jetzt} />;
+    case "einheit": {
+      const g = tb.gruppen[zelle.gruppe]!;
+      const e = g.einheiten[zelle.index]!;
+      return g.uebung ? <UebungZeile e={e} /> : <Karte e={e} fassung={fassung} jetzt={jetzt} />;
+    }
     case "abgang-kopf":
       return (
         <li className="lt-gruppe lt-gruppe-ab">
@@ -450,6 +540,7 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
         <li className="lt-abgang">
           <span className="lt-abgang-zeit">{a.zeit != null ? uhrzeitText(a.zeit, jetzt) : "–"}</span>
           <span className="lt-abgang-name">{a.name}</span>
+          {a.uebung && <span className="lt-abgang-uebung">({UEBUNG_WORT})</span>}
         </li>
       );
     }
@@ -501,22 +592,24 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   const schmal = useSchmal();
   const flaeche = useRef<HTMLDivElement>(null);
   const masse = useFlaeche(flaeche);
-  const zaehlung = tb.gruppen.map((g) => `${g.kopf ? "k" : "o"}${g.einheiten.length}`).join(",");
+  const satzGruppen = tb.gruppen.map((g) => ({ kopf: g.kopf, anzahl: g.einheiten.length, zeile: g.uebung }));
+  const zaehlung = satzGruppen.map((g) => `${g.kopf ? "k" : "o"}${g.zeile ? "z" : ""}${g.anzahl}`).join(",");
   const abgaenge = tb.abgerueckt.length;
   // Auf halbe Schriftbreiten gerundet: Ein Zeichen mehr im Auftrag soll den Satz nicht neu rechnen lassen.
   const halbe = (em: number) => Math.ceil(em * 2) / 2;
   const bedarf = { breit: halbe(tb.bedarf.breit), drei: halbe(tb.bedarf.drei), zwei: halbe(tb.bedarf.zwei) };
+  const bedarfNamen = { breit: halbe(tb.bedarfNamen.breit), drei: halbe(tb.bedarfNamen.drei), zwei: halbe(tb.bedarfNamen.zwei) };
   // Der Satz hängt nur an Zahl und Gliederung der Einheiten und an der Fläche, nicht an jedem Takt der Uhr.
   const satz = useMemo(
     () =>
       schmal || !masse
         ? null
-        : tafelSatz(tb.gruppen.map((g) => ({ kopf: g.kopf, anzahl: g.einheiten.length })), abgaenge, masse, bedarf),
+        : tafelSatz(satzGruppen, abgaenge, masse, bedarf, bedarfNamen),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [schmal, masse, zaehlung, abgaenge, bedarf.breit, bedarf.drei, bedarf.zwei],
+    [schmal, masse, zaehlung, abgaenge, bedarf.breit, bedarf.drei, bedarf.zwei, bedarfNamen.breit, bedarfNamen.drei, bedarfNamen.zwei],
   );
   // Ohne Messung (kein Layout) und am Telefon: alles in einer Spalte, die Seite rollt.
-  const seiten = satz ? satz.seiten : [[tafelFortlaufend(tb.gruppen.map((g) => ({ kopf: g.kopf, anzahl: g.einheiten.length })), abgaenge)]];
+  const seiten = satz ? satz.seiten : [[tafelFortlaufend(satzGruppen, abgaenge)]];
   const fassung: KartenFassung = satz ? satz.fassung : "drei";
 
   const wer = useWerBreite(flaeche, satz?.fassung === "breit");
@@ -555,42 +648,76 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
   const zuege = tb.gruppen.map((g, nummer) => ({ g, nummer })).filter(({ g }) => !g.uebung);
   const uebersicht = seitenZahl > 1 && zuege.filter(({ g }) => g.kopf).length > 1;
 
-  // Abgerückte Einheiten: Stehen Karten auf der Tafel (auch nur Übungsmeldungen, die nicht zählen), nennt die Randspalte
-  // die letzten mit Uhrzeit; sonst stehen sie auf der Tafel. Dieselbe Bedingung wie im Satz (`tafelSatz`, Regel 3).
-  const karten = tb.gruppen.reduce((n, g) => n + g.einheiten.length, 0);
-  const abgaengeAmRand = karten > 0 ? tb.abgerueckt.slice(0, ABGAENGE_AM_RAND) : [];
+  // Abgerückte Einheiten: Steht etwas auf der Tafel (auch nur Zeilen von Übungsmeldungen, die nicht zählen), nennt die
+  // Randspalte die letzten mit Uhrzeit; sonst stehen sie auf der Tafel. Dieselbe Bedingung wie im Satz (`tafelSatz`, Regel 3).
+  const aufTafel = tb.gruppen.reduce((n, g) => n + g.einheiten.length, 0);
+  const abgaengeAmRand = aufTafel > 0 ? tb.abgerueckt.slice(0, ABGAENGE_AM_RAND) : [];
   // „Zuletzt" führt, was am Platz markiert ist und wieder kam; Abgänge stehen im eigenen Block darüber.
   const bewegungen = bild.bewegungen.filter((b) => b.art !== "Abgerückt");
   const zuletzt = useRef<HTMLUListElement>(null);
   const zuletztSichtbar = useGanzSichtbar(zuletzt);
   // Die Übersicht der Züge gibt nach, wenn die Randspalte voll ist (viele Züge, viel Bedarf): Zu sehen sind dann nur
-  // ganze Zeilen, und die Überschrift nennt, wie viele. Datenstand und Bedienung darunter bleiben so immer im Bild.
-  // Passen nicht alle Zeilen, steht der Ausschnitt da, in dem die Züge der laufenden Seite stehen: „fett: auf dieser
-  // Seite" zeigte sonst auf den hinteren Seiten nichts Fettes, und die hinteren Züge stünden nie in der Übersicht.
+  // ganze Zeilen, und die Überschrift nennt, wie viele. Passen nicht alle, stehen die Züge der anderen Seiten vorn: Ihre
+  // Stärke steht sonst nirgends, die der laufenden Seite steht in deren Köpfen auf der Tafel. Die Liste behält dafür
+  // alle Einträge (ausgeblendet, was nicht passt), damit ihre Höhe und so das Maß des Fensters nicht an der Auswahl hängt.
   const zuegeFenster = useRef<HTMLDivElement>(null);
   const zuegePlatz = useZeilenPlatz(zuegeFenster);
-  const zuegeZeilen = Math.ceil(zuege.length / 2);
-  const zuegeKnapp = zuegePlatz != null && zuegePlatz.zeilen < zuegeZeilen;
-  const ersteHier = Math.max(0, zuege.findIndex(({ nummer }) => aufSeite.has(nummer)));
-  const zuegeAb = zuegeKnapp ? Math.min(Math.floor(ersteHier / 2), zuegeZeilen - zuegePlatz.zeilen) : 0;
-  const zuegeVon = zuegeAb * 2;
-  const zuegeBis = zuegeKnapp ? Math.min(zuege.length, (zuegeAb + zuegePlatz.zeilen) * 2) : zuege.length;
+  const zuegeFrei = zuegePlatz == null ? zuege.length : Math.min(zuege.length, zuegePlatz.zeilen * 2);
+  const zuegeKnapp = zuegeFrei < zuege.length;
+  const andere = zuege.filter(({ nummer }) => !aufSeite.has(nummer));
+  const zuegeFolge = zuegeKnapp ? [...andere, ...zuege.filter(({ nummer }) => aufSeite.has(nummer))] : zuege;
+  const nurAndere = zuegeKnapp && zuegeFrei > 0 && zuegeFrei <= andere.length;
+  const gliederWort = tb.gliederung === "zug" ? "Züge" : "Organisationen";
+  const zuegeTitel = nurAndere ? `${gliederWort} anderer Seiten` : gliederWort;
+  const zuegeZusatz =
+    zuegeFrei === 0
+      ? // Passt keine Zeile, sagt die Überschrift wenigstens, dass es die Züge gibt und wo sie stehen.
+        `${zuege.length} · siehe Seiten`
+      : nurAndere
+        ? zuegeFrei < andere.length
+          ? `${zuegeFrei} von ${andere.length}`
+          : ""
+        : `${zuegeKnapp ? `${zuegeFrei} von ${zuege.length} · ` : ""}fett: auf dieser Seite`;
+
+  // Rangfolge der Randspalte: Die festen Blöcke (Zähler, Dauer, Bedarf, Abgerückt) stehen immer; die Übersicht der Züge
+  // nur, wenn ihre Überschrift und eine Zeile Platz haben, „Zuletzt" nur, wenn danach noch seine Überschrift passt. Ein
+  // Block, der nicht einmal mit der Überschrift Platz hat, entfällt samt Linie, statt angeschnitten dazustehen.
+  const randHuelle = useRef<HTMLDivElement>(null);
+  const randFest = useRef<HTMLDivElement>(null);
+  const randFrei = useRandFrei(randHuelle, randFest, !schmal);
+  let zeigeZuege = uebersicht;
+  let zeigeZuletzt = bewegungen.length > 0;
+  if (randFrei) {
+    const e = randFrei.einheit;
+    const abstand = 1.6 * e;
+    let frei = randFrei.px;
+    // Dieselben Maße wie in lagetafel.css: Abstand, Linie und Überschrift (.lt-block), bei den Zügen dazu eine Zeile.
+    const zuegeMindestens = abstand + ZUEGE_MINDESTENS_E * e + 1;
+    if (zeigeZuege && frei >= zuegeMindestens) frei -= zuegeMindestens;
+    else zeigeZuege = false;
+    if (zeigeZuletzt && frei < abstand + ZULETZT_MINDESTENS_E * e + 1) zeigeZuletzt = false;
+  }
 
   const dauer = dauerZeile(beginn, bild, jetzt);
   const letzteAlt = bild.letzteMeldung != null && jetzt - bild.letzteMeldung >= VERALTET_MS;
   const alterAnwesende = bild.zeitenPruefen ? null : anwesendenAlterText(bild.anwesendenAlter, jetzt);
-  // Übungsmeldungen zuerst: Sie stehen als Karten darunter, und der Satz erklärt, warum oben trotzdem null steht. Wer
+  // Übungsmeldungen zuerst: Sie stehen als Zeilen darunter, und der Satz erklärt, warum oben trotzdem null steht. Wer
   // abgerückt ist, führt in diesem Fall die Randspalte.
+  const daneben = bild.uebungenDaneben;
   const leerText =
-    bild.uebungenDaneben > 0
-      ? `Keine Einheit in der Lage (${bild.uebungenDaneben} Übung, nicht gezählt).`
+    daneben > 0
+      ? `Keine Einheit in der Lage: ${daneben} ${daneben === 1 ? "Übungsmeldung" : "Übungsmeldungen"}, nicht gezählt.`
       : bild.abgerueckt > 0
         ? "Alle Einheiten sind abgerückt."
         : "Noch keine Einheit gemeldet.";
+  // Zwei Auswege, je nach Lage: Ist das Ganze eine Übung, wird die Sammlung zur Übung (im Hauptfenster an derselben Null,
+  // nur solange sie keine echte Meldung führt); trägt ein Bogen das Kennzeichen versehentlich, zählt er an seiner Karte.
+  const nurUebung = einsatz.eintraege.length > 0 && einsatz.eintraege.every((e) => !!e.bogen.uebung);
   const leerZusatz =
-    bild.uebungenDaneben > 0
-      ? // Der Ausweg steht im Hauptfenster an derselben Null (einsaetze-ui.tsx): Dort lässt sich die Sammlung als Übung führen.
-        "Übungsmeldungen zählen nur in einer Übung. Im Hauptfenster: „Als Übung führen…“"
+    daneben > 0
+      ? nurUebung
+        ? "Ist es eine Übung: im Hauptfenster „Als Übung führen…“. Ist ein Bogen versehentlich als Übung gekennzeichnet: an seiner Karte „Als Einsatzmeldung zählen…“."
+        : "Übungsmeldungen zählen nur in einer Übung. Ist ein Bogen versehentlich als Übung gekennzeichnet: an seiner Karte „Als Einsatzmeldung zählen…“."
       : // Der Monitor ist reine Anzeige: Wer davorsteht, soll wissen, dass er nichts tun muss.
         "Was im Hauptfenster aufgenommen wird, erscheint hier von selbst.";
 
@@ -692,8 +819,11 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
 
       <aside className="lt-rand" aria-label="Lage, Bedarf und letzte Bewegungen">
         {/* Alles über dem Fuß steht in einer eigenen Hülle: Wird die Randspalte zu voll, weicht erst „Zuletzt", dann die Übersicht
-            der Züge; was dann noch übersteht, schneidet die Hülle ab. Datenstand und Bedienung darunter bleiben immer im Bild. */}
-        <div className="lt-rand-inhalt">
+            der Züge (siehe zeigeZuege, zeigeZuletzt); was dann noch übersteht, schneidet die Hülle ab. Datenstand und Bedienung
+            darunter bleiben immer im Bild. */}
+        <div className="lt-rand-inhalt" ref={randHuelle}>
+        {/* Die festen Blöcke: Ihr unterer Rand ist das Maß für den Platz der weichenden. */}
+        <div className="lt-rand-fest" ref={randFest}>
         <dl className="lt-zaehler">
           <div>
             <dt>{einheitenWort(s.einheiten)}</dt>
@@ -738,37 +868,35 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
                 <li key={a.id}>
                   <span className="lt-ab-zeit">{a.zeit != null ? uhrzeitText(a.zeit, jetzt) : "–"}</span>
                   <span className="lt-ab-name">{a.name}</span>
+                  {/* Neben dem Namen, nicht in ihm: Bei Platzmangel wird der Name gekürzt, das Kennzeichen bleibt. */}
+                  {a.uebung && <span className="lt-ab-uebung">({UEBUNG_WORT})</span>}
                 </li>
               ))}
               {tb.abgerueckt.length > abgaengeAmRand.length && <li className="lt-ab-rest">+ {tb.abgerueckt.length - abgaengeAmRand.length} weitere</li>}
             </ul>
           </section>
         )}
+        </div>
 
         {/* Beim Blättern: alle Züge mit ihrer Stärke, die der laufenden Seite fett. Die Stärke eines Zuges stünde sonst
             nur da, solange seine Seite steht; ein Zug mit Bedarf trägt das Warnzeichen auch, wenn er gerade nicht zu sehen ist. */}
-        {uebersicht && (
+        {zeigeZuege && (
           <section className="lt-block lt-block-zuege" aria-labelledby="lt-zuege-titel">
             <h2 id="lt-zuege-titel">
-              {tb.gliederung === "zug" ? "Züge" : "Organisationen"}{" "}
-              <span className="lt-block-zusatz">
-                {zuegeKnapp && zuegeBis === zuegeVon
-                  ? // Passt keine Zeile, sagt die Überschrift wenigstens, dass es die Züge gibt und wo sie stehen.
-                    `${zuege.length} · siehe Seiten`
-                  : `${zuegeKnapp ? `${zuegeBis - zuegeVon} von ${zuege.length} · ` : ""}fett: auf dieser Seite`}
-              </span>
+              {zuegeTitel}
+              {zuegeZusatz && <> <span className="lt-block-zusatz">{zuegeZusatz}</span></>}
             </h2>
-            {/* Das Fenster begrenzt die Höhe und schneidet ab; die Liste darin behält ihre volle Höhe und wird nur verschoben.
-                So hängt das Maß des Fensters nicht an dem Ausschnitt, den es selbst bestimmt. */}
+            {/* Das Fenster begrenzt die Höhe und schneidet ab; die Liste darin behält alle Einträge und so ihre volle Höhe.
+                So hängt das Maß des Fensters nicht an der Auswahl, die es selbst bestimmt. */}
             <div className="lt-zuege-fenster" ref={zuegeFenster}>
-              <ul className="lt-zuege" style={zuegeAb > 0 && zuegePlatz ? { transform: `translateY(-${zuegeAb * zuegePlatz.schritt}px)` } : undefined}>
-                {zuege.map(({ g, nummer }, i) => (
-                  // Was außerhalb des Ausschnitts liegt, bleibt unsichtbar an seinem Platz: Eine halbe Zeile stünde sonst angeschnitten da.
+              <ul className="lt-zuege">
+                {zuegeFolge.map(({ g, nummer }, i) => (
+                  // Was nicht in das Fenster passt, bleibt unsichtbar an seinem Platz: Eine halbe Zeile stünde sonst angeschnitten da.
                   <li
                     key={g.schluessel}
                     data-hier={aufSeite.has(nummer) || undefined}
                     data-achtung={g.einheiten.some((e) => e.bedarf.length > 0) || undefined}
-                    style={i < zuegeVon || i >= zuegeBis ? { visibility: "hidden" } : undefined}
+                    style={i >= zuegeFrei ? { visibility: "hidden" } : undefined}
                   >
                     <span className="lt-zug-name">{g.titel}</span>
                     <b>{g.staerke.gesamt}</b>
@@ -779,7 +907,7 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
           </section>
         )}
 
-        {bewegungen.length > 0 && (
+        {zeigeZuletzt && (
           <section className="lt-block lt-block-zuletzt" aria-labelledby="lt-zuletzt-titel">
             {/* Zu sehen sind nur so viele Einträge, wie in die Spalte passen: Die Überschrift sagt, wie viele von wie vielen. */}
             <h2 id="lt-zuletzt-titel">

@@ -16,7 +16,7 @@
 import { deflateRaw, inflateRaw } from "pako";
 import { decodePayloadUrl, encodePayloadUrl, fragmentInhalt } from "../../vendor/eeb-format/src/codec";
 import { OrganisationsTyp, PersonalErfassung, type Erfassungsbogen } from "../../vendor/eeb-format/src/model";
-import { EinsatzArt, einsatzAnlegen, meldungHinzufuegen, speicherhuelleSetzen } from "../../vendor/bos-meldekopf/src/einsaetze";
+import { EinsatzArt, MeldeStatus, einsatzAnlegen, meldungHinzufuegen, speicherhuelleSetzen } from "../../vendor/bos-meldekopf/src/einsaetze";
 import { V2_FRAGMENT } from "../fixtures";
 
 const KOMPRESSOR = { deflateRaw: (d: Uint8Array) => deflateRaw(d), inflateRaw: (d: Uint8Array) => inflateRaw(d) };
@@ -81,9 +81,10 @@ export function sammlungSpeicher(
 /**
  * Eine volle Lage für die Tafel des Lagemonitors (neu im Meldekopf): THW-Einheiten reihum auf Züge verteilt, der erste
  * Zug mit langem Namen, zwei von drei Einheiten mit Sofortbedarf (Ruhezeit und Unterbringung, jede dritte dazu mit
- * abweichender Verpflegung). Über die Oberfläche bräuchte das je Einheit ein Dutzend Schritte.
+ * abweichender Verpflegung). Über die Oberfläche bräuchte das je Einheit ein Dutzend Schritte. Mit `abgerueckt` sind
+ * die zuerst eingetroffenen so viele Einheiten abgerückt (vor 5, 10, … Minuten), wie es die Einsatzansicht vermerkt.
  */
-export function tafelLageSpeicher(name: string, einheiten: number, zuege: number): { einsaetze: string; einsatzId: string } {
+export function tafelLageSpeicher(name: string, einheiten: number, zuege: number, abgerueckt = 0): { einsaetze: string; einsatzId: string } {
   const ablage = new Map<string, string>();
   speicherhuelleSetzen({ getItem: (k) => ablage.get(k) ?? null, setItem: (k, v) => void ablage.set(k, v) });
   try {
@@ -115,9 +116,23 @@ export function tafelLageSpeicher(name: string, einheiten: number, zuege: number
       meldungHinzufuegen(s.id, bogen, { quelle: "scan", zugEtikett: zug === 0 ? "1. Technischer Zug Oldenburg-Wesermarsch Nord" : `${zug + 1}. Zug` });
     }
     // Eingetroffen im Abstand von einer Minute: Die jüngsten tragen auf der Tafel die Marke „neu".
-    const liste = JSON.parse(ablage.get("eeb.einsaetze.v1") ?? "[]") as { id: string; eintraege: { empfangenAm: number }[] }[];
-    const beginn = Date.now() - einheiten * 60_000;
-    for (const x of liste) x.eintraege.forEach((e, i) => (e.empfangenAm = beginn + i * 60_000));
+    const liste = JSON.parse(ablage.get("eeb.einsaetze.v1") ?? "[]") as {
+      id: string;
+      eintraege: { empfangenAm: number; status: MeldeStatus; abgerueckAm?: number; vermerke?: { zeit: number; text: string }[] }[];
+    }[];
+    const jetzt = Date.now();
+    const beginn = jetzt - einheiten * 60_000;
+    for (const x of liste) {
+      x.eintraege.forEach((e, i) => {
+        e.empfangenAm = beginn + i * 60_000;
+        if (i < abgerueckt) {
+          const zeit = jetzt - (i + 1) * 5 * 60_000;
+          e.status = MeldeStatus.ABGERUECKT;
+          e.abgerueckAm = zeit;
+          e.vermerke = [{ zeit, text: "Abgerückt" }];
+        }
+      });
+    }
     return { einsaetze: JSON.stringify(liste), einsatzId: s.id };
   } finally {
     speicherhuelleSetzen(null);
