@@ -40,7 +40,8 @@ export async function einsatzErfragen(artVorgabe?: EinsatzArt): Promise<Einsatzs
   }
   const werte = await frageFelder({
     titel: "Neue Einsatz-Sammlung anlegen",
-    hinweis: "Die Sammelmappe des Meldekopfs für eintreffende Bögen — mit Stärke-Summen über alle anwesenden Einheiten.",
+    hinweis:
+      "Die Sammelmappe des Meldekopfs für eintreffende Bögen — mit Stärke-Summen über alle anwesenden Einheiten. In einer Übung zählen als Übung gekennzeichnete Bögen mit, sonst nicht.",
     ok: "Einsatz anlegen",
     felder: [
       { name: "name", label: "Name", platzhalter: "z. B. Hochwasser Weser" },

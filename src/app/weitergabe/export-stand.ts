@@ -25,7 +25,8 @@
  * darin, nur Kennungen und ein Zeitstempel.
  */
 
-import type { Einsatzsammlung, MeldeEintrag } from "@bos/meldekopf/einsaetze";
+import type { EinsatzArt, Einsatzsammlung, MeldeEintrag } from "@bos/meldekopf/einsaetze";
+import { zaehltInLage } from "../auswertung";
 import { zeitLang } from "../eintrag-zeiten";
 import { FELDER, STAND_FELDER, standGleichheit, vermerkFeld, vermerkKennung, type Feld, type StandFeld } from "./einsatz-abgleich";
 import { MeldeStatus } from "@bos/meldekopf/einsaetze";
@@ -120,6 +121,14 @@ export interface ExportStand {
    * jünger als 30 Minuten ist (R4-K7).
    */
   bestaetigt?: boolean;
+  /**
+   * Art der Sammlung zum Zeitpunkt des Stands (neu im Meldekopf). Die Art lässt
+   * sich nachträglich umstellen und entscheidet, welche Einheiten zählen: Ein
+   * Lageblatt von davor zeigt andere Summen, ein Gerät, das die Lage davor bekam,
+   * zählt anders. Fehlt bei älteren Ständen; dann zählt eine Umstellung nicht
+   * als Änderung.
+   */
+  art?: EinsatzArt;
 }
 
 type Ablage = Record<string, ExportStand>;
@@ -159,6 +168,7 @@ function standLesen(stand: unknown): ExportStand | null {
     ...(typeof s.uebernommenAm === "number" ? { uebernommenAm: s.uebernommenAm } : {}),
     ...(s.bestaetigt === true ? { bestaetigt: true } : {}),
     ...(s.herkunft === "geraet" || s.herkunft === "weitergabe" ? { herkunft: s.herkunft } : {}),
+    ...(typeof s.art === "number" ? { art: s.art } : {}),
   };
 }
 
@@ -246,7 +256,7 @@ function zustandVon(eintraege: MeldeEintrag[]): NonNullable<ExportStand["zustand
 }
 
 function neuerStand(einsatz: Einsatzsammlung, jetzt: number): ExportStand {
-  return { zeitpunkt: jetzt, eintragIds: einsatz.eintraege.map((e) => e.id), zustand: zustandVon(einsatz.eintraege) };
+  return { zeitpunkt: jetzt, eintragIds: einsatz.eintraege.map((e) => e.id), zustand: zustandVon(einsatz.eintraege), art: einsatz.art };
 }
 
 /**
@@ -364,6 +374,11 @@ export function weitergabeUmImportErgaenzen(
   jetzt = Date.now(),
   /** Hat die Datei etwas gebracht? Eine ältere Datei übernimmt nichts, und der Kopf darf es nicht behaupten (R13-A4). */
   uebernommen = true,
+  /**
+   * Die Art in der Datei: die, mit der das andere Gerät zählt (neu im Meldekopf). Gilt hier eine andere, ist das „seitdem
+   * Neues", und die Lage geht noch einmal hinüber.
+   */
+  dateiArt?: EinsatzArt,
 ): void {
   const alt = ablageLaden(WEITERGABE_SCHLUESSEL);
   const stand = alt[einsatzId];
@@ -386,6 +401,7 @@ export function weitergabeUmImportErgaenzen(
     ...(stand.vermerke ? { vermerke: [...new Set([...stand.vermerke, ...vermerke.map(pruefsumme)])] } : {}),
     ...(zustand ? { zustand } : {}),
     ...(uebernommen ? { uebernommenAm: jetzt } : {}),
+    ...(dateiArt != null ? { art: dateiArt } : {}),
   };
   ablageSpeichern(alt, WEITERGABE_SCHLUESSEL);
 }
@@ -407,8 +423,10 @@ export interface AenderungenSeit {
 const ART_TEXT: Record<Feld, string> = { status: "Abrücken", notiz: "Auftrag", eintreffzeit: "Eintreffzeit" };
 const ART_FASSUNG = "Fassung";
 const ART_WIEDER_DA = "Wieder anwesend";
+/** Die Art der Sammlung wurde umgestellt (neu im Meldekopf): Es zählen andere Einheiten. */
+const ART_DER_SAMMLUNG = "Art der Sammlung";
 /** Reihenfolge der Arten in „2 Änderungen (Abrücken, Auftrag)". */
-const ART_REIHE = [ART_TEXT.status, "Zusammenführen", ART_WIEDER_DA, ART_TEXT.notiz, ART_TEXT.eintreffzeit, ART_FASSUNG];
+const ART_REIHE = [ART_DER_SAMMLUNG, ART_TEXT.status, "Zusammenführen", ART_WIEDER_DA, ART_TEXT.notiz, ART_TEXT.eintreffzeit, ART_FASSUNG];
 
 /** Das Wort für einen Statuswechsel — in die Richtung, in die er ging (R5-K1: „Abrücken" für zwei Zurückgekehrte war falsch). */
 function statusArt(status: MeldeStatus): string {
@@ -427,8 +445,13 @@ function statusArt(status: MeldeStatus): string {
  * einem Export den nachgereichten Bogen statt der Schnellerfassung gelten
  * lässt, hat die Lage geändert. Eine NEUE Fassung ist dagegen eine neue
  * Meldung und wird dort gezählt, nicht hier.
+ *
+ * Neu im Meldekopf: Mit `art` (der Art der Sammlung jetzt) zählt auch eine
+ * Umstellung der Art seit dem Stand als eine Änderung („Art der Sammlung").
+ * Die Einheiten, die dadurch anders zählen (die Übungsbögen), gehören zu den
+ * geänderten: So stehen sie im Nachtrag, und der Stab bekommt die neue Zählung.
  */
-export function aenderungenSeit(eintraege: MeldeEintrag[], stand: ExportStand): AenderungenSeit {
+export function aenderungenSeit(eintraege: MeldeEintrag[], stand: ExportStand, art?: EinsatzArt): AenderungenSeit {
   const arten = new Set<string>();
   const jeEinheit: Record<string, Set<string>> = {};
   const einheiten = new Set<string>();
@@ -468,6 +491,13 @@ export function aenderungenSeit(eintraege: MeldeEintrag[], stand: ExportStand): 
       }
     }
     anzahl = gezaehlt.size;
+  }
+  if (art != null && stand.art != null && stand.art !== art) {
+    anzahl++;
+    arten.add(ART_DER_SAMMLUNG);
+    for (const k of geltendeJeEinheit(eintraege)) {
+      if (zaehltInLage(stand.art, k.bogen) !== zaehltInLage(art, k.bogen)) vermerke(k.einheitSchluessel, ART_DER_SAMMLUNG);
+    }
   }
   return {
     anzahl,
@@ -524,10 +554,10 @@ export function neuZurKenntnis(eintraege: MeldeEintrag[], stand: ExportStand | n
  * Auftrag, Eintreffzeit). Ohne das ginge ein Abrücken nie in einen Teilexport
  * (R4-K1): Die Einheit stünde beim Stab weiter als anwesend in der Lage.
  */
-export function nachtragEintraege(eintraege: MeldeEintrag[], stand: ExportStand | null): MeldeEintrag[] {
+export function nachtragEintraege(eintraege: MeldeEintrag[], stand: ExportStand | null, art?: EinsatzArt): MeldeEintrag[] {
   if (!stand) return eintraege;
   const neu = neueEintraege(eintraege, stand);
-  const geaendert = new Set(aenderungenSeit(eintraege, stand).einheiten);
+  const geaendert = new Set(aenderungenSeit(eintraege, stand, art).einheiten);
   if (geaendert.size === 0) return neu;
   const ids = new Set(neu.map((e) => e.id));
   for (const k of geltendeJeEinheit(eintraege)) if (geaendert.has(k.einheitSchluessel)) ids.add(k.id);
@@ -538,7 +568,7 @@ export function nachtragEintraege(eintraege: MeldeEintrag[], stand: ExportStand 
 export interface NachtragGrund {
   /** Die Einheit war beim Stand noch nicht in der Sammlung — nur ihre Kräfte kommen zur Summe der letzten Lieferung dazu. */
   neu: boolean;
-  /** „neu", „Folgemeldung", „Auftrag", „Abrücken", „Wieder anwesend", „Eintreffzeit", „Fassung". */
+  /** „neu", „Folgemeldung", „Art der Sammlung", „Auftrag", „Abrücken", „Wieder anwesend", „Eintreffzeit", „Fassung". */
   gruende: string[];
 }
 
@@ -585,10 +615,10 @@ export function ortHinweisText(ort: string): string {
  * sah eine Einheit mit bloßer Auftragsänderung wie eine neue Meldung aus, und wer die
  * „Summe Nachtrag" auf die bisherige Summe addierte, zählte ihre Kräfte doppelt.
  */
-export function nachtragGruende(eintraege: MeldeEintrag[], stand: ExportStand): Record<string, NachtragGrund> {
+export function nachtragGruende(eintraege: MeldeEintrag[], stand: ExportStand, art?: EinsatzArt): Record<string, NachtragGrund> {
   const bekannteIds = new Set(stand.eintragIds);
   const bekannteEinheiten = new Set(eintraege.filter((e) => bekannteIds.has(e.id)).map((e) => e.einheitSchluessel));
-  const aend = aenderungenSeit(eintraege, stand);
+  const aend = aenderungenSeit(eintraege, stand, art);
   const aus: Record<string, NachtragGrund> = {};
   for (const k of geltendeJeEinheit(eintraege)) {
     const schl = k.einheitSchluessel;
@@ -618,10 +648,10 @@ export function nachtragGrundText(g: NachtragGrund | undefined): string {
  */
 export function exportSammlung(einsatz: Einsatzsammlung, umfang: ExportUmfang, stand: ExportStand | null): Einsatzsammlung {
   if (umfang === "alle") return einsatz;
-  const eintraege = nachtragEintraege(einsatz.eintraege, stand);
+  const eintraege = nachtragEintraege(einsatz.eintraege, stand, einsatz.art);
   const fremdeOrte = ortHinweise({ ...einsatz, eintraege }, einsatz.eintraege);
   if (!stand) return { ...einsatz, eintraege, fremdeOrte };
-  return { ...einsatz, eintraege, fremdeOrte, nachtragSeit: stand.zeitpunkt, nachtragGruende: nachtragGruende(einsatz.eintraege, stand) };
+  return { ...einsatz, eintraege, fremdeOrte, nachtragSeit: stand.zeitpunkt, nachtragGruende: nachtragGruende(einsatz.eintraege, stand, einsatz.art) };
 }
 
 /**
@@ -664,6 +694,8 @@ export function exportStaendeUebernehmen(einsatzId: string, staende: unknown, be
         eintragIds: [...new Set([...hier.eintragIds, ...eingang.eintragIds])],
         ...(hier.zustand || eingang.zustand ? { zustand: { ...frueher.zustand, ...spaeter.zustand } } : {}),
         ...(juenger ? { herkunft: "geraet" as const } : hier.herkunft ? { herkunft: hier.herkunft } : {}),
+        // Die Art, mit der der Stab zuletzt beliefert wurde: die des jüngeren Stands.
+        ...((spaeter.art ?? frueher.art) != null ? { art: (spaeter.art ?? frueher.art)! } : {}),
       };
     }
     geaendert = true;
@@ -695,7 +727,13 @@ export function exportStandAusWeitergabe(einsatzId: string, ziel: ExportZiel, be
   } else {
     Object.assign(neu, alt);
   }
-  const stand: ExportStand = { zeitpunkt: w.zeitpunkt, eintragIds: [...w.eintragIds], ...(w.zustand ? { zustand: w.zustand } : {}), herkunft: "weitergabe" };
+  const stand: ExportStand = {
+    zeitpunkt: w.zeitpunkt,
+    eintragIds: [...w.eintragIds],
+    ...(w.zustand ? { zustand: w.zustand } : {}),
+    ...(w.art != null ? { art: w.art } : {}),
+    herkunft: "weitergabe",
+  };
   neu[einsatzId] = { ...neu[einsatzId], [ziel]: stand };
   ablageSpeichern(neu, SPEICHER_SCHLUESSEL);
   return stand;

@@ -385,7 +385,8 @@ describe("Lagemonitor, Meldekopf Runde 1", () => {
     render(<Lagemonitor einsatzId={e.id} />);
     const bewegung = document.querySelector(".lm-bewegung")!.textContent!;
     expect(bewegung).toMatch(/Eingetroffen: .*OV Spät/);
-    expect(bewegung).toMatch(/nachgetragen, da seit \d\d:\d\d/);
+    // Kurz nach Mitternacht liegt die Eintreffzeit am Vortag; dann steht das Datum davor.
+    expect(bewegung).toMatch(/nachgetragen, da seit (\d\d\.\d\d\. )?\d\d:\d\d/);
     expect(bewegung).not.toMatch(/gerade eben/);
   });
 });

@@ -95,12 +95,19 @@ declare module "@bos/meldekopf/einsaetze" {
   }
   interface Einsatzsammlung {
     /**
-     * Wann die Art zuletzt umgestellt wurde (Geräteuhr, Date.now()); fehlt, solange sie gilt, wie die Sammlung angelegt
+     * Wann die geltende Art umgestellt wurde (Geräteuhr, Date.now()); fehlt, solange sie gilt, wie die Sammlung angelegt
      * wurde. Neu im Meldekopf: Die Art lässt sich nachträglich ändern (`einsatzArtSetzen`). Das Feld reist mit der
-     * Sammlung (Einsatz-Datei, Sammel-PDF) und entscheidet beim Abgleich zweier Geräte, welche Art gilt
-     * (`einsatzAbgleichen`): die zuletzt umgestellte.
+     * Sammlung (Einsatz-Datei, Sammel-PDF) und entscheidet beim Abgleich zweier Geräte mit, welche Art gilt
+     * (`artEntscheiden`).
      */
     artSeit?: number;
+    /**
+     * Die Umstellungen der Art, die diese Sammlung kennt: ihre Zeitpunkte, auch zurückgenommene, und die Rücknahmen
+     * selbst, höchstens die letzten {@link ART_VERLAUF_MAX}. Neu im Meldekopf, reist wie `artSeit`. Beim Abgleich zeigt
+     * der Verlauf, ob ein Gerät die Umstellung des anderen schon kannte: Dann ist seine Art die neuere, ohne Widerspruch.
+     * Fehlt bei älteren Sammlungen; dann gilt `artSeit` allein ({@link artBekannt}).
+     */
+    artVerlauf?: number[];
   }
 }
 
@@ -384,43 +391,108 @@ export function einsatzKopfSetzen(einsatzId: string, name: string, ort: string):
   return vorher;
 }
 
+/** Die Art einer Sammlung und seit wann sie gilt: der Stand vor einer Umstellung, für deren Rücknahme. */
+export interface ArtStand {
+  art: EinsatzArt;
+  /** Fehlt, wenn die Art galt, wie die Sammlung angelegt wurde. */
+  artSeit?: number;
+}
+
+/** So viele Zeitpunkte behält der Verlauf der Art: genug für jedes Hin und Her einer Lage, ohne zu wachsen. */
+export const ART_VERLAUF_MAX = 20;
+
+/** Die Umstellungen der Art, die eine Sammlung kennt: ihr Verlauf samt der geltenden (`artSeit`), aufsteigend. */
+export function artBekannt(s: Pick<Einsatzsammlung, "artSeit" | "artVerlauf">): number[] {
+  const alle = new Set((s.artVerlauf ?? []).filter((z) => Number.isFinite(z)));
+  if (s.artSeit != null && Number.isFinite(s.artSeit)) alle.add(s.artSeit);
+  return [...alle].sort((a, b) => a - b).slice(-ART_VERLAUF_MAX);
+}
+
+/** Einen Schritt in den Verlauf schreiben: jetzt, aber nach jedem schon bekannten (zwei Schritte in derselben Millisekunde). */
+function artSchritt(s: Einsatzsammlung): number {
+  const bekannt = artBekannt(s);
+  const zeit = Math.max(Date.now(), (bekannt[bekannt.length - 1] ?? 0) + 1);
+  s.artVerlauf = [...bekannt, zeit].slice(-ART_VERLAUF_MAX);
+  return zeit;
+}
+
+function artUmstellen(s: Einsatzsammlung, art: EinsatzArt): void {
+  s.artSeit = artSchritt(s);
+  s.art = art;
+}
+
+/**
+ * Eine Umstellung zurücknehmen: Art und `artSeit` wie davor, als hätte es sie nicht gegeben. Hat ein anderes Gerät
+ * inzwischen selbst umgestellt, gilt beim Abgleich dessen Art, denn dieses hat netto nichts geändert. Im Verlauf bleiben
+ * die Umstellung und die Rücknahme stehen: Hat ein anderes Gerät die Umstellung schon bekommen, sieht es so, dass dieses
+ * sie kennt und weiter ist, und übernimmt die Art von davor.
+ */
+function artZuruecksetzen(s: Einsatzsammlung, vorher: ArtStand): void {
+  artSchritt(s);
+  s.art = vorher.art;
+  if (vorher.artSeit != null) s.artSeit = vorher.artSeit;
+  else delete s.artSeit;
+}
+
 /**
  * Art einer Sammlung nachträglich ändern. Neu im Meldekopf (kein Gegenstück im Erfassungsbogen): Wer eine Übung als
  * „Einsatz" angelegt hat, bekam die Übungsbögen nicht gezählt (`zaehltInLage`) und konnte die Art nicht mehr umstellen.
  * Der Kern bietet dafür keinen Setter. Meldungen, Zeiten und Aufträge bleiben unberührt; was zählt, rechnet jede
- * Ansicht aus der Art neu. Liefert die Art davor (für „Rückgängig"); `null`, wenn es den Einsatz nicht gibt.
+ * Ansicht aus der Art neu. Liefert den Stand davor (für „Rückgängig", {@link einsatzArtZuruecknehmen}); `null`, wenn
+ * es den Einsatz nicht gibt.
  */
-export function einsatzArtSetzen(einsatzId: string, art: EinsatzArt): EinsatzArt | null {
+export function einsatzArtSetzen(einsatzId: string, art: EinsatzArt): ArtStand | null {
   const liste = alleSammlungen();
   const s = liste.find((x) => x.id === einsatzId);
   if (!s) return null;
-  const vorher = s.art;
-  if (vorher === art) return vorher;
-  s.art = art;
-  s.artSeit = Date.now();
-  s.geaendert = s.artSeit;
+  const vorher: ArtStand = { art: s.art, ...(s.artSeit != null ? { artSeit: s.artSeit } : {}) };
+  if (s.art === art) return vorher;
+  artUmstellen(s, art);
+  s.geaendert = Date.now();
   sammlungenSchreiben(liste);
   return vorher;
+}
+
+/**
+ * Eine Umstellung der Art zurücknehmen („Rückgängig", oder die Aufnahme legt nach „Als Übung führen und ablegen" nichts
+ * ab): Art und Zeitpunkt wie in `vorher` (siehe {@link artZuruecksetzen}). `false`, wenn es nichts zurückzunehmen gab;
+ * `null`, wenn es den Einsatz nicht gibt.
+ */
+export function einsatzArtZuruecknehmen(einsatzId: string, vorher: ArtStand): boolean | null {
+  const liste = alleSammlungen();
+  const s = liste.find((x) => x.id === einsatzId);
+  if (!s) return null;
+  if (s.art === vorher.art && s.artSeit === vorher.artSeit) return false;
+  artZuruecksetzen(s, vorher);
+  s.geaendert = Date.now();
+  sammlungenSchreiben(liste);
+  return true;
 }
 
 /**
  * Name, Ort/Auftrag und Art in einem Schreibvorgang ändern. Neu im Meldekopf, für „Einsatz bearbeiten" und dessen
  * „Rückgängig": Zwei Schreibvorgänge hintereinander ließen bei vollem Speicher einen halb geänderten Kopf zurück (Name
  * neu, Art alt), und die Meldung „Nicht geändert" stimmte dann nicht. Regeln wie {@link einsatzKopfSetzen} und
- * {@link einsatzArtSetzen}; liefert die Werte davor, `null`, wenn es den Einsatz nicht gibt.
+ * {@link einsatzArtSetzen}; mit `ruecknahme` (beim „Rückgängig") wird die Art wie mit {@link einsatzArtZuruecknehmen}
+ * auf diesen Stand gesetzt. Liefert die Werte davor, `null`, wenn es den Einsatz nicht gibt.
  */
-export function einsatzKopfMitArtSetzen(einsatzId: string, name: string, ort: string, art: EinsatzArt): { name: string; ort: string; art: EinsatzArt } | null {
+export function einsatzKopfMitArtSetzen(
+  einsatzId: string,
+  name: string,
+  ort: string,
+  art: EinsatzArt,
+  ruecknahme?: ArtStand,
+): ({ name: string; ort: string } & ArtStand) | null {
   const liste = alleSammlungen();
   const s = liste.find((x) => x.id === einsatzId);
   if (!s) return null;
-  const vorher = { name: s.name, ort: s.ort ?? "", art: s.art };
+  const vorher = { name: s.name, ort: s.ort ?? "", art: s.art, ...(s.artSeit != null ? { artSeit: s.artSeit } : {}) };
   s.name = name.trim() || s.name;
   s.ort = ort.trim() || undefined;
   s.geaendert = Date.now();
-  if (s.art !== art) {
-    s.art = art;
-    s.artSeit = s.geaendert;
-  }
+  if (ruecknahme) {
+    if (s.art !== ruecknahme.art || s.artSeit !== ruecknahme.artSeit) artZuruecksetzen(s, ruecknahme);
+  } else if (s.art !== art) artUmstellen(s, art);
   sammlungenSchreiben(liste);
   return vorher;
 }

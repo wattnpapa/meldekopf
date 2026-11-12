@@ -7,8 +7,9 @@
  */
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { Page } from "playwright";
+import { OrganisationsTyp } from "../../vendor/eeb-format/src/model";
 import { EinsatzArt } from "../../vendor/bos-meldekopf/src/einsaetze";
-import { fernseherBoegen, sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment } from "../support/sammlung";
+import { fernseherBoegen, sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment, weitereEinheit } from "../support/sammlung";
 import type { EebWelt } from "../support/welt";
 
 const MONITOR = new WeakMap<EebWelt, Page>();
@@ -81,8 +82,20 @@ async function tafelLageAufDemGeraet(welt: EebWelt, einheiten: number, organisat
  * Sie ist die zuletzt geöffnete; ein Neuladen im Szenario setzt sie nicht zurück.
  */
 Given("auf dem Gerät liegt die Sammlung {string} mit {int} Übungsbögen", async function (this: EebWelt, name: string, anzahl: number) {
-  const { einsaetze, einsatzId } = sammlungSpeicher(name, uebungsBoegen(anzahl));
-  await this.page.addInitScript(
+  await uebungsSammlungLegen(this, sammlungSpeicher(name, uebungsBoegen(anzahl)));
+});
+
+/** Wie oben, dazu Einheiten ohne Übungskennzeichen: eine echte Lage mit einzelnen Übungsbögen (oder umgekehrt). */
+Given(
+  "auf dem Gerät liegt die Sammlung {string} mit {int} Übungsbögen und {int} Einheiten ohne Übungskennzeichen",
+  async function (this: EebWelt, name: string, uebungen: number, echte: number) {
+    const boegen = [...uebungsBoegen(uebungen), ...Array.from({ length: echte }, (_, i) => weitereEinheit(OrganisationsTyp.FEUERWEHR, `Echt ${i + 1}`))];
+    await uebungsSammlungLegen(this, sammlungSpeicher(name, boegen));
+  },
+);
+
+async function uebungsSammlungLegen(welt: EebWelt, { einsaetze, einsatzId }: { einsaetze: string; einsatzId: string }) {
+  await welt.page.addInitScript(
     ([e, id]) => {
       if (sessionStorage.getItem("prüfstand.uebung")) return;
       sessionStorage.setItem("prüfstand.uebung", "1");
@@ -91,8 +104,8 @@ Given("auf dem Gerät liegt die Sammlung {string} mit {int} Übungsbögen", asyn
     },
     [einsaetze, einsatzId] as const,
   );
-  await this.oeffneApp();
-});
+  await welt.oeffneApp();
+}
 
 /** Die Übung vom Foto des Fernsehers (support/sammlung.ts), als Übung geführt; die zuletzt geöffnete Sammlung. */
 Given("auf dem Gerät liegt die Übung vom Fernseher mit ihren langen Namen", async function (this: EebWelt) {

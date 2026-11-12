@@ -55,6 +55,27 @@ Funktionalität: Eine Sammlung nachträglich als Übung führen
     Dann sehe ich den Hinweis "Übung · letzte Meldung"
     Und sehe ich den Hinweis "Nichts gezählt" nicht
 
+  # Nach der Gegenprüfung: „Als Übung führen…" fragte in einer echten Lage nach,
+  # derselbe Wechsel unter „Einsatz bearbeiten" nicht. Der Fernseher zeigte danach
+  # „ÜBUNG – keine Echtlage".
+  Szenario: Eine Lage mit echten Einheiten wird unter „Einsatz bearbeiten" nur nach Rückfrage zur Übung
+    Angenommen auf dem Gerät liegt die Sammlung "Hochwasser Hunte" mit 2 Übungsbögen und 2 Einheiten ohne Übungskennzeichen
+    Wenn ich auf "Einsatz bearbeiten…" klicke
+    Dann sehe ich den Dialog "Einsatz bearbeiten"
+    Wenn ich im Dialog "Art" auf "Übung" stelle
+    Und ich im Dialog auf "Übernehmen" klicke
+    Dann sehe ich den Dialog "Als Übung führen?"
+    Und sehe ich den Hinweis "führt auch 2 Einheiten ohne Übungskennzeichen"
+    Und sehe ich den Hinweis "Danach zählt die Lage 4 Einheiten"
+    Wenn ich im Dialog auf "Abbrechen" klicke
+    Dann sehe ich den Hinweis "Einsatz · letzte Meldung"
+    Wenn ich auf "Einsatz bearbeiten…" klicke
+    Und ich im Dialog "Art" auf "Übung" stelle
+    Und ich im Dialog auf "Übernehmen" klicke
+    Dann sehe ich den Dialog "Als Übung führen?"
+    Wenn ich im Dialog auf "Als Übung führen" klicke
+    Dann sehe ich den Hinweis "Übung · letzte Meldung"
+
   # Die Vorgabe beim Anlegen ist „Einsatz". Kommt dann der erste Übungsbogen,
   # steht der Weg zur Übung in derselben Rückfrage.
   Szenario: Der erste Übungsbogen bietet an, die Sammlung als Übung zu führen
@@ -69,5 +90,6 @@ Funktionalität: Eine Sammlung nachträglich als Übung führen
     Dann sehe ich den Dialog "Übungsbogen in diese Sammlung?"
     Wenn ich im Dialog auf "Als Übung führen und ablegen" klicke
     Dann sehe ich die Überschrift "Einheiten (1 gemeldet"
+    Und sehe ich den Hinweis "Zurückstellen: „Einsatz bearbeiten…“ in der Einsatzansicht."
     Und sehe ich den Hinweis "Übung · letzte Meldung"
     Und sehe ich den Hinweis "Nichts gezählt" nicht

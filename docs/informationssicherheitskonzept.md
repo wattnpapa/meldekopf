@@ -554,7 +554,9 @@ Signatur und kommt als „unsigniert" in die Sammlung (5.2 gilt unverändert).
 > das die strengere Lesart. Die Zeile ist seit 2026-11-11 so gefasst. Seit
 > demselben Tag lässt sich die Art einer Sammlung nachträglich ändern
 > (`einsatzArtSetzen`); an der Frist ändert das nichts, weil sie nicht an der
-> Art hängt.
+> Art hängt. Die Sammlung trägt dazu `artSeit` und `artVerlauf` (Zeitpunkte
+> der Umstellungen, keine Personendaten), die Stände der Ausgaben seit
+> 2026-11-12 die Art (`art`).
 
 > *Entfällt gegenüber der Vorlage:* Rückholplatz des eigenen Bogens und
 > Fensterabgleich des Entwurfs als Bedienweg, Musterung, Vorlagen-Papierkorb
@@ -599,7 +601,8 @@ Vermerk „nicht gezählt“, jede als knappe Zeile mit Name, Typ und Stärke
 (ohne Zeichen, Auftrag, Funkrufname und Bedarf); die Zeilen nennen sie weiter
 nur als Zahl. Lange Namen stehen dort, wo sie nicht passen, in der üblichen
 Kurzform („FF Lenglern“); gekürzt werden nur feste Bezeichnungen der
-Organisationen, nie ein Ortsname oder ein Freitext. Die Klasse der gezeigten
+Organisationen, ihrer Gliederungen und Dienststellen und, in einem Freitext-Typ,
+feste Fachbegriffe („SEG“, „FGr“), nie ein Ortsname. Die Klasse der gezeigten
 Angaben ändert sich dadurch nicht.
 
 Sicherheitsrelevant ist die **Sichtbarkeit für Umstehende**: Ein Fernseher im

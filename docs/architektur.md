@@ -351,30 +351,48 @@ Die Tafel rechnet ihren Satz selbst (`tafelSatz` in `lagetafel.ts`, reine
 Rechnung ohne Browser): aus Zahl und Gliederung der Einheiten und der
 gemessenen Fläche die größte Schrift, bei der alles auf eine Seite passt, in
 einer von drei Fassungen der Einheitenkarte. Dazu kommt der Platzbedarf des
-Inhalts (`kartenBedarf`): Gibt es einen Satz, in dem nichts gekürzt wird,
-gewinnt er, solange seine Schrift gut lesbar bleibt oder höchstens ein
-Zehntel kleiner ist; sonst gilt dasselbe für die Namen allein
-(`namenBedarf`), denn sie sagen, wer da ist. Erst wenn auch das zu viel
+Inhalts (`satzBedarf` aus `kartenBedarf` und `namenBedarf`): Gibt es einen
+Satz, in dem nichts gekürzt wird, gewinnt er, solange seine Schrift gut
+lesbar bleibt oder höchstens ein Zehntel kleiner ist; sonst gilt dasselbe für
+die Namen allein, denn sie sagen, wer da ist. Erst wenn auch das zu viel
 kostet, wird gekürzt, statt allen die Schrift zu nehmen oder die Tafel
-blättern zu lassen. Geschätzt wird ohne Browser, aus einer Tabelle der
-Zeichenbreiten der Tafelschrift (`textBreite`, im Browser gemessen und im
-Zweifel nach oben gerundet; geprüft an Namen einer Übung, nie zu knapp,
-höchstens 6 % zu weit). Ein fester Mittelwert je Zeichen lag bei Namen
-zwischen 10 % zu knapp und 15 % zu weit.
+blättern zu lassen. In der breiten Fassung teilen sich alle Karten die
+Spalte der Namen: Ihr Bedarf entsteht aus dem längsten Namen und dem
+längsten Auftrag über alle Karten, und ein Name, der mehr als 62 % der Karte
+bräuchte, passt dort nie (seit 2026-11-12; vorher galt der breite Satz als
+ungekürzt, obwohl Name und Auftrag gekürzt dastanden). „Alles ganz“ schließt
+die Namen ein. Geschätzt wird ohne Browser, aus einer Tabelle der
+Zeichenbreiten der Tafelschrift (`textBreite`, im Browser gemessen; jede
+Gruppe so breit wie ihr breitestes Zeichen). An 52 gemessenen Namen liegt
+die Schätzung nie zu knapp und 1 bis 9 % zu weit, meist 2 bis 5 %. Ein
+fester Mittelwert je Zeichen lag bei Namen zwischen 10 % zu knapp und 15 %
+zu weit.
 
 Namen bleiben erkennbar, in dieser Folge: Passt der volle Name nicht, steht
 seine übliche Kurzform da (`kurzName`, `herkunftKurzform`: „FF Lenglern“,
-„DRK-KV Buchenrode“, „Bw“, „OV“ …). Die Wahl trifft die Stilvorlage ohne
-Messung wie beim Typ: Der volle Name liegt hinter einem Anker ohne Breite über
-der Kurzform und bricht, wenn er nicht passt, in eine Zeile um, die nicht zu
-sehen ist. Fehlt der Form, die dann steht, nur wenig, läuft sie bis auf neun
-Zehntel kleiner (`--lt-name-em` mit einer Container-Abfrage, nur in den
-Fassungen, in denen die Breite des Namens nicht an seinem Inhalt hängt).
-Erst danach wird der längere Teil gekürzt (Organisation oder Standort). Der
-Satz rechnet mit der Kurzform. Im Gruppenkopf bekommt die Zahl der Einheiten
-nur den Platz, der neben Name und Stärke übrig bleibt: Ein Schwundfaktor
-allein nahm dem Namen Bruchteile eines Pixels, und schon die lösten die
-Auslassung aus („T… (Fortsetzung)“).
+„DRK-KV Buchenrode“, „Bw KVK Göttingen“, „KFB“, „OV“, „OG“ …; die
+Gliederungen wie in den Vokabularen der Ebenen, Groß- und Kleinschreibung und
+doppelter Leerraum zählen nicht). Sie springt nur ein, wo sie schmaler ist
+als die volle Form, beim Typ wie beim Namen. Die Wahl trifft die Stilvorlage
+ohne Messung wie beim Typ: Der volle Name liegt hinter einem Anker ohne
+Breite über der Kurzform und bricht, wenn er nicht passt, in eine Zeile um,
+die nicht zu sehen ist. Fehlt der Form, die dann steht, nur wenig, läuft sie
+bis auf neun Zehntel kleiner (`--lt-name-em` mit einer Container-Abfrage, nur
+in den Fassungen, in denen die Breite des Namens nicht an seinem Inhalt
+hängt), auf der Grundlinie des Namens in voller Größe (eine Stütze ohne
+Breite gibt sie vor). Erst danach wird der breitere Teil gekürzt
+(Organisation oder Standort, nach geschätzter Breite gewählt); von ihm
+bleiben mindestens drei Zeichen, und reicht auch das nicht, endet der andere
+Teil mit Auslassung statt hart am Rand. Der Satz rechnet mit der Kurzform.
+Im Gruppenkopf bekommt die Zahl der Einheiten nur den Platz, der neben Name
+und Stärke übrig bleibt, und steht ganz oder gar nicht (hinter einem Anker
+wie der Typ): Ein Schwundfaktor allein nahm dem Namen Bruchteile eines
+Pixels, und schon die lösten die Auslassung aus („T… (Fortsetzung)“); eine
+gekürzte Zahl las sich als „1“ für „16 Einheiten“. In den Zeilen der
+Übungsmeldungen geht der Name von der Breite seiner Kurzform aus und wächst
+bis zur vollen; gekürzt wird zuerst der Typ. In der dritten Zeile der Karte
+weichen Auftrag und dann Kennwort und Ort des Funkrufnamens, bevor der
+Bedarf gekürzt wird.
 
 Die Stilvorlage bekommt dieselben Maße als CSS-Eigenschaften hineingereicht, es
 gibt eine Quelle für Rechnung und Satz. Im Browser gemessen wird nur
@@ -388,6 +406,9 @@ dieselben Zahlen.
 Abgerückte Einheiten gehören nicht in diesen Satz: Die Randspalte führt die
 zuletzt abgerückten mit Uhrzeit, unabhängig davon, wie voll die Tafel ist
 (ein Block, der mit dem Füllstand kommt und geht, wäre kein festes Lagebild).
+Ein langer Name endet dort mit Auslassung, „(Übung)“ dahinter bleibt stehen;
+bis 2026-11-12 ragte die Zeile über die Randspalte hinaus und wurde mitten im
+Wort abgeschnitten.
 Auf der Tafel stehen sie nur, wenn niemand mehr anwesend ist. Beim Blättern
 laufen die Gruppen über Spalten und Seiten weiter, statt Platz frei zu
 lassen; die Seitenzeile nennt die Gruppen der Seite und der nächsten. Gruppiert
@@ -483,7 +504,7 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | --- | --- | --- |
 | `eeb.einsaetze.v1` | Alle Einsatz-Sammlungen (Kern) | `@bos/meldekopf` |
 | `eeb.export-stand.v2` | Export-Stand je Einsatz und Format (das Ziel `xlsx` der Oldenburg-Liste entfällt seit 2026-11-09, alte Stände werden nur gelesen) | `export-stand.ts` |
-| `eeb.lageblatt-stand.v1`, `eeb.weitergabe-stand.v1`, `eeb.kenntnis-stand.v1` | Lageblatt-, Weitergabe-, Kenntnis-Stand | `export-stand.ts` |
+| `eeb.lageblatt-stand.v1`, `eeb.weitergabe-stand.v1`, `eeb.kenntnis-stand.v1` | Lageblatt-, Weitergabe-, Kenntnis-Stand. Seit 2026-11-12 tragen Lageblatt-, Weitergabe- und Export-Stand die Art der Sammlung (`art`, neu im Meldekopf, ohne neuen Schlüssel); ältere Stände ohne das Feld bleiben lesbar | `export-stand.ts` |
 | `eeb.entfernt.v1` | Vor Ort entfernte Meldungen je Sammlung | `entfernte-meldungen.ts` |
 | `eeb.aufgeraeumt.v1` | Nachricht über automatisch gelöschte Sammlungen | `aufraeum-hinweis.ts` |
 | `eeb.letzterEinsatz.v1` | Zuletzt offene Sammlung, 12 h | `app.tsx` |
@@ -519,10 +540,18 @@ Altschlüssel des Anzeigemodus und wird nur gelesen.
 
 Der Papierkorb der Sammlungen ist kein eigener Schlüssel, sondern
 `geloeschtAm` an der Sammlung in `eeb.einsaetze.v1`. Ebenso `artSeit`
-(seit 2026-11-11, neu im Meldekopf): der Zeitpunkt, zu dem die Art der
-Sammlung zuletzt umgestellt wurde. Beim Abgleich zweier Geräte gewinnt die
-jüngere Umstellung; eine Sammlung ohne das Feld (ältere Stände, der
-Erfassungsbogen) bleibt lesbar und ändert die Art eines anderen Geräts nie. `eeb.offline-zusatz.v1`
+(seit 2026-11-11, neu im Meldekopf): der Zeitpunkt, zu dem die geltende Art
+der Sammlung umgestellt wurde, und `artVerlauf` (seit 2026-11-12): die
+Zeitpunkte aller Umstellungen, die das Gerät kennt, auch zurückgenommene und
+die Rücknahmen selbst, höchstens die letzten 20. Beim Abgleich zweier Geräte
+gilt die Art des Geräts, das die Umstellung des anderen schon kannte; haben
+beide unabhängig umgestellt, die jüngere, mit Widerspruch. „Rückgängig“ setzt
+`artSeit` auf den Wert davor zurück. Eine Sammlung ohne die Felder (ältere
+Stände, der Erfassungsbogen) bleibt lesbar und ändert die Art eines anderen
+Geräts nie. Lageblatt-, Weitergabe- und Export-Stand merken sich die Art
+(`art`): Ist sie seitdem umgestellt, gilt das Lageblatt als nicht mehr
+aktuell, die Übergabe als „seitdem Neues“, und der Nachtrag trägt die
+Einheiten, die dadurch anders zählen. `eeb.offline-zusatz.v1`
 schreibt `offline-bereit.ts` (seit Phase 5), `eeb.wartet.fragment`
 `wartender-link.ts` (seit Phase 3). Prüfvermerk 2026-10-25 (ISK/DSFA): Die Tabelle nannte
 `eeb.einsaetze-papierkorb.v1` und `eeb.signieren.v1`, die es im Code nicht
@@ -654,6 +683,14 @@ Abhängigkeiten jetzt ins Startbündel, statt sie als zwei eigene Brocken
 Ständen `4a1d2b6` und `d17c99c`; neuer Code kam dabei nicht in den Start. Der
 Brocken der Tafel wächst auf rund 31 KB JavaScript und 22 KB Stilvorlage
 (Kurzformen der Namen, Tabelle der Zeichenbreiten, Namensstufe des Satzes).
+**Nach der Gegenprüfung (2026-11-12):** 4.362.043 / 636.564 Byte, Budget neu
+gesetzt. Das Startbündel wächst um 3,2 KB: die Rückfrage beim Wechsel der Art
+unter „Einsatz bearbeiten…“ (`artWechselFrage`), der Verlauf der Art
+(`artVerlauf`, `einsatzArtZuruecknehmen`) und die Art in den Ständen der
+Ausgaben liegen in Einsatzansicht, Abgleich und `export-stand`, die alle zum
+Start gehören. Der Brocken der Tafel wächst auf rund 34 KB JavaScript und
+23 KB Stilvorlage (weitere Kurzformen, `satzBedarf`, Zahl im Gruppenkopf,
+Stütze der Grundlinie).
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

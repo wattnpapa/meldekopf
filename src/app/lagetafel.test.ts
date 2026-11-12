@@ -165,10 +165,63 @@ describe("kurzName und herkunftKurzform", () => {
     expect(kurzName("DRK-Kreisverband Buchenrode e. V.")).toBe("DRK-KV Buchenrode");
     expect(kurzName("Deutsches Rotes Kreuz Kreisverband Göttingen-Northeim e.V.")).toBe("DRK KV Göttingen-Northeim");
     expect(kurzName("Johanniter-Unfall-Hilfe e.V. Regionalverband Weser-Ems")).toBe("JUH RV Weser-Ems");
-    expect(kurzName("Malteser Hilfsdienst e. V., Ortsgruppe Rhauderfehn")).toBe("MHD, OG Rhauderfehn");
-    expect(kurzName("Bundeswehr Panzerpionierkompanie 130")).toBe("Bw Panzerpionierkompanie 130");
+    // Das Komma hinter „e. V." geht mit.
+    expect(kurzName("Malteser Hilfsdienst e. V., Ortsgruppe Rhauderfehn")).toBe("MHD OG Rhauderfehn");
+    expect(kurzName("Bundeswehr Panzerpionierkompanie 130")).toBe("Bw PzPiKp 130");
     expect(kurzName("Technisches Hilfswerk Ortsverband Gieboldehausen")).toBe("THW OV Gieboldehausen");
     expect(kurzName("Schnelleinsatzgruppe Betreuung")).toBe("SEG Betreuung");
+  });
+
+  it("kennt die Schreibweisen der Organisationen und die Bezeichnungen der App", () => {
+    // Ohne Organisationsnamen steht die Bezeichnung der App da (orgLabel): Auch sie hat ihre Kurzform.
+    expect(kurzName("Johanniter (JUH) Delmenhorst")).toBe("JUH Delmenhorst");
+    expect(kurzName("Malteser (MHD) Oldenburg (Oldb)")).toBe("MHD Oldenburg (Oldb)");
+    expect(kurzName("Johanniter Unfall Hilfe Regionalverband Weser-Ems")).toBe("JUH RV Weser-Ems");
+    expect(kurzName("Johanniter-Unfallhilfe Ortsverband Vechta")).toBe("JUH OV Vechta");
+    expect(kurzName("Die Johanniter Regionalverband Niedersachsen/Bremen")).toBe("JUH RV Niedersachsen/Bremen");
+    expect(kurzName("Arbeiter Samariter Bund Kreisverband Hannover")).toBe("ASB KV Hannover");
+    expect(kurzName("Deutsche Lebensrettungsgesellschaft Ortsgruppe Goslar")).toBe("DLRG OG Goslar");
+    expect(kurzName("Bayerisches Rotes Kreuz Kreisverband München")).toBe("BRK KV München");
+    expect(kurzName("Bundesanstalt Technisches Hilfswerk Ortsverband Göttingen")).toBe("THW OV Göttingen");
+    // Ein Klammerzusatz, der die Abkürzung nur wiederholt, fällt weg.
+    expect(kurzName("Technisches Hilfswerk (THW) Ortsverband Göttingen")).toBe("THW OV Göttingen");
+    expect(kurzName("Deutsches Rotes Kreuz (DRK) Kreisverband Northeim")).toBe("DRK KV Northeim");
+    // Groß- und Kleinschreibung zählen nicht, auch nicht bei „e.v.".
+    expect(kurzName("FREIWILLIGE FEUERWEHR LENGLERN")).toBe("FF LENGLERN");
+    expect(kurzName("DRK Ortsverein Bovenden e.v.")).toBe("DRK OV Bovenden");
+  });
+
+  it("kürzt Gliederungen, Dienststellen von Bundeswehr und Polizei und übliche Fachbegriffe", () => {
+    expect(kurzName("Kreisfeuerwehrbereitschaft Göttingen")).toBe("KFB Göttingen");
+    expect(kurzName("Bundeswehr Kreisverbindungskommando Göttingen")).toBe("Bw KVK Göttingen");
+    expect(kurzName("Bezirksverbindungskommando Braunschweig")).toBe("BVK Braunschweig");
+    expect(kurzName("Landeskommando Niedersachsen")).toBe("LKdo Niedersachsen");
+    expect(kurzName("Panzerpionierbataillon 1")).toBe("PzPiBtl 1");
+    expect(kurzName("Pionierbataillon 130")).toBe("PiBtl 130");
+    expect(kurzName("Polizeiinspektion Göttingen")).toBe("PI Göttingen");
+    expect(kurzName("Polizeidirektion Göttingen")).toBe("PD Göttingen");
+    // Die Gliederungen der Vokabulare (@bos/vokabulare, ebenen.ts und thw.ts).
+    expect(kurzName("Malteser Hilfsdienst Ortsgliederung Duderstadt")).toBe("MHD OG Duderstadt");
+    expect(kurzName("Malteser Hilfsdienst Diözesangliederung Hildesheim")).toBe("MHD DG Hildesheim");
+    expect(kurzName("THW Regionalbereich Göttingen")).toBe("THW RB Göttingen");
+    expect(kurzName("Psychosoziale Notfallversorgung Landkreis Göttingen")).toBe("PSNV LK Göttingen");
+    expect(kurzName("Medizinische Task Force 34")).toBe("MTF 34");
+    expect(kurzName("Kriseninterventionsteam Göttingen")).toBe("KIT Göttingen");
+    expect(kurzName("Schnell-Einsatz-Gruppe Sanität")).toBe("SEG Sanität");
+    expect(kurzName("Fachgruppe Räumen")).toBe("FGr Räumen");
+    // Zwei Einheiten, die sich nur im letzten Wort unterscheiden: Die Kurzform behält es, und sie ist kurz genug, dass es bleibt.
+    expect(kurzName("Kreisfeuerwehrbereitschaft Göttingen")).not.toBe(kurzName("Kreisfeuerwehrbereitschaft Northeim"));
+    expect(textBreite(kurzName("Bundeswehr Kreisverbindungskommando Northeim"))).toBeLessThan(textBreite("Bundeswehr Kreisverbindungsko…"));
+  });
+
+  it("vereinheitlicht den Leerraum, bevor sie kürzt", () => {
+    expect(kurzName("Freiwillige  Feuerwehr Lenglern")).toBe("FF Lenglern");
+    expect(kurzName("Freiwillige\u00a0Feuerwehr Rastede")).toBe("FF Rastede");
+    // Unterscheidet sich die Kurzform nur im Leerraum, gibt es keine: Der Name steht vereinheitlicht da.
+    const e = nameTeile(bogen({ ort: "Bad  Segeberg", typ: 4 }).einheit);
+    expect(e.herkunft).toBe("THW Bad Segeberg");
+    expect(e.ort).toBe("Bad Segeberg");
+    expect(herkunftKurzform(e.herkunft, e.ort)).toBe(e.herkunft);
   });
 
   it("lässt Namen ohne übliche Kurzform und Wörter, die nur so beginnen, unverändert", () => {
@@ -191,6 +244,18 @@ describe("kurzName und herkunftKurzform", () => {
     expect(nameTeile(bogen({ org: T.DRK, ort: "Brake", typ: "Schnelleinsatzgruppe Betreuung" }).einheit).typKurz).toBe("SEG Betreuung");
     expect(nameTeile(bogen({ org: T.DRK, ort: "Brake", typ: "Betreuungszug" }).einheit).typKurz).toBe("Betreuungszug");
     expect(nameTeile(bogen({ ort: "Brake", typ: 4 }).einheit).typKurz).toBe("B");
+  });
+
+  it("nimmt für einen Freitext-Typ nie eine Kurzform, die breiter ist als er", () => {
+    // „Fachgruppe Räumen" steht als „FGr Räumen" da; die Kurzform hieß früher wieder „Fachgruppe Räumen" und schaute
+    // unter dem kürzeren Typ hervor („FGr RäumenRäumen").
+    const fgr = nameTeile(bogen({ ort: "Northeim", typ: "Fachgruppe Räumen" }).einheit);
+    expect(fgr).toMatchObject({ typ: "FGr Räumen", typKurz: "FGr Räumen" });
+    expect(nameTeile(bogen({ org: T.DRK, ort: "Brake", typ: "Fachgruppe Logistik und Versorgung" }).einheit).typKurz).toBe("FGr Logistik und Versorgung");
+    for (const typ of ["Fachgruppe Wasserschaden/Pumpen", "Schnell-Einsatz-Gruppe Sanität", "Betreuungszug", "SEG", "Technische Einsatzleitung"]) {
+      const n = nameTeile(bogen({ org: T.DRK, ort: "Brake", typ }).einheit);
+      expect(textBreite(n.typKurz), typ).toBeLessThanOrEqual(textBreite(n.typ));
+    }
   });
 });
 
@@ -535,8 +600,9 @@ describe("kartenBedarf", () => {
   it("stellt in der breiten Fassung Name und Auftrag nebeneinander, in den anderen untereinander", () => {
     const ohne = kartenBedarf(einheit({ ort: "Clausthal-Zellerfeld", typ: 4 }));
     const mit = kartenBedarf(einheit({ ort: "Clausthal-Zellerfeld", typ: 4, notiz: "Sandsackfüllplatz Nord, Abschnitt 3 bis 5" }));
-    // 41 Zeichen Auftrag: in „breit" kommen sie zum Namen dazu, in „drei" stehen sie in eigener Zeile.
-    expect(mit.breit - ohne.breit).toBeGreaterThan(15);
+    // 41 Zeichen Auftrag: in „breit" kommen sie zum Namen dazu, in „drei" stehen sie in eigener Zeile. Ohne Auftrag braucht
+    // die breite Karte schon so viel, dass der Name in den größten Anteil der Spalte passt (SATZ.wer.max).
+    expect(mit.breit - ohne.breit).toBeGreaterThan(10);
     expect(mit.drei).toBeLessThan(mit.breit);
     // Ohne Auftrag reicht der breiten Karte ihre Mindestbreite, mit diesem Auftrag nicht mehr.
     expect(ohne.breit).toBeLessThan(SATZ.karte.breit.breite);
@@ -546,8 +612,39 @@ describe("kartenBedarf", () => {
   it("reicht als Bedarf der Tafel den größten je Fassung weiter", () => {
     const tb = tafelbild(sammlung([eintrag({ ort: "Brake", typ: 4 }), eintrag({ ort: "Clausthal-Zellerfeld", typ: 16, notiz: "Beleuchtung und Stromversorgung der Einsatzstelle Nord" })]), JETZT);
     const einzeln = tb.gruppen.flatMap((g) => g.einheiten).map(kartenBedarf);
-    for (const fassung of ["breit", "drei", "zwei"] as const) expect(tb.bedarf[fassung]).toBe(Math.max(...einzeln.map((b) => b[fassung])));
+    for (const fassung of ["drei", "zwei"] as const) expect(tb.bedarf[fassung]).toBe(Math.max(...einzeln.map((b) => b[fassung])));
+    expect(tb.bedarf.breit).toBeGreaterThanOrEqual(Math.max(...einzeln.map((b) => b.breit)));
     expect(tafelbild(sammlung([]), JETZT).bedarf).toEqual({ breit: 0, drei: 0, zwei: 0 });
+  });
+
+  it("rechnet in der breiten Fassung mit der Spalte aller Karten: der lange Name der einen neben dem langen Auftrag der anderen", () => {
+    // Nachgestellt nach der Gegenprüfung: Ein langer Name ohne übliche Kurzform und, auf einer anderen Karte, ein langer
+    // Auftrag mit Bedarf. Jede Karte für sich passte in die breite Fassung; zusammen nicht, weil die Spalte „wer" für alle
+    // gleich ist. Gewählt wurde trotzdem „breit", und Name, Auftrag und Bedarf standen gekürzt da.
+    const tb = tafelbild(
+      sammlung([
+        eintrag({ org: T.SONSTIGE, orgName: "Notfallseelsorge Kirchenkreis Göttingen-Münden", ort: "", typ: undefined }),
+        eintrag({
+          ort: "Brake",
+          typ: 4,
+          funk: [21, 52],
+          notiz: "Sandsackfüllplatz Nord am Bauhof, danach Deichverteidigung Abschnitt 3",
+          bedarf: { ruhezeitErforderlich: true, unterbringung: true, verpflegungPersonen: 4 },
+        }),
+      ]),
+      JETZT,
+    );
+    const einheiten = tb.gruppen.flatMap((g) => g.einheiten);
+    expect(einheiten).toHaveLength(2);
+    const einzeln = einheiten.map(kartenBedarf);
+    expect(tb.bedarf.breit).toBeGreaterThan(Math.max(...einzeln.map((b) => b.breit)) + 5);
+    // Alles ganz schließt die Namen ein.
+    for (const fassung of ["breit", "drei", "zwei"] as const) expect(tb.bedarf[fassung], fassung).toBeGreaterThanOrEqual(tb.bedarfNamen[fassung]);
+    // Der Satz auf der Fläche eines Fernsehers mit 1920 × 1080 lässt den Namen ganz: Die Karte ist mindestens so breit, wie er braucht.
+    const masse: TafelMasse = { breite: 1415, hoehe: 839, einheit: 10.8 };
+    const satz = tafelSatz([{ kopf: true, anzahl: 1 }, { kopf: true, anzahl: 1 }], 0, masse, tb.bedarf, tb.bedarfNamen);
+    const spalte = (masse.breite - (satz.spalten - 1) * SATZ.spaltenAbstand * masse.einheit) / satz.spalten;
+    expect(spalte / satz.schrift, satz.fassung).toBeGreaterThanOrEqual(tb.bedarfNamen[satz.fassung]);
   });
 });
 
@@ -603,12 +700,22 @@ describe("textBreite und namenBedarf", () => {
     ["Freiwillige Feuerwehr Lenglern", 14.592],
     ["DRK-Kreisverband Buchenrode e. V.", 17.063],
     ["Bundeswehr Panzerpionierzug", 14.576],
+    // Kurzformen aus vielen Großbuchstaben (100 px, mit Unterschneidung): Mit der ersten Tabelle lagen sie zu knapp.
+    ["SEG POS", 4.513],
+    ["DLRG OG OSS", 6.996],
+    ["THW OG", 4.15],
+    ["OG GOSLAR", 6.11],
+    ["PSNV OSTPRIGNITZ", 9.96],
+    ["MHD OG Duderstadt", 9.692],
+    ["Bw KVK Göttingen", 8.706],
+    // Viele schmale Zeichen: Hier liegt die Schätzung am weitesten darüber.
+    ["FF Kyritz", 4.134],
   ];
 
-  it("schätzt die Breite eines Namens nie zu knapp und höchstens um ein Vierzehntel zu weit", () => {
+  it("schätzt die Breite eines Namens nie zu knapp und höchstens um ein Zehntel zu weit", () => {
     for (const [name, breite] of GEMESSEN) {
       expect(textBreite(name), name).toBeGreaterThanOrEqual(breite);
-      expect(textBreite(name), name).toBeLessThanOrEqual(breite * 1.07);
+      expect(textBreite(name), name).toBeLessThanOrEqual(breite * 1.1);
     }
     // Schmale Zeichen zählen weniger als breite: Ein fester Mittelwert lag bei „THW Gieboldehausen" zu knapp.
     expect(textBreite("iiii")).toBeLessThan(textBreite("mmmm") / 2);
@@ -849,7 +956,10 @@ describe("tafelSatz", () => {
     // Kostete auch der Name zu viel, bleibt es beim Satz ohne Rücksicht.
     expect(tafelSatz(lage, 0, FERNSEHER, { zwei: 40, drei: 40, breit: 90 }, { zwei: 27, drei: 27, breit: 60 })).toEqual(frei);
     // Passt alles ganz, gilt das; die Namen fragt der Satz dann nicht mehr.
-    expect(tafelSatz(lage, 0, FERNSEHER, { zwei: 21, drei: 21, breit: 60 }, { zwei: 30, drei: 30, breit: 90 })).toEqual(nurName);
+    expect(tafelSatz(lage, 0, FERNSEHER, { zwei: 21, drei: 21, breit: 60 }, { zwei: 12, drei: 12, breit: 40 })).toEqual(nurName);
+    // Alles ganz schließt die Namen ein: Verlangen sie mehr als der Bedarf aller Angaben, gilt ihr Wert auch in der ersten Stufe.
+    // Ein Satz, in dem nur Auftrag und Bedarf ganz dastünden, der Name aber gekürzt, gälte sonst als „alles ganz".
+    expect(tafelSatz(lage, 0, FERNSEHER, { zwei: 21, drei: 21, breit: 60 }, { zwei: 30, drei: 30, breit: 90 })).toEqual(frei);
   });
 
   it("kürzt lieber, als wegen eines langen Namens zu blättern oder unter die kleinste Schrift zu gehen", () => {

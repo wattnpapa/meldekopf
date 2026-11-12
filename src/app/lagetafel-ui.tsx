@@ -344,18 +344,28 @@ function Typ({ e, fassung }: { e: TafelEinheit; fassung: KartenFassung }) {
 }
 
 /**
- * Herkunft in zwei Teilen, Organisation und Standort. Reicht die Zeile nicht, wird der längere Teil gekürzt und der
- * kürzere bleibt ganz: bei „Johanniter-Unfall-Hilfe … Oldenburg" die Organisation, damit der Ort bleibt, der sonst
- * gleichnamige Karten unterscheidet; bei „THW Clausthal-Zellerfeld" der Ort.
+ * Herkunft in zwei Teilen, Organisation und Standort. Reicht die Zeile nicht, wird der breitere Teil gekürzt und der
+ * schmalere bleibt ganz: bei „Johanniter-Unfall-Hilfe … Oldenburg" die Organisation, damit der Ort bleibt, der sonst
+ * gleichnamige Karten unterscheidet; bei „THW Clausthal-Zellerfeld" der Ort. Gewählt wird nach der geschätzten Breite,
+ * nicht nach der Zahl der Zeichen: „DRK-KV Northeim" ist breiter als „Osterode am Harz", obwohl es ein Zeichen weniger
+ * hat; so bleibt der Standort stehen, der die vier Karten des Kreisverbands unterscheidet. Vom gekürzten Teil bleiben
+ * mindestens seine ersten drei Zeichen („DRK…"); reicht auch das nicht, wird der andere Teil gekürzt (lagetafel.css).
  */
 function HerkunftTeile({ herkunft, ort }: { herkunft: string; ort: string }) {
   const organisation = ort ? herkunft.slice(0, herkunft.length - ort.length).trim() : "";
   if (!organisation) return <span className="lt-teil-weich">{herkunft}</span>;
-  const ortWeich = ort.length > organisation.length;
+  const ortWeich = textBreite(ort) > textBreite(organisation);
+  const weich = ortWeich ? ort : organisation;
+  const stil = { "--lt-weich-min": `${Math.min(textBreite(weich), textBreite(Array.from(weich).slice(0, 3).join("") + "…")).toFixed(2)}em` } as CSSProperties;
+  // Beide Teile kennen den Stummel: Der feste bleibt um ihn schmaler als das Feld.
   return (
     <>
-      <span className={ortWeich ? "lt-teil-fest" : "lt-teil-weich"}>{organisation}</span>{" "}
-      <span className={ortWeich ? "lt-teil-weich" : "lt-teil-fest"}>{ort}</span>
+      <span className={ortWeich ? "lt-teil-fest" : "lt-teil-weich"} style={stil}>
+        {organisation}
+      </span>{" "}
+      <span className={ortWeich ? "lt-teil-weich" : "lt-teil-fest"} style={stil}>
+        {ort}
+      </span>
     </>
   );
 }
@@ -460,9 +470,21 @@ function UebungZeile({ e }: { e: TafelEinheit }) {
   return (
     <li className="lt-abgang lt-uebung-zeile" data-uebung="">
       <Herkunft e={e} />
-      {e.typKurz && <span className="lt-uebung-typ">{e.typKurz}</span>}
+      {e.typKurz && <span className={textBreite(e.typKurz) <= 4 ? "lt-uebung-typ lt-uebung-typ-fest" : "lt-uebung-typ"}>{e.typKurz}</span>}
       <StaerkeKlein s={e.staerke} soll={e.soll} />
     </li>
+  );
+}
+
+/** Zahl der Einheiten im Gruppenkopf: ganz oder gar nicht, nie gekürzt („1" für „16 Einheiten"), siehe lagetafel.css. */
+function GruppenZahl({ anzahl }: { anzahl: number }) {
+  return (
+    <span className="lt-gruppe-zahl">
+      <span className="lt-zahl-anker" />
+      <span className="lt-zahl-text">
+        {anzahl} {einheitenWort(anzahl)}
+      </span>
+    </span>
   );
 }
 
@@ -477,7 +499,7 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
             <span className="lt-gruppe-name">{g.titel}</span>
             {zelle.fortsetzung && <> <span className="lt-fortsetzung">(Fortsetzung)</span></>}
           </h3>
-          <span className="lt-gruppe-zahl">{g.einheiten.length} {einheitenWort(g.einheiten.length)}</span>
+          <GruppenZahl anzahl={g.einheiten.length} />
           {/* Wo bei einer Organisation deren Stärke steht, sagt die Gruppe der Übungsmeldungen, dass ihre Zahlen nicht in der Lage stecken. */}
           {g.uebung ? <span className="lt-gruppe-ohne">nicht gezählt</span> : <StaerkeKlein s={g.staerke} />}
         </li>
@@ -495,7 +517,7 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
             <span className="lt-gruppe-name">Abgerückt</span>
             {zelle.fortsetzung && <> <span className="lt-fortsetzung">(Fortsetzung)</span></>}
           </h3>
-          <span className="lt-gruppe-zahl">{tb.abgerueckt.length} {einheitenWort(tb.abgerueckt.length)}</span>
+          <GruppenZahl anzahl={tb.abgerueckt.length} />
         </li>
       );
     case "abgang": {

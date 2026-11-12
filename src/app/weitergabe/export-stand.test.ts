@@ -31,6 +31,7 @@ import {
   neueEintraege,
   seitdemText,
   weitergabeStandLaden,
+  weitergabeUmImportErgaenzen,
   weitergabeVermerken,
 } from "./export-stand";
 
@@ -415,5 +416,64 @@ describe("letzterStandMit()", () => {
     // Eine später dazugekommene Meldung stand in keinem Stand.
     expect(letzterStandMit("e1", ["m3", "m9"])).toBeNull();
     expect(letzterStandMit("andere", ["m1"])).toBeNull();
+  });
+});
+
+/** Neu im Meldekopf: Die Art der Sammlung lässt sich umstellen; Stände wissen, mit welcher Art sie entstanden. */
+describe("Umstellung der Art seit dem Stand", () => {
+  beforeEach(() => {
+    (globalThis as { localStorage?: Storage }).localStorage = new MemStorage() as unknown as Storage;
+  });
+
+  /** Eine echte Einheit und zwei Übungsbögen, als Einsatz geführt. */
+  function lage(): Einsatzsammlung {
+    const uebung = (id: string, name: string) => {
+      const e = eintrag(id, name, 2);
+      e.bogen.uebung = true;
+      return e;
+    };
+    return sammlung("e1", [eintrag("m1", "Wardenburg", 1), uebung("m2", "Hatten"), uebung("m3", "Huntlosen")]);
+  }
+
+  it("zählt die Umstellung als Änderung; die Übungsbögen, die jetzt zählen, gehören in den Nachtrag", () => {
+    const s = lage();
+    const blatt = lageblattVermerken(s, undefined, 100);
+    expect(blatt.art).toBe(EinsatzArt.EINSATZ);
+    expect(aenderungenSeit(s.eintraege, blatt, s.art).anzahl).toBe(0);
+    // Als Übung geführt: Das Blatt zeigte 1 Einheit, jetzt zählen 3.
+    const uebung = { ...s, art: EinsatzArt.UEBUNG };
+    const a = aenderungenSeit(uebung.eintraege, blatt, uebung.art);
+    expect(a.anzahl).toBe(1);
+    expect(a.arten).toEqual(["Art der Sammlung"]);
+    expect(a.einheiten.sort()).toEqual([uebung.eintraege[1]!.einheitSchluessel, uebung.eintraege[2]!.einheitSchluessel].sort());
+    expect(seitdemText(0, a)).toBe("seitdem 1 Änderung (Art der Sammlung)");
+    // Der Nachtrag an den Stab trägt die beiden Übungsbögen, mit ihrem Grund.
+    exportVermerken(s, "csv", undefined, 100);
+    const stand = exportStandLaden("e1", "csv")!;
+    expect(nachtragEintraege(uebung.eintraege, stand, uebung.art).map((e) => e.id)).toEqual(["m2", "m3"]);
+    expect(nachtragGruende(uebung.eintraege, stand, uebung.art)[uebung.eintraege[1]!.einheitSchluessel]).toEqual({ neu: false, gruende: ["Art der Sammlung"] });
+    expect(exportSammlung(uebung, "neue", stand).eintraege.map((e) => e.id)).toEqual(["m2", "m3"]);
+  });
+
+  it("lässt ältere Stände ohne Art und Aufrufe ohne Art unverändert", () => {
+    const s = lage();
+    const alt: ExportStand = { zeitpunkt: 100, eintragIds: ["m1", "m2", "m3"] };
+    expect(aenderungenSeit(s.eintraege, alt, EinsatzArt.UEBUNG).anzahl).toBe(0);
+    const blatt = lageblattVermerken(s, undefined, 100);
+    expect(aenderungenSeit(s.eintraege, blatt).anzahl).toBe(0);
+    // Gelesen wird die Art mit dem Stand.
+    expect(lageblattStandLaden("e1")!.art).toBe(EinsatzArt.EINSATZ);
+  });
+
+  it("nimmt beim Import die Art der Datei in den Stand der Weitergabe: Zählt das andere Gerät anders, ist das „seitdem Neues“", () => {
+    const s = lage();
+    weitergabeVermerken(s, undefined, 100);
+    // Die Datei vom anderen Gerät kommt als Übung; hier gilt weiter „Einsatz".
+    weitergabeUmImportErgaenzen("e1", [], [], {}, 200, true, EinsatzArt.UEBUNG);
+    const w = weitergabeStandLaden("e1")!;
+    expect(w.art).toBe(EinsatzArt.UEBUNG);
+    expect(aenderungenSeit(s.eintraege, w, s.art).anzahl).toBe(1);
+    // Ab der Weitergabe gerechnet, trägt der Stand des Formats die Art mit.
+    expect(exportStandAusWeitergabe("e1", "pdf")!.art).toBe(EinsatzArt.UEBUNG);
   });
 });

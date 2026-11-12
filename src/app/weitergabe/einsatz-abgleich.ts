@@ -33,10 +33,12 @@
  *
  * Neu im Meldekopf: die Art der Sammlung. Sie lässt sich nachträglich ändern
  * (`einsatzArtSetzen`) und entscheidet, ob Übungsbögen zählen; zwei Geräte
- * mit verschiedener Art zählen dieselbe Lage verschieden. Es gilt die zuletzt
- * umgestellte (`artSeit`); hat nur ein Gerät umgestellt, dessen Art. Haben
- * beide umgestellt oder lässt es sich nicht entscheiden, nennt die Quittung
- * es als Widerspruch.
+ * mit verschiedener Art zählen dieselbe Lage verschieden. Es gilt die Art des
+ * Geräts, das die Umstellung des anderen schon kannte (`artVerlauf`); hat nur
+ * ein Gerät umgestellt, dessen Art. Haben beide unabhängig voneinander
+ * umgestellt, gilt die jüngere Umstellung (`artSeit`), und die Quittung nennt
+ * es als Widerspruch; ebenso, wenn keines eine Zeit trägt (dann bleibt die
+ * eigene Art).
  */
 
 import {
@@ -52,7 +54,7 @@ import { ART_LABEL } from "../einsaetze-konstanten";
 import { staerke } from "@bos/eeb-format/model";
 import { geltendeJeEinheit, istPlatzhalterFassung } from "../fassung-vorrang";
 import { einheitAnzeigename, zeitpunktDeutsch } from "../hilfen";
-import { sammlungenSchreiben, zeitKurz, type FuehrungsVermerk } from "../eintrag-zeiten";
+import { ART_VERLAUF_MAX, artBekannt, sammlungenSchreiben, zeitKurz, type FuehrungsVermerk } from "../eintrag-zeiten";
 
 export type Feld = "status" | "notiz" | "eintreffzeit";
 
@@ -254,9 +256,9 @@ export interface AbgleichWiderspruch {
 export interface ArtAbgleich {
   hier: EinsatzArt;
   datei: EinsatzArt;
-  /** Welche jetzt gilt: die zuletzt umgestellte. */
+  /** Welche jetzt gilt (siehe {@link artEntscheiden}). */
   gilt: "hier" | "datei";
-  /** Beide Geräte haben umgestellt, oder keines trägt eine Zeit: Die Quittung nennt es, damit nichts still kippt. */
+  /** Beide Geräte haben unabhängig umgestellt, oder keines trägt eine Zeit: Die Quittung nennt es, damit nichts still kippt. */
   widerspruch: boolean;
 }
 
@@ -289,15 +291,45 @@ export function importUebernahm(r: Pick<AbgleichErgebnis, "neuerEinsatz" | "hinz
 }
 
 /**
- * Welche Art gilt, wenn sie auf beiden Geräten verschieden ist: die zuletzt umgestellte (`artSeit`). Hat nur eine Seite
- * umgestellt, gilt deren Art ohne Widerspruch; die andere kennt die Umstellung nur noch nicht.
+ * Welche Art gilt, wenn sie auf beiden Geräten verschieden ist. Entscheidend ist, wer wessen Stand kennt (`artVerlauf`,
+ * {@link artBekannt}):
+ *
+ * 1. Kennt eine Seite den geltenden Stand der anderen (deren `artSeit`, oder die Art vom Anlegen) und die andere ihren
+ *    nicht, ist sie weiter: Ihre Art gilt ohne Widerspruch. So übernimmt ein Gerät die zweite Umstellung des anderen,
+ *    und eine ältere Datei, die zurückkommt, ändert nichts. Wer nur umgestellt und zurückgenommen hat, steht wieder auf
+ *    dem Stand davor: Hat die andere Seite inzwischen selbst umgestellt, gilt deren Art.
+ * 2. Kennen beide den Stand der anderen, gilt die Seite, die mehr Umstellungen kennt: Sie hat eine Umstellung
+ *    zurückgenommen, die die andere schon bekommen hatte.
+ * 3. Sonst haben beide unabhängig umgestellt: Die jüngere Umstellung gilt, und die Quittung nennt den Widerspruch. Ohne
+ *    jede Zeit (ältere Sammlungen) bleibt die eigene Art, ebenfalls mit Widerspruch.
  */
-export function artEntscheiden(hier: Pick<Einsatzsammlung, "art" | "artSeit">, datei: Pick<Einsatzsammlung, "art" | "artSeit">): ArtAbgleich | null {
+export function artEntscheiden(
+  hier: Pick<Einsatzsammlung, "art" | "artSeit" | "artVerlauf">,
+  datei: Pick<Einsatzsammlung, "art" | "artSeit" | "artVerlauf">,
+): ArtAbgleich | null {
   if (hier.art === datei.art) return null;
   const h = hier.artSeit;
   const d = datei.artSeit;
-  if (d != null && (h == null || d > h)) return { hier: hier.art, datei: datei.art, gilt: "datei", widerspruch: h != null };
-  return { hier: hier.art, datei: datei.art, gilt: "hier", widerspruch: h == null || d != null };
+  const hierKennt = new Set(artBekannt(hier));
+  const dateiKennt = new Set(artBekannt(datei));
+  const hierBekanntDort = h == null || dateiKennt.has(h);
+  const dateiBekanntHier = d == null || hierKennt.has(d);
+  const ergebnis = (gilt: "hier" | "datei", widerspruch: boolean): ArtAbgleich => ({ hier: hier.art, datei: datei.art, gilt, widerspruch });
+  if (hierBekanntDort && !dateiBekanntHier) return ergebnis("datei", false);
+  if (dateiBekanntHier && !hierBekanntDort) return ergebnis("hier", false);
+  if (hierBekanntDort && dateiBekanntHier) {
+    const dateiMehr = [...hierKennt].every((z) => dateiKennt.has(z)) && dateiKennt.size > hierKennt.size;
+    const hierMehr = [...dateiKennt].every((z) => hierKennt.has(z)) && hierKennt.size > dateiKennt.size;
+    if (dateiMehr) return ergebnis("datei", false);
+    if (hierMehr) return ergebnis("hier", false);
+  }
+  if (h != null && d != null) return ergebnis(d > h ? "datei" : "hier", true);
+  return ergebnis(d != null ? "datei" : "hier", true);
+}
+
+/** Die Umstellungen, die beide Seiten zusammen kennen: Nach dem Abgleich kennt dieses Gerät auch die der Datei. */
+function artVerlaufVereint(hier: Pick<Einsatzsammlung, "artSeit" | "artVerlauf">, datei: Pick<Einsatzsammlung, "artSeit" | "artVerlauf">): number[] {
+  return [...new Set([...artBekannt(hier), ...artBekannt(datei)])].sort((a, b) => a - b).slice(-ART_VERLAUF_MAX);
 }
 
 /** Der Satz der Quittung zur Art; leer, wenn nichts zu sagen ist (die Art dieses Geräts ist die jüngere). */
@@ -390,16 +422,24 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
 
   const einheiten = new Set(importiert.eintraege.map((e) => e.einheitSchluessel));
   let geschrieben = false;
-  // Die Art der Sammlung (neu im Meldekopf): Es gilt die zuletzt umgestellte. Eine Sammlung, die für ein ANDERES Ziel
-  // zugeschnitten wurde (`sammlungFuerZiel`), trägt schon Art und Zeit des Ziels und kommt hier nicht an.
+  // Die Art der Sammlung (neu im Meldekopf, `artEntscheiden`). Eine Sammlung, die für ein ANDERES Ziel zugeschnitten
+  // wurde (`sammlungFuerZiel`), trägt schon Art, Zeit und Verlauf des Ziels und kommt hier nicht an.
   const art = artEntscheiden(vorher, importiert);
   if (art) {
     ergebnis.art = art;
     if (art.gilt === "datei") {
       s.art = importiert.art;
       if (importiert.artSeit != null) s.artSeit = importiert.artSeit;
+      else delete s.artSeit;
       geschrieben = true;
     }
+  }
+  // Was die Datei an Umstellungen kennt, kennt dieses Gerät jetzt auch, gleich welche Art gilt: Sonst hielte der nächste
+  // Abgleich eine Umstellung, die beide schon kannten, für unabhängig und meldete einen Widerspruch.
+  const verlauf = artVerlaufVereint(vorher, importiert);
+  if (verlauf.length > 0 && JSON.stringify(verlauf) !== JSON.stringify(s.artVerlauf ?? [])) {
+    s.artVerlauf = verlauf;
+    geschrieben = true;
   }
   // Welche Fassung gilt, hat womöglich das andere Gerät entschieden (R4-W1):
   // ein dort bestätigter Vorrang kommt mit, solange hier keiner gesetzt ist.

@@ -232,10 +232,15 @@ main.lt .lt-leer-zusatz { font-size: calc(var(--lt-e) * 2.5); color: var(--lt-te
 main.lt .lt-gruppe h3 { flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; font-size: 0.96em; font-weight: 700; line-height: 1.15; white-space: nowrap; }
 .lt-gruppe-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lt-fortsetzung { flex: none; margin-left: 0.3em; font-weight: 400; color: var(--lt-text-2); }
-/* Die Zahl der Einheiten bekommt nur, was neben Name und Stärke übrig bleibt (Grundbreite 0), und wird zuerst gekürzt; der Name erst,
+/* Die Zahl der Einheiten bekommt nur, was neben Name und Stärke übrig bleibt (Grundbreite 0), und weicht zuerst; der Name erst,
    wenn für sie nichts mehr bleibt. Auf dem Fernseher stand „T… (Fortsetzung)" für „THW", während „11 Einheiten" ganz dastand. Ein
-   Schwundfaktor allein reicht nicht: Er nimmt dem Namen noch Bruchteile eines Pixels, und schon die lösen die Auslassung aus. */
-.lt-gruppe-zahl { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 0.66em; color: var(--lt-text-2); }
+   Schwundfaktor allein reicht nicht: Er nimmt dem Namen noch Bruchteile eines Pixels, und schon die lösen die Auslassung aus.
+   Gekürzt wird die Zahl nicht: Aus „16 Einheiten" wurde sonst „1", und das las sich wie eine Einheit. Sie steht wie der ausgeschriebene
+   Typ hinter einem Anker ohne Breite; passt sie nicht, bricht sie in eine zweite Zeile um, die nicht zu sehen ist. Im ersten Kopf der
+   Gruppe steht sie in aller Regel, und die Stärke daneben bleibt immer. */
+.lt-gruppe-zahl { flex: 1 1 0; min-width: 0; height: 1.2em; font-size: 0.66em; line-height: 1.2; white-space: normal; overflow: hidden; color: var(--lt-text-2); }
+.lt-zahl-anker { display: inline-block; width: 0; }
+.lt-zahl-text { display: inline-block; white-space: nowrap; }
 .lt-gruppe .lt-staerke { flex: none; }
 .lt-gruppe .lt-staerke b { font-size: 0.96em; }
 .lt-gruppe-ab { border-bottom-style: dashed; color: var(--lt-text-2); }
@@ -277,18 +282,25 @@ main.lt .lt-gruppe-uebung h3 { color: var(--lt-uebung); }
 /* Unterlage im Format des beschnittenen Zeichens (256 × 172, lagetafel.ts); solange es lädt, bleibt der Platz leer. */
 .lt-zeichen img { display: block; width: 100%; aspect-ratio: 256 / 172; object-fit: contain; }
 .lt-zeichen img[data-zeichen="geladen"] { background: #fff; filter: var(--lt-zeichen-filter); }
-.lt-herkunft { grid-area: herkunft; flex: 1 1 0; display: flex; gap: 0.26em; font-weight: 700; line-height: 1.22; }
+.lt-herkunft { grid-area: herkunft; flex: 1 1 0; display: flex; align-items: baseline; gap: 0.26em; font-weight: 700; line-height: 1.22; }
+/* Läuft der Name kleiner (unten), bleibt er auf der Grundlinie des Namens in voller Größe: Eine Stütze ohne Breite in der Schrift der
+   Zeile gibt sie vor. Sonst säße der kleinere Name höher als die Stärke daneben, auf dem 4K-Fernseher um 5 px. */
+.lt-herkunft:not(.lt-herkunft-wahl)::before, .lt-herkunft-kurz::before { content: "\200B"; flex: none; width: 0; margin-right: -0.26em; }
 /* Herkunft und Funkrufname bestehen aus zwei Teilen. Reicht der Platz nicht, endet der „weiche" mit Auslassung und der „feste"
-   bleibt ganz: der Standort hinter einer langen Organisation, die Kennziffer hinter Kennwort und Ort (lagetafel-ui.tsx). */
-.lt-teil-weich { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.lt-teil-fest { flex: none; }
+   bleibt ganz: der Standort hinter einer langen Organisation, die Kennziffer hinter Kennwort und Ort (lagetafel-ui.tsx). Vom weichen
+   Teil der Herkunft bleiben mindestens seine ersten Zeichen (--lt-weich-min): Ein einzelner Buchstabe mit Auslassung („D…") las sich
+   aus der Entfernung wie eine Abkürzung. Reicht auch das nicht, wird der feste Teil gekürzt, mit Auslassung statt hart am Rand. */
+.lt-teil-weich { flex: 0 1 auto; min-width: var(--lt-weich-min, 0); overflow: hidden; text-overflow: ellipsis; }
+/* Der feste Teil schrumpft nicht (ein Schwundfaktor nähme ihm Bruchteile eines Pixels und löste schon damit die Auslassung aus),
+   er ist aber nie breiter als das Feld abzüglich des Stummels und des Abstands. */
+.lt-teil-fest { flex: none; max-width: calc(100% - var(--lt-weich-min, 0em) - 0.3em); overflow: hidden; text-overflow: ellipsis; }
 /* Voller Name oder übliche Kurzform („FF Lenglern"), ohne Messung wie beim Typ (unten): Die Kurzform liegt über die ganze Breite unter
    dem vollen Namen. Der steht hinter einem Anker ohne Breite in derselben Zeile und deckt sie zu; passt er nicht in die Zeile, bricht er
    hinter dem Anker in eine zweite um, die nicht zu sehen ist, und die Kurzform bleibt stehen. Passt auch sie nicht, wird ihr längerer
    Teil gekürzt (wie oben). */
 .lt-karte .lt-herkunft-wahl, .lt-uebung-zeile .lt-herkunft-wahl { position: relative; display: block; height: 1.22em; white-space: normal; text-overflow: clip; overflow: hidden; }
 .lt-herkunft-lang { position: relative; z-index: 1; display: inline-block; white-space: nowrap; background: var(--lt-flaeche); }
-.lt-herkunft-kurz { position: absolute; inset: 0 0 auto 0; display: flex; gap: 0.26em; white-space: nowrap; overflow: hidden; }
+.lt-herkunft-kurz { position: absolute; inset: 0 0 auto 0; display: flex; align-items: baseline; gap: 0.26em; white-space: nowrap; overflow: hidden; }
 /* Die Zeile einer Übungsmeldung hat keine Kartenfläche: Der volle Name deckt die Kurzform mit dem Grund der Tafel zu. */
 .lt-uebung-zeile .lt-herkunft-lang { background: var(--lt-grund); }
 /* Ein Name, dem wenig Platz fehlt, läuft etwas kleiner, statt gekürzt zu werden: bis auf neun Zehntel, nach der geschätzten Breite der
@@ -352,7 +364,9 @@ main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-typ { max-width: 8.5e
 main.lt[data-fassung="zwei"] .lt-typ ~ .lt-wie .lt-auftrag-text::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
 
 /* Drei Zeilen: Herkunft; Typ ausgeschrieben (mit dem Stand); darunter über die ganze Breite Funkrufname, Auftrag und Marken.
-   Wird die dritte Zeile eng, weicht zuerst der Auftrag, dann wird der Bedarf gekürzt; der Funkrufname behält seine Nummer. */
+   Wird die dritte Zeile eng, weicht zuerst der Auftrag, dann Kennwort und Ort des Funkrufnamens (seine Nummer bleibt), erst danach
+   wird der Bedarf gekürzt: Er ist, was zu entscheiden ist. Am 1366er-Fernseher blieb von „Ruhezeit" neben einem langen Funkrufnamen
+   und der Marke „neu" nur das Warnzeichen. Die Marken nehmen höchstens die Zeile bis auf vier Schriftbreiten für die Nummer. */
 main.lt[data-fassung="drei"] .lt-karte {
   grid-template-columns: calc(var(--lt-zeichen) * 1em) minmax(0, 1fr) max-content;
   /* 1,22 + 0,96 + 0,96 = 3,14: die Höhe der Karte (3,7) ohne ihr Polster. */
@@ -360,9 +374,9 @@ main.lt[data-fassung="drei"] .lt-karte {
   grid-template-areas: "z kopf kopf" "z typ stand" "z wie wie";
 }
 main.lt[data-fassung="drei"] .lt-wie { grid-area: wie; display: flex; align-items: center; }
-main.lt[data-fassung="drei"] .lt-funkruf { flex: none; max-width: 15em; margin-right: 0.45em; }
+main.lt[data-fassung="drei"] .lt-funkruf { flex: 0 1 auto; max-width: 15em; margin-right: 0.45em; }
 main.lt[data-fassung="drei"] .lt-auftrag { flex: 1 1 0; }
-main.lt[data-fassung="drei"] .lt-marken { flex: 0 1 auto; margin-left: auto; padding-left: 0.4em; }
+main.lt[data-fassung="drei"] .lt-marken { flex: none; max-width: calc(100% - 4em); margin-left: auto; padding-left: 0.4em; }
 main.lt[data-fassung="drei"] .lt-funkruf ~ .lt-auftrag .lt-auftrag-text::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
 
 /* Breit: links wer (Herkunft, Typ), rechts was (Auftrag, Funkrufname). Die linke Spalte ist so breit wie der längste Name der
@@ -373,6 +387,9 @@ main.lt[data-fassung="breit"] .lt-karte {
   grid-template-areas: "z herkunft auftrag auftrag staerke" "z typ funkruf marken stand";
 }
 main.lt[data-fassung="breit"] :is(.lt-herkunft, .lt-typ) { padding-right: 0.8em; }
+/* Die Kurzformen liegen über der ganzen Breite ihres Feldes, zu der hier der Abstand zum Auftrag gehört: Sie enden vor ihm. */
+main.lt[data-fassung="breit"] .lt-herkunft-kurz { right: 0.8em; }
+main.lt[data-fassung="breit"] .lt-typ-kurz { max-width: calc(100% - 0.8em); }
 main.lt[data-fassung="breit"] .lt-auftrag { font-size: 0.86em; line-height: 1.22; }
 
 /* Abgerückte Einheiten: eine Zeile, zurückgenommen. Sie zählen nicht, stehen aber da: „Ist die Einheit schon weg?" */
@@ -393,12 +410,17 @@ main.lt[data-fassung="breit"] .lt-auftrag { font-size: 0.86em; line-height: 1.22
 .lt-abgang-uebung { flex: none; }
 
 /* Übungsmeldung, die in der Lage nicht zählt: eine Zeile wie die einer abgerückten Einheit, zurückgenommen. Name und Typ links,
-   die Stärke mager am rechten Rand; sie bleibt immer ganz. Reicht die Zeile nicht, werden Name (zuerst der volle zugunsten der
-   Kurzform, dann der längere ihrer Teile, wie auf der Karte) und Typ gekürzt, jeder nach seiner Länge: Ein Freitext-Typ darf die
-   Stärke nicht verdrängen. */
+   die Stärke mager am rechten Rand; sie bleibt immer ganz. Reicht die Zeile nicht, weicht zuerst der volle Name der Kurzform, dann
+   wird vor allem der Typ gekürzt (zehnfacher Schwund), erst danach der Name, wie auf der Karte an seinem breiteren Teil: Wie auf der
+   Tafel sollen wenigstens die Namen ganz dastehen. Ein Freitext-Typ darf die Stärke nicht verdrängen. */
 .lt-uebung-zeile > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lt-uebung-zeile .lt-herkunft { flex: 0 1 auto; font-weight: 600; line-height: 1.2; }
-.lt-uebung-typ { flex: 0 1 auto; }
+/* Mit Kurzform geht der Name von deren Breite aus (--lt-name-em) und wächst bis zur vollen Form, soweit die Zeile reicht. Bemessen nach
+   dem verdeckten vollen Namen, blieb neben der Kurzform eine Lücke, und der Typ daneben wurde gekürzt, obwohl er hineingepasst hätte. */
+.lt-uebung-zeile .lt-herkunft-wahl { flex: 1 1 calc(var(--lt-name-em, 0) * 1em); max-width: max-content; }
+.lt-uebung-typ { flex: 0 10 auto; }
+/* Ein kurzer Typ („TEL", „SEG", „B") gibt nichts her: Gekürzt stünde nur ein Buchstabe da. */
+.lt-uebung-typ-fest { flex-shrink: 0; }
 .lt-uebung-zeile > .lt-staerke { margin-left: auto; overflow: visible; }
 .lt-uebung-zeile .lt-staerke b { font-size: 1em; font-weight: 400; color: var(--lt-text-2); }
 
@@ -470,12 +492,14 @@ main.lt .lt-bedarf li.lt-dringend { color: var(--lt-achtung); font-weight: 700; 
 .lt-bedarf li.lt-dringend::before { content: "\26A0\FE0E\00A0"; }
 
 /* Abgerückte Einheiten: die letzten mit Uhrzeit, je eine Zeile. Der Block steht fest, auch wenn „Zuletzt" darunter keinen Platz mehr hat. */
-.lt-abgaenge { display: grid; gap: calc(var(--lt-e) * 0.3); }
-main.lt .lt-abgaenge li { display: flex; gap: calc(var(--lt-e) * 1); font-size: calc(var(--lt-e) * 2.25); line-height: 1.2; white-space: nowrap; }
+/* Die Spalte ist so breit wie die Liste, nicht wie ihre längste Zeile: Sonst ragte eine lange Zeile über die Randspalte hinaus, der
+   Name endete ohne Auslassung mitten im Wort, und „(Übung)" dahinter fehlte. */
+.lt-abgaenge { display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(var(--lt-e) * 0.3); }
+main.lt .lt-abgaenge li { --lt-ab-luecke: calc(var(--lt-e) * 1); display: flex; gap: var(--lt-ab-luecke); font-size: calc(var(--lt-e) * 2.25); line-height: 1.2; white-space: nowrap; }
 .lt-ab-zeit { flex: none; color: var(--lt-text-2); }
 .lt-ab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* Dicht am Namen, wie ein Wortabstand: Der Abstand der Zeile (1 --lt-e) wäre für ein nachgestelltes Wort zu weit. */
-.lt-ab-uebung { flex: none; margin-left: -0.2em; color: var(--lt-text-2); }
+/* Dicht am Namen, wie ein Wortabstand: Der Abstand der Zeile wäre für ein nachgestelltes Wort zu weit. */
+.lt-ab-uebung { flex: none; margin-left: calc(0.25em - var(--lt-ab-luecke)); color: var(--lt-text-2); }
 main.lt .lt-abgaenge li.lt-ab-rest { color: var(--lt-text-2); }
 
 /* „Zuletzt" nimmt, was übrig ist. Die Liste bricht in Spalten um; zu sehen ist nur die erste, also nur ganze Einträge.
@@ -618,16 +642,17 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   .lt-gruppe { height: auto; padding-top: 0.2em; white-space: normal; flex-wrap: wrap; row-gap: 0; }
   main.lt .lt-gruppe h3 { flex-wrap: wrap; white-space: normal; }
   .lt-herkunft, .lt-funkruf { flex-wrap: wrap; row-gap: 0; }
-  .lt-teil-weich, .lt-teil-fest { flex: 0 1 auto; min-width: 0; overflow: visible; overflow-wrap: anywhere; }
+  .lt-teil-weich, .lt-teil-fest { flex: 0 1 auto; min-width: 0; max-width: none; overflow: visible; overflow-wrap: anywhere; }
   main.lt .lt-einsatz { flex-wrap: wrap; }
   .lt-einsatz-name, .lt-ort, .lt-einsatz-name + .lt-ort { max-width: 100%; min-width: 0; overflow: visible; }
-  main.lt .lt-abgaenge li { font-size: var(--lt-b); }
+  main.lt .lt-abgaenge li { --lt-ab-luecke: 0.6em; font-size: var(--lt-b); }
   .lt-bedienung .lm-stufenleiste { flex-wrap: wrap; }
   .lt-bedienung .lm-stufenleiste .lm-knopf, .lt-bedienung .lm-stufenleiste .lm-knopf + .lm-knopf { flex: 1 1 auto; width: auto; padding-inline: 0.55em; }
   main.lt .lt-seitenzeile { white-space: normal; }
   .lt-gruppe-name { overflow: visible; }
   /* Hier bricht der Kopf um: Die Zahl rückt in eine eigene Zeile, statt gekürzt zu werden. */
-  .lt-gruppe-zahl { flex: 1 1 auto; min-width: auto; overflow: visible; }
+  .lt-gruppe-zahl { flex: 1 1 auto; min-width: auto; height: auto; overflow: visible; }
+  .lt-zahl-anker { display: none; }
   .lt-abgang { height: auto; min-height: calc(var(--lt-abgang-h) * 1em); white-space: normal; }
   .lt-uebung-zeile { flex-wrap: wrap; column-gap: 0.5em; }
   .lt-uebung-zeile > * { white-space: normal; overflow: visible; overflow-wrap: anywhere; }

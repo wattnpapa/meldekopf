@@ -621,10 +621,10 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         <h2 id="lm-einheiten-titel" className="lm-titel">Einheiten</h2>
         {bild.einheiten.length === 0 ? (
           <p className="lm-leer-hinweis">
-            {bild.abgerueckt > 0
-              ? "Alle Einheiten sind abgerückt."
-              : bild.uebungenDaneben > 0
-                ? `Keine Einheit in der Lage (${bild.uebungenDaneben} Übung, nicht gezählt).` /* R20-L4: sagt, was da ist, statt „noch keine“ */
+            {bild.uebungenDaneben > 0
+              ? `Keine Einheit in der Lage (${bild.uebungenDaneben} Übung, nicht gezählt${bild.abgerueckt > 0 ? `; ${bild.abgerueckt} abgerückt` : ""}).` /* R20-L4: sagt, was da ist, statt „noch keine“; neu im Meldekopf: vor „abgerückt“, wie die Tafel */
+              : bild.abgerueckt > 0
+                ? "Alle Einheiten sind abgerückt."
                 : "Noch keine Einheit gemeldet."}
           </p>
         ) : (

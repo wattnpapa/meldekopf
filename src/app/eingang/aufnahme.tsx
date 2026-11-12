@@ -60,11 +60,13 @@ import { einsatzErfragen } from "../einsatz-erfragen";
 import {
   SpeicherVollFehler,
   einsatzArtSetzen,
+  einsatzArtZuruecknehmen,
   istSpeicherVoll,
   meldungAufnehmen,
   speicherVollMeldung,
   vomPapierMarkieren,
   zeitLang,
+  type ArtStand,
 } from "../eintrag-zeiten";
 import { fassungGiltSetzen, fassungInHistorieLegen, fassungPruefen, fassungenJeEinheit, geltendeJeEinheit, type FassungsPruefung } from "../fassung-vorrang";
 import { anzahlEinheiten, einheitenZahl, letzteMeldung, nummernWechsel, nummernWechselText, rueckkehrText } from "../einheiten-tabelle";
@@ -467,7 +469,9 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       const nurUebung = einsatz!.eintraege.every((e) => !!e.bogen.uebung);
       const wahl = await frageWahl({
         titel: "Übungsbogen in diese Sammlung?",
-        text: `„${einheitAnzeigename(b.einheit)}" ist als ÜBUNG gekennzeichnet. In „${einsatz!.name}" zählt er nicht in die Lage, bekommt aber eine Nummer. Für Übungen gibt es Sammlungen der Art „Übung“.`,
+        text: nurUebung
+          ? `„${einheitAnzeigename(b.einheit)}" ist als ÜBUNG gekennzeichnet. „${einsatz!.name}" wird als ${ART_LABEL[einsatz!.art]} geführt; dort zählt er nicht in die Lage, bekommt aber eine Nummer. Ist die Sammlung selbst eine Übung, wird sie als Übung geführt, und er zählt.`
+          : `„${einheitAnzeigename(b.einheit)}" ist als ÜBUNG gekennzeichnet. In „${einsatz!.name}" zählt er nicht in die Lage, bekommt aber eine Nummer. Für Übungen gibt es Sammlungen der Art „Übung“.`,
         wege: nurUebung
           ? [
               { wert: "uebung", label: "Als Übung führen und ablegen", hinweis: `„${einsatz!.name}" wird zur Übung: Übungsmeldungen zählen dann wie jede andere Einheit.` },
@@ -485,7 +489,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       alsUebung = wahl === "uebung";
     }
     const uebungZusatz = alsUebung
-      ? ` „${einsatz!.name}" wird jetzt als Übung geführt; Übungsmeldungen zählen.`
+      ? ` „${einsatz!.name}" wird jetzt als Übung geführt; Übungsmeldungen zählen. Zurückstellen: „Einsatz bearbeiten…“ in der Einsatzansicht.`
       : uebungDaneben
         ? " Achtung: als ÜBUNG gekennzeichnet — zählt nicht in die Lage."
         : "";
@@ -682,8 +686,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     // Stand vor der Aufnahme — für die Frage, welche Fassung gilt (R4-W1).
     const vorherEintraege = einsatz?.eintraege ?? [];
     let r;
-    // Neu im Meldekopf: die Art vor „Als Übung führen und ablegen", solange umgestellt, aber noch nichts abgelegt ist.
-    let artDavor: EinsatzArt | null = null;
+    // Neu im Meldekopf: die Art vor „Als Übung führen und ablegen" samt ihrem Zeitpunkt, solange umgestellt, aber noch nichts abgelegt ist.
+    let artDavor: ArtStand | null = null;
     try {
       // Auf „Als Übung führen und ablegen" wird die Sammlung jetzt zur Übung, unmittelbar vor dem Ablegen. Es sind zwei
       // Schreibvorgänge; scheitert der zweite (voller Speicher: Der Bogen braucht Platz, die Art nicht), nimmt der
@@ -703,9 +707,10 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       let text = istSpeicherVoll(e) ? new SpeicherVollFehler(e).message : fehlerText(e);
       // Neu im Meldekopf: Der Knopf hieß „… und ablegen". Ist nichts abgelegt, gilt auch die Umstellung nicht; lässt sie
       // sich nicht zurücknehmen, steht es da, statt eine Übung zu hinterlassen, von der die Meldung nichts sagt.
-      if (artDavor != null && artDavor !== EinsatzArt.UEBUNG) {
+      if (artDavor != null && artDavor.art !== EinsatzArt.UEBUNG) {
         try {
-          einsatzArtSetzen(zielId, artDavor);
+          // Diese Umstellung hat das Gerät nie verlassen: Art und Zeitpunkt wie davor.
+          einsatzArtZuruecknehmen(zielId, artDavor);
         } catch {
           text += ` „${einsatz!.name}" wird aber schon als Übung geführt.`;
         }
@@ -1859,7 +1864,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
       const eintraegeVorher = (einsaetzeLaden().find((x) => x.id === s.id)?.eintraege ?? []).map((e) => ({ ...e }));
       const r = einsatzAbgleichen(geklaert.sammlung);
       // Was von dort kam, hat das andere Gerät schon (R3-W2).
-      weitergabeUmImportErgaenzen(s.id, r.neueIds, r.neueVermerke, r.bekannt, Date.now(), importUebernahm(r));
+      // Die Art der Datei ist die, mit der das andere Gerät zählt (neu im Meldekopf).
+      weitergabeUmImportErgaenzen(s.id, r.neueIds, r.neueVermerke, r.bekannt, Date.now(), importUebernahm(r), geklaert.sammlung.art);
       // Was der Stab laut dem anderen Gerät schon bekam, gilt hier auch (R5-W6).
       exportStaendeUebernehmen(s.id, dateiStaende, [...einsaetzeLaden(), ...einsaetzePapierkorb()].map((x) => x.id));
       const lageSatz = lageAngabenUebernehmen(s.id, dateiLage, [...einsaetzeLaden(), ...einsaetzePapierkorb()].map((x) => x.id));

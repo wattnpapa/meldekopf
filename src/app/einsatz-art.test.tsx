@@ -12,11 +12,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Erfassungsbogen } from "@bos/eeb-format/model";
 import { Dialogschicht } from "@bos/oberflaeche/dialoge";
-import { EinsatzArt, MeldeStatus, einsaetzeLaden, einsatzAnlegen, meldungHinzufuegen } from "@bos/meldekopf/einsaetze";
+import { EinsatzArt, MeldeStatus, einsaetzeLaden, einsaetzeSpeichern, einsatzAnlegen, meldungHinzufuegen } from "@bos/meldekopf/einsaetze";
 import { aggregiere, uebungenAusserhalbDerLage } from "./auswertung";
 import { EinsatzDetail, kopfAenderungText } from "./einsaetze-ui";
-import { SpeicherVollFehler, einsatzArtSetzen, einsatzKopfMitArtSetzen, statusMitZeitSetzen } from "./eintrag-zeiten";
+import { SpeicherVollFehler, einsatzArtSetzen, einsatzArtZuruecknehmen, einsatzKopfMitArtSetzen, statusMitZeitSetzen } from "./eintrag-zeiten";
 import { neuerBogen } from "./hilfen";
+import { lageblattVermerken, weitergabeVermerken } from "./weitergabe/export-stand";
 import { lagebild } from "./lagemonitor";
 
 function bogen(ort: string, uebung = false): Erfassungsbogen {
@@ -29,11 +30,15 @@ function bogen(ort: string, uebung = false): Erfassungsbogen {
 
 const sammlung = (id: string) => einsaetzeLaden().find((s) => s.id === id)!;
 
-/** Die Einsatzansicht auf dem aktuellen Speicherstand; `neuLaden` baut sie nach einer Änderung neu auf (Rolle von onGeaendert in der App). */
-function ansicht(einsatzId: string) {
+/**
+ * Die Einsatzansicht auf dem aktuellen Speicherstand; `neuLaden` baut sie nach einer Änderung neu auf (Rolle von
+ * onGeaendert in der App). `ausgabe`: mit Weitergabe und Lageblatt, dann steht der Stand der Ausgabe bei der Summe.
+ */
+function ansicht(einsatzId: string, ausgabe = false) {
   const baum = () => (
     <>
       <EinsatzDetail
+        {...(ausgabe ? { onWeitergeben: () => {}, onLageblatt: () => {} } : {})}
         einsatz={sammlung(einsatzId)}
         onZurueck={() => {}}
         onGeaendert={() => r.rerender(baum())}
@@ -61,25 +66,48 @@ const einheitenLeiste = () => document.querySelector(".staerke-leiste .anzahl")!
 describe("einsatzArtSetzen", () => {
   beforeEach(() => localStorage.clear());
 
-  it("stellt die Art um, lässt Meldungen, Name und Ort stehen und liefert die Art davor", () => {
+  it("stellt die Art um, lässt Meldungen, Name und Ort stehen und liefert den Stand davor", () => {
     const s = einsatzAnlegen("Wattsturm", EinsatzArt.EINSATZ, "Hooksiel");
     meldungHinzufuegen(s.id, bogen("Alpha", true));
     const eintraege = JSON.stringify(sammlung(s.id).eintraege);
-    expect(einsatzArtSetzen(s.id, EinsatzArt.UEBUNG)).toBe(EinsatzArt.EINSATZ);
+    // Die Art vom Anlegen hat keinen Zeitpunkt.
+    expect(einsatzArtSetzen(s.id, EinsatzArt.UEBUNG)).toEqual({ art: EinsatzArt.EINSATZ });
     const danach = sammlung(s.id);
     expect(danach.art).toBe(EinsatzArt.UEBUNG);
     expect([danach.name, danach.ort, danach.angelegt]).toEqual(["Wattsturm", "Hooksiel", s.angelegt]);
     expect(JSON.stringify(danach.eintraege)).toBe(eintraege);
-    // Mit der Art davor geht es zurück.
-    expect(einsatzArtSetzen(s.id, EinsatzArt.EINSATZ)).toBe(EinsatzArt.UEBUNG);
+    // Die Umstellung steht mit ihrem Zeitpunkt im Verlauf.
+    expect(danach.artVerlauf).toEqual([danach.artSeit]);
+    // Ein zweites Umstellen ist ein neuer Schritt, nach dem ersten.
+    expect(einsatzArtSetzen(s.id, EinsatzArt.EINSATZ)).toEqual({ art: EinsatzArt.UEBUNG, artSeit: danach.artSeit });
     expect(sammlung(s.id).art).toBe(EinsatzArt.EINSATZ);
+    expect(sammlung(s.id).artSeit).toBeGreaterThan(danach.artSeit!);
+    expect(sammlung(s.id).artVerlauf).toHaveLength(2);
+  });
+
+  it("nimmt eine Umstellung samt Zeitpunkt zurück; Umstellung und Rücknahme bleiben im Verlauf", () => {
+    const s = einsatzAnlegen("Wattsturm", EinsatzArt.EINSATZ);
+    const vorher = einsatzArtSetzen(s.id, EinsatzArt.UEBUNG)!;
+    const umgestellt = sammlung(s.id).artSeit!;
+    expect(einsatzArtZuruecknehmen(s.id, vorher)).toBe(true);
+    const danach = sammlung(s.id);
+    // Wie vor der Umstellung: Art vom Anlegen, ohne Zeitpunkt.
+    expect(danach.art).toBe(EinsatzArt.EINSATZ);
+    expect(danach.artSeit).toBeUndefined();
+    // Im Verlauf: die Umstellung und danach die Rücknahme. Ein Gerät, das die Umstellung schon bekommen hat, sieht so, dass dieses weiter ist.
+    expect(danach.artVerlauf).toHaveLength(2);
+    expect(danach.artVerlauf![0]).toBe(umgestellt);
+    expect(danach.artVerlauf![1]).toBeGreaterThan(umgestellt);
+    // Gibt es nichts zurückzunehmen, schreibt sie nichts.
+    expect(einsatzArtZuruecknehmen(s.id, vorher)).toBe(false);
+    expect(einsatzArtZuruecknehmen("gibt-es-nicht", vorher)).toBeNull();
   });
 
   it("schreibt nichts, wenn die Art schon gilt, und liefert null für einen unbekannten Einsatz", () => {
     const s = einsatzAnlegen("Wattsturm", EinsatzArt.VERANSTALTUNG);
     const geaendert = sammlung(s.id).geaendert;
     const schreiben = vi.spyOn(Storage.prototype, "setItem");
-    expect(einsatzArtSetzen(s.id, EinsatzArt.VERANSTALTUNG)).toBe(EinsatzArt.VERANSTALTUNG);
+    expect(einsatzArtSetzen(s.id, EinsatzArt.VERANSTALTUNG)).toEqual({ art: EinsatzArt.VERANSTALTUNG });
     expect(schreiben).not.toHaveBeenCalled();
     schreiben.mockRestore();
     expect(sammlung(s.id).geaendert).toBe(geaendert);
@@ -116,9 +144,10 @@ describe("einsatzKopfMitArtSetzen", () => {
     const danach = sammlung(s.id);
     // Wie einsatzKopfSetzen: Der Name wird beschnitten, ein geleerter Ort entfällt.
     expect([danach.name, danach.ort, danach.art]).toEqual(["Wattsturm 2026", undefined, EinsatzArt.UEBUNG]);
-    // Mit den Werten davor geht es vollständig zurück.
-    einsatzKopfMitArtSetzen(s.id, vorher!.name, vorher!.ort, vorher!.art);
+    // Mit den Werten davor geht es vollständig zurück, auch der Zeitpunkt der Art: Die Sammlung gilt wieder als nie umgestellt.
+    einsatzKopfMitArtSetzen(s.id, vorher!.name, vorher!.ort, vorher!.art, vorher!);
     expect([sammlung(s.id).name, sammlung(s.id).ort, sammlung(s.id).art]).toEqual(["Wattsturm", "Hooksiel", EinsatzArt.EINSATZ]);
+    expect(sammlung(s.id).artSeit).toBeUndefined();
     expect(einsatzKopfMitArtSetzen("gibt-es-nicht", "X", "Y", EinsatzArt.UEBUNG)).toBeNull();
   });
 
@@ -167,6 +196,8 @@ describe("Sammlung nachträglich als Übung führen", () => {
     await nutzer.click(within(hinweis).getByRole("button", { name: "Als Übung führen…" }));
     let frage = dialog("Als Übung führen?")!;
     expect(frage.textContent).toContain("„Tafel Test\" wird dann als Übung geführt");
+    // Die Zahlen davor und danach: oben steht danach nicht mehr 0.
+    expect(frage.textContent).toContain("Danach zählt die Lage 2 Einheiten mit Stärke 10 (jetzt 0 Einheiten, Stärke 0).");
     expect(frage.textContent).toContain("Übungsmeldungen zählen dann wie jede andere Einheit");
     expect(frage.textContent).toContain("ÜBUNG – keine Echtlage");
     // Der Rückweg nennt den Knopf, den es gibt.
@@ -216,6 +247,50 @@ describe("Sammlung nachträglich als Übung führen", () => {
     await nutzer.click(within(frage).getByRole("button", { name: "Als Übung führen" }));
     await waitFor(() => expect(einheitenLeiste()).toBe("2Einheiten"));
     expect(sammlung(s.id).art).toBe(EinsatzArt.UEBUNG);
+  });
+
+  it("lässt Lageblatt und Übergabe nach dem Umstellen nicht mehr als aktuell gelten: Die Zählung hat sich geändert", async () => {
+    // Nach der Gegenprüfung: Die Summe sprang von 0 auf 24, die Zeile daneben sagte weiter „Lageblatt – aktuell".
+    const nutzer = userEvent.setup();
+    const s = einsatzAnlegen("Tafel Test", EinsatzArt.EINSATZ, "Nord");
+    meldungHinzufuegen(s.id, bogen("Alpha", true));
+    meldungHinzufuegen(s.id, bogen("Bravo", true));
+    lageblattVermerken(sammlung(s.id));
+    weitergabeVermerken(sammlung(s.id));
+    ansicht(s.id, true);
+    const stand = () => document.querySelector<HTMLElement>(".ausgabe-stand")!.textContent!;
+    expect(stand()).toMatch(/Lageblatt .* – aktuell/);
+    expect(stand()).not.toMatch(/seitdem Neues/);
+    await nutzer.click(within(document.querySelector<HTMLElement>(".nur-uebung")!).getByRole("button", { name: "Als Übung führen…" }));
+    await nutzer.click(within(dialog("Als Übung führen?")!).getByRole("button", { name: "Als Übung führen" }));
+    await waitFor(() => expect(sammlung(s.id).art).toBe(EinsatzArt.UEBUNG));
+    await waitFor(() => expect(stand()).toMatch(/Lageblatt .* – nicht mehr aktuell/));
+    expect(stand()).toMatch(/übergeben .* – seitdem Neues/);
+    // Zurückgenommen, stimmt das Blatt wieder.
+    const quittung = await screen.findByText(/Art „Einsatz" → „Übung"/);
+    const leiste = quittung.closest("[role='status'], dialog, .quittung")!;
+    await nutzer.click(within(leiste as HTMLElement).getByRole("button", { name: "Änderung am Einsatz rückgängig machen" }));
+    await waitFor(() => expect(stand()).toMatch(/Lageblatt .* – aktuell/));
+  });
+
+  it("nimmt mit „Rückgängig“ nur die Art zurück: Ein inzwischen geänderter Name bleibt", async () => {
+    const nutzer = userEvent.setup();
+    const s = einsatzAnlegen("Tafel Test", EinsatzArt.EINSATZ, "Nord");
+    meldungHinzufuegen(s.id, bogen("Alpha", true));
+    ansicht(s.id);
+    await nutzer.click(within(document.querySelector<HTMLElement>(".nur-uebung")!).getByRole("button", { name: "Als Übung führen…" }));
+    await nutzer.click(within(dialog("Als Übung führen?")!).getByRole("button", { name: "Als Übung führen" }));
+    await waitFor(() => expect(sammlung(s.id).art).toBe(EinsatzArt.UEBUNG));
+    // Ein anderes Fenster benennt die Sammlung um, solange die Quittung noch steht.
+    const liste = structuredClone(einsaetzeLaden());
+    liste.find((x) => x.id === s.id)!.name = "Übung Monitor 2";
+    einsaetzeSpeichern(liste);
+    const quittung = await screen.findByText(/Art „Einsatz" → „Übung"/);
+    const leiste = quittung.closest("[role='status'], dialog, .quittung")!;
+    await nutzer.click(within(leiste as HTMLElement).getByRole("button", { name: "Änderung am Einsatz rückgängig machen" }));
+    await waitFor(() => expect(sammlung(s.id).art).toBe(EinsatzArt.EINSATZ));
+    expect(sammlung(s.id).name).toBe("Übung Monitor 2");
+    expect(sammlung(s.id).ort).toBe("Nord");
   });
 
   it("meldet einen vollen Speicher, lässt die Art stehen und quittiert nichts", async () => {
@@ -313,5 +388,64 @@ describe("Einsatz bearbeiten: Art", () => {
     expect(sammlung(s.id).art).toBe(EinsatzArt.VERANSTALTUNG);
     expect(await screen.findByText(/Ort \(leer\) → „Marktplatz"/)).toBeTruthy();
     expect(screen.queryByText(/Art „/)).toBeNull();
+  });
+
+  /** „Einsatz bearbeiten…" öffnen, die Art (und wahlweise den Namen) setzen und übernehmen. */
+  async function bearbeiten(nutzer: ReturnType<typeof userEvent.setup>, art: string, name?: string) {
+    await nutzer.click(screen.getByRole("button", { name: "Einsatz bearbeiten…" }));
+    const d = dialog("Einsatz bearbeiten")!;
+    await nutzer.selectOptions(within(d).getByLabelText("Art") as HTMLSelectElement, art);
+    if (name) {
+      await nutzer.clear(within(d).getByLabelText("Name"));
+      await nutzer.type(within(d).getByLabelText("Name"), name);
+    }
+    await nutzer.click(within(d).getByRole("button", { name: "Übernehmen" }));
+  }
+  const warteDialog = (titel: string) =>
+    waitFor(() => {
+      const d = dialog(titel);
+      if (!d?.open) throw new Error(`kein Dialog „${titel}"`);
+      return d;
+    });
+
+  it("fragt nach, bevor eine Lage mit echten Einheiten zur Übung wird, mit den Zahlen davor und danach; „Abbrechen“ lässt alles, wie es war", async () => {
+    // Nach der Gegenprüfung: „Als Übung führen…" fragte nach, derselbe Wechsel über „Einsatz bearbeiten…" nicht.
+    const nutzer = userEvent.setup();
+    const s = einsatzAnlegen("Hochwasser Hunte", EinsatzArt.EINSATZ, "Wardenburg");
+    meldungHinzufuegen(s.id, bogen("Echt 1"));
+    meldungHinzufuegen(s.id, bogen("Echt 2"));
+    meldungHinzufuegen(s.id, bogen("Geübt", true));
+    ansicht(s.id);
+    await bearbeiten(nutzer, "Übung", "Hunte 2026");
+    const frage = await warteDialog("Als Übung führen?");
+    expect(frage.textContent).toContain("führt auch 2 Einheiten ohne Übungskennzeichen");
+    expect(frage.textContent).toContain("Danach zählt die Lage 3 Einheiten mit Stärke 15 (jetzt 2 Einheiten, Stärke 10).");
+    expect(frage.textContent).toContain("„Abbrechen“ lässt auch Name und Ort, wie sie waren.");
+    expect(document.activeElement).toBe(within(frage).getByRole("button", { name: "Abbrechen" }));
+    await nutzer.click(within(frage).getByRole("button", { name: "Abbrechen" }));
+    expect([sammlung(s.id).art, sammlung(s.id).name]).toEqual([EinsatzArt.EINSATZ, "Hochwasser Hunte"]);
+    // Bestätigt, gilt die Übung.
+    await bearbeiten(nutzer, "Übung");
+    await nutzer.click(within(await warteDialog("Als Übung führen?")).getByRole("button", { name: "Als Übung führen" }));
+    await waitFor(() => expect(sammlung(s.id).art).toBe(EinsatzArt.UEBUNG));
+  });
+
+  it("nennt beim Wechsel aus einer Übung die Einheiten, die dann nicht mehr zählen; ändert sich an der Zählung nichts, fragt sie nicht", async () => {
+    const nutzer = userEvent.setup();
+    const s = einsatzAnlegen("Übung Monitor 2", EinsatzArt.UEBUNG);
+    meldungHinzufuegen(s.id, bogen("Geübt 1", true));
+    meldungHinzufuegen(s.id, bogen("Geübt 2", true));
+    meldungHinzufuegen(s.id, bogen("Echt"));
+    ansicht(s.id);
+    await bearbeiten(nutzer, "Einsatz");
+    const frage = await warteDialog("Als Einsatz führen?");
+    expect(frage.textContent).toContain("2 Einheiten sind als Übung gekennzeichnet und zählen dann nicht mehr");
+    expect(frage.textContent).toContain("Danach zählt die Lage 1 Einheit mit Stärke 5 (jetzt 3 Einheiten, Stärke 15).");
+    await nutzer.click(within(frage).getByRole("button", { name: "Als Einsatz führen" }));
+    await waitFor(() => expect(sammlung(s.id).art).toBe(EinsatzArt.EINSATZ));
+    // Einsatz → Veranstaltung: Es zählen dieselben Einheiten, keine Rückfrage.
+    await bearbeiten(nutzer, "Veranstaltung");
+    await waitFor(() => expect(sammlung(s.id).art).toBe(EinsatzArt.VERANSTALTUNG));
+    expect(dialog("Als Veranstaltung führen?")?.open ?? false).toBe(false);
   });
 });

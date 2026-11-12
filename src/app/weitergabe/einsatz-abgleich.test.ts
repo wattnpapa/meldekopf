@@ -8,7 +8,7 @@
  * eingebettet tragen.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { OrganisationsTyp, PersonalErfassung, SCHEMA_VERSION, type Erfassungsbogen } from "@bos/eeb-format/model";
 import {
   EinsatzArt,
@@ -489,23 +489,139 @@ describe("einsatzAbgleichen — Art der Sammlung", () => {
     expect(abgleichText(r)).toBe("");
   });
 
-  it("lässt bei zwei Umstellungen die jüngere gelten und nennt es als Widerspruch, der an der Einsatzansicht stehen bleibt", async () => {
+  it("lässt bei zwei unabhängigen Umstellungen die jüngere gelten und nennt es als Widerspruch, der an der Einsatzansicht stehen bleibt", async () => {
     const { einsatzArtSetzen } = await import("../eintrag-zeiten");
     const { widerspruecheZumMerken } = await import("./einsatz-abgleich");
     const id = lage();
-    auf(geraetB);
-    einsatzArtSetzen(id, EinsatzArt.VERANSTALTUNG);
-    auf(geraetA);
-    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
-    // Die Umstellung auf A ist die jüngere.
+    // Keines der Geräte kennt die Umstellung des anderen; die auf A ist die jüngere.
+    const t0 = Date.now();
+    vi.useFakeTimers({ now: t0 + 60_000 });
+    try {
+      auf(geraetB);
+      einsatzArtSetzen(id, EinsatzArt.VERANSTALTUNG);
+      vi.setSystemTime(t0 + 120_000);
+      auf(geraetA);
+      einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    } finally {
+      vi.useRealTimers();
+    }
     const datei = weitergeben(id);
-    datei.artSeit = (datei.artSeit ?? 0) + 60_000;
     auf(geraetB);
     const r = einsatzAbgleichen(datei);
     expect(sammlung(id).art).toBe(EinsatzArt.UEBUNG);
     expect(r.art).toMatchObject({ gilt: "datei", widerspruch: true });
     expect(abgleichText(r)).toBe("Widerspruch bei der Art der Sammlung: hier „Veranstaltung“, in der Datei „Übung“; die jüngere Umstellung aus der Datei gilt. Bitte prüfen.");
     expect(widerspruecheZumMerken(r)[0]).toBe(abgleichText(r));
+  });
+
+  it("übernimmt die zweite Umstellung desselben Geräts ohne Widerspruch", async () => {
+    // Nach der Gegenprüfung: A stellt um, B übernimmt; A stellt zurück und gibt wieder weiter. B hat nie selbst
+    // umgestellt und meldete trotzdem einen Widerspruch, weil es die erste Umstellung mit übernommen hatte.
+    const { einsatzArtSetzen } = await import("../eintrag-zeiten");
+    const { widerspruecheZumMerken } = await import("./einsatz-abgleich");
+    const id = lage();
+    auf(geraetA);
+    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    const erste = weitergeben(id);
+    auf(geraetB);
+    expect(einsatzAbgleichen(erste).art).toMatchObject({ gilt: "datei", widerspruch: false });
+    auf(geraetA);
+    einsatzArtSetzen(id, EinsatzArt.EINSATZ);
+    const zweite = weitergeben(id);
+    auf(geraetB);
+    const r = einsatzAbgleichen(zweite);
+    expect(r.art).toEqual({ hier: EinsatzArt.UEBUNG, datei: EinsatzArt.EINSATZ, gilt: "datei", widerspruch: false });
+    expect(sammlung(id).art).toBe(EinsatzArt.EINSATZ);
+    expect(widerspruecheZumMerken(r)).toEqual([]);
+    expect(abgleichText(r)).toBe("Art der Sammlung vom anderen Gerät übernommen: jetzt „Einsatz“ (vorher „Übung“).");
+  });
+
+  it("lässt eine ältere Datei, die zurückkommt, die Art nicht ändern und meldet nichts", async () => {
+    const { einsatzArtSetzen } = await import("../eintrag-zeiten");
+    const id = lage();
+    auf(geraetA);
+    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    const erste = weitergeben(id);
+    auf(geraetB);
+    einsatzAbgleichen(erste);
+    // B gibt den Stand mit der ersten Umstellung weiter; A hat inzwischen zurückgestellt.
+    const vonB = weitergeben(id);
+    auf(geraetA);
+    einsatzArtSetzen(id, EinsatzArt.EINSATZ);
+    const r = einsatzAbgleichen(vonB);
+    expect(r.art).toEqual({ hier: EinsatzArt.EINSATZ, datei: EinsatzArt.UEBUNG, gilt: "hier", widerspruch: false });
+    expect(sammlung(id).art).toBe(EinsatzArt.EINSATZ);
+    expect(abgleichText(r)).toBe("");
+  });
+
+  it("lässt nach „Rückgängig“ die Umstellung des anderen Geräts gelten: Dieses hat netto nichts geändert", async () => {
+    const { einsatzArtSetzen, einsatzArtZuruecknehmen } = await import("../eintrag-zeiten");
+    const id = lage();
+    // B stellt bewusst auf Übung; A stellt eine Minute danach um und nimmt es gleich zurück. (Die Umstellungen tragen die
+    // Zeit der Geräteuhr; zwei Geräte in derselben Millisekunde gibt es nur im Test.)
+    const t0 = Date.now();
+    vi.useFakeTimers({ now: t0 + 60_000 });
+    let vonA: ReturnType<typeof weitergeben>;
+    let vonB: ReturnType<typeof weitergeben>;
+    try {
+      auf(geraetB);
+      einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+      vonB = weitergeben(id);
+      vi.setSystemTime(t0 + 120_000);
+      auf(geraetA);
+      const vorher = einsatzArtSetzen(id, EinsatzArt.VERANSTALTUNG)!;
+      einsatzArtZuruecknehmen(id, vorher);
+      vonA = weitergeben(id);
+    } finally {
+      vi.useRealTimers();
+    }
+    // A liest B: Bs Übung gilt, ohne Widerspruch.
+    const r = einsatzAbgleichen(vonB);
+    expect(r.art).toEqual({ hier: EinsatzArt.EINSATZ, datei: EinsatzArt.UEBUNG, gilt: "datei", widerspruch: false });
+    expect(sammlung(id).art).toBe(EinsatzArt.UEBUNG);
+    // B liest A (den Stand vor dem Abgleich): B bleibt bei der Übung, ohne Widerspruch.
+    auf(geraetB);
+    const rb = einsatzAbgleichen(vonA);
+    expect(rb.art).toEqual({ hier: EinsatzArt.UEBUNG, datei: EinsatzArt.EINSATZ, gilt: "hier", widerspruch: false });
+    expect(sammlung(id).art).toBe(EinsatzArt.UEBUNG);
+  });
+
+  it("gibt eine Rücknahme weiter, die das andere Gerät nach der Umstellung bekommt", async () => {
+    const { einsatzArtSetzen, einsatzArtZuruecknehmen } = await import("../eintrag-zeiten");
+    const id = lage();
+    // A stellt um und gibt weiter, nimmt die Umstellung danach zurück und gibt wieder weiter.
+    auf(geraetA);
+    const vorher = einsatzArtSetzen(id, EinsatzArt.UEBUNG)!;
+    const umgestellt = weitergeben(id);
+    auf(geraetB);
+    einsatzAbgleichen(umgestellt);
+    expect(sammlung(id).art).toBe(EinsatzArt.UEBUNG);
+    auf(geraetA);
+    einsatzArtZuruecknehmen(id, vorher);
+    const zurueck = weitergeben(id);
+    auf(geraetB);
+    const r = einsatzAbgleichen(zurueck);
+    expect(r.art).toEqual({ hier: EinsatzArt.UEBUNG, datei: EinsatzArt.EINSATZ, gilt: "datei", widerspruch: false });
+    expect(sammlung(id).art).toBe(EinsatzArt.EINSATZ);
+    expect(sammlung(id).artSeit).toBeUndefined();
+  });
+
+  it("merkt sich die Umstellungen der Datei auch bei gleicher Art: Der nächste Abgleich hält sie nicht für unabhängig", async () => {
+    const { einsatzArtSetzen } = await import("../eintrag-zeiten");
+    const id = lage();
+    // Beide stellen auf Übung, unabhängig voneinander; gleiche Art, nichts zu entscheiden.
+    auf(geraetA);
+    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    const vonA = weitergeben(id);
+    auf(geraetB);
+    einsatzArtSetzen(id, EinsatzArt.UEBUNG);
+    expect(einsatzAbgleichen(vonA).art).toBeUndefined();
+    // B stellt danach zurück; A übernimmt das ohne Widerspruch, weil B As Umstellung kannte.
+    einsatzArtSetzen(id, EinsatzArt.EINSATZ);
+    const vonB = weitergeben(id);
+    auf(geraetA);
+    expect(einsatzAbgleichen(vonB).art).toMatchObject({ gilt: "datei", widerspruch: false });
+    expect(sammlung(id).art).toBe(EinsatzArt.EINSATZ);
   });
 
   it("lässt die Art des Ziels stehen, wenn eine fremde Sammlung in eine laufende Lage übernommen wird", () => {

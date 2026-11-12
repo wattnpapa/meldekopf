@@ -130,7 +130,7 @@ export interface Tafelbild {
   /** Kurzer Name je Meldung (Herkunft und Typ in Kurzform), für die Bewegungen in der Randspalte. */
   namen: Map<string, string>;
   /**
-   * Breite, die die breiteste Karte je Fassung braucht, damit nichts gekürzt wird, in Schriftgrößen ({@link kartenBedarf});
+   * Breite, die eine Karte je Fassung braucht, damit auf keiner etwas gekürzt wird, in Schriftgrößen ({@link satzBedarf});
    * 0 ohne Karten. Die Zeilen der Übungsmeldungen zählen nicht mit: Sie werden gekürzt, nicht die Karten verbreitert.
    */
   bedarf: Record<KartenFassung, number>;
@@ -151,64 +151,110 @@ export interface Tafelbild {
  */
 export function nameTeile(e: Einheit): { herkunft: string; ort: string; typ: string; typKurz: string } {
   const tabelle = vokabularFuer(e.organisation, "einheitstyp");
-  const lang = vokabText(e.einheitsTyp, tabelle, "name").trim();
-  const kurz = vokabText(e.einheitsTyp, tabelle, "kurz").trim();
-  const herkunft = einheitAnzeigename({ ...e, einheitsTyp: {} });
-  // Der Standort ist, was nach der Organisation kommt. Die Karte kürzt bei Platzmangel den längeren der beiden Teile:
+  const lang = einfach(vokabText(e.einheitsTyp, tabelle, "name"));
+  const kurz = einfach(vokabText(e.einheitsTyp, tabelle, "kurz"));
+  const ohneTyp = einheitAnzeigename({ ...e, einheitsTyp: {} });
+  // Mit einfachem Leerraum: Ein doppeltes Leerzeichen stünde sonst im vollen Namen, aber nicht in der Kurzform.
+  const herkunft = einfach(ohneTyp);
+  // Der Standort ist, was nach der Organisation kommt. Die Karte kürzt bei Platzmangel den breiteren der beiden Teile:
   // bei „Johanniter-Unfall-Hilfe … Oldenburg" die Organisation, damit der Ort bleibt, der gleichnamige Karten unterscheidet.
-  const organisation = e.organisationName?.trim() || orgLabel(e.organisation);
+  const organisation = einfach(e.organisationName?.trim() || orgLabel(e.organisation));
   const ort = herkunft.startsWith(organisation + " ") ? herkunft.slice(organisation.length + 1) : "";
   // Nennt Organisation oder Standort den Typ schon („Bundeswehr Panzerpionierzug"), steht er nicht noch einmal da.
-  const schonGenannt = lang !== "" && einheitAnzeigename(e) === herkunft;
+  if (lang !== "" && einheitAnzeigename(e) === ohneTyp) return { herkunft, ort, typ: "", typKurz: "" };
+  const typ = lang.replace(/^Fachgruppe(?=\s)/, "FGr");
   // Ein Freitext-Typ hat keine Kurzform im Vokabular (beide Formen sind sein Text); die übliche Kürzung („SEG" für
-  // „Schnelleinsatzgruppe") springt dann ein.
-  const typKurz = e.einheitsTyp?.code == null ? kurzName(lang) : kurz;
-  return { herkunft, ort, typ: schonGenannt ? "" : lang.replace(/^Fachgruppe(?=\s)/, "FGr"), typKurz: schonGenannt ? "" : typKurz };
+  // „Schnelleinsatzgruppe") springt dann ein. Sie gilt nur, wo sie schmaler ist als der Typ: Sonst lag die längere Form
+  // unter der kürzeren und schaute hervor („FGr RäumenRäumen").
+  const kurzForm = e.einheitsTyp?.code == null ? kurzName(typ) : kurz || typ;
+  return { herkunft, ort, typ, typKurz: textBreite(kurzForm) < textBreite(typ) ? kurzForm : typ };
 }
 
 /**
  * Übliche Kurzformen der Organisationen und ihrer Gliederungen, wie sie auch auf der Lagekarte stehen. Die Tafel zeigt
  * sie nur, wo der volle Name nicht in die Zeile passt (lagetafel-ui.tsx): „Freiwillige Feuerwehr Lenglern" wird
  * „FF Lenglern", „DRK-Kreisverband Buchenrode e. V." wird „DRK-KV Buchenrode". So bleibt erkennbar, was sonst mit
- * Auslassung endete, oft gerade vor dem Teil, der zwei Einheiten unterscheidet. Ohne Rückwärtsblick in den Mustern:
- * Ältere Browser kennen ihn nicht und lehnten das ganze Skript ab.
+ * Auslassung endete, oft gerade vor dem Teil, der zwei Einheiten unterscheidet („Kreisverbindungskommando Göttingen"
+ * und „… Northeim" standen beide als „Bw Kreisverbindungsko…" da). Groß- und Kleinschreibung zählen nicht
+ * („FREIWILLIGE FEUERWEHR"). Aufgenommen ist nur, was bundesweit gleich gekürzt wird: „Ortsfeuerwehr" etwa bleibt
+ * ausgeschrieben. Ohne Rückwärtsblick in den Mustern: Ältere Browser kennen ihn nicht und lehnten das ganze Skript ab.
  */
 const KURZFORMEN: readonly [RegExp, string][] = [
-  // „e. V." trägt nichts zur Unterscheidung bei, am Ende wie mitten im Namen („Johanniter-Unfall-Hilfe e.V. Regionalverband …").
-  [/\s*,?\s*\be\.\s?V\.?(?=$|[\s,;)])/gu, ""],
-  [/(^|[\s-])Deutsches Rotes Kreuz(?=$|[\s,.-])/gu, "$1DRK"],
-  [/(^|[\s-])Johanniter-Unfall-Hilfe(?=$|[\s,.-])/gu, "$1JUH"],
-  [/(^|[\s-])Malteser Hilfsdienst(?=$|[\s,.-])/gu, "$1MHD"],
-  [/(^|[\s-])Arbeiter-Samariter-Bund(?=$|[\s,.-])/gu, "$1ASB"],
-  [/(^|[\s-])Deutsche Lebens-Rettungs-Gesellschaft(?=$|[\s,.-])/gu, "$1DLRG"],
-  [/(^|[\s-])Technisches Hilfswerk(?=$|[\s,.-])/gu, "$1THW"],
-  [/(^|[\s-])Freiwillige Feuerwehr(?=$|[\s,.-])/gu, "$1FF"],
-  [/(^|[\s-])Berufsfeuerwehr(?=$|[\s,.-])/gu, "$1BF"],
-  [/(^|[\s-])Werkfeuerwehr(?=$|[\s,.-])/gu, "$1WF"],
-  [/(^|[\s-])Bundeswehr(?=$|[\s,.-])/gu, "$1Bw"],
-  [/(^|[\s-])Landesverband(?=$|[\s,.-])/gu, "$1LV"],
-  [/(^|[\s-])Bezirksverband(?=$|[\s,.-])/gu, "$1BV"],
-  [/(^|[\s-])Regionalverband(?=$|[\s,.-])/gu, "$1RV"],
-  [/(^|[\s-])Kreisverband(?=$|[\s,.-])/gu, "$1KV"],
-  [/(^|[\s-])Ortsverband(?=$|[\s,.-])/gu, "$1OV"],
-  [/(^|[\s-])Ortsverein(?=$|[\s,.-])/gu, "$1OV"],
-  [/(^|[\s-])Ortsgruppe(?=$|[\s,.-])/gu, "$1OG"],
-  // Für Einheitentypen im Freitext, die keine Kurzform im Vokabular haben.
-  [/(^|[\s-])Schnelleinsatzgruppe(?=$|[\s,.-])/gu, "$1SEG"],
-  [/(^|[\s-])Technische Einsatzleitung(?=$|[\s,.-])/gu, "$1TEL"],
+  // „e. V." trägt nichts zur Unterscheidung bei, am Ende wie mitten im Namen („Johanniter-Unfall-Hilfe e.V. Regionalverband …");
+  // ein Komma dahinter geht mit („Malteser Hilfsdienst e. V., Ortsgruppe …" wird „MHD OG …").
+  [/\s*,?\s*\be\.\s?V\.?(?:\s*,)?(?=$|[\s;)])/giu, ""],
+  [/(^|[\s-])Bundesanstalt Technisches Hilfswerk(?=$|[\s,.-])/giu, "$1THW"],
+  [/(^|[\s-])Technisches Hilfswerk(?=$|[\s,.-])/giu, "$1THW"],
+  [/(^|[\s-])Deutsches Rotes Kreuz(?=$|[\s,.-])/giu, "$1DRK"],
+  [/(^|[\s-])Bayerisches Rotes Kreuz(?=$|[\s,.-])/giu, "$1BRK"],
+  // Die Bezeichnungen der App selbst, wenn kein Organisationsname erfasst ist (`orgLabel`).
+  [/(^|[\s-])Johanniter \(JUH\)(?=$|[\s,.-])/giu, "$1JUH"],
+  [/(^|[\s-])Malteser \(MHD\)(?=$|[\s,.-])/giu, "$1MHD"],
+  [/(^|[\s-])(?:Die )?Johanniter[\s-]Unfall[\s-]?Hilfe(?=$|[\s,.-])/giu, "$1JUH"],
+  [/(^|[\s-])Die Johanniter(?=$|[\s,.-])/giu, "$1JUH"],
+  [/(^|[\s-])Malteser[\s-]Hilfsdienst(?=$|[\s,.-])/giu, "$1MHD"],
+  [/(^|[\s-])Arbeiter[\s-]Samariter[\s-]Bund(?=$|[\s,.-])/giu, "$1ASB"],
+  [/(^|[\s-])Deutsche Lebens[\s-]?Rettungs[\s-]?Gesellschaft(?=$|[\s,.-])/giu, "$1DLRG"],
+  [/(^|[\s-])Freiwillige Feuerwehr(?=$|[\s,.-])/giu, "$1FF"],
+  [/(^|[\s-])Berufsfeuerwehr(?=$|[\s,.-])/giu, "$1BF"],
+  [/(^|[\s-])Werkfeuerwehr(?=$|[\s,.-])/giu, "$1WF"],
+  [/(^|[\s-])Kreisfeuerwehrbereitschaft(?=$|[\s,.-])/giu, "$1KFB"],
+  [/(^|[\s-])Bundeswehr(?=$|[\s,.-])/giu, "$1Bw"],
+  // Die amtlichen Kürzel der Dienststellen und Truppenteile, die im Katastrophenschutz auftreten.
+  [/(^|[\s-])Landeskommando(?=$|[\s,.-])/giu, "$1LKdo"],
+  [/(^|[\s-])Bezirksverbindungskommando(?=$|[\s,.-])/giu, "$1BVK"],
+  [/(^|[\s-])Kreisverbindungskommando(?=$|[\s,.-])/giu, "$1KVK"],
+  [/(^|[\s-])Panzerpionierbataillon(?=$|[\s,.-])/giu, "$1PzPiBtl"],
+  [/(^|[\s-])Panzerpionierkompanie(?=$|[\s,.-])/giu, "$1PzPiKp"],
+  [/(^|[\s-])Pionierbataillon(?=$|[\s,.-])/giu, "$1PiBtl"],
+  [/(^|[\s-])Polizeidirektion(?=$|[\s,.-])/giu, "$1PD"],
+  [/(^|[\s-])Polizeiinspektion(?=$|[\s,.-])/giu, "$1PI"],
+  // Die Gliederungen, wie sie die Vokabulare der Ebenen kürzen (@bos/vokabulare, ebenen.ts und thw.ts).
+  [/(^|[\s-])Landesverband(?=$|[\s,.-])/giu, "$1LV"],
+  [/(^|[\s-])Landkreis(?=$|[\s,.-])/giu, "$1LK"],
+  [/(^|[\s-])Bezirksverband(?=$|[\s,.-])/giu, "$1BV"],
+  [/(^|[\s-])Regionalverband(?=$|[\s,.-])/giu, "$1RV"],
+  [/(^|[\s-])Regionalbereich(?=$|[\s,.-])/giu, "$1RB"],
+  [/(^|[\s-])Kreisverband(?=$|[\s,.-])/giu, "$1KV"],
+  [/(^|[\s-])Ortsverband(?=$|[\s,.-])/giu, "$1OV"],
+  [/(^|[\s-])Ortsverein(?=$|[\s,.-])/giu, "$1OV"],
+  [/(^|[\s-])Ortsgruppe(?=$|[\s,.-])/giu, "$1OG"],
+  [/(^|[\s-])Ortsgliederung(?=$|[\s,.-])/giu, "$1OG"],
+  [/(^|[\s-])Diözesangliederung(?=$|[\s,.-])/giu, "$1DG"],
+  [/(^|[\s-])Landesgliederung(?=$|[\s,.-])/giu, "$1LG"],
+  // Für Einheitentypen im Freitext, die keine Kurzform im Vokabular haben; „FGr" ist die Abkürzung des Vokabulars selbst.
+  [/(^|[\s-])Fachgruppe(?=$|[\s,.-])/giu, "$1FGr"],
+  [/(^|[\s-])Schnell[\s-]?Einsatz[\s-]?Gruppe(?=$|[\s,.-])/giu, "$1SEG"],
+  [/(^|[\s-])Technische Einsatzleitung(?=$|[\s,.-])/giu, "$1TEL"],
+  [/(^|[\s-])Psychosoziale Notfallversorgung(?=$|[\s,.-])/giu, "$1PSNV"],
+  [/(^|[\s-])Medizinische Task[\s-]Force(?=$|[\s,.-])/giu, "$1MTF"],
+  [/(^|[\s-])Kriseninterventionsteam(?=$|[\s,.-])/giu, "$1KIT"],
+  // Ein Klammerzusatz, der nur die Abkürzung davor wiederholt („Technisches Hilfswerk (THW)" wird „THW (THW)"), fällt weg.
+  [/(^|[\s-])([A-ZÄÖÜ]{2,})\s\(\2\)(?=$|[\s,.-])/gu, "$1$2"],
 ];
 
-/** Ein Name in seiner üblichen Kurzform ({@link KURZFORMEN}); unverändert, wenn keine passt. */
+/** Leerraum vereinheitlicht: Ein doppeltes oder geschütztes Leerzeichen (aus einer Liste kopiert) zählt wie eines. */
+const einfach = (text: string): string => text.replace(/\s+/gu, " ").trim();
+
+/**
+ * Ein Name in seiner üblichen Kurzform ({@link KURZFORMEN}); unverändert, wenn keine passt. Der Leerraum wird vorher
+ * vereinheitlicht: Die Muster erwarten ein Leerzeichen, und „Freiwillige  Feuerwehr" soll so kurz werden wie die anderen.
+ */
 export function kurzName(name: string): string {
-  let kurz = name.trim();
+  const voll = einfach(name);
+  let kurz = voll;
   for (const [muster, ersatz] of KURZFORMEN) kurz = kurz.replace(muster, ersatz);
-  return kurz.replace(/\s+/g, " ").trim() || name.trim();
+  return einfach(kurz) || voll;
 }
 
-/** Kurzform der Herkunft aus ihren Teilen (Organisation und Standort, siehe {@link nameTeile}); Teile einzeln gekürzt. */
+/**
+ * Kurzform der Herkunft aus ihren Teilen (Organisation und Standort, siehe {@link nameTeile}); Teile einzeln gekürzt.
+ * Ist sie nicht schmaler als der volle Name, bleibt es bei ihm: Eine Wahl zwischen fast gleichen Formen wäre keine.
+ */
 export function herkunftKurzform(herkunft: string, ort: string): string {
   const organisation = ort ? herkunft.slice(0, herkunft.length - ort.length).trim() : herkunft;
-  return [kurzName(organisation), ort ? kurzName(ort) : ""].filter(Boolean).join(" ");
+  const kurz = [kurzName(organisation), ort ? kurzName(ort) : ""].filter(Boolean).join(" ");
+  return textBreite(kurz) < textBreite(herkunft) ? kurz : herkunft;
 }
 
 /**
@@ -368,37 +414,32 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
 
   const namen = new Map<string, string>(abgerueckt.map((a) => [a.id, a.name]));
   for (const g of gruppen) for (const e of g.einheiten) namen.set(e.id, [e.herkunftKurz, e.typKurz].filter(Boolean).join(" "));
-  const bedarf: Record<KartenFassung, number> = { breit: 0, drei: 0, zwei: 0 };
-  const bedarfNamen: Record<KartenFassung, number> = { breit: 0, drei: 0, zwei: 0 };
-  for (const g of gruppen) {
-    if (g.uebung) continue;
-    for (const e of g.einheiten) {
-      const b = kartenBedarf(e);
-      const n = namenBedarf(e);
-      for (const f of FASSUNGEN) {
-        bedarf[f] = Math.max(bedarf[f], b[f]);
-        bedarfNamen[f] = Math.max(bedarfNamen[f], n[f]);
-      }
-    }
-  }
+  const { bedarf, bedarfNamen } = satzBedarf(gruppen.filter((g) => !g.uebung).flatMap((g) => g.einheiten));
   return { bild, gruppen, abgerueckt, namen, bedarf, bedarfNamen };
 }
 
 /**
  * Breite der Zeichen der Tafelschrift (Archivo) in Schriftgrößen, fett gesetzt: im Browser gemessen (jedes Zeichen
- * zehnfach, ohne Unterschneidung) und zu Gruppen gerundet, im Zweifel nach oben. Ein Zeichen, das in keiner Gruppe
- * steht, zählt wie ein Kleinbuchstabe (0,52 bis 0,61). Ein fester Mittelwert reichte nicht: Die Namen auf der Tafel
- * liegen zwischen 0,52 („Freiwillige Feuerwehr …") und 0,62 („DLRG Baden") je Zeichen; mit 0,56 passte „THW
- * Gieboldehausen" nach der Rechnung, auf dem Fernseher fehlten ihm 8 px.
+ * zwanzigfach, mit und ohne Unterschneidung, der größere Wert) und zu Gruppen gerundet. Jede Gruppe ist so breit wie ihr
+ * breitestes Zeichen: Die Schätzung liegt nie zu knapp. Zu weit liegt sie an 52 gemessenen Namen um 1 bis 9 %, meist um
+ * 2 bis 5 % (am meisten bei vielen schmalen Zeichen, „FF Kyritz"). Ein Zeichen, das in keiner Gruppe steht, zählt
+ * wie die breiteren Kleinbuchstaben und die Ziffern. Ein fester Mittelwert reichte nicht: Die Namen auf der Tafel liegen
+ * zwischen 0,52 („Freiwillige Feuerwehr …") und 0,62 („DLRG Baden") je Zeichen; mit 0,56 passte „THW Gieboldehausen"
+ * nach der Rechnung, auf dem Fernseher fehlten ihm 8 px.
  */
 const ZEICHENGRUPPEN: readonly (readonly [string, number])[] = [
   [" ", 0.2],
-  ["iljI'!.,:;|", 0.31],
-  ["ftr()/-", 0.38],
-  ["FJLPSTZ", 0.66],
-  ["ABCDEGHKNOQRUVXYÄÖÜ&+", 0.76],
-  ["mwM", 0.89],
-  ["W—", 1],
+  ["'|jilI/!.,", 0.31],
+  ["ftr()-:;", 0.38],
+  ['"–', 0.5],
+  ["zvyskxcaäe", 0.59],
+  ["FßT+Z", 0.66],
+  ["SPEVY", 0.7],
+  ["XBAÄKRCD", 0.74],
+  ["UÜHN&", 0.77],
+  ["OQÖwG", 0.81],
+  ["Mm", 0.9],
+  ["W…—", 1],
 ];
 const ZEICHENBREITE = new Map<string, number>(ZEICHENGRUPPEN.flatMap(([zeichen, breite]) => Array.from(zeichen, (z): [string, number] => [z, breite])));
 /** Normal gesetzt ist die Schrift etwas schmaler als fett (gemessen 0,93 bis 1,0). */
@@ -407,7 +448,7 @@ const NORMAL_ZU_FETT = 0.96;
 /** Geschätzte Breite eines Textes in fetter Tafelschrift, in Schriftgrößen ({@link ZEICHENGRUPPEN}). */
 export function textBreite(text: string): number {
   let summe = 0;
-  for (const zeichen of text) summe += ZEICHENBREITE.get(zeichen) ?? 0.61;
+  for (const zeichen of text) summe += ZEICHENBREITE.get(zeichen) ?? 0.62;
   return summe;
 }
 
@@ -424,19 +465,85 @@ function staerkeBreite(e: TafelEinheit): number {
 }
 
 /**
+ * Geschätzte Breite der Kurzform des Namens. Ihre zwei Teile (Organisation und Standort) stehen mit 0,26 Schriftgrößen
+ * Abstand statt eines Leerzeichens (0,2) nebeneinander (lagetafel.css).
+ */
+function nameBreite(e: TafelEinheit): number {
+  return textBreite(e.herkunftKurz) + (e.ort ? 0.06 : 0);
+}
+
+/**
+ * Breite der breiten Karte aus ihren zwei Teilen, in Schriftgrößen der Herkunftszeile: `wer` die Spalte links (Name und
+ * Typ samt Abstand zum Auftrag), `was` der Rest daneben (Auftrag oder Funkrufname mit Marken, dahinter Stärke und Stand).
+ * Die Spalte „wer" bekommt mindestens `SATZ.wer.min` und höchstens `SATZ.wer.max` des Platzes neben dem Zeichen
+ * ({@link werBreite}): Ein Name, der mehr bräuchte, würde gekürzt, wie breit die Karte auch ist.
+ */
+function breitAus(wer: number, was: number): number {
+  return kartenRand() + Math.max(wer + was, wer / SATZ.wer.max, was / (1 - SATZ.wer.min));
+}
+
+/** Die zwei Teile der breiten Karte, wenn alles ganz dastehen soll ({@link breitAus}). */
+function breitTeile(e: TafelEinheit): { wer: number; was: number } {
+  const normal = (text: string) => textBreite(text) * NORMAL_ZU_FETT;
+  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (textBreite(t) + 0.64));
+  const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.88 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
+  const typKurz = e.typKurz ? 0.74 * textBreite(e.typKurz) + 0.33 : 0;
+  const funk = e.funkruf ? 0.74 * normal(e.funkruf) + 0.33 : 0;
+  // Ein Typ aus dem Vokabular ist kurz („B"); ins Gewicht fällt hier der Freitext, auch in seiner Kurzform („SEG Betreuung …").
+  return {
+    wer: Math.max(nameBreite(e), typKurz) + 0.8,
+    was: Math.max(e.auftrag ? 0.86 * normal(e.auftrag) : 0, funk + markenBreite) + Math.max(staerkeBreite(e), STAND_BREITE),
+  };
+}
+
+/** Die zwei Teile der breiten Karte, wenn nur der Name ganz dastehen soll: er in der Spalte, rechts Stärke und Stand. */
+function breitTeileNamen(e: TafelEinheit): { wer: number; was: number } {
+  return { wer: nameBreite(e) + 0.8, was: Math.max(staerkeBreite(e), STAND_BREITE) };
+}
+
+/**
  * Breite, die eine Karte je Fassung braucht, damit ihr Name ganz dasteht (in der Kurzform, {@link herkunftKurzform}),
  * in Schriftgrößen der Herkunftszeile. In „zwei" und „drei" teilt er sich die erste Zeile mit der Stärke; in „breit"
  * steht er in der Spalte „wer", die höchstens `SATZ.wer.max` des Platzes neben dem Zeichen bekommt.
  */
 export function namenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
   const rand = kartenRand();
-  const name = textBreite(e.herkunftKurz);
-  const staerke = staerkeBreite(e);
-  return {
-    zwei: rand + name + staerke,
-    drei: rand + name + staerke,
-    breit: rand + Math.max((name + 0.8) / SATZ.wer.max, name + 0.8 + Math.max(staerke, STAND_BREITE)),
-  };
+  const kopf = nameBreite(e) + staerkeBreite(e);
+  const breit = breitTeileNamen(e);
+  return { zwei: rand + kopf, drei: rand + kopf, breit: breitAus(breit.wer, breit.was) };
+}
+
+/**
+ * Bedarf der ganzen Tafel je Fassung ({@link Tafelbild.bedarf}, {@link Tafelbild.bedarfNamen}). In „zwei" und „drei"
+ * steht jede Karte für sich: Es zählt die breiteste. In „breit" teilen sich alle Karten die Spalte „wer": Sie ist so
+ * breit wie der längste Name, und jede Karte braucht daneben Platz für ihren Auftrag. Die Teile werden deshalb über alle
+ * Karten genommen, nicht die Karten: Der lange Name der einen und der lange Auftrag der anderen ergeben zusammen mehr
+ * als jede Karte allein. Alles ganz schließt die Namen ein: Der Bedarf aller Angaben ist nie kleiner als der der Namen.
+ */
+export function satzBedarf(einheiten: readonly TafelEinheit[]): { bedarf: Record<KartenFassung, number>; bedarfNamen: Record<KartenFassung, number> } {
+  const bedarf: Record<KartenFassung, number> = { breit: 0, drei: 0, zwei: 0 };
+  const bedarfNamen: Record<KartenFassung, number> = { breit: 0, drei: 0, zwei: 0 };
+  if (einheiten.length === 0) return { bedarf, bedarfNamen };
+  const breit = { wer: 0, was: 0 };
+  const breitNamen = { wer: 0, was: 0 };
+  for (const e of einheiten) {
+    const b = kartenBedarf(e);
+    const n = namenBedarf(e);
+    for (const f of ["zwei", "drei"] as const) {
+      bedarf[f] = Math.max(bedarf[f], b[f]);
+      bedarfNamen[f] = Math.max(bedarfNamen[f], n[f]);
+    }
+    const t = breitTeile(e);
+    const tn = breitTeileNamen(e);
+    breit.wer = Math.max(breit.wer, t.wer);
+    breit.was = Math.max(breit.was, t.was);
+    breitNamen.wer = Math.max(breitNamen.wer, tn.wer);
+    breitNamen.was = Math.max(breitNamen.was, tn.was);
+  }
+  bedarf.breit = breitAus(breit.wer, breit.was);
+  bedarfNamen.breit = breitAus(breitNamen.wer, breitNamen.was);
+  for (const f of FASSUNGEN) bedarf[f] = Math.max(bedarf[f], bedarfNamen[f]);
+  return { bedarf, bedarfNamen };
 }
 
 /**
@@ -457,18 +564,19 @@ export function kartenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
   const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
   const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.88 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
   // Wie beim Typ zählt die Kurzform: Sie springt ein, wo der volle Name nicht passt („FF Lenglern"), und bleibt ganz.
-  const kopf = fett(e.herkunftKurz) + staerke;
+  const kopf = nameBreite(e) + staerke;
   const typKurz = e.typKurz ? 0.74 * fett(e.typKurz) + 0.33 : 0;
   const funk = e.funkruf ? 0.74 * normal(e.funkruf) + 0.33 : 0;
   const auftrag = e.auftrag ? 0.74 * (normal(e.auftrag) + 0.8) : 0;
+  const breit = breitTeile(e);
   return {
     // Zwei Zeilen: Name und Stärke; darunter Typ in Kurzform, Auftrag, Marken und Stand (ohne Funkrufname).
     zwei: rand + Math.max(kopf, typKurz + auftrag + markenBreite + stand),
     // Drei Zeilen: Name und Stärke; Typ und Stand; Funkrufname, Auftrag und Marken.
     drei: rand + Math.max(kopf, typKurz + stand, funk + auftrag + markenBreite),
-    // Breit: links Name und Typ, rechts Auftrag oder Funkrufname mit Marken, dahinter Stärke und Stand. Ein Typ aus dem
-    // Vokabular ist kurz („B"); ins Gewicht fällt hier der Freitext, auch in seiner Kurzform („SEG Betreuung …").
-    breit: rand + Math.max(fett(e.herkunftKurz), typKurz) + 0.8 + Math.max(e.auftrag ? 0.86 * normal(e.auftrag) : 0, funk + markenBreite) + Math.max(staerke, stand),
+    // Breit: links Name und Typ, rechts Auftrag oder Funkrufname mit Marken, dahinter Stärke und Stand ({@link breitTeile}).
+    // Für die ganze Tafel rechnet {@link satzBedarf} mit den Teilen aller Karten.
+    breit: breitAus(breit.wer, breit.was),
   };
 }
 
@@ -865,7 +973,10 @@ export function tafelSatz(
     // Wie bei den Fassungen: Ist die Schrift eines ungekürzten Satzes gut lesbar, gewinnt er immer; darunter nur, wenn er kaum
     // kleiner ist. Erst alles ganz, dann wenigstens die Namen.
     const schwelle = Math.min(frei.schrift * SATZ.ungekuerztAb, SATZ.gutGenug * masse.einheit);
-    for (const stufe of [bedarf, namen]) {
+    // Alles ganz schließt die Namen ein: Verlangen sie mehr als der Rest, gilt ihr Wert auch hier.
+    const alles: Partial<Record<KartenFassung, number>> = {};
+    for (const f of FASSUNGEN) alles[f] = Math.max(bedarf[f] ?? 0, namen[f] ?? 0);
+    for (const stufe of [alles, namen]) {
       const ganz = besterSatz(gruppen, abgaengeGesamt, abgaenge, masse, mitBedarf(stufe));
       if (ganz && ganz.schrift >= schwelle - GENAU) return ganz;
     }

@@ -138,7 +138,8 @@ describe("Lagetafel", () => {
     expect(bergung.querySelector(".lt-auftrag")!.textContent).toBe("Sandsackfüllplatz Nord");
     expect(bergung.querySelector(".lt-fum")!.textContent).toBe("0/3/6//");
     expect(bergung.querySelector(".lt-staerke b")!.textContent).toBe("9");
-    expect(bergung.querySelector(".lt-stand")!.textContent).toMatch(/^Stand \d\d:\d\d$/);
+    // Kurz nach Mitternacht liegt der Stand am Vortag; dann steht das Datum davor.
+    expect(bergung.querySelector(".lt-stand")!.textContent).toMatch(/^Stand (\d\d\.\d\d\. )?\d\d:\d\d$/);
     expect(karte("THW Brake").querySelector(".lt-typ-lang")!.textContent).toBe("FGr Notversorgung und Notinstandsetzung");
     // Ohne Funkrufname und Auftrag bleibt die Stelle leer, statt einen Strich zu zeigen.
     expect(karte("THW Brake").querySelector(".lt-funkruf, .lt-auftrag")).toBeNull();
@@ -186,7 +187,7 @@ describe("Lagetafel", () => {
     for (const name of ["THW Alt", "THW Frisch"]) {
       const stand = karte(name).querySelector(".lt-stand")!;
       expect(stand.className).toBe("lt-stand");
-      expect(stand.textContent).toMatch(/^Stand \d\d:\d\d$/);
+      expect(stand.textContent).toMatch(/^Stand (\d\d\.\d\d\. )?\d\d:\d\d$/);
     }
     // Auch neben einer Bedarfsmarke bleibt das Wort stehen: Eine nackte Uhrzeit neben „Ruhezeit" läse sich als deren Beginn.
     expect(karte("THW Alt").querySelector(".lt-marke-achtung")!.textContent).toBe("Ruhezeit");
@@ -203,7 +204,7 @@ describe("Lagetafel", () => {
     const zaehler = Array.from(rand.querySelectorAll(".lt-zaehler > div")).map((d) => `${d.querySelector("dd")!.textContent} ${d.querySelector("dt")!.textContent}`);
     // Die abgerückte Einheit steht im eigenen Block darunter; der Zähler nennt, was da ist.
     expect(zaehler).toEqual(["1 Einheit", "0 Fahrzeuge"]);
-    expect(rand.querySelector(".lt-dauer")!.textContent).toMatch(/^Beginn \d\d:\d\d · seit 1 Std 35 Min$/);
+    expect(rand.querySelector(".lt-dauer")!.textContent).toMatch(/^Beginn (\d\d\.\d\d\. )?\d\d:\d\d · seit 1 Std 35 Min$/);
     const bedarf = Array.from(rand.querySelectorAll(".lt-bedarf li"));
     expect(bedarf.map((b) => b.textContent)).toEqual(["Verpflegung 9", "Ruhezeit 1×"]);
     expect(bedarf[1]!.className).toBe("lt-dringend");
@@ -796,7 +797,7 @@ describe("Lagemonitor: Zeilen oder Tafel", () => {
     expect((await screen.findByRole("heading", { level: 1 })).textContent).toBe("Heros Brake 21/10");
     expect(document.querySelector("main.lt")!.className).toBe("lt lt-gedimmt");
     expect(document.querySelector("main.lm")).toBeNull();
-    expect(document.querySelector(".lt-dauer")!.textContent).toMatch(/^Beginn \d\d:\d\d · seit 30 Min$/);
+    expect(document.querySelector(".lt-dauer")!.textContent).toMatch(/^Beginn (\d\d\.\d\d\. )?\d\d:\d\d · seit 30 Min$/);
     expect(document.title).toBe("Lage – Hochwasser Weser");
     // Dieselbe Leiter wie in der Zeilenansicht: aus Gedimmt führt ein Tipp auf Dunkel.
     expect(document.querySelector(".lm-stufe")!.textContent).toBe("Stufe: Gedimmt");

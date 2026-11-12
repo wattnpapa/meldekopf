@@ -161,6 +161,7 @@ import {
   einheitEntfernen,
   einheitVerschieben,
   einsatzArtSetzen,
+  einsatzArtZuruecknehmen,
   einsatzKopfMitArtSetzen,
   notizSetzen,
   meldungAufnehmen,
@@ -171,6 +172,7 @@ import {
   zeitUnstimmigkeit,
   zeitpunktZuMs,
   zusammenfuehrungZurueck,
+  type ArtStand,
   type ZusammenfuehrungVorher,
 } from "./eintrag-zeiten";
 import { frageFelder, frageJaNein, frageWahl, zeigeHinweis } from "@bos/oberflaeche/dialoge";
@@ -453,9 +455,9 @@ function SignaturWarnung({ eintrag }: { eintrag: MeldeEintrag }) {
 }
 
 /** „seitdem keine neuen Bögen" / „seitdem 1 neuer Bogen und 1 Änderung (Abrücken)" — für die Zeile je Format (R4-W2, R4-K1). */
-function seitdemBoegenText(eintraege: MeldeEintrag[], stand: ExportStand): string {
+function seitdemBoegenText(eintraege: MeldeEintrag[], stand: ExportStand, art: EinsatzArt): string {
   const neu = neueEintraege(eintraege, stand).length;
-  const aend = aenderungText(aenderungenSeit(eintraege, stand));
+  const aend = aenderungText(aenderungenSeit(eintraege, stand, art));
   const teile = [...(neu > 0 ? [neu === 1 ? "1 neuer Bogen" : `${neu} neue Bögen`] : []), ...(aend ? [aend] : [])];
   return `seitdem ${teile.length > 0 ? teile.join(" und ") : "keine neuen Bögen"}`;
 }
@@ -464,7 +466,7 @@ function seitdemBoegenText(eintraege: MeldeEintrag[], stand: ExportStand): strin
 function ausgabeStandText(s: Einsatzsammlung): string {
   // Neue Meldungen UND Änderungen an bekannten Einheiten (Abrücken,
   // Auftrag, Eintreffzeit) — wie die Weitergabe (R4-K1).
-  const seit = (stand: ExportStand) => seitdemText(neueEintraege(s.eintraege, stand).length, aenderungenSeit(s.eintraege, stand));
+  const seit = (stand: ExportStand) => seitdemText(neueEintraege(s.eintraege, stand).length, aenderungenSeit(s.eintraege, stand, s.art));
   const teil = (was: string, stand: ExportStand | null, keiner: string) =>
     stand ? `${was} ${exportZeitKurz(stand.zeitpunkt)} (${seit(stand)})` : `${was}: ${keiner}`;
   // Weitergabe der ganzen Sammlung nur, wenn es eine gab: an ihr erkennt man
@@ -475,7 +477,7 @@ function ausgabeStandText(s: Einsatzsammlung): string {
   const exporte = EXPORT_ZIELE.filter((z) => staende[z]).map((z) => `${EXPORT_ZIEL_NAME[z]} ${exportZeitKurz(staende[z]!.zeitpunkt)} (${seit(staende[z]!)})`);
   // Ein veraltetes Blatt sagt es auch hier: „… — neu drucken" (R8-W6).
   const lbStand = lageblattStandLaden(s.id);
-  const lbVeraltet = lbStand != null && (neueEintraege(s.eintraege, lbStand).length > 0 || aenderungenSeit(s.eintraege, lbStand).anzahl > 0);
+  const lbVeraltet = lbStand != null && (neueEintraege(s.eintraege, lbStand).length > 0 || aenderungenSeit(s.eintraege, lbStand, s.art).anzahl > 0);
   return [
     teil("Lageblatt", lbStand, "noch keins") + (lbVeraltet ? " — neu drucken" : ""),
     exporte.length > 0 ? `Export ${exporte.join(", ")}` : "Export: noch keiner",
@@ -485,7 +487,7 @@ function ausgabeStandText(s: Einsatzsammlung): string {
 
 /** „Weitergegeben … (seitdem 1 neue Meldung und 1 Änderung (Abrücken))" — Änderungen an bekannten Einheiten zählen mit (R3-W2). */
 function weitergabeTeil(s: Einsatzsammlung, stand: ExportStand): string {
-  return `Weitergabe-Datei erzeugt ${exportZeitKurz(stand.zeitpunkt)}, Empfang nicht bestätigt (${seitdemText(neueEintraege(s.eintraege, stand).length, aenderungenSeit(s.eintraege, stand))})`;
+  return `Weitergabe-Datei erzeugt ${exportZeitKurz(stand.zeitpunkt)}, Empfang nicht bestätigt (${seitdemText(neueEintraege(s.eintraege, stand).length, aenderungenSeit(s.eintraege, stand, s.art))})`;
 }
 
 /** Ab diesem Alter der letzten Meldung warnt die App wie der Lagemonitor („Lage ist alt", R10-K1). */
@@ -1115,6 +1117,48 @@ export function kopfAenderungText(vorher: { name: string; ort: string; art?: Ein
   return teile.join(" · ");
 }
 
+/**
+ * Die Rückfrage vor einer Umstellung der Art (neu im Meldekopf), für „Als Übung führen…" und „Einsatz bearbeiten…":
+ * die Zahlen davor und danach, damit sichtbar ist, was oben und auf dem Fernseher stehen wird. `vorsicht`: Die
+ * Umstellung macht eine Lage mit echten Einheiten zur Übung, oder Einheiten zählen danach nicht mehr; dann steht die
+ * Rückfrage auf „Abbrechen".
+ */
+export function artWechselFrage(einsatz: Einsatzsammlung, neu: EinsatzArt): { titel: string; text: string; ok: string; vorsicht: boolean } {
+  const jetzt = aggregiere(einsatz.eintraege, einsatz.art);
+  const dann = aggregiere(einsatz.eintraege, neu);
+  const einheiten = (n: number) => `${n} ${n === 1 ? "Einheit" : "Einheiten"}`;
+  const zahlen = `Danach zählt die Lage ${einheiten(dann.einheiten)} mit Stärke ${dann.staerke.gesamt} (jetzt ${einheiten(jetzt.einheiten)}, Stärke ${jetzt.staerke.gesamt}).`;
+  if (neu === EinsatzArt.UEBUNG) {
+    // Führt die Sammlung auch Einheiten ohne Übungskennzeichen (anwesend oder abgerückt), ist sie womöglich eine echte Lage
+    // mit einzelnen falsch gekennzeichneten Bögen. Dann sagt die Rückfrage das und nennt den Weg je Bogen: Eine echte Lage
+    // als Übung zu führen, stellte den Fernseher auf „ÜBUNG – keine Echtlage".
+    const echte = geltendeJeEinheit(einsatz.eintraege).filter((e) => !e.bogen.uebung).length;
+    const folge = `${zahlen} Übungsmeldungen zählen dann wie jede andere Einheit, und der Lagemonitor zeigt „ÜBUNG – keine Echtlage“. Über „Einsatz bearbeiten…“ im Kopf lässt sich die Art wieder umstellen.`;
+    return {
+      titel: "Als Übung führen?",
+      ok: "Als Übung führen",
+      vorsicht: echte > 0,
+      text:
+        echte === 0
+          ? `„${einsatz.name}" wird dann als Übung geführt. ${folge}`
+          : `„${einsatz.name}" führt auch ${echte === 1 ? "eine Einheit" : `${echte} Einheiten`} ohne Übungskennzeichen. Als Übung geführt, ist die ganze Sammlung eine Übung: ${folge} Ist nur ein Bogen versehentlich als Übung gekennzeichnet, besser an seiner Karte unter „Mehr…“: „Als Einsatzmeldung zählen…“.`,
+    };
+  }
+  // Aus einer Übung heraus zählen die Übungsmeldungen nicht mehr: Sie bleiben gemeldet, aber die Lage wird kleiner.
+  const weg = jetzt.einheiten - dann.einheiten;
+  return {
+    titel: `Als ${ART_LABEL[neu]} führen?`,
+    ok: `Als ${ART_LABEL[neu]} führen`,
+    vorsicht: weg > 0,
+    text:
+      `„${einsatz.name}" wird dann als ${ART_LABEL[neu]} geführt. ` +
+      (weg > 0
+        ? `${weg === 1 ? "Eine Einheit ist" : `${weg} Einheiten sind`} als Übung gekennzeichnet und ${weg === 1 ? "zählt" : "zählen"} dann nicht mehr; der Lagemonitor führt sie als „nicht gezählt“. `
+        : "") +
+      zahlen,
+  };
+}
+
 /** Zwischenstand der laufenden Sammel-PDF: „12 von 30 Bögen vorbereitet" samt Balken (R17-O1, R17-D4, R17-A4). */
 function ArbeitFortschrittZeile() {
   const f = useArbeitFortschritt();
@@ -1234,7 +1278,7 @@ export function EinsatzDetail(props: {
     if (exportUmfang !== "neue") return basis;
     const stand = exportStaende[ziel];
     if (!stand) return `${basis} — erste Lieferung: alle Bögen`;
-    const n = new Set(nachtragEintraege(einsatz.eintraege, stand).map((e) => e.einheitSchluessel)).size;
+    const n = new Set(nachtragEintraege(einsatz.eintraege, stand, einsatz.art).map((e) => e.einheitSchluessel)).size;
     return `${basis} — ${n === 0 ? "Nachtrag: nichts Neues" : `Nachtrag (${n === 1 ? "1 Einheit" : `${n} Einheiten`})`}`;
   };
   const ausgabeTipp = (schluessel: string, name: string | null, los: () => void, ereignis?: { timeStamp: number; nativeEvent?: MouseEvent }) => {
@@ -1270,7 +1314,7 @@ export function EinsatzDetail(props: {
   // geltende Fassung jeder Einheit mit Änderung (R4-W2, R4-K1). Beim Teilexport
   // ohne Neues gäbe es eine leere Datei — der Knopf dieses Formats bleibt
   // gesperrt, seine Zeile sagt warum.
-  const nachtragJe = (z: ExportZiel) => nachtragEintraege(einsatz.eintraege, exportStaende[z] ?? null).length;
+  const nachtragJe = (z: ExportZiel) => nachtragEintraege(einsatz.eintraege, exportStaende[z] ?? null, einsatz.art).length;
   const gesperrt = (z: ExportZiel) => nurNeue && nachtragJe(z) === 0;
   // Wann zuletzt ein Lageblatt entstand und was seitdem kam — ob der Aushang
   // an der Wand noch stimmt (Audit Runde 2, R2-A3). Bei jedem Rendern frisch
@@ -1278,7 +1322,7 @@ export function EinsatzDetail(props: {
   const lageblattStand = lageblattStandLaden(einsatz.id);
   const lageblattVeraltet =
     lageblattStand != null &&
-    (neueEintraege(einsatz.eintraege, lageblattStand).length > 0 || aenderungenSeit(einsatz.eintraege, lageblattStand).anzahl > 0);
+    (neueEintraege(einsatz.eintraege, lageblattStand).length > 0 || aenderungenSeit(einsatz.eintraege, lageblattStand, einsatz.art).anzahl > 0);
   // „✓ Lageblatt erzeugt" über einer Zeile „Aushang ist nicht mehr aktuell" widerspricht sich: Nach der
   // ersten Änderung fällt die Bestätigung weg (R8-W6).
   const ausgabeQuittungSichtbar = ausgabeQuittung?.startsWith("✓ Lageblatt erzeugt") && lageblattVeraltet ? null : ausgabeQuittung;
@@ -1291,7 +1335,7 @@ export function EinsatzDetail(props: {
   const abschlussStand = abschlussLaden(einsatz.id);
   const seitWeitergabe = weitergabeStand ? neueEintraege(einsatz.eintraege, weitergabeStand).length : 0;
   // Auch Abrücken, Auftrag zählen — was ein Import mitbrachte, nicht (R3-W2).
-  const aenderungenSeitWeitergabe = weitergabeStand ? aenderungenSeit(einsatz.eintraege, weitergabeStand) : { anzahl: 0, arten: [] };
+  const aenderungenSeitWeitergabe = weitergabeStand ? aenderungenSeit(einsatz.eintraege, weitergabeStand, einsatz.art) : { anzahl: 0, arten: [] };
   const weitergabeOffen = seitWeitergabe > 0 || aenderungenSeitWeitergabe.anzahl > 0;
   const [suche, setSuche] = useState("");
   const [sortierung, setSortierung] = useState<EinheitenSortierung>("nummer");
@@ -1695,7 +1739,9 @@ export function EinsatzDetail(props: {
   // Auftrag/Notiz an einer Karte gespeichert: Quittung mit „Rückgängig" (R15-W3).
   const [auftragGesetzt, setAuftragGesetzt] = useState<AuftragGesetzt | null>(null);
   // Name, Ort oder Art des Einsatzes geändert: Quittung mit „Rückgängig" (R16-K1; die Art neu im Meldekopf).
-  const [kopfGeaendert, setKopfGeaendert] = useState<{ vorher: { name: string; ort: string; art: EinsatzArt }; nachher: string; nonce: number } | null>(null);
+  // `nurArt`: Die Änderung war „Als Übung führen" (nur die Art); „Rückgängig" setzt dann nur sie zurück, nicht Name und Ort.
+  // `vorher.artSeit`: Die Rücknahme stellt auch den Zeitpunkt der Art wieder her (ArtStand, eintrag-zeiten.ts).
+  const [kopfGeaendert, setKopfGeaendert] = useState<{ vorher: { name: string; ort: string } & ArtStand; nachher: string; nonce: number; nurArt?: boolean } | null>(null);
   useEffect(() => {
     setVerschobenQuittung(null);
     setAuftragGesetzt(null);
@@ -1722,7 +1768,23 @@ export function EinsatzDetail(props: {
     // Nur eine Art, die es gibt: Ein leerer oder fremder Wert lässt die bisherige stehen.
     const art = ART_WAHL.some((a) => a.wert === w.art) ? (Number(w.art) as EinsatzArt) : einsatz.art;
     if (name === einsatz.name && ort === (einsatz.ort ?? "") && art === einsatz.art) return;
-    const alt: { werte: { name: string; ort: string; art: EinsatzArt } | null } = { werte: null };
+    // Wie „Als Übung führen…": Macht die neue Art eine Lage mit echten Einheiten zur Übung, oder zählen danach Einheiten
+    // nicht mehr, fragt die App mit den Zahlen davor und danach nach und steht auf „Abbrechen". Eine Auswahlliste ist schnell
+    // verstellt, und der Fernseher zeigte danach „ÜBUNG – keine Echtlage".
+    if (art !== einsatz.art) {
+      const frage = artWechselFrage(einsatz, art);
+      if (frage.vorsicht) {
+        const auchKopf = name !== einsatz.name || ort !== (einsatz.ort ?? "");
+        const ja = await frageJaNein({
+          titel: frage.titel,
+          text: frage.text + (auchKopf ? " „Abbrechen“ lässt auch Name und Ort, wie sie waren." : ""),
+          ok: frage.ok,
+          fokus: "abbruch",
+        });
+        if (!ja) return;
+      }
+    }
+    const alt: { werte: ({ name: string; ort: string } & ArtStand) | null } = { werte: null };
     // R20-O3: Der Dialog ist zu; was eingegeben war, steht in der Meldung zum Abschreiben.
     if (
       !(await gesichert(
@@ -1745,36 +1807,33 @@ export function EinsatzDetail(props: {
    */
   async function alsUebungFuehren() {
     if (einsatz.art === EinsatzArt.UEBUNG) return;
-    // Führt die Sammlung auch Einheiten ohne Übungskennzeichen (anwesend oder abgerückt), ist sie womöglich eine echte Lage
-    // mit einzelnen falsch gekennzeichneten Bögen. Dann sagt die Rückfrage das, nennt den Weg je Bogen und legt den Fokus
-    // auf „Abbrechen": Eine echte Lage als Übung zu führen, stellte den Fernseher auf „ÜBUNG – keine Echtlage".
-    const echte = geltendeJeEinheit(einsatz.eintraege).filter((e) => !e.bogen.uebung).length;
-    const folge = `Übungsmeldungen zählen dann wie jede andere Einheit, und der Lagemonitor zeigt „ÜBUNG – keine Echtlage“. Über „Einsatz bearbeiten…“ im Kopf lässt sich die Art wieder umstellen.`;
-    const ja = await frageJaNein({
-      titel: "Als Übung führen?",
-      text:
-        echte === 0
-          ? `„${einsatz.name}" wird dann als Übung geführt. ${folge}`
-          : `„${einsatz.name}" führt auch ${echte === 1 ? "eine Einheit" : `${echte} Einheiten`} ohne Übungskennzeichen. Als Übung geführt, ist die ganze Sammlung eine Übung: ${folge} Ist nur ein Bogen versehentlich als Übung gekennzeichnet, besser an seiner Karte unter „Mehr…“: „Als Einsatzmeldung zählen…“.`,
-      ok: "Als Übung führen",
-      ...(echte === 0 ? {} : { fokus: "abbruch" as const }),
-    });
+    // Die Rückfrage nennt die Zahlen davor und danach; führt die Sammlung auch echte Einheiten, steht sie auf „Abbrechen".
+    const frage = artWechselFrage(einsatz, EinsatzArt.UEBUNG);
+    const ja = await frageJaNein({ titel: frage.titel, text: frage.text, ok: frage.ok, ...(frage.vorsicht ? { fokus: "abbruch" as const } : {}) });
     if (!ja) return;
-    const alt: { art: EinsatzArt | null } = { art: null };
-    if (!(await gesichert("Nicht geändert", () => (alt.art = einsatzArtSetzen(einsatz.id, EinsatzArt.UEBUNG)), undefined, false, `„${einsatz.name}" wird weiter als ${ART_LABEL[einsatz.art]} geführt.`))) return;
-    if (alt.art == null) return;
-    const vorher = { name: einsatz.name, ort: einsatz.ort ?? "", art: alt.art };
-    setKopfGeaendert({ vorher, nachher: kopfAenderungText(vorher, vorher.name, vorher.ort, EinsatzArt.UEBUNG), nonce: Date.now() });
+    const alt: { stand: ArtStand | null } = { stand: null };
+    if (!(await gesichert("Nicht geändert", () => (alt.stand = einsatzArtSetzen(einsatz.id, EinsatzArt.UEBUNG)), undefined, false, `„${einsatz.name}" wird weiter als ${ART_LABEL[einsatz.art]} geführt.`))) return;
+    if (alt.stand == null) return;
+    const vorher = { name: einsatz.name, ort: einsatz.ort ?? "", ...alt.stand };
+    setKopfGeaendert({ vorher, nachher: kopfAenderungText(vorher, vorher.name, vorher.ort, EinsatzArt.UEBUNG), nonce: Date.now(), nurArt: true });
     onGeaendert();
   }
 
   async function kopfZurueck() {
     if (!kopfGeaendert) return;
     const { vorher } = kopfGeaendert;
+    if (kopfGeaendert.nurArt) {
+      // Nur die Art: Wurde inzwischen der Name geändert, bleibt er.
+      if (!(await gesichert("Rückgängig", () => einsatzArtZuruecknehmen(einsatz.id, vorher)))) return;
+      zurueckQuittieren(`Zurückgenommen: „${einsatz.name}" wird wieder als ${ART_LABEL[vorher.art]} geführt.`);
+      setKopfGeaendert(null);
+      onGeaendert();
+      return;
+    }
     const artZurueck = vorher.art !== einsatz.art;
     const nameZurueck = vorher.name !== einsatz.name;
     if (
-      !(await gesichert("Rückgängig", () => einsatzKopfMitArtSetzen(einsatz.id, vorher.name, vorher.ort, vorher.art)))
+      !(await gesichert("Rückgängig", () => einsatzKopfMitArtSetzen(einsatz.id, vorher.name, vorher.ort, vorher.art, vorher)))
     )
       return;
     // Genannt wird, was sich für den Leser ändert: der Name, sonst die Art; ein zurückgenommener Ort steht im Kopf darunter.
@@ -2917,6 +2976,7 @@ export function EinsatzDetail(props: {
               )}
               <EinheitKarte
                 einsatzId={einsatz.id}
+                einsatzArt={einsatz.art}
                 kopf={e}
                 alle={einsatz.eintraege}
                 onGeaendert={onGeaendert}
@@ -3050,7 +3110,7 @@ export function EinsatzDetail(props: {
       {onLageblatt && (
         <p className="hinweis lageblatt-stand" role="status">
           {lageblattStand
-            ? `Lageblatt erstellt ${exportZeitKurz(lageblattStand.zeitpunkt)} · ${seitdemText(neueEintraege(einsatz.eintraege, lageblattStand).length, aenderungenSeit(einsatz.eintraege, lageblattStand))}${lageblattVeraltet ? " — Aushang ist nicht mehr aktuell, neu drucken" : ""}`
+            ? `Lageblatt erstellt ${exportZeitKurz(lageblattStand.zeitpunkt)} · ${seitdemText(neueEintraege(einsatz.eintraege, lageblattStand).length, aenderungenSeit(einsatz.eintraege, lageblattStand, einsatz.art))}${lageblattVeraltet ? " — Aushang ist nicht mehr aktuell, neu drucken" : ""}`
             : "Noch kein Lageblatt aus diesem Einsatz."}
         </p>
       )}
@@ -3121,7 +3181,7 @@ export function EinsatzDetail(props: {
             <span className="hinweis export-stand-zeile" key={z}>
               {EXPORT_ZIEL_NAME[z]}: zuletzt erzeugt {exportZeitKurz(stand.zeitpunkt)}
               {stand.herkunft === "geraet" ? " (vom anderen Gerät)" : stand.herkunft === "weitergabe" ? " (ab der Weitergabe gerechnet)" : ""} ·{" "}
-              {seitdemBoegenText(einsatz.eintraege, stand)}
+              {seitdemBoegenText(einsatz.eintraege, stand, einsatz.art)}
             </span>
           );
         })}
@@ -4207,6 +4267,8 @@ const WIEDER_ANWESEND_FRAGE_MS: number = PRELLSCHUTZ_MS === 0 ? 0 : 60_000;
 
 function EinheitKarte(props: {
   einsatzId: string;
+  /** Art der Sammlung (neu im Meldekopf): In einer Übung zählt jeder Bogen, die Rückfrage beim Umkennzeichnen sagt das. */
+  einsatzArt?: EinsatzArt;
   kopf: MeldeEintrag;
   alle: MeldeEintrag[];
   onGeaendert: () => void;
@@ -4796,7 +4858,10 @@ function EinheitKarte(props: {
     const sicher = await frageJaNein({
       titel: wirdEinsatz ? "Als Einsatzmeldung zählen?" : "Als Übung kennzeichnen?",
       text:
-        `„${name}" zählt danach ${wirdEinsatz ? "in Stärke, Verpflegung und Unterbringung mit" : "dort nicht mehr mit"} (${personenText}). ` +
+        (props.einsatzArt === EinsatzArt.UEBUNG
+          ? // Neu im Meldekopf: In einer Übung zählt jeder Bogen; die Kennzeichnung ändert dort nur Wasserzeichen und Datenschutzfrist.
+            `In dieser Übung zählt „${name}" so oder so mit (${personenText}). Die Kennzeichnung bestimmt das Wasserzeichen im PDF und die Datenschutzfrist (ein Übungsbogen ist von ihr ausgenommen). `
+          : `„${name}" zählt danach ${wirdEinsatz ? "in Stärke, Verpflegung und Unterbringung mit" : "dort nicht mehr mit"} (${personenText}). `) +
         "Neue Fassung in der Historie; das Alter der Meldung bleibt; „Rückgängig“ nimmt sie zurück.",
       ok: wirdEinsatz ? "Als Einsatzmeldung zählen" : "Als Übung kennzeichnen",
       fokus: "abbruch",
