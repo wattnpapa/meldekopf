@@ -371,7 +371,8 @@ main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-kopfzeile { grid-ar
 main.lt[data-fassung="zwei"] .lt-wie { grid-area: wie; display: flex; align-items: center; }
 main.lt[data-fassung="zwei"] .lt-funkruf { display: none; }
 /* Ein Typ ohne Kurzform (Freitext) nimmt höchstens diese Breite, neben einer Marke weniger: Sonst bliebe für sie und den Auftrag nichts. */
-main.lt[data-fassung="zwei"] .lt-typ { flex: none; max-width: 14em; margin-right: 0.45em; }
+/* Nie breiter als die Reihe: Neben einem Stand mit Datum ragte ein langer Typ sonst über sie hinaus und endete ohne Auslassung. */
+main.lt[data-fassung="zwei"] .lt-typ { flex: none; max-width: min(14em, calc(100% - 0.45em)); margin-right: 0.45em; }
 /* Neben Marken weniger, und nie so breit, dass für sie weniger als ihr Mindestes bleibt (in Schriftgrößen der Karte, der Typ steht in 0,74). */
 main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-typ { max-width: min(8.5em, calc(100% - 0.45em - var(--lt-marken-min, 0) * 1em / 0.74)); }
 main.lt[data-fassung="zwei"] .lt-auftrag { flex: 1 1 0; }
@@ -653,7 +654,8 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   .lt-typ-lang { display: inline; white-space: normal; background: none; }
   .lt-wie > .lt-funkruf-wahl { height: auto; }
   .lt-funkruf-voll { display: flex; flex-wrap: wrap; row-gap: 0; min-width: 0; white-space: normal; background: none; }
-  main.lt[data-fassung] .lt-karte .lt-auftrag-text::before { content: none; }
+  /* Hier steht der Auftrag in eigener Zeile: kein Trennpunkt davor (auch nicht der hinter Funkrufname oder Typ, der sonst schwerer wöge). */
+  main.lt[data-fassung] .lt-karte .lt-auftrag-text::before, main.lt[data-fassung] .lt-karte :is(.lt-funkruf, .lt-typ) ~ .lt-auftrag .lt-auftrag-text::before { content: none; }
   main.lt[data-fassung] .lt-auftrag { container-type: normal; }
   .lt-marken { justify-content: flex-start; margin: 0.15em 0 0; }
   .lt-karte > *, .lt-kopfzeile > *, .lt-wie > * { white-space: normal; overflow: visible; overflow-wrap: anywhere; }

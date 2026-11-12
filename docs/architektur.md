@@ -401,12 +401,17 @@ Schrift des Funkrufnamens (0,93 der fetten Schätzung, gemessen 0,86 bis
 0,92). Bis 2026-11-12 stand dort „R.. 55/17/4“ mit angeschnittener
 Auslassung. In der breiten Fassung hält die Spalte des Funkrufnamens seine
 Kennziffer frei (`--lt-funk-fest`); an 16:10-Fernsehern blieb sonst von
-„22/51“ nur „2..“. Die Spalte „wer“ misst den ganzen Funkrufnamen mit seinen
-Teilen, nicht seine Hülle: Eine Messung der Hülle hing an der Breite, die
-sie bestimmt, die Spalte sank je Bild um einen Pixel, und nach 50
-Durchgängen brach React ab (Stand `c053757`, nie ausgeliefert). Seitdem
-ändert `useWerBreite` die Breite in einem Zug höchstens achtmal (gebraucht
-werden zwei oder drei).
+„22/51“ nur „2..“. Die Spalte „wer“ misst nur, was nicht an ihrer eigenen
+Breite hängt: den ganzen Funkrufnamen mit seinen Teilen (nicht seine Hülle)
+und für die Marken, was sie ganz brauchen, mit Polster, Rahmen und Abständen
+(nicht ihre Spur im Raster). Hing die Messung an der Spalte, sank diese je
+Bild um einen Pixel, und nach 50 Durchgängen brach React ab und der
+Fernseher zeigte die Zeilen: über die Hülle des Funkrufnamens im Stand
+`c053757` (nie ausgeliefert), über die Spur der Marken schon im
+ausgelieferten Stand `b1254c0`, sobald in der breiten Fassung eine Karte
+ohne Funkrufnamen einen langen Bedarf neben einem langen Namen trug.
+Gebraucht werden seitdem zwei oder drei Messungen; zur Sicherheit ändert
+`useWerBreite` die Breite in einem Zug höchstens achtmal.
 
 In der knappen Fassung teilen sich Typ, Auftrag und Marken die zweite Zeile
 neben dem Stand. Es weicht zuerst der Auftrag, dann der Bedarf. Eine
@@ -716,10 +721,10 @@ Ausgaben liegen in Einsatzansicht, Abgleich und `export-stand`, die alle zum
 Start gehören. Der Brocken der Tafel wächst auf rund 34 KB JavaScript und
 23 KB Stilvorlage (weitere Kurzformen, `satzBedarf`, Zahl im Gruppenkopf,
 Stütze der Grundlinie).
-**Nach der Live-Prüfung (2026-11-12):** 4.363.037 / 636.564 Byte, im
-Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 1 KB
+**Nach der Live-Prüfung (2026-11-12):** 4.363.421 / 636.564 Byte, im
+Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 1,4 KB
 (Wahl des Funkrufnamens, Mindestes der Marken in der knappen Karte,
-Kennziffer in der breiten, Schutz der Messung).
+Kennziffer in der breiten, Messung der Marken und Schutz der Messung).
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

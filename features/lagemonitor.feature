@@ -111,12 +111,26 @@ Funktionalität: Lagemonitor für den Fernseher
     Und ich den Lagemonitor öffne
     Dann zeigt der Lagemonitor die Tafel
     Und steht die Tafel in der Fassung "breit" und bleibt stehen
-    Und zeigt der Lagemonitor "14/43/1"
+    Und steht auf der Tafel die Kennziffer "14/43/1" ganz
     Wenn ich den Fernseher auf 3840 x 2160 stelle
     Dann steht die Tafel in der Fassung "breit" und bleibt stehen
     Wenn ich den Fernseher auf 1280 x 720 stelle
     Dann steht die Tafel in der Fassung "breit" und bleibt stehen
     Und überdeckt auf der Tafel keine Angabe eine andere
+
+  # Eine Einheit ohne Funkrufnamen meldet einen langen Bedarf, daneben steht ein langer Name.
+  # Vorgefallen (zweite Gegenprüfung, schon im ausgelieferten Stand): Die Tafel maß die Spur
+  # der Marken statt ihres Bedarfs, die Spalte der Namen sank je Bild um einen Pixel, und nach
+  # 50 Durchgängen zeigte der Fernseher die Zeilen; „Neu laden" holte die Tafel nicht zurück.
+  Szenario: Ein langer Bedarf bringt die breite Tafel nicht zum Absturz und nicht ins Wandern
+    Angenommen auf dem Gerät liegt eine kleine Lage, in der eine Einheit ohne Funkrufnamen einen langen Bedarf meldet
+    Wenn ich für den Fernseher die Darstellung "Tafel" wähle
+    Und ich den Lagemonitor öffne
+    Dann zeigt der Lagemonitor die Tafel
+    Und steht die Tafel in der Fassung "breit" und bleibt stehen
+    Und zeigt der Lagemonitor "Verpflegung 12"
+    Wenn ich den Fernseher auf 3840 x 2160 stelle
+    Dann steht die Tafel in der Fassung "breit" und bleibt stehen
 
   # Die volle Randspalte: Bedarf, abgerückte Einheiten und frische Bewegungen
   # zugleich, die Tafel blättert. Vorgefallen (Gegenprüfung): Von „Zuletzt" blieb

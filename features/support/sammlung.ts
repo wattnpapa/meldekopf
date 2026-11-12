@@ -49,13 +49,14 @@ export function weitereEinheit(organisation: OrganisationsTyp, ort: string): Erf
 
 /**
  * Inhalt von `eeb.einsaetze.v1` mit einer Sammlung aus den gegebenen Bögen. `alterMin`: wie viele Minuten der Eingang
- * jedes Bogens her ist (Vorgabe: einer je Minute, der letzte vor einer Minute); nach einer Viertelstunde trägt eine
- * Einheit die Marke „neu" nicht mehr.
+ * jedes Bogens vor `jetzt` liegt (Vorgabe: einer je Minute, der letzte vor einer Minute); nach einer Viertelstunde trägt
+ * eine Einheit die Marke „neu" nicht mehr. `jetzt` ist die Uhr, an der die Seite die Zeiten misst (Vorgabe: die des
+ * Rechners; die Seite des Prüfstands läuft ab `PRUEFSTAND_ZEIT`, support/haken.ts).
  */
 export function sammlungSpeicher(
   name: string,
   boegen: Erfassungsbogen[],
-  opt: { vomPapier?: boolean; art?: EinsatzArt; alterMin?: number[] } = {},
+  opt: { vomPapier?: boolean; art?: EinsatzArt; alterMin?: number[]; jetzt?: number } = {},
 ): { einsaetze: string; einsatzId: string } {
   const ablage = new Map<string, string>();
   speicherhuelleSetzen({ getItem: (k) => ablage.get(k) ?? null, setItem: (k, v) => void ablage.set(k, v) });
@@ -68,11 +69,12 @@ export function sammlungSpeicher(
       id: string;
       eintraege: { empfangenAm: number; vomPapier?: number }[];
     }[];
-    const beginn = Date.now() - boegen.length * 60_000;
+    const jetzt = opt.jetzt ?? Date.now();
+    const beginn = jetzt - boegen.length * 60_000;
     for (const x of liste) {
       x.eintraege.forEach((e, i) => {
         const alter = opt.alterMin?.[i];
-        e.empfangenAm = alter != null ? Date.now() - alter * 60_000 : beginn + i * 60_000;
+        e.empfangenAm = alter != null ? jetzt - alter * 60_000 : beginn + i * 60_000;
         // Zeitpunkt des Einlesens vom Papier, wie ihn vomPapierMarkieren (eintrag-zeiten.ts) setzt.
         if (opt.vomPapier) e.vomPapier = e.empfangenAm;
       });
@@ -234,6 +236,50 @@ export function funkrufBoegen(): Erfassungsbogen[] {
 
 /** Wie viele Minuten die Eingänge von {@link funkrufBoegen} her sind. */
 export const FUNKRUF_ALTER_MIN = [103, 102, 101, 100, 30];
+
+/**
+ * Eine kleine Lage für die breite Karte der Tafel (neu im Meldekopf): zwei THW-Einheiten und eine Feuerwehr mit
+ * Funkrufnamen, dazu ein eben eingetroffener DRK-Ortsverein ohne Funkrufnamen, der Ruhezeit, Unterbringung und
+ * Verpflegung für 12 meldet ({@link BEDARF_ALTER_MIN}). Vorgefallen (zweite Gegenprüfung, schon im ausgelieferten
+ * Stand): Die Tafel maß für die Spalte der Namen die Spur der Marken statt ihres Bedarfs; neben dem langen Namen der
+ * Feuerwehr war die Spur gequetscht, die Messung folgte der Spalte um je einen Pixel, und nach 50 Durchgängen brach die
+ * Tafel ab.
+ */
+export function bedarfBoegen(): Erfassungsbogen[] {
+  const T = OrganisationsTyp;
+  const einheit = (
+    organisation: OrganisationsTyp,
+    ort: string,
+    typ: number | string,
+    [fuehrer, unterfuehrer, mannschaft]: [number, number, number],
+    funk?: { kennwort: string | number; teile: number[] },
+    organisationName?: string,
+  ): Erfassungsbogen => ({
+    ...weitereEinheit(organisation, ort),
+    einheit: {
+      organisation,
+      ...(organisationName ? { organisationName } : {}),
+      einheitsTyp: typeof typ === "number" ? { code: typ } : { freitext: typ },
+      hierarchie: [{ bezeichnung: { code: 1 }, name: ort }],
+    },
+    staerkeManuell: { fuehrer, unterfuehrer, mannschaft, gesamt: fuehrer + unterfuehrer + mannschaft },
+    sofortbedarf: undefined,
+    fahrzeuge: funk
+      ? [{ typ: { freitext: "MTW" }, funkrufname: { kennwort: typeof funk.kennwort === "number" ? { code: funk.kennwort } : { freitext: funk.kennwort }, eigenerStandort: true, teile: funk.teile } }]
+      : [],
+  });
+  const drk = einheit(T.DRK, "Rastede", "Sanitätsgruppe", [0, 2, 6], undefined, "DRK-Ortsverein");
+  drk.sofortbedarf = { verpflegungPersonen: 12, dieselLiter: 0, benzinLiter: 0, gemischLiter: 0, unterbringung: true, ruhezeitErforderlich: true };
+  return [
+    einheit(T.THW, "Westerstede", 3, [1, 1, 2], { kennwort: 1, teile: [21, 10] }),
+    einheit(T.THW, "Gieboldehausen", 4, [0, 3, 6], { kennwort: 1, teile: [22, 51] }),
+    einheit(T.FEUERWEHR, "Bad Zwischenahn", "Löschgruppe", [0, 1, 8], { kennwort: "Florian Ammerland", teile: [14, 43, 1] }, "Freiwillige Feuerwehr"),
+    drk,
+  ];
+}
+
+/** Wie viele Minuten die Eingänge von {@link bedarfBoegen} her sind: der DRK-Ortsverein trägt noch die Marke „neu". */
+export const BEDARF_ALTER_MIN = [70, 66, 80, 3];
 
 /** Datenteil eines Bogen-Links (hinter „#") für einen Übungsbogen, wie ihn der Erfassungsbogen teilt. */
 export function uebungsBogenFragment(): string {

@@ -1084,6 +1084,8 @@ describe("Lagetafel, Stil", () => {
     const telefon = css.slice(css.indexOf("@media (max-width: 960px), (max-height: 560px), (max-aspect-ratio: 6/5)"));
     expect(telefon).toMatch(/\.lt-typ-kurz, \.lt-typ-anker, \.lt-funkruf-kurz \{ display: none; \}/);
     expect(telefon).toMatch(/\.lt-funkruf-voll \{ display: flex; flex-wrap: wrap;/);
+    // Der Auftrag steht dort in eigener Zeile: Der Trennpunkt entfällt auch hinter Funkrufname oder Typ (schwerere Regel).
+    expect(telefon).toMatch(/main\.lt\[data-fassung\] \.lt-karte :is\(\.lt-funkruf, \.lt-typ\) ~ \.lt-auftrag \.lt-auftrag-text::before \{ content: none; \}/);
   });
 
   it("lässt Marken nie über Typ, Funkrufname oder Zeichen laufen: Der Bedarf wird gekürzt, die Marke der Bewegung bleibt ganz", () => {
@@ -1107,7 +1109,7 @@ describe("Lagetafel, Stil", () => {
     // Name und Stärke teilen die erste Zeile unter sich auf: Der Name hängt nicht an der Breite des Stands darunter.
     expect(css).toMatch(/main\.lt:is\(\[data-fassung="zwei"\], \[data-fassung="drei"\]\) \.lt-kopfzeile \{ grid-area: kopf; display: flex;/);
     // Ein Typ ohne Kurzform bekommt in der knappen Fassung eine Obergrenze, damit Auftrag und Marken Platz behalten.
-    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-typ \{ flex: none; max-width: 14em;/);
+    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-typ \{ flex: none; max-width: min\(14em, calc\(100% - 0\.45em\)\);/);
   });
 
   it("kürzt einen langen Gruppennamen mit Auslassung und lässt „(Fortsetzung)“ stehen", () => {

@@ -9,7 +9,8 @@ import { Given, Then, When } from "@cucumber/cucumber";
 import type { Page } from "playwright";
 import { OrganisationsTyp } from "../../vendor/eeb-format/src/model";
 import { EinsatzArt } from "../../vendor/bos-meldekopf/src/einsaetze";
-import { FUNKRUF_ALTER_MIN, fernseherBoegen, funkrufBoegen, sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment, weitereEinheit } from "../support/sammlung";
+import { PRUEFSTAND_ZEIT } from "../support/haken";
+import { BEDARF_ALTER_MIN, FUNKRUF_ALTER_MIN, bedarfBoegen, fernseherBoegen, funkrufBoegen, sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment, weitereEinheit } from "../support/sammlung";
 import type { EebWelt } from "../support/welt";
 
 const MONITOR = new WeakMap<EebWelt, Page>();
@@ -122,38 +123,90 @@ Given("auf dem Gerät liegt die Übung vom Fernseher mit ihren langen Namen", as
   await this.oeffneApp();
 });
 
-/** Die kleine Lage mit langem Funkrufnamen (support/sammlung.ts); die zuletzt geöffnete Sammlung. */
-Given("auf dem Gerät liegt eine kleine Lage mit einem langen Funkrufnamen", async function (this: EebWelt) {
-  const { einsaetze, einsatzId } = sammlungSpeicher("Sturm Ammerland", funkrufBoegen(), { alterMin: FUNKRUF_ALTER_MIN });
-  await this.page.addInitScript(
+/**
+ * Eine kleine Lage für die breite Karte (support/sammlung.ts), die zuletzt geöffnete Sammlung. Die Zeiten gelten der Uhr
+ * der Seite, die am Prüfstand ab `PRUEFSTAND_ZEIT` läuft: Mit der Uhr des Rechners lägen alle Eingänge in der Zukunft.
+ */
+async function kleineLageLegen(welt: EebWelt, name: string, boegen: ReturnType<typeof funkrufBoegen>, alterMin: number[]): Promise<void> {
+  const { einsaetze, einsatzId } = sammlungSpeicher(name, boegen, { alterMin, jetzt: PRUEFSTAND_ZEIT.getTime() });
+  await welt.page.addInitScript(
     ([e, id]) => {
-      if (sessionStorage.getItem("prüfstand.funkruf")) return;
-      sessionStorage.setItem("prüfstand.funkruf", "1");
+      if (sessionStorage.getItem("prüfstand.kleinelage")) return;
+      sessionStorage.setItem("prüfstand.kleinelage", "1");
       localStorage.setItem("eeb.einsaetze.v1", e);
       localStorage.setItem("eeb.letzterEinsatz.v1", JSON.stringify({ id, um: Date.now() }));
     },
     [einsaetze, einsatzId] as const,
   );
-  await this.oeffneApp();
+  await welt.oeffneApp();
+}
+
+Given("auf dem Gerät liegt eine kleine Lage mit einem langen Funkrufnamen", async function (this: EebWelt) {
+  await kleineLageLegen(this, "Sturm Ammerland", funkrufBoegen(), FUNKRUF_ALTER_MIN);
+});
+
+Given("auf dem Gerät liegt eine kleine Lage, in der eine Einheit ohne Funkrufnamen einen langen Bedarf meldet", async function (this: EebWelt) {
+  await kleineLageLegen(this, "Sturm Rastede", bedarfBoegen(), BEDARF_ALTER_MIN);
 });
 
 /**
  * Die Tafel steht in der gegebenen Fassung und bleibt stehen, nachdem sie nachgemessen hat: Die Spalte der Namen hat
- * eine gemessene Breite, die sich nicht mehr ändert, und der Monitor ist nicht auf die Zeilen ausgewichen.
+ * eine gemessene Breite, die sich über einen Takt des Monitors (5 s) hinaus nicht mehr ändert, und der Monitor ist nicht
+ * auf die Zeilen ausgewichen. Ein Takt gehört dazu: Eine Messung, die an der eigenen Breite hängt, liefe sonst in jedem
+ * Takt um einige Schritte weiter, ohne dass ein kurzer Blick es merkte.
  */
 Then("steht die Tafel in der Fassung {string} und bleibt stehen", async function (this: EebWelt, fassung: string) {
   const seite = monitor(this);
   await seite.waitForFunction((f) => document.querySelector("main.lt")?.getAttribute("data-fassung") === f, fassung);
   const wer = () => seite.evaluate(() => (document.querySelector("main.lt") as HTMLElement | null)?.style.getPropertyValue("--lt-wer") ?? null);
-  // Zwei Bilder und eine Weile Ruhe: Ein Durchgang, der sich selbst hinterherläuft, hätte React bis dahin abbrechen lassen.
   await seite.evaluate(() => new Promise((fertig) => requestAnimationFrame(() => requestAnimationFrame(() => fertig(true)))));
   await seite.waitForTimeout(500);
   const vorher = await wer();
-  await seite.waitForTimeout(500);
+  if (!vorher || !/px$/.test(vorher)) throw new Error(`Die Spalte der Namen ist nicht gemessen (--lt-wer: ${vorher}).`);
+  // Jede Änderung zählen, bis ein Takt sicher vorbei ist.
+  await seite.evaluate(() => {
+    const w = window as unknown as { __werAenderungen: number };
+    w.__werAenderungen = 0;
+    const tafel = document.querySelector("main.lt") as HTMLElement;
+    let zuletzt = tafel.style.getPropertyValue("--lt-wer");
+    new MutationObserver(() => {
+      const jetzt = tafel.style.getPropertyValue("--lt-wer");
+      if (jetzt !== zuletzt) w.__werAenderungen++;
+      zuletzt = jetzt;
+    }).observe(tafel, { attributes: true, attributeFilter: ["style"] });
+  });
+  await seite.waitForTimeout(6_000);
   if ((await seite.locator("main.lt").count()) === 0) throw new Error("Die Tafel ist weg: Der Monitor zeigt die Zeilen.");
   if (await seite.getByText("gerade nicht zeigen").count()) throw new Error("Der Monitor ist auf die Zeilen ausgewichen.");
-  if (!vorher || !/px$/.test(vorher)) throw new Error(`Die Spalte der Namen ist nicht gemessen (--lt-wer: ${vorher}).`);
-  if ((await wer()) !== vorher) throw new Error("Die Spalte der Namen ändert sich noch.");
+  const aenderungen = await seite.evaluate(() => (window as unknown as { __werAenderungen: number }).__werAenderungen);
+  if (aenderungen > 0 || (await wer()) !== vorher) throw new Error(`Die Spalte der Namen ändert sich noch (${aenderungen}-mal in 6 s, von ${vorher} auf ${await wer()}).`);
+});
+
+/**
+ * Die Kennziffer eines Funkrufnamens steht ganz zu lesen: im ganzen Funkrufnamen, wenn er in der ersten Zeile seines
+ * Felds steht, sonst allein (lagetafel-ui.tsx, `Funkruf`). Die Kopie darunter zählt nicht, solange der Name sie zudeckt.
+ */
+Then("steht auf der Tafel die Kennziffer {string} ganz", async function (this: EebWelt, kennziffer: string) {
+  // Als Text, nicht als Funktion (tsx hängt Hilfsfunktionen an, die es im Browser nicht gibt); die Kennziffer als JSON.
+  const befund = await monitor(this).evaluate<string>(
+    `((gesucht) => {
+      const messung = document.createRange();
+      const ganz = (el) => { messung.selectNodeContents(el); return messung.getBoundingClientRect().width <= el.getBoundingClientRect().width + 0.5; };
+      const gesehen = [];
+      for (const feld of document.querySelectorAll("main.lt .lt-funkruf-wahl")) {
+        const voll = feld.querySelector(".lt-funkruf-voll");
+        const zeile = voll.getBoundingClientRect().top < feld.getBoundingClientRect().bottom - 1;
+        const teil = zeile ? voll.querySelector(".lt-teil-fest") : feld.querySelector(".lt-funkruf-kurz");
+        if (teil.textContent !== gesucht) continue;
+        // Die Kennziffer ist nicht gekürzt und steht im Feld (der umgebrochene Name darunter zählt nicht).
+        const t = teil.getBoundingClientRect(), f = feld.getBoundingClientRect();
+        if (f.width > 0 && ganz(teil) && t.right <= f.right + 0.5 && t.left >= f.left - 0.5) return "ganz";
+        gesehen.push((zeile ? "im Namen" : "allein") + ", gekürzt");
+      }
+      return gesehen.join("; ") || "nicht gefunden";
+    })(${JSON.stringify(kennziffer)})`,
+  );
+  if (befund !== "ganz") throw new Error(`Die Kennziffer „${kennziffer}“ steht nicht ganz da: ${befund}.`);
 });
 
 /**

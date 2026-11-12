@@ -159,6 +159,21 @@ function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): n
       messung.selectNodeContents(teil);
       return messung.getBoundingClientRect().width;
     };
+    // Was die Marken ganz brauchen: jede mit Polster und Rahmen (von einer gekürzten zählt ihr ganzer Inhalt, scrollWidth
+    // samt Warnzeichen), die Abstände dazwischen und der Abstand davor. Nicht ihre Spur im Raster: Ist die Spalte „wer"
+    // zu breit, ist die Spur gequetscht, die Messung folgte der Spalte um je einen Pixel, und im ausgelieferten Stand
+    // (b1254c0) brach React nach 50 Durchgängen ab, sobald eine Karte ohne Funkrufnamen einen langen Bedarf trug.
+    const marken = (huelle: Element | null): number => {
+      if (!huelle) return 0;
+      const stil = getComputedStyle(huelle);
+      const kinder = Array.from(huelle.children) as HTMLElement[];
+      const ganz = kinder.reduce((summe, marke) => {
+        const s = getComputedStyle(marke);
+        const voll = marke.scrollWidth + px(s.borderLeftWidth) + px(s.borderRightWidth);
+        return summe + Math.max(marke.getBoundingClientRect().width, voll) + px(s.marginLeft) + px(s.marginRight);
+      }, 0);
+      return ganz + px(stil.columnGap) * Math.max(0, kinder.length - 1) + px(stil.marginLeft) + px(stil.paddingLeft) + px(stil.paddingRight);
+    };
     const bedarf = { ganz: 0, lang: 0, frei: platz };
     for (const karte of el.querySelectorAll<HTMLElement>(".lt-karte")) {
       // Name und Typ: Ohne Kurzform muss das Feld ganz dastehen. Mit Kurzform muss sie es, und die volle Form soll es,
@@ -179,7 +194,7 @@ function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): n
       // nicht die Hülle. Die Hülle maß nur ihr Feld; die Breite hing so an sich selbst, sank je Durchgang um einen Pixel,
       // und nach 50 Durchgängen brach React ab (c053757).
       const funkruf = karte.querySelector(".lt-funkruf-voll") ?? karte.querySelector(".lt-funkruf");
-      const rechts = (spuren[4] ?? 0) + Math.max(text(karte.querySelector(".lt-auftrag")), text(funkruf) + (spuren[3] ?? 0));
+      const rechts = (spuren[4] ?? 0) + Math.max(text(karte.querySelector(".lt-auftrag")), text(funkruf) + marken(karte.querySelector(".lt-marken")));
       bedarf.frei = Math.min(bedarf.frei, platz - rechts);
     }
     // Bruchteile gehen zugunsten dessen, was nicht gekürzt werden soll: Der Bedarf von Name und Typ wird aufgerundet,

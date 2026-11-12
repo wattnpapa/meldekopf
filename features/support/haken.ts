@@ -145,7 +145,7 @@ ${meckern.trim()}` : ""),
  * Seite läuft ab hier normal weiter (install + resume), sie startet nur an
  * einem festen Tag statt am Tag des Laufs.
  */
-const PRUEFSTAND_ZEIT = new Date("2025-05-20T09:00:00Z");
+export const PRUEFSTAND_ZEIT = new Date("2025-05-20T09:00:00Z");
 
 Before(async function (this: EebWelt, { pickle }) {
   const kontext = await browser.newContext();
