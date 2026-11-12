@@ -47,11 +47,15 @@ export function weitereEinheit(organisation: OrganisationsTyp, ort: string): Erf
   };
 }
 
-/** Inhalt von `eeb.einsaetze.v1` mit einer Sammlung aus den gegebenen Bögen. */
+/**
+ * Inhalt von `eeb.einsaetze.v1` mit einer Sammlung aus den gegebenen Bögen. `alterMin`: wie viele Minuten der Eingang
+ * jedes Bogens her ist (Vorgabe: einer je Minute, der letzte vor einer Minute); nach einer Viertelstunde trägt eine
+ * Einheit die Marke „neu" nicht mehr.
+ */
 export function sammlungSpeicher(
   name: string,
   boegen: Erfassungsbogen[],
-  opt: { vomPapier?: boolean; art?: EinsatzArt } = {},
+  opt: { vomPapier?: boolean; art?: EinsatzArt; alterMin?: number[] } = {},
 ): { einsaetze: string; einsatzId: string } {
   const ablage = new Map<string, string>();
   speicherhuelleSetzen({ getItem: (k) => ablage.get(k) ?? null, setItem: (k, v) => void ablage.set(k, v) });
@@ -67,7 +71,8 @@ export function sammlungSpeicher(
     const beginn = Date.now() - boegen.length * 60_000;
     for (const x of liste) {
       x.eintraege.forEach((e, i) => {
-        e.empfangenAm = beginn + i * 60_000;
+        const alter = opt.alterMin?.[i];
+        e.empfangenAm = alter != null ? Date.now() - alter * 60_000 : beginn + i * 60_000;
         // Zeitpunkt des Einlesens vom Papier, wie ihn vomPapierMarkieren (eintrag-zeiten.ts) setzt.
         if (opt.vomPapier) e.vomPapier = e.empfangenAm;
       });
@@ -199,6 +204,36 @@ export function fernseherBoegen(): Erfassungsbogen[] {
     uebung: true,
   }));
 }
+
+/**
+ * Eine kleine Lage für die breite Karte der Tafel (neu im Meldekopf): vier THW-Einheiten und eine Feuerwehr mit langem
+ * Funkrufnamen („Florian Ammerland Bad Zwischenahn Rostrup 14/43/1"), alle ohne Sofortbedarf und seit über einer
+ * Viertelstunde da ({@link FUNKRUF_ALTER_MIN}), also ohne Marken. Bei der Vorgabebreite der Namensspalte ist er gekürzt, und
+ * die Tafel misst die Spalte nach. Vorgefallen (Gegenprüfung): Gemessen wurde die Hülle des Funkrufnamens, die Breite
+ * hing an sich selbst, sank je Bild um einen Pixel, und nach 50 Durchgängen brach React ab.
+ */
+export function funkrufBoegen(): Erfassungsbogen[] {
+  const T = OrganisationsTyp;
+  const einheit = (organisation: OrganisationsTyp, ort: string, typ: number | string, mannschaft: number, organisationName?: string): Erfassungsbogen => ({
+    ...weitereEinheit(organisation, ort),
+    einheit: {
+      organisation,
+      ...(organisationName ? { organisationName } : {}),
+      einheitsTyp: typeof typ === "number" ? { code: typ } : { freitext: typ },
+      hierarchie: [{ bezeichnung: { code: 1 }, name: ort }],
+    },
+    staerkeManuell: { fuehrer: 0, unterfuehrer: 2, mannschaft, gesamt: 2 + mannschaft },
+    // Ohne Sofortbedarf (der alte Bogen meldet Verpflegung für 20): Marken nähmen der breiten Karte den Platz.
+    sofortbedarf: undefined,
+  });
+  const ff = einheit(T.FEUERWEHR, "Rostrup", "Löschgruppe", 8, "Freiwillige Feuerwehr");
+  ff.staerkeManuell = { fuehrer: 0, unterfuehrer: 1, mannschaft: 8, gesamt: 9 };
+  ff.fahrzeuge = [{ typ: { freitext: "LF 20" }, funkrufname: { kennwort: { freitext: "Florian Ammerland Bad Zwischenahn" }, eigenerStandort: true, teile: [14, 43, 1] } }];
+  return [einheit(T.THW, "Peine", 4, 6), einheit(T.THW, "Uslar", 16, 6), einheit(T.THW, "Leer", 27, 6), einheit(T.THW, "Celle", 9, 6), ff];
+}
+
+/** Wie viele Minuten die Eingänge von {@link funkrufBoegen} her sind. */
+export const FUNKRUF_ALTER_MIN = [103, 102, 101, 100, 30];
 
 /** Datenteil eines Bogen-Links (hinter „#") für einen Übungsbogen, wie ihn der Erfassungsbogen teilt. */
 export function uebungsBogenFragment(): string {

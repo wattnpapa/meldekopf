@@ -650,12 +650,14 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(karten()[0]!.querySelector(".lt-typ")!.textContent).toBe("FGr N");
   });
 
-  it("stellt in der knappen Fassung den Typ mit Auftrag und Marken in eine Zeile, in der er vor dem Bedarf bis auf seinen Stummel weicht", () => {
+  it("stellt in der knappen Fassung den Typ mit Auftrag und Marken in eine Zeile; nur ein Freitext-Typ weicht, und nur bis auf den Anfang des Bedarfs", () => {
     // Vorgefallen (Live-Prüfung): Neben einem langen Freitext-Typ und der Marke „Stärke −2" blieb vom Bedarf „Verpflegung 120"
-    // ein leerer Rahmen. Der Typ nahm seine volle Obergrenze, bevor die Marken etwas bekamen.
+    // ein leerer Rahmen. Die Gegenprüfung danach: Ein Typ des Vokabulars darf dafür nicht gekürzt werden („FGr…" passt auf
+    // zwei Dutzend Fachgruppen), ein Freitext-Typ nur so weit, dass vom Bedarf der Anfang steht.
     fernseher();
     const { sammlung } = einsatzMit([
-      ...Array.from({ length: 15 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 16 })),
+      ...Array.from({ length: 14 }, (_, i) => ({ ort: `Ort ${i + 1}`, typ: 16 })),
+      { ort: "Wasser", typ: 27, ruhezeit: true },
       { ort: "Duderstadt", typ: "Schnelleinsatzgruppe Betreuung und Verpflegung mit Feldküche", ruhezeit: true, auftrag: "Verpflegung Halle 2" },
     ]);
     tafel(sammlung());
@@ -666,13 +668,16 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(Array.from(wie.children).map((c) => c.className)).toEqual(["lt-typ", "lt-auftrag", "lt-marken"]);
     expect(wie.querySelector(".lt-typ")!.textContent).toBe("SEG Betreuung und Verpflegung mit Feldküche");
     expect(k.querySelector(":scope > .lt-stand")).not.toBeNull();
-    // Der Rest des Typs: die ersten drei Zeichen mit Auslassung („SEG…") samt Abstand, in Schriftgrößen der Karte.
-    const rest = Number.parseFloat(wie.style.getPropertyValue("--lt-typ-rest"));
-    expect(rest).toBeGreaterThan(2);
-    expect(rest).toBeLessThan(3.2);
-    // Ein kurzer Typ behält sich ganz: Sein Rest ist er selbst.
-    const kurz = Number.parseFloat(karte("THW Ort 1").querySelector<HTMLElement>(".lt-wie")!.style.getPropertyValue("--lt-typ-rest"));
-    expect(kurz).toBeLessThan(rest);
+    // Was die Marken mindestens brauchen: „neu" ganz und „⚠ Ruh…", mit Polster und Abständen, in Schriftgrößen der Karte.
+    const mindest = Number.parseFloat(wie.style.getPropertyValue("--lt-marken-min"));
+    expect(mindest).toBeGreaterThan(5);
+    expect(mindest).toBeLessThan(7);
+    // Ein Typ des Vokabulars („FGr WP (A)") bekommt keine Grenze: Er wird nie gekürzt.
+    const vokabular = karte("THW Wasser").querySelector<HTMLElement>(".lt-wie")!;
+    expect(vokabular.querySelector(".lt-typ")!.textContent).toBe("FGr WP (A)");
+    expect(vokabular.style.getPropertyValue("--lt-marken-min")).toBe("");
+    // Ohne Marken auch kein Mindestes.
+    expect(karte("THW Ort 1").querySelector<HTMLElement>(".lt-wie")!.style.getPropertyValue("--lt-marken-min")).toBe("");
     // In den anderen Fassungen bleibt der Typ ein Feld der Karte für sich (ohne Messung: „drei").
     cleanup();
     vi.restoreAllMocks();
@@ -680,7 +685,20 @@ describe("Lagetafel: Satz und Blättern", () => {
     expect(document.querySelector("main.lt")!.getAttribute("data-fassung")).toBe("drei");
     const drei = karte("THW Duderstadt");
     expect(drei.querySelector(":scope > .lt-typ")).not.toBeNull();
-    expect(drei.querySelector<HTMLElement>(".lt-wie")!.style.getPropertyValue("--lt-typ-rest")).toBe("");
+    expect(drei.querySelector<HTMLElement>(".lt-wie")!.style.getPropertyValue("--lt-marken-min")).toBe("");
+  });
+
+  it("hält in der breiten Fassung die Kennziffer des Funkrufnamens frei", () => {
+    const { sammlung } = einsatzMit([{ ort: "Brake", typ: 4, funk: [22, 51] }, { ort: "Elsfleth", typ: 4 }]);
+    tafel(sammlung());
+    // Kennziffer in Schriftgrößen der Karte (Funkrufname 0,74): an der Karte, deren Raster sie in der breiten Fassung freihält.
+    const frei = Number.parseFloat(karte("THW Brake").style.getPropertyValue("--lt-funk-fest"));
+    expect(frei).toBeGreaterThan(1.5);
+    expect(frei).toBeLessThan(3);
+    expect(karte("THW Elsfleth").style.getPropertyValue("--lt-funk-fest")).toBe("");
+    expect(readFileSync("src/app/lagetafel.css", "utf8")).toMatch(
+      /main\.lt\[data-fassung="breit"\] \.lt-karte \{[^}]*grid-template-columns: calc\(var\(--lt-zeichen\) \* 1em\) var\(--lt-wer\) minmax\(calc\(var\(--lt-funk-fest, 0\) \* 1em\), 1fr\) auto max-content;/s,
+    );
   });
 
   it("blättert, wenn nicht alle Einheiten auf eine Seite passen, und zeigt jede Einheit auf genau einer Seite", () => {
@@ -1051,12 +1069,13 @@ describe("Lagetafel, Stil", () => {
     expect(css).toMatch(/\.lt-spalte > :first-child \{ margin-top: 0; \}/);
   });
 
-  it("lässt in der knappen Fassung Auftrag und Typ vor dem Bedarf weichen und zeigt den Funkrufnamen nur mit Stummel oder die Kennziffer allein", () => {
-    // Die zweite Zeile der knappen Fassung ist eine Reihe neben dem Stand: Die Marken nehmen sie bis auf den Rest des Typs.
+  it("lässt in der knappen Fassung zuerst den Auftrag weichen und zeigt den Funkrufnamen nur mit Stummel oder die Kennziffer allein", () => {
+    // Die zweite Zeile der knappen Fassung ist eine Reihe neben dem Stand: Typ fest, Marken schrumpfen, der Auftrag nimmt den Rest.
     expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-karte \{[^}]*grid-template-areas: "z kopf kopf" "z wie stand";/s);
     expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-wie \{ grid-area: wie; display: flex;/);
     expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-auftrag \{ flex: 1 1 0; \}/);
-    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-marken \{ flex: none; max-width: calc\(100% - var\(--lt-typ-rest, 0em\)\); margin-left: auto;/);
+    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-marken \{ flex: 0 1 auto; margin-left: auto;/);
+    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-karte:has\(\.lt-marken\) \.lt-typ \{ max-width: min\(8\.5em, calc\(100% - 0\.45em - var\(--lt-marken-min, 0\) \* 1em \/ 0\.74\)\); \}/);
     // Funkrufname: Der ganze deckt die Kennziffer allein zu, solange er mit seiner Mindestbreite in die Zeile passt.
     expect(css).toMatch(/\.lt-wie > \.lt-funkruf-wahl \{ position: relative; display: block; height: 1\.3em; white-space: normal;/);
     expect(css).toMatch(/\.lt-funkruf-kurz \{ position: absolute; top: 0; left: 0;/);
@@ -1088,7 +1107,7 @@ describe("Lagetafel, Stil", () => {
     // Name und Stärke teilen die erste Zeile unter sich auf: Der Name hängt nicht an der Breite des Stands darunter.
     expect(css).toMatch(/main\.lt:is\(\[data-fassung="zwei"\], \[data-fassung="drei"\]\) \.lt-kopfzeile \{ grid-area: kopf; display: flex;/);
     // Ein Typ ohne Kurzform bekommt in der knappen Fassung eine Obergrenze, damit Auftrag und Marken Platz behalten.
-    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-typ \{ flex: 0 1 auto; max-width: 14em;/);
+    expect(css).toMatch(/main\.lt\[data-fassung="zwei"\] \.lt-typ \{ flex: none; max-width: 14em;/);
   });
 
   it("kürzt einen langen Gruppennamen mit Auslassung und lässt „(Fortsetzung)“ stehen", () => {

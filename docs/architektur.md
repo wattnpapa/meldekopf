@@ -396,14 +396,28 @@ Bedarf gekürzt wird. Von Kennwort und Ort bleiben mindestens drei Zeichen;
 passen die nicht neben die Kennziffer, steht sie allein (ohne Messung wie
 beim Typ: Der ganze Funkrufname liegt mit seiner Mindestbreite hinter einem
 Anker über der Kennziffer und bricht, wenn er nicht passt, in eine Zeile um,
-die nicht zu sehen ist). Bis 2026-11-12 stand dort „R.. 55/17/4“ mit
-angeschnittener Auslassung. In der knappen Fassung teilen sich Typ, Auftrag
-und Marken die zweite Zeile neben dem Stand: Es weicht zuerst der Auftrag,
-dann der Typ bis auf seinen Stummel (drei Zeichen oder die ganze Kurzform,
-wenn sie schmaler ist; `--lt-typ-rest`), erst danach der Bedarf. Bis
-2026-11-12 nahm der Typ seine volle Obergrenze, bevor die Marken etwas
-bekamen; neben einem langen Freitext-Typ und „Stärke −2“ blieb vom Bedarf
-eine Viertelstunde lang nur ein leerer Rahmen.
+die nicht zu sehen ist). Die Mindestbreite rechnet mit der normal gesetzten
+Schrift des Funkrufnamens (0,93 der fetten Schätzung, gemessen 0,86 bis
+0,92). Bis 2026-11-12 stand dort „R.. 55/17/4“ mit angeschnittener
+Auslassung. In der breiten Fassung hält die Spalte des Funkrufnamens seine
+Kennziffer frei (`--lt-funk-fest`); an 16:10-Fernsehern blieb sonst von
+„22/51“ nur „2..“. Die Spalte „wer“ misst den ganzen Funkrufnamen mit seinen
+Teilen, nicht seine Hülle: Eine Messung der Hülle hing an der Breite, die
+sie bestimmt, die Spalte sank je Bild um einen Pixel, und nach 50
+Durchgängen brach React ab (Stand `c053757`, nie ausgeliefert). Seitdem
+ändert `useWerBreite` die Breite in einem Zug höchstens achtmal (gebraucht
+werden zwei oder drei).
+
+In der knappen Fassung teilen sich Typ, Auftrag und Marken die zweite Zeile
+neben dem Stand. Es weicht zuerst der Auftrag, dann der Bedarf. Eine
+Kurzform des Vokabulars („FGr WP (A)“, „B (Fachberater)“) wird nie gekürzt:
+Ihr Anfang („FGr…“) passt auf zwei Dutzend Fachgruppen, und gekürzt las
+sich „FGr S…“ wie eine andere Einheit. Ein Freitext-Typ („SEG Betreuung …“)
+weicht nur so weit, dass die Bewegung und der Anfang des Bedarfs („⚠ Ver…“)
+stehen (`--lt-marken-min`). Bis 2026-11-12 blieb vom Bedarf neben einem
+langen Freitext-Typ und „Stärke −2“ eine Viertelstunde lang nur ein leerer
+Rahmen. Neben einer langen THW-Kurzform und „Stärke −2“ kann das auf der
+kleinsten Karte weiter geschehen; den Bedarf nennt dann die Randspalte.
 
 Die Stilvorlage bekommt dieselben Maße als CSS-Eigenschaften hineingereicht, es
 gibt eine Quelle für Rechnung und Satz. Im Browser gemessen wird nur
@@ -702,9 +716,10 @@ Ausgaben liegen in Einsatzansicht, Abgleich und `export-stand`, die alle zum
 Start gehören. Der Brocken der Tafel wächst auf rund 34 KB JavaScript und
 23 KB Stilvorlage (weitere Kurzformen, `satzBedarf`, Zahl im Gruppenkopf,
 Stütze der Grundlinie).
-**Nach der Live-Prüfung (2026-11-12):** 4.362.494 / 636.564 Byte, im
-Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 0,5 KB
-(Wahl des Funkrufnamens, Rest des Typs in der knappen Karte).
+**Nach der Live-Prüfung (2026-11-12):** 4.363.037 / 636.564 Byte, im
+Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 1 KB
+(Wahl des Funkrufnamens, Mindestes der Marken in der knappen Karte,
+Kennziffer in der breiten, Schutz der Messung).
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

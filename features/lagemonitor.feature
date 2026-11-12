@@ -101,6 +101,23 @@ Funktionalität: Lagemonitor für den Fernseher
     Dann stehen alle Einheiten der Tafel ganz im Bild
     Und überdeckt auf der Tafel keine Angabe eine andere
 
+  # Eine kleine Lage steht in der breiten Karte; ein langer Funkrufname ist bei der Vorgabebreite
+  # der Namensspalte gekürzt, und die Tafel misst nach. Vorgefallen (Gegenprüfung): Sie maß die
+  # Hülle des Funkrufnamens, die Spalte sank je Bild um einen Pixel, und nach 50 Durchgängen
+  # brach die Tafel ab und der Fernseher zeigte die Zeilen.
+  Szenario: Ein gekürzter Funkrufname bringt die breite Tafel nicht zum Absturz
+    Angenommen auf dem Gerät liegt eine kleine Lage mit einem langen Funkrufnamen
+    Wenn ich für den Fernseher die Darstellung "Tafel" wähle
+    Und ich den Lagemonitor öffne
+    Dann zeigt der Lagemonitor die Tafel
+    Und steht die Tafel in der Fassung "breit" und bleibt stehen
+    Und zeigt der Lagemonitor "14/43/1"
+    Wenn ich den Fernseher auf 3840 x 2160 stelle
+    Dann steht die Tafel in der Fassung "breit" und bleibt stehen
+    Wenn ich den Fernseher auf 1280 x 720 stelle
+    Dann steht die Tafel in der Fassung "breit" und bleibt stehen
+    Und überdeckt auf der Tafel keine Angabe eine andere
+
   # Die volle Randspalte: Bedarf, abgerückte Einheiten und frische Bewegungen
   # zugleich, die Tafel blättert. Vorgefallen (Gegenprüfung): Von „Zuletzt" blieb
   # ein Textrest über dem Fuß. „Zuletzt" weicht ganz oder behält seine

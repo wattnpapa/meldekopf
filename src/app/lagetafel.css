@@ -357,9 +357,10 @@ main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-auftrag { container
 .lt-marke-achtung::before { content: "\26A0\FE0E\00A0"; }
 
 /* Zwei Zeilen, Typ in Kurzform; der Funkrufname entfällt, wo es eng ist. Die zweite Zeile teilen sich Typ, Auftrag und Marken
-   (.lt-wie, mit dem Typ vorn) neben dem Stand. Wird sie eng, weicht zuerst der Auftrag, dann der Typ bis auf seinen Stummel
-   (--lt-typ-rest, lagetafel-ui.tsx), erst danach wird der Bedarf gekürzt: Er ist, was zu entscheiden ist, und den Typ zeigt auch
-   das Zeichen. Neben einem langen Freitext-Typ und der Marke „Stärke −2" blieb vom Bedarf sonst nur ein leerer Rahmen. */
+   (.lt-wie, mit dem Typ vorn) neben dem Stand. Wird sie eng, weicht zuerst der Auftrag, dann der Bedarf. Der Typ bleibt: Eine
+   Kurzform des Vokabulars wird nie gekürzt („FGr…" passte auf zwei Dutzend Fachgruppen), ein Freitext-Typ nur so weit, dass die
+   Bewegung und der Anfang des Bedarfs („⚠ Ver…") stehen (--lt-marken-min, lagetafel-ui.tsx). Neben einem langen Freitext-Typ und
+   der Marke „Stärke −2" blieb vom Bedarf sonst nur ein leerer Rahmen. */
 main.lt[data-fassung="zwei"] .lt-karte {
   /* Stand und Stärke behalten ihre Breite. */
   grid-template-columns: calc(var(--lt-zeichen) * 1em) minmax(0, 1fr) max-content;
@@ -370,10 +371,11 @@ main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-kopfzeile { grid-ar
 main.lt[data-fassung="zwei"] .lt-wie { grid-area: wie; display: flex; align-items: center; }
 main.lt[data-fassung="zwei"] .lt-funkruf { display: none; }
 /* Ein Typ ohne Kurzform (Freitext) nimmt höchstens diese Breite, neben einer Marke weniger: Sonst bliebe für sie und den Auftrag nichts. */
-main.lt[data-fassung="zwei"] .lt-typ { flex: 0 1 auto; max-width: 14em; margin-right: 0.45em; }
-main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-typ { max-width: 8.5em; }
+main.lt[data-fassung="zwei"] .lt-typ { flex: none; max-width: 14em; margin-right: 0.45em; }
+/* Neben Marken weniger, und nie so breit, dass für sie weniger als ihr Mindestes bleibt (in Schriftgrößen der Karte, der Typ steht in 0,74). */
+main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-typ { max-width: min(8.5em, calc(100% - 0.45em - var(--lt-marken-min, 0) * 1em / 0.74)); }
 main.lt[data-fassung="zwei"] .lt-auftrag { flex: 1 1 0; }
-main.lt[data-fassung="zwei"] .lt-marken { flex: none; max-width: calc(100% - var(--lt-typ-rest, 0em)); margin-left: auto; padding-left: 0.4em; }
+main.lt[data-fassung="zwei"] .lt-marken { flex: 0 1 auto; margin-left: auto; padding-left: 0.4em; }
 main.lt[data-fassung="zwei"] .lt-typ ~ .lt-auftrag .lt-auftrag-text::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
 
 /* Drei Zeilen: Herkunft; Typ ausgeschrieben (mit dem Stand); darunter über die ganze Breite Funkrufname, Auftrag und Marken.
@@ -395,7 +397,9 @@ main.lt[data-fassung="drei"] .lt-funkruf ~ .lt-auftrag .lt-auftrag-text::before 
 /* Breit: links wer (Herkunft, Typ), rechts was (Auftrag, Funkrufname). Die linke Spalte ist so breit wie der längste Name der
    Tafel (--lt-wer, gemessen in lagetafel-ui.tsx) und für alle Karten gleich, damit die Spalten fluchten. */
 main.lt[data-fassung="breit"] .lt-karte {
-  grid-template-columns: calc(var(--lt-zeichen) * 1em) var(--lt-wer) minmax(0, 1fr) auto max-content;
+  /* Die Spalte des Funkrufnamens hält seine Kennziffer frei (--lt-funk-fest, lagetafel-ui.tsx): Die Marken nehmen sonst ihre
+     ganze Breite, und an 16:10-Fernsehern blieb von „22/51" nur „2..". */
+  grid-template-columns: calc(var(--lt-zeichen) * 1em) var(--lt-wer) minmax(calc(var(--lt-funk-fest, 0) * 1em), 1fr) auto max-content;
   grid-template-rows: 1.22em 0.97em;
   grid-template-areas: "z herkunft auftrag auftrag staerke" "z typ funkruf marken stand";
 }

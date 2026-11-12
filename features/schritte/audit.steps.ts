@@ -9,7 +9,7 @@ import { Given, Then, When } from "@cucumber/cucumber";
 import type { Page } from "playwright";
 import { OrganisationsTyp } from "../../vendor/eeb-format/src/model";
 import { EinsatzArt } from "../../vendor/bos-meldekopf/src/einsaetze";
-import { fernseherBoegen, sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment, weitereEinheit } from "../support/sammlung";
+import { FUNKRUF_ALTER_MIN, fernseherBoegen, funkrufBoegen, sammlungSpeicher, tafelLageSpeicher, uebungsBoegen, uebungsBogenFragment, weitereEinheit } from "../support/sammlung";
 import type { EebWelt } from "../support/welt";
 
 const MONITOR = new WeakMap<EebWelt, Page>();
@@ -120,6 +120,40 @@ Given("auf dem Gerät liegt die Übung vom Fernseher mit ihren langen Namen", as
     [einsaetze, einsatzId] as const,
   );
   await this.oeffneApp();
+});
+
+/** Die kleine Lage mit langem Funkrufnamen (support/sammlung.ts); die zuletzt geöffnete Sammlung. */
+Given("auf dem Gerät liegt eine kleine Lage mit einem langen Funkrufnamen", async function (this: EebWelt) {
+  const { einsaetze, einsatzId } = sammlungSpeicher("Sturm Ammerland", funkrufBoegen(), { alterMin: FUNKRUF_ALTER_MIN });
+  await this.page.addInitScript(
+    ([e, id]) => {
+      if (sessionStorage.getItem("prüfstand.funkruf")) return;
+      sessionStorage.setItem("prüfstand.funkruf", "1");
+      localStorage.setItem("eeb.einsaetze.v1", e);
+      localStorage.setItem("eeb.letzterEinsatz.v1", JSON.stringify({ id, um: Date.now() }));
+    },
+    [einsaetze, einsatzId] as const,
+  );
+  await this.oeffneApp();
+});
+
+/**
+ * Die Tafel steht in der gegebenen Fassung und bleibt stehen, nachdem sie nachgemessen hat: Die Spalte der Namen hat
+ * eine gemessene Breite, die sich nicht mehr ändert, und der Monitor ist nicht auf die Zeilen ausgewichen.
+ */
+Then("steht die Tafel in der Fassung {string} und bleibt stehen", async function (this: EebWelt, fassung: string) {
+  const seite = monitor(this);
+  await seite.waitForFunction((f) => document.querySelector("main.lt")?.getAttribute("data-fassung") === f, fassung);
+  const wer = () => seite.evaluate(() => (document.querySelector("main.lt") as HTMLElement | null)?.style.getPropertyValue("--lt-wer") ?? null);
+  // Zwei Bilder und eine Weile Ruhe: Ein Durchgang, der sich selbst hinterherläuft, hätte React bis dahin abbrechen lassen.
+  await seite.evaluate(() => new Promise((fertig) => requestAnimationFrame(() => requestAnimationFrame(() => fertig(true)))));
+  await seite.waitForTimeout(500);
+  const vorher = await wer();
+  await seite.waitForTimeout(500);
+  if ((await seite.locator("main.lt").count()) === 0) throw new Error("Die Tafel ist weg: Der Monitor zeigt die Zeilen.");
+  if (await seite.getByText("gerade nicht zeigen").count()) throw new Error("Der Monitor ist auf die Zeilen ausgewichen.");
+  if (!vorher || !/px$/.test(vorher)) throw new Error(`Die Spalte der Namen ist nicht gemessen (--lt-wer: ${vorher}).`);
+  if ((await wer()) !== vorher) throw new Error("Die Spalte der Namen ändert sich noch.");
 });
 
 /**

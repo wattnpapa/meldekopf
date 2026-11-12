@@ -126,6 +126,8 @@ const px = (wert: string) => Number.parseFloat(wert) || 0;
  */
 function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): number | null {
   const [breite, setBreite] = useState<number | null>(null);
+  // Wie oft die Breite in einem Zug nachgemessen und geändert wurde (siehe unten); nach dem Zug wieder null.
+  const schritte = useRef(0);
   // Kommt die Schrift der App erst nach dem ersten Bild, wird noch einmal gemessen.
   const [, setSchriftDa] = useState(false);
   useEffect(() => {
@@ -173,16 +175,29 @@ function useWerBreite(flaeche: RefObject<HTMLElement | null>, aktiv: boolean): n
       }
       // Was die rechte Seite dieser Karte braucht: oben der Auftrag, unten Funkrufname und Marken, dahinter Stärke und Stand.
       const spuren = getComputedStyle(karte).gridTemplateColumns.split(" ").map(px);
-      const rechts = (spuren[4] ?? 0) + Math.max(text(karte.querySelector(".lt-auftrag")), text(karte.querySelector(".lt-funkruf")) + (spuren[3] ?? 0));
+      // Der Funkrufname mit Kennziffer steht als Wahl da (lt-funkruf-wahl): Gemessen wird seine volle Form mit ihren Teilen,
+      // nicht die Hülle. Die Hülle maß nur ihr Feld; die Breite hing so an sich selbst, sank je Durchgang um einen Pixel,
+      // und nach 50 Durchgängen brach React ab (c053757).
+      const funkruf = karte.querySelector(".lt-funkruf-voll") ?? karte.querySelector(".lt-funkruf");
+      const rechts = (spuren[4] ?? 0) + Math.max(text(karte.querySelector(".lt-auftrag")), text(funkruf) + (spuren[3] ?? 0));
       bedarf.frei = Math.min(bedarf.frei, platz - rechts);
     }
     // Bruchteile gehen zugunsten dessen, was nicht gekürzt werden soll: Der Bedarf von Name und Typ wird aufgerundet,
     // der Platz, den Auftrag und Funkrufname lassen, abgerundet.
     const neu = werBreite({ ganz: Math.ceil(bedarf.ganz), lang: Math.ceil(bedarf.lang), frei: Math.floor(bedarf.frei) - 1 }, platz);
-    setBreite((alt) => (alt === neu ? alt : neu));
+    if (neu === breite) return;
+    // Schutz für den Fernseher: Hängt eine Messung doch an der Breite, die sie bestimmt, liefe jede Änderung in einen neuen
+    // Durchgang, bis React abbricht und der Monitor die Zeilen zeigt. Nach wenigen Änderungen in einem Zug (üblich sind zwei
+    // oder drei) bleibt die Spalte deshalb, wie sie ist; der nächste Zug misst neu.
+    if (schritte.current === 0) setTimeout(() => (schritte.current = 0), 0);
+    if (++schritte.current > WER_SCHRITTE_MAX) return;
+    setBreite(neu);
   });
   return breite;
 }
+
+/** So oft darf die Spalte „wer" in einem Zug nachgemessen werden ({@link useWerBreite}); gebraucht werden zwei oder drei. */
+const WER_SCHRITTE_MAX = 8;
 
 /**
  * Wie viele Einträge einer Liste ganz zu sehen sind; `null`, solange es nichts zu messen gibt (kein Layout). Die Liste
@@ -333,18 +348,25 @@ function StaerkeKlein({ s, soll }: { s: Staerke; soll?: boolean }) {
 const stummel = (text: string): number => Math.min(textBreite(text), textBreite(Array.from(text).slice(0, 3).join("") + "…"));
 
 /**
- * Was in der knappen Fassung vom Typ (Kurzform) bleibt, wenn die Marken daneben Platz brauchen: sein Stummel samt
- * Abstand, in Schriftgrößen der Karte (Typ 0,74, Abstand 0,45 seiner Schrift). Die Marken nehmen höchstens die Zeile
- * bis auf diesen Rest (`--lt-typ-rest` in lagetafel.css): Der Bedarf ist, was zu entscheiden ist; den Typ zeigt
- * daneben auch das taktische Zeichen.
+ * Was die Marken der knappen Karte mindestens brauchen, in Schriftgrößen der Karte: die Bewegung ganz, vom Bedarf das
+ * Warnzeichen und der Stummel („⚠ Ver…"), dazu Polster, Rahmen und Abstände (Marken 0,7 der Karte; „⚠" mit Abstand im
+ * Browser 1,22, hier 1,25). Ein Freitext-Typ weicht bis hierhin (`--lt-marken-min` in lagetafel.css); `null` ohne Marken.
  */
-const typRest = (typKurz: string): string => (0.74 * (stummel(typKurz) + 0.45)).toFixed(2);
+function markenMindest(e: TafelEinheit): number | null {
+  if (!e.marke && e.bedarf.length === 0) return null;
+  const marke = (text: string) => 0.7 * (textBreite(text) + 0.6 + 0.2);
+  const bewegung = e.marke ? marke(e.marke.text) + (e.bedarf.length > 0 ? 0.3 : 0) : 0;
+  const bedarf = e.bedarf.length > 0 ? 0.7 * (1.25 + stummel(e.bedarf.join(", ")) + 0.6 + 0.2) : 0;
+  return 0.4 + bewegung + bedarf;
+}
 
 /**
  * Typ der Einheit. In der knappen Fassung steht die Kurzform; sonst der ausgeschriebene Typ, und wo dessen Zeile zu
  * kurz ist, die Kurzform an seiner Stelle. Die Wahl trifft die Stilvorlage ohne Messung (`.lt-typ-wahl` in
- * lagetafel.css): Der lange Name deckt die Kurzform zu, solange er in die Zeile passt. Gekürzt wird er nur in der
- * knappen Fassung und nur bis auf seinen Stummel ({@link typRest}), wenn die Marken daneben den Platz brauchen.
+ * lagetafel.css): Der lange Name deckt die Kurzform zu, solange er in die Zeile passt. Eine Kurzform des Vokabulars
+ * („FGr WP (A)", „B (Fachberater)") wird nie gekürzt: Ihr Anfang („FGr…") passt auf zwei Dutzend Fachgruppen. Ein
+ * Freitext-Typ weicht in der knappen Fassung nur so weit, dass Bewegung und Anfang des Bedarfs stehen
+ * ({@link markenMindest}); weiter wird der Bedarf gekürzt.
  */
 function Typ({ e, fassung }: { e: TafelEinheit; fassung: KartenFassung }) {
   if (!e.typ) return null;
@@ -427,7 +449,7 @@ function Herkunft({ e }: { e: TafelEinheit }) {
  * Kennwort und Ort deckt die Kennziffer allein zu, solange er mit seiner Mindestbreite in die Zeile passt.
  */
 function Funkruf({ name }: { name: string }) {
-  const teile = /^(.*\S)\s+(\S*\d\S*)$/.exec(name);
+  const teile = funkrufTeile(name);
   if (!teile) {
     return (
       <span className="lt-funkruf">
@@ -435,10 +457,10 @@ function Funkruf({ name }: { name: string }) {
       </span>
     );
   }
-  const weich = teile[1]!;
-  const fest = teile[2]!;
-  // Kennziffer, Abstand der Teile (0,26) und der Stummel davor, in Schriftgrößen des Funkrufnamens.
-  const mindestens = textBreite(fest) + 0.26 + stummel(weich);
+  const { weich, fest } = teile;
+  // Kennziffer, Abstand der Teile (0,26) und der Stummel davor, in Schriftgrößen des Funkrufnamens: Er steht normal
+  // gesetzt, die Schätzung gilt der fetten Schrift (gemessen 0,86 bis 0,92 davon).
+  const mindestens = FUNK_SCHRIFT * (textBreite(fest) + stummel(weich)) + 0.26;
   return (
     <span className="lt-funkruf lt-funkruf-wahl">
       <span className="lt-funkruf-kurz" aria-hidden="true">
@@ -452,12 +474,27 @@ function Funkruf({ name }: { name: string }) {
   );
 }
 
+/** Kennwort und Ort („Heros Brake") und die Kennziffer am Ende („22/51"); `null` ohne Kennziffer. */
+function funkrufTeile(name: string): { weich: string; fest: string } | null {
+  const teile = /^(.*\S)\s+(\S*\d\S*)$/.exec(name);
+  return teile ? { weich: teile[1]!, fest: teile[2]! } : null;
+}
+
+/** Normal gesetzter Funkrufname gegen die fette Schätzung ({@link textBreite}): gemessen 0,86 bis 0,92, mit Rand. */
+const FUNK_SCHRIFT = 0.93;
+
 function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung; jetzt: number }) {
-  // In der knappen Fassung teilt sich der Typ seine Zeile mit Auftrag und Marken und weicht vor dem Bedarf (lagetafel.css).
+  // In der knappen Fassung teilt sich der Typ seine Zeile mit Auftrag und Marken; ein Freitext-Typ weicht dort bis auf
+  // den Platz, den die Marken mindestens brauchen (lagetafel.css).
   const knapp = fassung === "zwei";
   const typ = <Typ e={e} fassung={fassung} />;
+  const freitext = e.einheit.einheitsTyp?.code == null;
+  const mindest = knapp && e.typ && freitext ? markenMindest(e) : null;
+  // In der breiten Fassung hält die Spalte des Funkrufnamens mindestens seine Kennziffer frei (Funkrufname 0,74 der Karte).
+  const kennziffer = e.funkruf ? funkrufTeile(e.funkruf)?.fest : undefined;
+  const kartenStil = kennziffer ? ({ "--lt-funk-fest": (0.74 * textBreite(kennziffer)).toFixed(2) } as CSSProperties) : undefined;
   return (
-    <li className="lt-karte" data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined}>
+    <li className="lt-karte" style={kartenStil} data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined}>
       <span className="lt-zeichen">
         <TafelZeichen einheit={e.einheit} />
       </span>
@@ -470,7 +507,7 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
       {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, in „zwei" mit dem Typ die zweite,
           in „breit" je ein Feld der Karte (lagetafel.css). */}
       {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0 || (knapp && e.typ)) && (
-        <span className="lt-wie" style={knapp && e.typ ? ({ "--lt-typ-rest": `${typRest(e.typKurz)}em` } as CSSProperties) : undefined}>
+        <span className="lt-wie" style={mindest != null ? ({ "--lt-marken-min": mindest.toFixed(2) } as CSSProperties) : undefined}>
           {knapp && typ}
           {e.funkruf && <Funkruf name={e.funkruf} />}
           {e.auftrag && (
