@@ -322,6 +322,13 @@ main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-karte :is(.lt-herku
 .lt-typ-anker { display: inline-block; width: 0; }
 .lt-typ-lang { position: relative; display: inline-block; white-space: nowrap; background: var(--lt-flaeche); }
 .lt-funkruf { grid-area: funkruf; display: flex; gap: 0.26em; font-size: 0.74em; line-height: 1.3; color: var(--lt-text-2); }
+/* Funkrufname mit Kennwort und Ort oder die Kennziffer allein, ohne Messung wie beim Typ: Die Kennziffer liegt am Zeilenanfang.
+   Der ganze Funkrufname steht hinter einem Anker ohne Breite in derselben Zeile und deckt sie zu; er wird gekürzt, aber nie
+   schmaler als Kennziffer und Stummel davor (--lt-funk-min, lagetafel-ui.tsx). Passt das nicht, bricht er hinter dem Anker in
+   eine zweite Zeile um, die nicht zu sehen ist, und die Kennziffer steht allein: Am Fernseher stand sonst „R.. 55/17/4". */
+.lt-wie > .lt-funkruf-wahl { position: relative; display: block; height: 1.3em; white-space: normal; text-overflow: clip; }
+.lt-funkruf-kurz { position: absolute; top: 0; left: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-funkruf-voll { position: relative; display: inline-flex; gap: 0.26em; vertical-align: top; max-width: 100%; min-width: var(--lt-funk-min, 0); white-space: nowrap; background: var(--lt-flaeche); }
 .lt-auftrag { grid-area: auftrag; font-size: 0.74em; line-height: 1.3; }
 /* Bleiben dem Auftrag neben Typ und Marken weniger als vier Schriftbreiten, entfällt er ganz: „· Bo…" sagt nichts und sieht nach Fehler aus.
    Das Feld misst sich dafür selbst (seine Breite hängt in diesen Fassungen nie am eigenen Inhalt). */
@@ -349,19 +356,25 @@ main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-auftrag { container
 .lt-marke-achtung { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--lt-achtung); }
 .lt-marke-achtung::before { content: "\26A0\FE0E\00A0"; }
 
-/* Zwei Zeilen, Typ in Kurzform; der Funkrufname entfällt, wo es eng ist. */
+/* Zwei Zeilen, Typ in Kurzform; der Funkrufname entfällt, wo es eng ist. Die zweite Zeile teilen sich Typ, Auftrag und Marken
+   (.lt-wie, mit dem Typ vorn) neben dem Stand. Wird sie eng, weicht zuerst der Auftrag, dann der Typ bis auf seinen Stummel
+   (--lt-typ-rest, lagetafel-ui.tsx), erst danach wird der Bedarf gekürzt: Er ist, was zu entscheiden ist, und den Typ zeigt auch
+   das Zeichen. Neben einem langen Freitext-Typ und der Marke „Stärke −2" blieb vom Bedarf sonst nur ein leerer Rahmen. */
 main.lt[data-fassung="zwei"] .lt-karte {
-  /* Typ (Kurzform), Stärke und Stand behalten ihre Breite; die Marken bekommen, was dann bleibt, der Auftrag den Rest. */
-  grid-template-columns: calc(var(--lt-zeichen) * 1em) max-content minmax(0, 1fr) auto max-content;
+  /* Stand und Stärke behalten ihre Breite. */
+  grid-template-columns: calc(var(--lt-zeichen) * 1em) minmax(0, 1fr) max-content;
   grid-template-rows: 1.22em 0.97em;
-  grid-template-areas: "z kopf kopf kopf kopf" "z typ auftrag marken stand";
+  grid-template-areas: "z kopf kopf" "z wie stand";
 }
 main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-kopfzeile { grid-area: kopf; display: flex; align-items: center; }
+main.lt[data-fassung="zwei"] .lt-wie { grid-area: wie; display: flex; align-items: center; }
 main.lt[data-fassung="zwei"] .lt-funkruf { display: none; }
 /* Ein Typ ohne Kurzform (Freitext) nimmt höchstens diese Breite, neben einer Marke weniger: Sonst bliebe für sie und den Auftrag nichts. */
-main.lt[data-fassung="zwei"] .lt-typ { max-width: 14em; margin-right: 0.45em; }
+main.lt[data-fassung="zwei"] .lt-typ { flex: 0 1 auto; max-width: 14em; margin-right: 0.45em; }
 main.lt[data-fassung="zwei"] .lt-karte:has(.lt-marken) .lt-typ { max-width: 8.5em; }
-main.lt[data-fassung="zwei"] .lt-typ ~ .lt-wie .lt-auftrag-text::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
+main.lt[data-fassung="zwei"] .lt-auftrag { flex: 1 1 0; }
+main.lt[data-fassung="zwei"] .lt-marken { flex: none; max-width: calc(100% - var(--lt-typ-rest, 0em)); margin-left: auto; padding-left: 0.4em; }
+main.lt[data-fassung="zwei"] .lt-typ ~ .lt-auftrag .lt-auftrag-text::before { content: "\00B7\00A0"; color: var(--lt-text-2); }
 
 /* Drei Zeilen: Herkunft; Typ ausgeschrieben (mit dem Stand); darunter über die ganze Breite Funkrufname, Auftrag und Marken.
    Wird die dritte Zeile eng, weicht zuerst der Auftrag, dann Kennwort und Ort des Funkrufnamens (seine Nummer bleibt), erst danach
@@ -632,8 +645,10 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
   /* Hier bricht der Name um: Er läuft nicht kleiner. */
   main.lt[data-fassung] .lt-karte .lt-herkunft { container-type: normal; }
   main.lt[data-fassung] .lt-karte :is(.lt-herkunft > .lt-teil-weich, .lt-herkunft > .lt-teil-fest) { font-size: inherit; }
-  .lt-typ-kurz, .lt-typ-anker { display: none; }
+  .lt-typ-kurz, .lt-typ-anker, .lt-funkruf-kurz { display: none; }
   .lt-typ-lang { display: inline; white-space: normal; background: none; }
+  .lt-wie > .lt-funkruf-wahl { height: auto; }
+  .lt-funkruf-voll { display: flex; flex-wrap: wrap; row-gap: 0; min-width: 0; white-space: normal; background: none; }
   main.lt[data-fassung] .lt-karte .lt-auftrag-text::before { content: none; }
   main.lt[data-fassung] .lt-auftrag { container-type: normal; }
   .lt-marken { justify-content: flex-start; margin: 0.15em 0 0; }

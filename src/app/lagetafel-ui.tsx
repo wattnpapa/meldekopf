@@ -326,9 +326,25 @@ function StaerkeKlein({ s, soll }: { s: Staerke; soll?: boolean }) {
 }
 
 /**
- * Typ der Einheit. Abgeschnitten wird er nie: In der knappen Fassung steht die Kurzform; sonst der ausgeschriebene
- * Typ, und wo dessen Zeile zu kurz ist, die Kurzform an seiner Stelle. Die Wahl trifft die Stilvorlage ohne Messung
- * (`.lt-typ-wahl` in lagetafel.css): Der lange Name deckt die Kurzform zu, solange er in die Zeile passt.
+ * Geschätzte Breite dessen, was von einem gekürzten Text mindestens stehen bleibt: seine ersten drei Zeichen mit
+ * Auslassung („DRK…"), oder der ganze Text, wenn er schmaler ist. In Schriftgrößen des Textes ({@link textBreite}).
+ * Ein einzelner Buchstabe mit Auslassung („D…") las sich aus der Entfernung wie eine Abkürzung.
+ */
+const stummel = (text: string): number => Math.min(textBreite(text), textBreite(Array.from(text).slice(0, 3).join("") + "…"));
+
+/**
+ * Was in der knappen Fassung vom Typ (Kurzform) bleibt, wenn die Marken daneben Platz brauchen: sein Stummel samt
+ * Abstand, in Schriftgrößen der Karte (Typ 0,74, Abstand 0,45 seiner Schrift). Die Marken nehmen höchstens die Zeile
+ * bis auf diesen Rest (`--lt-typ-rest` in lagetafel.css): Der Bedarf ist, was zu entscheiden ist; den Typ zeigt
+ * daneben auch das taktische Zeichen.
+ */
+const typRest = (typKurz: string): string => (0.74 * (stummel(typKurz) + 0.45)).toFixed(2);
+
+/**
+ * Typ der Einheit. In der knappen Fassung steht die Kurzform; sonst der ausgeschriebene Typ, und wo dessen Zeile zu
+ * kurz ist, die Kurzform an seiner Stelle. Die Wahl trifft die Stilvorlage ohne Messung (`.lt-typ-wahl` in
+ * lagetafel.css): Der lange Name deckt die Kurzform zu, solange er in die Zeile passt. Gekürzt wird er nur in der
+ * knappen Fassung und nur bis auf seinen Stummel ({@link typRest}), wenn die Marken daneben den Platz brauchen.
  */
 function Typ({ e, fassung }: { e: TafelEinheit; fassung: KartenFassung }) {
   if (!e.typ) return null;
@@ -356,7 +372,7 @@ function HerkunftTeile({ herkunft, ort }: { herkunft: string; ort: string }) {
   if (!organisation) return <span className="lt-teil-weich">{herkunft}</span>;
   const ortWeich = textBreite(ort) > textBreite(organisation);
   const weich = ortWeich ? ort : organisation;
-  const stil = { "--lt-weich-min": `${Math.min(textBreite(weich), textBreite(Array.from(weich).slice(0, 3).join("") + "…")).toFixed(2)}em` } as CSSProperties;
+  const stil = { "--lt-weich-min": `${stummel(weich).toFixed(2)}em` } as CSSProperties;
   // Beide Teile kennen den Stummel: Der feste bleibt um ihn schmaler als das Feld.
   return (
     <>
@@ -405,24 +421,41 @@ function Herkunft({ e }: { e: TafelEinheit }) {
 
 /**
  * Funkrufname. Die Kennziffer am Ende unterscheidet die Fahrzeuge („22/51"); Kennwort und Ort davor wiederholen meist
- * die Herkunft. Gekürzt wird deshalb vorn, die Kennziffer bleibt stehen.
+ * die Herkunft. Gekürzt wird deshalb vorn, die Kennziffer bleibt stehen. Von Kennwort und Ort bleibt mindestens ihr
+ * Stummel ({@link stummel}); passt auch der nicht neben die Kennziffer, steht sie allein da, statt „R… 55/17/4". Die
+ * Wahl trifft die Stilvorlage ohne Messung wie beim Typ (`.lt-funkruf-wahl` in lagetafel.css): Der Funkrufname mit
+ * Kennwort und Ort deckt die Kennziffer allein zu, solange er mit seiner Mindestbreite in die Zeile passt.
  */
 function Funkruf({ name }: { name: string }) {
   const teile = /^(.*\S)\s+(\S*\d\S*)$/.exec(name);
-  return (
-    <span className="lt-funkruf">
-      {teile ? (
-        <>
-          <span className="lt-teil-weich">{teile[1]}</span> <span className="lt-teil-fest">{teile[2]}</span>
-        </>
-      ) : (
+  if (!teile) {
+    return (
+      <span className="lt-funkruf">
         <span className="lt-teil-weich">{name}</span>
-      )}
+      </span>
+    );
+  }
+  const weich = teile[1]!;
+  const fest = teile[2]!;
+  // Kennziffer, Abstand der Teile (0,26) und der Stummel davor, in Schriftgrößen des Funkrufnamens.
+  const mindestens = textBreite(fest) + 0.26 + stummel(weich);
+  return (
+    <span className="lt-funkruf lt-funkruf-wahl">
+      <span className="lt-funkruf-kurz" aria-hidden="true">
+        {fest}
+      </span>
+      <span className="lt-typ-anker" />
+      <span className="lt-funkruf-voll" style={{ "--lt-funk-min": `${mindestens.toFixed(2)}em` } as CSSProperties}>
+        <span className="lt-teil-weich">{weich}</span> <span className="lt-teil-fest">{fest}</span>
+      </span>
     </span>
   );
 }
 
 function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung; jetzt: number }) {
+  // In der knappen Fassung teilt sich der Typ seine Zeile mit Auftrag und Marken und weicht vor dem Bedarf (lagetafel.css).
+  const knapp = fassung === "zwei";
+  const typ = <Typ e={e} fassung={fassung} />;
   return (
     <li className="lt-karte" data-marke={e.marke?.art} data-achtung={e.bedarf.length > 0 || undefined}>
       <span className="lt-zeichen">
@@ -433,10 +466,12 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
         <Herkunft e={e} />
         <StaerkeKlein s={e.staerke} soll={e.soll} />
       </span>
-      <Typ e={e} fassung={fassung} />
-      {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, sonst je ein Feld der Karte (lagetafel.css). */}
-      {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0) && (
-        <span className="lt-wie">
+      {!knapp && typ}
+      {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, in „zwei" mit dem Typ die zweite,
+          in „breit" je ein Feld der Karte (lagetafel.css). */}
+      {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0 || (knapp && e.typ)) && (
+        <span className="lt-wie" style={knapp && e.typ ? ({ "--lt-typ-rest": `${typRest(e.typKurz)}em` } as CSSProperties) : undefined}>
+          {knapp && typ}
           {e.funkruf && <Funkruf name={e.funkruf} />}
           {e.auftrag && (
             <span className="lt-auftrag">

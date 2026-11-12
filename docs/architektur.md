@@ -392,7 +392,18 @@ gekürzte Zahl las sich als „1“ für „16 Einheiten“. In den Zeilen der
 Übungsmeldungen geht der Name von der Breite seiner Kurzform aus und wächst
 bis zur vollen; gekürzt wird zuerst der Typ. In der dritten Zeile der Karte
 weichen Auftrag und dann Kennwort und Ort des Funkrufnamens, bevor der
-Bedarf gekürzt wird.
+Bedarf gekürzt wird. Von Kennwort und Ort bleiben mindestens drei Zeichen;
+passen die nicht neben die Kennziffer, steht sie allein (ohne Messung wie
+beim Typ: Der ganze Funkrufname liegt mit seiner Mindestbreite hinter einem
+Anker über der Kennziffer und bricht, wenn er nicht passt, in eine Zeile um,
+die nicht zu sehen ist). Bis 2026-11-12 stand dort „R.. 55/17/4“ mit
+angeschnittener Auslassung. In der knappen Fassung teilen sich Typ, Auftrag
+und Marken die zweite Zeile neben dem Stand: Es weicht zuerst der Auftrag,
+dann der Typ bis auf seinen Stummel (drei Zeichen oder die ganze Kurzform,
+wenn sie schmaler ist; `--lt-typ-rest`), erst danach der Bedarf. Bis
+2026-11-12 nahm der Typ seine volle Obergrenze, bevor die Marken etwas
+bekamen; neben einem langen Freitext-Typ und „Stärke −2“ blieb vom Bedarf
+eine Viertelstunde lang nur ein leerer Rahmen.
 
 Die Stilvorlage bekommt dieselben Maße als CSS-Eigenschaften hineingereicht, es
 gibt eine Quelle für Rechnung und Satz. Im Browser gemessen wird nur
@@ -691,6 +702,9 @@ Ausgaben liegen in Einsatzansicht, Abgleich und `export-stand`, die alle zum
 Start gehören. Der Brocken der Tafel wächst auf rund 34 KB JavaScript und
 23 KB Stilvorlage (weitere Kurzformen, `satzBedarf`, Zahl im Gruppenkopf,
 Stütze der Grundlinie).
+**Nach der Live-Prüfung (2026-11-12):** 4.362.494 / 636.564 Byte, im
+Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 0,5 KB
+(Wahl des Funkrufnamens, Rest des Typs in der knappen Karte).
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab
