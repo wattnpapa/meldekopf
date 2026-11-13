@@ -434,6 +434,7 @@ export function lueckeKurz(text: string): string {
   if (/^Kennzeichen .* steht mehrfach/.test(text)) return "Kennzeichen doppelt";
   if (/kein Kraftfahrer/.test(text)) return "kein Kraftfahrer";
   if (/^Ort\/Auftrag ist noch leer/.test(text)) return "Ort/Auftrag leer";
+  if (/^Einsatzzeitraum ist nicht angegeben/.test(text)) return "Zeitraum fehlt";
   if (/^Einsatzzeitraum .* ist vorbei/.test(text)) return "Zeitraum vorbei";
   if (/^Einsatzzeitraum .* mehr als ein Jahr entfernt/.test(text)) return "Zeitraum: Jahr prüfen";
   if (/^Einsatzzeitraum: „bis“ liegt vor „von“/.test(text)) return "Zeitraum: bis vor von";

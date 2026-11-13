@@ -628,6 +628,14 @@ unbekannte Felder am `MeldeEintrag` werden vom Kern unverändert mitkopiert
 `vermerke`, `ersetztDurch`, `vomPapier`). Sammlungen aus dem Erfassungsbogen
 werden ohne Migration gelesen (ADR-007).
 
+Ein nicht angegebener Einsatzzeitraum kommt als Tag 0 an beiden Enden
+(01.01.2020), ohne Formatänderung: So meldet der Erfassungsbogen einen
+Beispielbogen, dessen Zeitraum niemand eingetragen hat (11/2026).
+`zeitraumLeer` in `src/app/zeitraum-eingabe.ts` erkennt das; Karte, PDF, CSV
+und Excel lassen das Feld frei, die Prüfpunkte nennen „Zeitraum fehlt“ statt
+„Zeitraum vorbei“. Der Meldungsvergleich im Kern (`@bos/meldekopf`,
+`meldung-diff.ts`) kennt die Konvention noch nicht und zeigt „01.01.2020“.
+
 ### 8.5 Tests
 
 Vitest neben dem Code, Kern-Tests im Submodul; Cucumber + Playwright gegen den

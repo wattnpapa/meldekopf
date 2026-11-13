@@ -10,6 +10,7 @@
  * Reine Anzeige + Aufruf der Store-/Auswertungslogik (einsaetze.ts, auswertung.ts).
  */
 
+import { zeitraumLeer } from "./zeitraum-eingabe";
 import { Fragment, Suspense, lazy, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
 import { useJuengsteQuittung } from "./eingang/juengste-quittung";
@@ -3940,7 +3941,7 @@ export function BogenDetails({ bogen, absender, absenderKarte }: { bogen: Erfass
       <h4>Einsatz / Auftrag</h4>
       <dl className="paare">
         <dt>Zeitraum</dt>
-        <dd>{zeitraumVonBis(bogen)}</dd>
+        <dd>{zeitraumVonBis(bogen) || "nicht angegeben"}</dd>
         <dt>Ort / Auftrag</dt><dd>{bogen.einsatz.ortAuftrag || "—"}</dd>
         <dt>Beginn / Ende</dt>
         <dd>
@@ -4655,7 +4656,10 @@ function EinheitKarte(props: {
       zeitEntwurf.feld === "eintreffen"
         ? {
             aufnahme: kopf.empfangenAm,
-            zeitraumVon: zeitpunktZuMs(kopf.bogen.einsatz.zeitraumVon * MINUTEN_JE_TAG),
+            // Zeitraum nicht angegeben: kein Bezug, sonst gälte der 01.01.2020 als Beginn.
+            ...(zeitraumLeer(kopf.bogen.einsatz)
+              ? {}
+              : { zeitraumVon: zeitpunktZuMs(kopf.bogen.einsatz.zeitraumVon * MINUTEN_JE_TAG) }),
           }
         : undefined,
     );
