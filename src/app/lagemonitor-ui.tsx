@@ -32,7 +32,7 @@ import { sammlungenBeiseitegelegt } from "./eingang/unlesbar";
 import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, dauerText, lagebild, uhrTeile, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile } from "./lagemonitor";
 
 import { URL_PARAMETER, lagemonitorKennung } from "./lagemonitor-kennung";
-import { useNeueVersion, type NeueVersion } from "./aktualisierung";
+import { aktualisierungStarten } from "./aktualisierung";
 import { ANSICHT_NAME, ANSICHT_SCHLUESSEL, lageAnsichtLaden, lageAnsichtMerken, type LageAnsicht } from "./lagemonitor-ansicht";
 
 // Die Tafel-Ansicht (neu im Meldekopf) wird erst geladen, wenn sie gewählt ist: Wer bei den Zeilen bleibt, lädt sie nicht.
@@ -98,6 +98,50 @@ function stufeLesen(): Stufe {
 function stufeMerken(stufe: Stufe): void {
   if (stufe === "hell") return;
   try { globalThis.localStorage?.setItem(STUFE_SCHLUESSEL, stufe); } catch { /* nicht gemerkt, der Monitor läuft trotzdem */ }
+}
+
+/**
+ * Was das selbsttätige Neuladen nach einer neuen Fassung überdauert, nur dieses eine Mal und nur in diesem Fenster
+ * (sessionStorage; neu im Meldekopf): die Stufe, auch „Hell“, und ob das Fenster im Vollbild stand. Gemerkt wird
+ * „Hell“ sonst nie (R7-L3); wer am Fernseher hell geschaltet hat, soll aber nicht durch ein Update im Dunkeln stehen.
+ */
+export const NACH_NEULADEN_SCHLUESSEL = "eeb.lagemonitor.nach-neuladen";
+interface NachNeuladen { stufe: Stufe; vollbild: boolean }
+
+function nachNeuladenLesen(): NachNeuladen | null {
+  try {
+    const text = globalThis.sessionStorage?.getItem(NACH_NEULADEN_SCHLUESSEL);
+    if (text == null) return null;
+    const w = JSON.parse(text) as Partial<NachNeuladen> | null;
+    const stufe = w?.stufe;
+    return stufe === "dunkel" || stufe === "gedimmt" || stufe === "hell" ? { stufe, vollbild: w?.vollbild === true } : null;
+  } catch {
+    return null;
+  }
+}
+
+function nachNeuladenMerken(w: NachNeuladen): void {
+  try { globalThis.sessionStorage?.setItem(NACH_NEULADEN_SCHLUESSEL, JSON.stringify(w)); } catch { /* dann eben die Vorgabe */ }
+}
+
+/**
+ * Nach dem selbsttätigen Neuladen ist das Vollbild weg: Der Browser schaltet es nur auf einen Tipp hin ein. Der erste
+ * Tipp ins Fenster holt es zurück. Knöpfe behalten ihre Aufgabe („Vollbild“ schaltete es sonst gleich wieder aus), und
+ * wer das Vollbild selbst ein- oder ausschaltet, hat entschieden: Dann horcht nichts mehr.
+ */
+function vollbildBeimErstenTipp(): () => void {
+  const tipp = (e: Event) => {
+    if (e.target instanceof Element && e.target.closest("button, summary, a, input, select, textarea, label")) return;
+    weg();
+    if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+  const weg = () => {
+    document.removeEventListener("pointerdown", tipp, true);
+    document.removeEventListener("fullscreenchange", weg);
+  };
+  document.addEventListener("pointerdown", tipp, true);
+  document.addEventListener("fullscreenchange", weg);
+  return weg;
 }
 /** Takt für Uhr, Dauer und „vor X Min". */
 const TAKT_MS = 5_000;
@@ -192,38 +236,6 @@ function useLageAnsicht(): [LageAnsicht, (ansicht: LageAnsicht, nurGemerkt?: boo
 function schliessen() {
   if (window.opener) window.close();
   else window.location.assign(window.location.pathname);
-}
-
-/** Ist das Fenster, das den Monitor geöffnet hat, noch offen? */
-function hauptfensterOffen(): boolean {
-  try {
-    return window.opener != null && !window.opener.closed;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Hinweis auf eine neue Fassung im Fenster des Monitors (`useNeueVersion` in aktualisierung.tsx). Ist das Hauptfenster
- * offen, wird dort aktualisiert: Eine hier aktivierte Fassung liefe dort unter einer laufenden Eingabe weiter. Dieses
- * Fenster lädt dann von selbst neu. Steht der Monitor allein (Popup-Sperre, Lesezeichen, Hauptfenster geschlossen),
- * aktualisiert er selbst. Vorher sagte der Monitor nichts und blieb alt, auch wenn man ihn selbst neu lud.
- */
-function NeueVersionHinweis({ v }: { v: NeueVersion }) {
-  if (!v.da) return null;
-  const dort = hauptfensterOffen();
-  return (
-    <div className="lm-zeile lm-neue-version" role="status">
-      <span className="lm-neue-version-text">
-        {v.laedt ? "Die neue Version wird geladen …" : dort ? "Neue Version: im Hauptfenster „Neu laden“, dieses Fenster folgt von selbst." : "Neue Version verfügbar."}
-      </span>
-      {!dort && (
-        <button type="button" className="lm-knopf" disabled={v.laedt} onClick={v.neuLaden}>
-          Neu laden
-        </button>
-      )}
-    </div>
-  );
 }
 
 function vollbild() {
@@ -371,8 +383,6 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
   // Lässt sich die Tafel nicht laden oder zeichnen, zeigt dieses Fenster die Zeilen, bis es neu geladen wird (TafelGrenze).
   const [tafelDefekt, setTafelDefekt] = useState(false);
   useWachhalten();
-  // Der Monitor sucht wie das Hauptfenster nach neuen Fassungen und folgt einer, sobald sie aktiv ist.
-  const neueVersion = useNeueVersion(true);
   // Bei jedem Durchlauf neu lesen: `stand` und `jetzt` lösen ihn aus, der Lesezugriff ist gepuffert (einsaetze-lesen.ts).
   void stand;
   const gelesen = einsaetzeLaden().find((s) => s.id === einsatzId);
@@ -392,7 +402,17 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
 
   // Leiter Gedimmt < Dunkel < Hell: „heller" und „dunkler" gehen je eine Sprosse. Aus Gedimmt führt ein Tipp nie auf Hell,
   // aus Hell führt ein Tipp zurück auf Dunkel statt über ein zweites helles Bild (R8-L4).
-  const [stufe, setStufe] = useState<Stufe>(stufeLesen);
+  const [nachNeuladen] = useState(nachNeuladenLesen);
+  const [stufe, setStufe] = useState<Stufe>(() => nachNeuladen?.stufe ?? stufeLesen());
+  // Eine neue Fassung lädt dieses Fenster von selbst neu (aktualisierung.tsx, gestartet in main.tsx); vorher Stufe und
+  // Vollbild festhalten, danach gilt der Merker einmal.
+  const stufeJetzt = useRef(stufe);
+  stufeJetzt.current = stufe;
+  useEffect(() => {
+    try { globalThis.sessionStorage?.removeItem(NACH_NEULADEN_SCHLUESSEL); } catch { /* gesperrt */ }
+    aktualisierungStarten("anzeige", () => nachNeuladenMerken({ stufe: stufeJetzt.current, vollbild: document.fullscreenElement != null }));
+  }, []);
+  useEffect(() => (nachNeuladen?.vollbild ? vollbildBeimErstenTipp() : undefined), [nachNeuladen]);
   const klasse = `lm${stufe === "hell" ? " lm-hell" : stufe === "gedimmt" ? " lm-gedimmt" : ""}`;
   const heller: Stufe | null = stufe === "gedimmt" ? "dunkel" : stufe === "dunkel" ? "hell" : null;
   const dunkler: Stufe | null = stufe === "hell" ? "dunkel" : stufe === "dunkel" ? "gedimmt" : null;
@@ -496,7 +516,6 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
           stufe={stufe}
           bedienung={
             <>
-              <NeueVersionHinweis v={neueVersion} />
               {stufenleiste}
               <div className="lt-wahl">
                 {wechselKnopf}
@@ -668,7 +687,6 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         )}
       </section>
 
-      <NeueVersionHinweis v={neueVersion} />
       <div className="lm-fuss">
       <details className="lm-zeile lm-klapp">
         <summary>Einsatzdaten</summary>

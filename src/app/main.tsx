@@ -31,6 +31,7 @@ import { stempelZeitpunkt } from "./datenschutz-uhr";
 import { alleDatenLoeschen, sicherungErstellen } from "./sicherung";
 import { LETZTER_EINSATZ_SCHLUESSEL } from "./letzter-einsatz";
 import { anfuehrungWaechterStarten } from "./typografie";
+import { aktualisierungStarten } from "./aktualisierung";
 
 // Der Lagemonitor wird nur nachgeladen, wenn die Adresse ihn verlangt (Startbündel, ADR-003 Aufnahmeregel 5).
 const Lagemonitor = lazy(() => import("./lagemonitor-ui").then((m) => ({ default: m.Lagemonitor })));
@@ -56,6 +57,11 @@ wendeAnzeigeModusAn();
 tastaturWaechterStarten();
 // Große Systemschrift: Das Stylesheet verdichtet dann die niedrigen Fenster (R5-M3).
 schriftStufeStarten();
+
+// Service Worker und neue Fassungen, einmal je Fenster und gleich beim Start: Übernimmt eine neue Fassung, während die
+// Seite noch lädt, verpasste ein später angemeldeter Hörer den Wechsel (Fernseher geöffnet, während im Hauptfenster
+// „Neu laden“ lief). Das Fenster des Lagemonitors folgt nur, das Hauptfenster sucht und meldet (aktualisierung.tsx).
+aktualisierungStarten(lagemonitorKennung() ? "anzeige" : "hauptfenster");
 
 // Einen Start zählen (Browser, PWA, App). Schlägt ohne Netz still fehl. Nicht
 // im Lagemonitor-Fenster: Es ist derselbe Start am selben Gerät, und zählte

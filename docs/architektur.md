@@ -132,7 +132,7 @@ flowchart LR
 
 | System | Richtung | Zweck | Protokoll |
 | --- | --- | --- | --- |
-| GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig; danach Prüfung auf neue Fassung | Auslieferung der PWA; danach offline. Die offene App fragt beim Laden, stündlich, nach einer Pause von mindestens zehn Minuten und bei wiederkehrendem Netz die Datei `sw.js` derselben Herkunft ab, ob eine neue Fassung bereitliegt (seit 2026-11-13, `aktualisierung.tsx`); kein Fremd-Host, ohne Netz scheitert die Frage still | HTTPS, statische Dateien |
+| GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig; danach Prüfung auf neue Fassung | Auslieferung der PWA; danach offline. Die App fragt beim Laden, das offene Hauptfenster außerdem stündlich, nach mindestens zehn Minuten im Hintergrund beim Zurückkommen und bei wiederkehrendem Netz die Datei `sw.js` derselben Herkunft ab, ob eine neue Fassung bereitliegt (seit 2026-11-13, `aktualisierung.tsx`); das Fenster des Lagemonitors fragt nicht selbst; kein Fremd-Host, ohne Netz scheitert die Frage still | HTTPS, statische Dateien |
 | GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart (das Lagemonitor-Fenster zählt nicht mit, `main.tsx`); einziger Fremd-Host in der CSP. Bewusst ohne das offizielle `count.js` von `gc.zgo.at` (wie im Erfassungsbogen): `statistik.ts` baut den Treffer selbst gegen dieselbe Zähl-URL `/count`, sonst wäre `gc.zgo.at` ein zweiter Fremd-Host und das Skript scheiterte unter `file://` und `capacitor://`. | HTTPS `sendBeacon` / Bild |
 | GitHub Releases | ein-/ausgehend | Installer, APK, `latest*.yml` für electron-updater | HTTPS |
 | Capacitor-Plugins | intern | Barcode-Scanner, Dateisystem, Teilen, App-Links | Bridge |
@@ -472,21 +472,45 @@ Wie im Erfassungsbogen (dort Kap. 6.4, 6.5): zweistufiger Vorrat (Kern vom
 Service Worker, Zusatz nachgeladen), Update-Banner im Web, electron-updater
 gegen die Releases dieses Repos.
 
-Seit 2026-11-13 sucht die offene Web-App selbst nach einer neuen Fassung:
-stündlich, nach einer Pause von mindestens zehn Minuten beim Zurückkommen und
-wenn das Netz wiederkommt (`useNeueVersion` in `aktualisierung.tsx`). Vorher
-fragte sie nur beim Laden; ein Fernseher oder Laptop, der den ganzen Einsatz
-lief, erfuhr von einer neuen Fassung nichts. Das Fenster des Lagemonitors
-zeigt den Hinweis ebenfalls. Ist das Hauptfenster offen, verweist er dorthin,
-denn eine im Monitor aktivierte Fassung liefe im Hauptfenster unter einer
-laufenden Eingabe weiter, deren nachgeladene Bausteine es nicht mehr gibt.
-Steht der Monitor allein, aktiviert er sie selbst. Sobald eine neue Fassung
-aktiv ist, lädt das Fenster des Monitors von selbst neu (reine Anzeige,
-nichts geht verloren); vorher blieb es alt, auch wenn man es selbst neu lud.
-Das Hauptfenster lädt nur neu, wenn dort „Neu laden“ getippt wurde; ist die
-neue Fassung anderswo aktiv geworden, zeigt es den Hinweis. Wurde der Hinweis
-mit „Später“ weggelegt, steht er mit der nächsten Suche wieder da, solange die
-neue Fassung wartet.
+Seit 2026-11-13 sucht das offene Hauptfenster selbst nach einer neuen
+Fassung: stündlich, nach mindestens zehn Minuten im Hintergrund beim
+Zurückkommen und wenn das Netz wiederkommt (`aktualisierungStarten` in
+`aktualisierung.tsx`, gestartet in `main.tsx`, einmal je Fenster). Vorher
+fragte die App nur beim Laden; ein Laptop, der den ganzen Einsatz lief,
+erfuhr von einer neuen Fassung nichts. Aktiviert wird eine neue Fassung weiter
+nur auf „Neu laden“ im Hinweis des Hauptfensters, oder wenn alle Fenster der
+App geschlossen waren. Nach „Später“ steht der Hinweis mit der nächsten Suche
+wieder da, solange die Fassung wartet. Die Installation verfolgt die App
+selbst; die Bibliothek hört nach einer abgebrochenen nicht mehr hin, und der
+Hinweis kam dann eine Stunde zu spät.
+
+Sobald eine neue Fassung die Steuerung übernimmt, lädt jedes Fenster der App
+neu, gleich in welchem sie aktiviert wurde. Weiterlaufen kann keins: Die neue
+Fassung räumt beim Aktivieren die Bausteine der alten aus dem Vorrat, und auf
+dem Server liegen sie nach dem Ausrollen auch nicht mehr. Die nächste
+nachgeladene Ansicht stürzte mit „ohne Netz“ ab, obwohl Netz da ist. Für
+Hauptfenster, die den Hinweis gesehen hatten, tat das schon die Bibliothek;
+jetzt gilt es für alle, auch für das Fenster des Lagemonitors, das vorher alt
+blieb, selbst wenn man es neu lud. Eine angefangene Erfassung übersteht das
+Neuladen (Entwurf), ein an einer Karte angefangener Auftrag wird beim Verlassen
+der Seite gesichert (R11-O1). Übernimmt die Fassung eine Seite, die vorher ungesteuert
+war (Erstinstallation, oder an Service Worker und Vorrat vorbei hart neu
+geladen), oder lief die Übernahme, während die Seite lud, entscheidet der
+Vorrat: Liegt der Baustein der Seite nicht mehr darin, lädt sie neu, einmal je
+Fassung und Fenster (`fassungVeraltet`).
+
+Das Fenster des Lagemonitors zeigt keinen Hinweis und sucht nicht selbst; es
+folgt dem Hauptfenster. Ein Monitor ohne Hauptfenster läuft mit seiner Fassung
+weiter, deren Bausteine im Vorrat bleiben, bis eine neue aktiv ist; die
+aktiviert das nächste Hauptfenster auf „Neu laden“. Ein Hinweis im Monitor
+kostete am 720p-Fernseher die Zeile „+ n weitere Einheiten“ und am Rand das
+Ende von „Abgerückt“, und eine dort aktivierte Fassung hätte das Hauptfenster
+unter einer laufenden Eingabe neu geladen. Stufe und Vollbild überstehen das
+selbsttätige Neuladen einmal: „Hell“ bleibt, obwohl es sonst nie gemerkt wird
+(R7-L3), und das Vollbild, das der Browser nur auf einen Tipp hin einschaltet,
+holt der erste Tipp ins Fenster zurück. Offen bleibt ein Fall, der nur per
+Skript erreichbar ist: „Neu laden“ in den ersten 40 ms nach dem Öffnen des
+Monitors lässt dessen Fenster leer, wie vorher; F5 hilft.
 
 ## 7. Verteilungssicht
 
@@ -574,6 +598,7 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.schnellOrganisation.v1` | Zuletzt gewählte Organisation der Schnellerfassung (nur die Zahl) | `schnell-organisation.ts` |
 | `eeb.einheiten-tabelle-alle-spalten` | Tabelle mit allen Spalten oder nur Kernspalten (Gerätewert) | `einsaetze-ui.tsx` |
 | `sessionStorage`: `eeb.import-laeuft.v1`, `eeb.karte-offen.v1`, `eeb.ansicht-stelle.v1`, `eeb.einsatz.rueckweg`, `eeb.funkruf.merker.<Index>`, `eeb.abgleich.fortsetzen` | Unterbrochener Import; offene Einheitenkarten (Kennungen); Bildlaufstelle; Rückweg nach „Einsatz bearbeiten“; ausgeschaltete Funkrufnamen je Fahrzeug, 15 Minuten; Merker nach dem Fensterabgleich | `eingang/import-unterbrochen.ts`, `einsaetze-ui.tsx`, `ansicht-stelle.ts`, `einsatz-notweg.ts`, `schnellerfassung/fahrzeuge.tsx`, `fenster-abgleich.tsx` |
+| `sessionStorage`: `eeb.fassung.veraltet`, `eeb.lagemonitor.nach-neuladen` | Fassung, für die das Fenster schon einmal wegen „veraltet“ neu geladen hat (Schutz gegen eine Schleife); Stufe und Vollbild des Lagemonitors über das selbsttätige Neuladen nach einer neuen Fassung, einmal. Beide neu im Meldekopf (2026-11-13) | `aktualisierung.tsx`, `lagemonitor-ui.tsx` |
 
 **Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen; eine
 eingespielte Sicherung aus dem Erfassungsbogen bringt sie mit, die
@@ -741,10 +766,13 @@ Stütze der Grundlinie).
 Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 1,4 KB
 (Wahl des Funkrufnamens, Mindestes der Marken in der knappen Karte,
 Kennziffer in der breiten, Messung der Marken und Schutz der Messung).
-**Suche nach neuen Fassungen im Betrieb (2026-11-13):** 4.364.986 / 637.506
-Byte, im Spielraum; das Budget bleibt. Das Startbündel wächst um 0,9 KB
-(`useNeueVersion` in `aktualisierung.tsx`, die das Hauptfenster beim Start
-braucht), der Brocken des Monitors um den Hinweis.
+**Suche nach neuen Fassungen im Betrieb, Neuladen aller Fenster
+(2026-11-13):** 4.367.087 / 639.148 Byte, im Spielraum; das Budget bleibt. Das
+Startbündel wächst um 2,6 KB: `aktualisierung.tsx` läuft einmal je Fenster ab
+`main.tsx`, mit stündlicher Suche, Messung der Pause, eigener Verfolgung der
+Installation und der Prüfung „veraltet“. Der Brocken des Monitors gewinnt nur
+das Festhalten von Stufe und Vollbild über das Neuladen; seine Stilvorlagen
+sind dieselben wie in `ba9cb89`.
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab
