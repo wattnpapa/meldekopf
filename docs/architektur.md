@@ -484,7 +484,9 @@ Steht der Monitor allein, aktiviert er sie selbst. Sobald eine neue Fassung
 aktiv ist, lädt das Fenster des Monitors von selbst neu (reine Anzeige,
 nichts geht verloren); vorher blieb es alt, auch wenn man es selbst neu lud.
 Das Hauptfenster lädt nur neu, wenn dort „Neu laden“ getippt wurde; ist die
-neue Fassung anderswo aktiv geworden, zeigt es den Hinweis.
+neue Fassung anderswo aktiv geworden, zeigt es den Hinweis. Wurde der Hinweis
+mit „Später“ weggelegt, steht er mit der nächsten Suche wieder da, solange die
+neue Fassung wartet.
 
 ## 7. Verteilungssicht
 
@@ -739,8 +741,8 @@ Stütze der Grundlinie).
 Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 1,4 KB
 (Wahl des Funkrufnamens, Mindestes der Marken in der knappen Karte,
 Kennziffer in der breiten, Messung der Marken und Schutz der Messung).
-**Suche nach neuen Fassungen im Betrieb (2026-11-13):** 4.364.856 / 637.376
-Byte, im Spielraum; das Budget bleibt. Das Startbündel wächst um 0,8 KB
+**Suche nach neuen Fassungen im Betrieb (2026-11-13):** 4.364.986 / 637.506
+Byte, im Spielraum; das Budget bleibt. Das Startbündel wächst um 0,9 KB
 (`useNeueVersion` in `aktualisierung.tsx`, die das Hauptfenster beim Start
 braucht), der Brocken des Monitors um den Hinweis.
 

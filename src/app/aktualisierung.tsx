@@ -65,7 +65,7 @@ export interface NeueVersion {
   laedt: boolean;
   /** Die neue Fassung aktivieren und diese Seite neu laden. */
   neuLaden: () => void;
-  /** Den Hinweis ausblenden; er kommt mit dem nächsten Laden oder der nächsten Suche wieder. */
+  /** Den Hinweis ausblenden; er kommt mit dem nächsten Laden oder der nächsten Suche ({@link SUCHE_MS}) wieder. */
   spaeter: () => void;
 }
 
@@ -89,6 +89,8 @@ export function useNeueVersion(fernseher: boolean): NeueVersion {
   const aktivieren = useRef<(() => Promise<void> | void) | null>(null);
   // In diesem Fenster wurde „Neu laden" getippt: Den Wechsel der Steuerung beantwortet es mit Neuladen.
   const selbst = useRef(false);
+  // Aktiviert die wartende Fassung (SKIP_WAITING), sobald die Registrierung steht.
+  const aktualisieren = useRef<((neuLaden?: boolean) => Promise<void>) | null>(null);
 
   useEffect(() => {
     // Kein SW in der nativen App (Capacitor iOS/Android) oder im Electron-Build:
@@ -103,9 +105,16 @@ export function useNeueVersion(fernseher: boolean): NeueVersion {
     let takt: number | undefined;
     let registrierung: ServiceWorkerRegistration | undefined;
     let zuletzt = Date.now();
+    // Wartet nach der Suche eine Fassung, die schon einmal gemeldet und mit „Später" weggelegt wurde, steht der Hinweis
+    // wieder da: Eine neue Meldung gibt es nur für eine neue Fassung.
+    const wartet = () => {
+      if (!registrierung?.waiting || !navigator.serviceWorker.controller) return;
+      if (!aktivieren.current) aktivieren.current = () => aktualisieren.current?.(true);
+      setDa(true);
+    };
     const suchen = () => {
       zuletzt = Date.now();
-      void registrierung?.update().catch(() => {
+      void registrierung?.update().then(wartet, () => {
         /* Ohne Netz oder bei einem Fehler des Servers: beim nächsten Mal. */
       });
     };
@@ -134,7 +143,7 @@ export function useNeueVersion(fernseher: boolean): NeueVersion {
     import("virtual:pwa-register")
       .then(({ registerSW }) => {
         if (abbestellt) return;
-        const updateSW = registerSW({
+        const updateSW: (neuLaden?: boolean) => Promise<void> = registerSW({
           // Neue Version wartet im Hintergrund → Hinweis einblenden.
           onNeedRefresh() {
             aktivieren.current = () => updateSW(true);
@@ -146,6 +155,7 @@ export function useNeueVersion(fernseher: boolean): NeueVersion {
           onRegisteredSW(_adresse, r) {
             if (abbestellt || !r) return;
             registrierung = r;
+            aktualisieren.current = updateSW;
             takt = window.setInterval(suchen, SUCHE_MS);
             document.addEventListener("visibilitychange", zurueck);
             window.addEventListener("online", suchen);

@@ -104,6 +104,26 @@ describe("Hauptfenster", () => {
     expect(pwa.updateSW).not.toHaveBeenCalled();
   });
 
+  it("zeigt den Hinweis nach „Später“ mit der nächsten Suche wieder, solange die neue Fassung wartet", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    container(true);
+    render(<WebUpdateBanner />);
+    const o = await registriert();
+    const r = { update: vi.fn(async () => {}), waiting: { state: "installed" } };
+    act(() => o.onRegisteredSW!("/sw.js", r as unknown as ServiceWorkerRegistration));
+    act(() => o.onNeedRefresh!());
+    fireEvent.click(screen.getByRole("button", { name: "Später" }));
+    expect(screen.queryByText("Neue Version verfügbar.")).toBeNull();
+    await act(async () => {
+      vi.advanceTimersByTime(SUCHE_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Neue Version verfügbar.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Neu laden" }));
+    expect(pwa.updateSW).toHaveBeenCalledWith(true);
+  });
+
   it("zeigt bei der ersten Installation keinen Hinweis", async () => {
     const sw = container(false);
     render(<WebUpdateBanner />);
