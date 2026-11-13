@@ -32,6 +32,7 @@ import { sammlungenBeiseitegelegt } from "./eingang/unlesbar";
 import { alterKurz, alterText, anwesendenAlterText, ausEingabeWert, dauerText, lagebild, uhrTeile, uhrzeitText, zuEingabeWert, type BedarfZeile, type EinheitZeile } from "./lagemonitor";
 
 import { URL_PARAMETER, lagemonitorKennung } from "./lagemonitor-kennung";
+import { useNeueVersion, type NeueVersion } from "./aktualisierung";
 import { ANSICHT_NAME, ANSICHT_SCHLUESSEL, lageAnsichtLaden, lageAnsichtMerken, type LageAnsicht } from "./lagemonitor-ansicht";
 
 // Die Tafel-Ansicht (neu im Meldekopf) wird erst geladen, wenn sie gewählt ist: Wer bei den Zeilen bleibt, lädt sie nicht.
@@ -193,6 +194,38 @@ function schliessen() {
   else window.location.assign(window.location.pathname);
 }
 
+/** Ist das Fenster, das den Monitor geöffnet hat, noch offen? */
+function hauptfensterOffen(): boolean {
+  try {
+    return window.opener != null && !window.opener.closed;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hinweis auf eine neue Fassung im Fenster des Monitors (`useNeueVersion` in aktualisierung.tsx). Ist das Hauptfenster
+ * offen, wird dort aktualisiert: Eine hier aktivierte Fassung liefe dort unter einer laufenden Eingabe weiter. Dieses
+ * Fenster lädt dann von selbst neu. Steht der Monitor allein (Popup-Sperre, Lesezeichen, Hauptfenster geschlossen),
+ * aktualisiert er selbst. Vorher sagte der Monitor nichts und blieb alt, auch wenn man ihn selbst neu lud.
+ */
+function NeueVersionHinweis({ v }: { v: NeueVersion }) {
+  if (!v.da) return null;
+  const dort = hauptfensterOffen();
+  return (
+    <div className="lm-zeile lm-neue-version" role="status">
+      <span className="lm-neue-version-text">
+        {v.laedt ? "Die neue Version wird geladen …" : dort ? "Neue Version: im Hauptfenster „Neu laden“, dieses Fenster folgt von selbst." : "Neue Version verfügbar."}
+      </span>
+      {!dort && (
+        <button type="button" className="lm-knopf" disabled={v.laedt} onClick={v.neuLaden}>
+          Neu laden
+        </button>
+      )}
+    </div>
+  );
+}
+
 function vollbild() {
   const doc = document;
   if (doc.fullscreenElement) void doc.exitFullscreen();
@@ -338,6 +371,8 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
   // Lässt sich die Tafel nicht laden oder zeichnen, zeigt dieses Fenster die Zeilen, bis es neu geladen wird (TafelGrenze).
   const [tafelDefekt, setTafelDefekt] = useState(false);
   useWachhalten();
+  // Der Monitor sucht wie das Hauptfenster nach neuen Fassungen und folgt einer, sobald sie aktiv ist.
+  const neueVersion = useNeueVersion(true);
   // Bei jedem Durchlauf neu lesen: `stand` und `jetzt` lösen ihn aus, der Lesezugriff ist gepuffert (einsaetze-lesen.ts).
   void stand;
   const gelesen = einsaetzeLaden().find((s) => s.id === einsatzId);
@@ -461,6 +496,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
           stufe={stufe}
           bedienung={
             <>
+              <NeueVersionHinweis v={neueVersion} />
               {stufenleiste}
               <div className="lt-wahl">
                 {wechselKnopf}
@@ -632,6 +668,7 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
         )}
       </section>
 
+      <NeueVersionHinweis v={neueVersion} />
       <div className="lm-fuss">
       <details className="lm-zeile lm-klapp">
         <summary>Einsatzdaten</summary>

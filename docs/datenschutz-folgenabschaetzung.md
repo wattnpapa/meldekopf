@@ -463,7 +463,7 @@ Ergänzend:
 | Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke; in der Ansicht „Tafel" je Einheit auch Auftrag, Sofortbedarf, Stand und das Etikett eines abgeteilten Teils; seit 2026-11-11 dort auch Übungsmeldungen einer echten Lage, mit denselben Angaben ohne Bedarf) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
 | GoatCounter-Zählimpuls | `meldekopf.goatcounter.com` | Nein — nur Pfad (Nutzungskanal, z. B. `/pwa/android`), Titel und im Browser der Referrer; keine Cookies, keine ID, kein Fragment, keine Sammlungsdaten; technisch unvermeidbar die IP-Adresse als Transportdatum | Art. 6 Abs. 1 lit. f DSGVO; Widerspruch per Kästchen „Nicht mitzählen" im Datenschutzdialog (`skipgc`, ab dem nächsten Start) |
 | Update-Prüfung (nur Desktop) | GitHub Releases | Nein, nur Verbindungsmetadaten | Berechtigtes Interesse an aktuellem Software-Stand |
-| Abruf der Webfassung | GitHub Pages (meldekopf.erfassungsbogen.app) | Nein, nur Verbindungsmetadaten | Auslieferung der Anwendung |
+| Abruf der Webfassung | GitHub Pages (meldekopf.erfassungsbogen.app) | Nein, nur Verbindungsmetadaten | Auslieferung der Anwendung; seit 2026-11-13 fragt die offene App außerdem stündlich, nach einer Pause und bei wiederkehrendem Netz die Datei `sw.js` nach einer neuen Fassung ab (dieselben Verbindungsmetadaten, kein Inhalt aus der App) |
 
 > *Entfällt gegenüber der Vorlage:* „Vorlage teilen" (Link/Datei in
 > Messenger oder Cloud) und der zweite Web-Host GitLab Pages auf Open CoDE;

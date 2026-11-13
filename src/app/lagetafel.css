@@ -569,6 +569,8 @@ main.lt .lt-datenstand.lt-warnung { color: var(--lt-achtung); font-weight: 700; 
 .lt-bedienung .lm-stufenleiste .lm-knopf { flex: none; width: 4.9em; padding-inline: 0; }
 .lt-bedienung .lm-stufenleiste .lm-knopf + .lm-knopf { width: 7.6em; }
 .lt-wahl { display: flex; flex-wrap: wrap; gap: 8px; font-size: max(var(--lm-min), calc(var(--lt-e) * 1.65)); }
+/* Hinweis auf eine neue Fassung über der Helligkeit, in der Schrift der Bedienung und mit ihrer Linie. */
+.lt-bedienung .lm-neue-version { margin: 0; border: 1px solid var(--lt-linie); color: var(--lt-text); font-size: max(var(--lm-min), calc(var(--lt-e) * 1.65)); text-align: left; }
 .lt-wahl .lm-knopf { flex: 1 1 auto; }
 .lt-bedienung .lm-knopf { min-height: 44px; padding: 0.2em 0.55em; font-size: inherit; font-weight: 600; white-space: nowrap; border-width: 1px; border-radius: 0; background: transparent; color: var(--lt-text); }
 @media (hover: hover) {

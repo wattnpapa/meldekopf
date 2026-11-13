@@ -132,7 +132,7 @@ flowchart LR
 
 | System | Richtung | Zweck | Protokoll |
 | --- | --- | --- | --- |
-| GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig | Auslieferung der PWA; danach offline | HTTPS, statische Dateien |
+| GitHub Pages (meldekopf.erfassungsbogen.app) | eingehend, einmalig; danach Prüfung auf neue Fassung | Auslieferung der PWA; danach offline. Die offene App fragt beim Laden, stündlich, nach einer Pause von mindestens zehn Minuten und bei wiederkehrendem Netz die Datei `sw.js` derselben Herkunft ab, ob eine neue Fassung bereitliegt (seit 2026-11-13, `aktualisierung.tsx`); kein Fremd-Host, ohne Netz scheitert die Frage still | HTTPS, statische Dateien |
 | GoatCounter (`meldekopf.goatcounter.com`, eigene Site dieser App; Host in `src/app/adressen.ts`) | ausgehend | Cookielose Reichweitenmessung, ein Treffer je Kaltstart (das Lagemonitor-Fenster zählt nicht mit, `main.tsx`); einziger Fremd-Host in der CSP. Bewusst ohne das offizielle `count.js` von `gc.zgo.at` (wie im Erfassungsbogen): `statistik.ts` baut den Treffer selbst gegen dieselbe Zähl-URL `/count`, sonst wäre `gc.zgo.at` ein zweiter Fremd-Host und das Skript scheiterte unter `file://` und `capacitor://`. | HTTPS `sendBeacon` / Bild |
 | GitHub Releases | ein-/ausgehend | Installer, APK, `latest*.yml` für electron-updater | HTTPS |
 | Capacitor-Plugins | intern | Barcode-Scanner, Dateisystem, Teilen, App-Links | Bridge |
@@ -472,6 +472,20 @@ Wie im Erfassungsbogen (dort Kap. 6.4, 6.5): zweistufiger Vorrat (Kern vom
 Service Worker, Zusatz nachgeladen), Update-Banner im Web, electron-updater
 gegen die Releases dieses Repos.
 
+Seit 2026-11-13 sucht die offene Web-App selbst nach einer neuen Fassung:
+stündlich, nach einer Pause von mindestens zehn Minuten beim Zurückkommen und
+wenn das Netz wiederkommt (`useNeueVersion` in `aktualisierung.tsx`). Vorher
+fragte sie nur beim Laden; ein Fernseher oder Laptop, der den ganzen Einsatz
+lief, erfuhr von einer neuen Fassung nichts. Das Fenster des Lagemonitors
+zeigt den Hinweis ebenfalls. Ist das Hauptfenster offen, verweist er dorthin,
+denn eine im Monitor aktivierte Fassung liefe im Hauptfenster unter einer
+laufenden Eingabe weiter, deren nachgeladene Bausteine es nicht mehr gibt.
+Steht der Monitor allein, aktiviert er sie selbst. Sobald eine neue Fassung
+aktiv ist, lädt das Fenster des Monitors von selbst neu (reine Anzeige,
+nichts geht verloren); vorher blieb es alt, auch wenn man es selbst neu lud.
+Das Hauptfenster lädt nur neu, wenn dort „Neu laden“ getippt wurde; ist die
+neue Fassung anderswo aktiv geworden, zeigt es den Hinweis.
+
 ## 7. Verteilungssicht
 
 | Ziel | Weg | Anmerkung |
@@ -725,6 +739,10 @@ Stütze der Grundlinie).
 Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 1,4 KB
 (Wahl des Funkrufnamens, Mindestes der Marken in der knappen Karte,
 Kennziffer in der breiten, Messung der Marken und Schutz der Messung).
+**Suche nach neuen Fassungen im Betrieb (2026-11-13):** 4.364.856 / 637.376
+Byte, im Spielraum; das Budget bleibt. Das Startbündel wächst um 0,8 KB
+(`useNeueVersion` in `aktualisierung.tsx`, die das Hauptfenster beim Start
+braucht), der Brocken des Monitors um den Hinweis.
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

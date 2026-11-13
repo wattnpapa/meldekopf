@@ -19,7 +19,9 @@ vi.mock("../weitergabe/pdf", () => ({
   blankoPdfErzeugen: async () => true,
 }));
 vi.mock("../nativ", async () => {
-  const echt = await vi.importActual<typeof import("../nativ")>("./nativ");
+  // Der Pfad gilt von dieser Datei aus (sie liegt in abgleich/); „./nativ" stammte aus dem Erfassungsbogen, wo der Test
+  // neben nativ.ts lag, und fiel erst auf, als der Lagemonitor nativ.ts über die Aktualisierung mitbrachte.
+  const echt = await vi.importActual<typeof import("../nativ")>("../nativ");
   return {
     istNativ: () => false,
     plattform: () => "web",

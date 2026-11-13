@@ -569,7 +569,12 @@ Signatur und kommt als „unsigniert" in die Sammlung (5.2 gilt unverändert).
 neuesten GitHub Releases dieses Repositorys, lädt Updates im Hintergrund und
 bietet einen Neustart an; Fehler (kein Netz, kein Release, unsignierter
 Build) werden still ignoriert, um den Offline-Start nicht zu blockieren. Die
-Web-App zeigt einen Service-Worker-Banner (`aktualisierung.tsx`).
+Web-App zeigt einen Service-Worker-Banner (`aktualisierung.tsx`). Seit
+2026-11-13 fragt die offene Web-App zusätzlich stündlich, nach einer Pause und
+bei wiederkehrendem Netz die eigene `sw.js` ab (gleiche Herkunft, kein
+Fremd-Host); eine neue Fassung wird weiter erst auf „Neu laden“ aktiviert. Das
+Fenster des Lagemonitors folgt einer aktivierten Fassung von selbst
+(reine Anzeige) und aktiviert selbst nur, wenn kein Hauptfenster offen ist.
 
 ### 5.7 Lagemonitor (neu gegenüber der Vorlage)
 
