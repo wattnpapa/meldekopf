@@ -442,7 +442,7 @@ export function lueckeKurz(text: string): string {
   if (/^Einsatzbeginn .* außerhalb des Einsatzzeitraums/.test(text)) return "Beginn außerhalb Zeitraum";
   if (/^Einheitstyp .* nicht erkannt/.test(text)) return "Einheitstyp nicht erkannt";
   if (/^Stärke ist 0/.test(text)) return "Stärke 0";
-  const verpflegung = /^Verpflegung für (\d+) Personen angefordert, die Gesamtstärke ist aber (\d+)/.exec(text);
+  const verpflegung = /^Verpflegung (?:nur )?für (\d+) Personen angefordert, die Gesamtstärke ist aber (\d+)/.exec(text);
   if (verpflegung) return `Verpflegung ${verpflegung[1]} statt Stärke ${verpflegung[2]}`;
   if (/^Sofortbedarf: mehr Vegetarier\/Veganer/.test(text)) return "mehr Vegetarier als Verpflegte";
   if (/^Verpflegung: .* übersteigen die Gesamtstärke/.test(text)) return "vegetarisch/vegan > Stärke";
