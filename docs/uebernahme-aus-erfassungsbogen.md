@@ -23,7 +23,7 @@ Kopfkommentar festhalten).
 | --- | --- | --- |
 | `vendor/eeb-format` | `eb58ad6` → `7ce601f` | Modell, Codec, Signatur, Datenschutzfrist |
 | `vendor/bos-meldekopf` | `59a986c` → `63429e6` | Einsätze, Aufteilen, Zusammenführen, Diff, Papierkorb, Darstellung |
-| `vendor/bos-vokabulare` | `2f94a46` → `c725bf9` | StAN-Vorbelegung, Funkrufnamen, Ebenen, Sitzplätze, Qualifikationen |
+| `vendor/bos-vokabulare` | `2f94a46` → `b17e579` | StAN-Vorbelegung, Funkrufnamen, Ebenen, Sitzplätze, Qualifikationen |
 | `vendor/bos-taktische-zeichen` | `cb9c227` → `a54364a` | Zeichen auf Karten, Tabelle, Monitor, PDF |
 
 Am 2026-11-09 auf den Stand des Erfassungsbogens `1d7ed5f` gehoben: Schema 10
