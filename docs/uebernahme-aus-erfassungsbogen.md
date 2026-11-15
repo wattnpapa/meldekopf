@@ -26,6 +26,13 @@ Kopfkommentar festhalten).
 | `vendor/bos-vokabulare` | `2f94a46` → `c725bf9` | StAN-Vorbelegung, Funkrufnamen, Ebenen, Sitzplätze, Qualifikationen |
 | `vendor/bos-taktische-zeichen` | `cb9c227` → `a54364a` | Zeichen auf Karten, Tabelle, Monitor, PDF |
 
+Am 2026-11-15 gehoben für Schema 13 (Farbe des taktischen Zeichens je
+Fahrzeug, für Gerät von Partnern): `eeb-format` `ef2e632`, `bos-meldekopf`
+`59100af`, `bos-taktische-zeichen` `6354ff8`, `bos-eeb-satz` `1787345`. Die
+Auswahl steht wie im Erfassungsbogen (`a9ad14e`, `schritte/fahrzeuge.tsx`) in
+der Fahrzeugkarte der Schnellerfassung; PDF, CSV und Einsatzansicht nennen
+die Farbe.
+
 Am 2026-11-09 auf den Stand des Erfassungsbogens `1d7ed5f` gehoben: Schema 10
 (Dienststelle je Person), 11 (Einsatzzeitraum mit Uhrzeit) und 12 (Funkrufname
 als Erreichbarkeit), Stärke als F / U / M // G, Fachzug Logistik nach StAN mit

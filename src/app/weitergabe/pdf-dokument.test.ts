@@ -341,6 +341,15 @@ describe("pdfDokument()", () => {
     expect(t).not.toMatch(/\[ {2}\] {1,2}(Unterbringung|Ruhezeit)/);
   });
 
+  it("nennt die abweichende Farbe des taktischen Zeichens als Wort und färbt das Zeichen", () => {
+    const b = basisBogen();
+    expect(texte(pdfDokument(b, QR).content).join("\n")).not.toContain("Zeichen:");
+    b.fahrzeuge[0]!.zeichenfarbe = 2;
+    const doc = pdfDokument(b, QR);
+    expect(texte(doc.content).join("\n")).toContain("Zeichen: grau");
+    expect(JSON.stringify(doc.content)).toContain("#A6A6A6");
+  });
+
   it("druckt den Sitzplatz-Richtwert gekennzeichnet, eine erfasste Zahl ohne Zusatz (OV Chemnitz, 11/2026)", () => {
     const b = basisBogen();
     expect(texte(pdfDokument(b, QR).content).join("\n")).toMatch(/Sitzplätze: \d+ \(Richtwert\)/);

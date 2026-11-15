@@ -203,7 +203,7 @@ flowchart LR
 | Baustein | Verantwortung | Herkunft |
 | --- | --- | --- |
 | Web-App (`src/app/`) | Einsatzliste, Einsatzansicht, Eingänge, Schnellerfassung, Lagemonitor, Papier-Abgleich, Exporte, Persistenz-Anbindung, Plattform. | Erfassungsbogen `src/app/`, Meldekopf-Anteil (rund 14.700 Zeilen Produktivcode, siehe Übernahme-Doku) |
-| `@bos/eeb-format` | Datenmodell (`SCHEMA_VERSION` 9), Codec, Signatur, Datenschutzfrist. | vorhanden |
+| `@bos/eeb-format` | Datenmodell (`SCHEMA_VERSION` 13), Codec, Signatur, Datenschutzfrist. | vorhanden |
 | `@bos/meldekopf` | Einsatz-Sammlung als reine Logik: Revisionen, Dedupe, Fristen, Aufteilen, Zusammenführen, Diff, Papierkorb, Text-Darstellung. | vorhanden (3.167 Zeilen) |
 | `@bos/vokabulare`, `@bos/taktische-zeichen` | Nachschlagetabellen, Zeichenauflösung. | vorhanden |
 | `@bos/eeb-satz` (<https://github.com/wattnpapa/bos-eeb-satz>) | Was beide Apps ausgeben und keine Oberfläche ist: pdfmake-Dokumentdefinition (Einzel- und Sammel-PDF, Lageblatt), CSV-Schreiber, XLSX-Schreiber, Oldenburg-Spalten, QR-Gruppierung mehrteiliger Bögen, PDF-Bild-Leser. | neu, aus `pdf-dokument.ts` (2.258), `bogen-csv.ts` (423), `einsatz-csv.ts` (290), `oldenburg-xlsx.ts` (615), `xlsx.ts` (319), `csv.ts` (51), `qr-boegen.ts` (48), `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts`. **Ist-Stand Phase 1:** erste Stufe `csv`, `xlsx`, `pdf-stroeme`, `pdf-bilder`, `taktische-zeichen-bogen`, `uebung-wasserzeichen`; der Rest hängt im Erfassungsbogen an App-Modulen (ADR-005, Nachtrag) |
@@ -648,7 +648,13 @@ den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 Erfassungsbogens `1d7ed5f` gehoben: `eeb-format` `7ce601f` (Schema 12),
 `bos-meldekopf` `63429e6`, `bos-vokabulare` `c725bf9`,
 `bos-taktische-zeichen` `a54364a`; `bos-eeb-satz` steht seit dem Abgleich
-auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`), `bos-oberflaeche`
+auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`); am 2026-11-15 für
+die Farbe des taktischen Zeichens je Fahrzeug gehoben: `eeb-format` `ef2e632`
+(Schema 13, `Fahrzeug.zeichenfarbe`), `bos-meldekopf` `59100af`
+(`zeichenfarbeText`, Zeile im Abgleich), `bos-taktische-zeichen` `6354ff8`
+(Farbvarianten kommunal/grau), `bos-eeb-satz` `1787345` (Brücke reicht die
+Farbe durch), alle auf dem Zweig `claude/affectionate-pasteur-j6dp6r` der
+Kern-Repos; `bos-oberflaeche`
 auf dem Stand `1d7ed5f` des Erfassungsbogens (Dialoge, Quittungen,
 Tipp-Schutz, Bausteine, `schreibweise`). Seit Phase 1 dazu `bos-eeb-satz`
 und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen

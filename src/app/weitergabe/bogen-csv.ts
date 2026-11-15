@@ -76,6 +76,7 @@ import { meldungsNummern } from "../einheiten-tabelle";
 import { MeldeStatus, type Einsatzsammlung, type MeldeEintrag, type MeldeQuelle } from "@bos/meldekopf/einsaetze";
 import { geltendeJeEinheit } from "../fassung-vorrang";
 import { exportKennzeile, nachtragGrundText, ortHinweisText, ortHinweise } from "./export-stand";
+import { zeichenfarbeText } from "@bos/meldekopf/darstellung";
 
 // ------------------------------------------------------------------ Spalten
 
@@ -161,6 +162,8 @@ const SPALTEN = [
   "Sitzplätze",
   "StAN-konform",
   "Änderungen/Sondergerät",
+  // Hinten angefügt, damit die Spalten davor ihre Stelle behalten.
+  "Zeichenfarbe",
 ] as const;
 
 type Spalte = (typeof SPALTEN)[number];
@@ -360,6 +363,8 @@ function fahrzeugSatz(b: Erfassungsbogen, k: Kontext, f: Fahrzeug, nr: number): 
     // undefined = Frage für diesen Fahrzeugtyp nicht anwendbar → leer lassen.
     "StAN-konform": f.stanKonform == null ? "" : jaNein(f.stanKonform),
     "Änderungen/Sondergerät": f.aenderungen ?? "",
+    // Leer = Farbe der Organisation; sonst „kommunal (orange)" oder „grau".
+    Zeichenfarbe: zeichenfarbeText(f),
   };
 }
 

@@ -20,6 +20,11 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > zwischen Begleitdokumenten und Code sind als *Prüfvermerk* gekennzeichnet;
 > wo Doku und Code sich widersprechen, gilt der Code.
 >
+> **Nachgezogen 2026-11-15 — Schema 13:** Die Kern-Submodule lesen und schreiben die
+> Farbe des taktischen Zeichens je Fahrzeug (`Fahrzeug.zeichenfarbe`, Flag 64 im
+> Fahrzeug-Byte). Nur Bögen mit diesem Feld sind Schema 13. PDF und CSV nennen die
+> Farbe; keine neuen Speicherorte, keine neuen Netzverbindungen.
+>
 > **Nachgezogen 2026-11-09 — Abgleich mit dem Erfassungsbogen `1d7ed5f`:**
 > Kern-Submodule auf Schema 12, Prüfrunden 10 bis 21 des Erfassungsbogens
 > übernommen. Neu für dieses Dokument: der Word-Import als Eingang (5.4a),
@@ -295,7 +300,7 @@ organisatorische Entscheidung (M12).
 
 | # | Zielobjekt | Beschreibung |
 | --- | --- | --- |
-| B1 | Quellcode-Repository | `wattnpapa/meldekopf`, öffentlich auf GitHub, samt sechs Submodulen unter `vendor/`: `eeb-format` (`7ce601f`), `bos-meldekopf` (`63429e6`), `bos-vokabulare` (`c725bf9`), `bos-taktische-zeichen` (`a54364a`), `bos-eeb-satz` (`c9ae5b2`), `bos-oberflaeche` (`acd5273`). Die vier ersten teilt die App mit dem Erfassungsbogen; `bos-eeb-satz` (Ausgabe ohne Oberfläche) und `bos-oberflaeche` (Dialoge, Anzeigemodi, Bausteine) sind seit Phase 1 neu. Änderungen am Kern nur im jeweiligen Repo, hier per gepinntem Commit (ADR-003) |
+| B1 | Quellcode-Repository | `wattnpapa/meldekopf`, öffentlich auf GitHub, samt sechs Submodulen unter `vendor/`: `eeb-format` (`ef2e632`), `bos-meldekopf` (`59100af`), `bos-vokabulare` (`c725bf9`), `bos-taktische-zeichen` (`6354ff8`), `bos-eeb-satz` (`1787345`), `bos-oberflaeche` (`acd5273`). Die vier ersten teilt die App mit dem Erfassungsbogen; `bos-eeb-satz` (Ausgabe ohne Oberfläche) und `bos-oberflaeche` (Dialoge, Anzeigemodi, Bausteine) sind seit Phase 1 neu. Änderungen am Kern nur im jeweiligen Repo, hier per gepinntem Commit (ADR-003) |
 | B2 | CI/CD-Pipeline | GitHub Actions: `ci.yml` (Kern-Kopien-Prüfung, Typprüfung, Tests, Build, Bundle-Budget, SBOM, `npm audit`, E2E) auf allen Zweigen; `release.yml` bei Push auf `main`: `prepare` → `check` → `build-pages`/`deploy-pages`, `build-win`, `build-linux` → `release`; `build-mac` und `build-android` mit `if: false` |
 | B3 | Abhängigkeiten (Software-Lieferkette) | npm-Pakete gemäß `package-lock.json`, gepinnt; Submodule über `file:` |
 | B4 | Code-Signing-Material | macOS-Zertifikat und Apple-API-Schlüssel sowie Android-Keystore als CI-Secrets vorgesehen; der macOS-Job ist stillgelegt, der Android-Job baut ohne Keystore nur eine ungenutzte Debug-APK. Windows und Linux ohne Signierung |

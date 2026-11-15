@@ -114,7 +114,7 @@ import { UnlesbarHinweis } from "./eingang/unlesbar-hinweis";
 import { unlesbarBestand } from "./eingang/unlesbar";
 import { koepfeJe, revisionenJe } from "./einheiten-index";
 import { aehnlicherOrt, andererEinheitstyp } from "./schnellerfassung/nacherfassung";
-import { einheitOrt } from "@bos/meldekopf/darstellung";
+import { einheitOrt, zeichenfarbeText } from "@bos/meldekopf/darstellung";
 import { RolleMarke } from "./rolle-marke";
 import { fortschrittSatz, sammelPdfDauerText, tippWaehrendLauf, useArbeitet, useArbeitFortschritt } from "@bos/oberflaeche/arbeitet";
 import { useMinutenTakt } from "./minuten-takt";
@@ -4003,7 +4003,11 @@ export function BogenDetails({ bogen, absender, absenderKarte }: { bogen: Erfass
             <tbody>
               {bogen.fahrzeuge.map((f, i) => (
                 <tr key={i}>
-                  <td>{vokabText(f.typ, vokabularFuer(org, "fahrzeug")) || "—"}</td>
+                  <td>
+                    {vokabText(f.typ, vokabularFuer(org, "fahrzeug")) || "—"}
+                    {/* Gerät von Partnern: die Farbe des Zeichens steht als Wort beim Typ. */}
+                    {zeichenfarbeText(f) && <small className="hinweis"> · Zeichen {zeichenfarbeText(f)}</small>}
+                  </td>
                   <td>{kennzeichenText(f) || "—"}</td>
                   <td>{funkrufText(f, bogen.einheit) || "—"}</td>
                   <td>{f.stanKonform == null ? "—" : f.stanKonform ? "ja" : "nein"}</td>

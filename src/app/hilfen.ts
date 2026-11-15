@@ -1714,7 +1714,7 @@ export function personUnbenannt(p: Person): boolean {
  */
 export function fahrzeugUnbenannt(f: Fahrzeug): boolean {
   return (
-    !f.kennzeichen?.trim() && !f.aenderungen?.trim() && f.sitzplaetze == null
+    !f.kennzeichen?.trim() && !f.aenderungen?.trim() && f.sitzplaetze == null && f.zeichenfarbe == null
   );
 }
 
@@ -1727,6 +1727,7 @@ export function fahrzeugLeer(f: Fahrzeug): boolean {
     f.funkrufname == null &&
     f.stanKonform == null &&
     !f.aenderungen?.trim() &&
-    f.sitzplaetze == null
+    f.sitzplaetze == null &&
+    f.zeichenfarbe == null
   );
 }
