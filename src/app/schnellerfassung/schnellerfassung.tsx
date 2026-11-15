@@ -192,7 +192,7 @@ export function Schnellerfassung({
         return;
       }
       const sammlung = einsaetzeLaden().find((s) => s.id === einsatz.id);
-      const belegt = sammlung ? [...meldungsNummern(sammlung.eintraege)].find(([schl, nr]) => nr === n && schl !== einheitSchluessel(b.einheit)) : undefined;
+      const belegt = sammlung ? [...meldungsNummern(sammlung.eintraege)].find(([schl, nr]) => nr === n && schl !== einheitSchluessel(b.einheit, b.personal)) : undefined;
       if (belegt) {
         const wer = sammlung!.eintraege.find((e) => e.einheitSchluessel === belegt[0]);
         await zeigeHinweis({

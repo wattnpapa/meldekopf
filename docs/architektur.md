@@ -655,7 +655,10 @@ den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-taktische-zeichen` `cb9c227`; am 2026-11-09 auf den Stand des
 Erfassungsbogens `1d7ed5f` gehoben: `eeb-format` `7ce601f` (Schema 12),
 `bos-meldekopf` `63429e6`, `bos-vokabulare` `b17e579`,
-`bos-taktische-zeichen` `a54364a`; `bos-eeb-satz` steht seit dem Abgleich
+`bos-taktische-zeichen` `a54364a`; für die Einzelperson (2026-11-15,
+`einheit.einzelperson`) gehoben auf `eeb-format` `b5304ac`,
+`bos-meldekopf` `bdd038c`, `bos-taktische-zeichen` `ef4e04e` und
+`bos-eeb-satz` `e78549d` (jeweils `main`); `bos-eeb-satz` steht seit dem Abgleich
 auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`), `bos-oberflaeche`
 auf dem Stand `1d7ed5f` des Erfassungsbogens (Dialoge, Quittungen,
 Tipp-Schutz, Bausteine, `schreibweise`). Seit Phase 1 dazu `bos-eeb-satz`

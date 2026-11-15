@@ -282,6 +282,40 @@ export function bedarfBoegen(): Erfassungsbogen[] {
 export const BEDARF_ALTER_MIN = [70, 66, 80, 3];
 
 /** Datenteil eines Bogen-Links (hinter „#") für einen Übungsbogen, wie ihn der Erfassungsbogen teilt. */
+/**
+ * Bogen-Link einer Einzelperson (neu im Meldekopf): ein Baufachberater aus Siegburg mit eigenem Bogen
+ * (`einheit.einzelperson`), wie ihn der Erfassungsbogen teilt. Genau eine Person, ihre Funktion als Einheitstyp.
+ */
+export function einzelpersonFragment(): string {
+  const vorlage = weitereEinheit(OrganisationsTyp.THW, "");
+  const bogen: Erfassungsbogen = {
+    ...vorlage,
+    einheit: {
+      organisation: OrganisationsTyp.THW,
+      einheitsTyp: { freitext: "Baufachberater/in" },
+      einzelperson: true,
+      hierarchie: [{ bezeichnung: { code: 1 }, name: "Siegburg" }],
+    },
+    personalErfassung: 0,
+    staerkeManuell: undefined,
+    personal: [
+      {
+        nachname: "Beispiel",
+        vorname: "Kim",
+        staerkeRolle: 0,
+        funktionen: [{ code: 61 }],
+        fahrerlaubnis: 5,
+        geschlecht: 2,
+        ernaehrung: 0,
+        kontakte: [{ art: 0, dienstlich: true, wert: "01715550100" }],
+        zusatzqualifikationen: [],
+      },
+    ],
+    fahrzeuge: [],
+  };
+  return fragmentInhalt(encodePayloadUrl(bogen, KOMPRESSOR));
+}
+
 export function uebungsBogenFragment(): string {
   return fragmentInhalt(encodePayloadUrl(uebungsBoegen(1)[0]!, KOMPRESSOR));
 }

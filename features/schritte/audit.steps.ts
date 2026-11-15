@@ -342,6 +342,19 @@ Then("trägt jede Einheit der Tafel ihr taktisches Zeichen", async function (thi
 });
 
 /**
+ * Eine Einzelperson (Fachberater/in mit eigenem Bogen) steht als Raute auf der Tafel, nicht als Formation. Das Zeichen
+ * ist ein Bild mit data:-URL; die Raute steht darin als Pfad „M64,128 L128,64 L192,128 L128,192 Z", den keine
+ * Formation enthält.
+ */
+Then("trägt die Tafel das Zeichen einer Person", async function (this: EebWelt) {
+  await monitor(this).waitForFunction(() =>
+    Array.from(document.querySelectorAll<HTMLImageElement>('main.lt .lt-karte .lt-zeichen img[data-zeichen="geladen"]')).some((b) =>
+      decodeURIComponent(b.src).includes("M64,128 L128,64 L192,128 L128,192 Z"),
+    ),
+  );
+});
+
+/**
  * Was jsdom nicht rechnen kann: Der Satz der Tafel (lagetafel.ts) und die Stilvorlage müssen im Browser dasselbe
  * ergeben. Jede Karte steht ganz in der Fläche, kein Name einer Einheit ist abgeschnitten, jede Zelle hat die
  * gerechnete Höhe und den gerechneten Abstand, und die Seite rollt nicht.

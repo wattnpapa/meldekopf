@@ -315,7 +315,7 @@ function TafelZeichen({ einheit }: { einheit: Einheit }) {
     };
   }, []);
   // Das Zeichen hängt an Organisation und Einheitentyp, nicht an der einzelnen Meldung.
-  const schluessel = `${einheit.organisation}|${einheit.einheitsTyp?.code ?? ""}|${einheit.einheitsTyp?.freitext ?? ""}`;
+  const schluessel = `${einheit.organisation}|${einheit.einheitsTyp?.code ?? ""}|${einheit.einheitsTyp?.freitext ?? ""}|${einheit.einzelperson ? "person" : ""}`;
   let url = zeichenVorrat.get(schluessel);
   if (!url && geladen && sammlung) {
     url = sammlung.svgDataUrl(zeichenFuerTafel(sammlung.einheitSymbolSvg(einheit)));
