@@ -652,7 +652,7 @@ auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`); am 2026-11-15 für
 die Farbe des taktischen Zeichens je Fahrzeug gehoben: `eeb-format` `ef2e632`
 (Schema 13, `Fahrzeug.zeichenfarbe`), `bos-meldekopf` `59100af`
 (`zeichenfarbeText`, Zeile im Abgleich), `bos-taktische-zeichen` `6354ff8`
-(Farbvarianten kommunal/grau), `bos-eeb-satz` `1787345` (Brücke reicht die
+(Farbvarianten kommunal/grau), `bos-eeb-satz` `7546c47` (Brücke reicht die
 Farbe durch), alle auf dem Zweig `claude/affectionate-pasteur-j6dp6r` der
 Kern-Repos; `bos-oberflaeche`
 auf dem Stand `1d7ed5f` des Erfassungsbogens (Dialoge, Quittungen,

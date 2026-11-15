@@ -28,7 +28,7 @@ Kopfkommentar festhalten).
 
 Am 2026-11-15 gehoben für Schema 13 (Farbe des taktischen Zeichens je
 Fahrzeug, für Gerät von Partnern): `eeb-format` `ef2e632`, `bos-meldekopf`
-`59100af`, `bos-taktische-zeichen` `6354ff8`, `bos-eeb-satz` `1787345`. Die
+`59100af`, `bos-taktische-zeichen` `6354ff8`, `bos-eeb-satz` `7546c47`. Die
 Auswahl steht wie im Erfassungsbogen (`a9ad14e`, `schritte/fahrzeuge.tsx`) in
 der Fahrzeugkarte der Schnellerfassung; PDF, CSV und Einsatzansicht nennen
 die Farbe.
