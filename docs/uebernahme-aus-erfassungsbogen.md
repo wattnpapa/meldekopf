@@ -23,12 +23,13 @@ Kopfkommentar festhalten).
 | --- | --- | --- |
 | `vendor/eeb-format` | `eb58ad6` → `7ce601f` | Modell, Codec, Signatur, Datenschutzfrist |
 | `vendor/bos-meldekopf` | `59a986c` → `63429e6` | Einsätze, Aufteilen, Zusammenführen, Diff, Papierkorb, Darstellung |
-| `vendor/bos-vokabulare` | `2f94a46` → `c725bf9` | StAN-Vorbelegung, Funkrufnamen, Ebenen, Sitzplätze, Qualifikationen |
+| `vendor/bos-vokabulare` | `2f94a46` → `b17e579` | StAN-Vorbelegung, Funkrufnamen, Ebenen, Sitzplätze, Qualifikationen |
 | `vendor/bos-taktische-zeichen` | `cb9c227` → `a54364a` | Zeichen auf Karten, Tabelle, Monitor, PDF |
 
 Am 2026-11-15 gehoben für Schema 13 (Farbe des taktischen Zeichens je
-Fahrzeug, für Gerät von Partnern): `eeb-format` `ef2e632`, `bos-meldekopf`
-`59100af`, `bos-taktische-zeichen` `6354ff8`, `bos-eeb-satz` `7546c47`. Die
+Fahrzeug, für Gerät von Partnern): `eeb-format` `f845f6d`, `bos-meldekopf`
+`f784ce0`, `bos-taktische-zeichen` `bf4b7fc`, `bos-eeb-satz` `fcf8edc`
+(jeweils `main`, zusammen mit der Einzelperson). Die
 Auswahl steht wie im Erfassungsbogen (`a9ad14e`, `schritte/fahrzeuge.tsx`) in
 der Fahrzeugkarte der Schnellerfassung; PDF, CSV und Einsatzansicht nennen
 die Farbe.

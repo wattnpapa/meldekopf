@@ -628,6 +628,14 @@ unbekannte Felder am `MeldeEintrag` werden vom Kern unverändert mitkopiert
 `vermerke`, `ersetztDurch`, `vomPapier`). Sammlungen aus dem Erfassungsbogen
 werden ohne Migration gelesen (ADR-007).
 
+Ein nicht angegebener Einsatzzeitraum kommt als Tag 0 an beiden Enden
+(01.01.2020), ohne Formatänderung: So meldet der Erfassungsbogen einen
+Beispielbogen, dessen Zeitraum niemand eingetragen hat (11/2026).
+`zeitraumLeer` in `src/app/zeitraum-eingabe.ts` erkennt das; Karte, PDF, CSV
+und Excel lassen das Feld frei, die Prüfpunkte nennen „Zeitraum fehlt“ statt
+„Zeitraum vorbei“. Der Meldungsvergleich im Kern (`@bos/meldekopf`,
+`meldung-diff.ts`) kennt die Konvention noch nicht und zeigt „01.01.2020“.
+
 ### 8.5 Tests
 
 Vitest neben dem Code, Kern-Tests im Submodul; Cucumber + Playwright gegen den
@@ -646,15 +654,16 @@ den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
 `bos-taktische-zeichen` `cb9c227`; am 2026-11-09 auf den Stand des
 Erfassungsbogens `1d7ed5f` gehoben: `eeb-format` `7ce601f` (Schema 12),
-`bos-meldekopf` `63429e6`, `bos-vokabulare` `c725bf9`,
+`bos-meldekopf` `63429e6`, `bos-vokabulare` `b17e579`,
 `bos-taktische-zeichen` `a54364a`; `bos-eeb-satz` steht seit dem Abgleich
 auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`); am 2026-11-15 für
-die Farbe des taktischen Zeichens je Fahrzeug gehoben: `eeb-format` `ef2e632`
-(Schema 13, `Fahrzeug.zeichenfarbe`), `bos-meldekopf` `59100af`
-(`zeichenfarbeText`, Zeile im Abgleich), `bos-taktische-zeichen` `6354ff8`
-(Farbvarianten kommunal/grau), `bos-eeb-satz` `7546c47` (Brücke reicht die
-Farbe durch), alle auf dem Zweig `claude/affectionate-pasteur-j6dp6r` der
-Kern-Repos; `bos-oberflaeche`
+die Einzelperson (`einheit.einzelperson`) und die Farbe des taktischen
+Zeichens je Fahrzeug (Schema 13, `Fahrzeug.zeichenfarbe`) gehoben auf
+`eeb-format` `f845f6d`, `bos-meldekopf` `f784ce0` (`zeichenfarbeText`,
+Zeile im Abgleich), `bos-taktische-zeichen` `bf4b7fc` (Personenzeichen,
+Farbvarianten kommunal/grau) und `bos-eeb-satz` `fcf8edc` (Brücke: Raute
+für Einzelpersonen, Farbe des Fahrzeugzeichens), jeweils `main`;
+`bos-oberflaeche`
 auf dem Stand `1d7ed5f` des Erfassungsbogens (Dialoge, Quittungen,
 Tipp-Schutz, Bausteine, `schreibweise`). Seit Phase 1 dazu `bos-eeb-satz`
 und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen

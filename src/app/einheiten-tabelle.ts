@@ -434,6 +434,7 @@ export function lueckeKurz(text: string): string {
   if (/^Kennzeichen .* steht mehrfach/.test(text)) return "Kennzeichen doppelt";
   if (/kein Kraftfahrer/.test(text)) return "kein Kraftfahrer";
   if (/^Ort\/Auftrag ist noch leer/.test(text)) return "Ort/Auftrag leer";
+  if (/^Einsatzzeitraum ist nicht angegeben/.test(text)) return "Zeitraum fehlt";
   if (/^Einsatzzeitraum .* ist vorbei/.test(text)) return "Zeitraum vorbei";
   if (/^Einsatzzeitraum .* mehr als ein Jahr entfernt/.test(text)) return "Zeitraum: Jahr prüfen";
   if (/^Einsatzzeitraum: „bis“ liegt vor „von“/.test(text)) return "Zeitraum: bis vor von";
@@ -441,7 +442,7 @@ export function lueckeKurz(text: string): string {
   if (/^Einsatzbeginn .* außerhalb des Einsatzzeitraums/.test(text)) return "Beginn außerhalb Zeitraum";
   if (/^Einheitstyp .* nicht erkannt/.test(text)) return "Einheitstyp nicht erkannt";
   if (/^Stärke ist 0/.test(text)) return "Stärke 0";
-  const verpflegung = /^Verpflegung für (\d+) Personen angefordert, die Gesamtstärke ist aber (\d+)/.exec(text);
+  const verpflegung = /^Verpflegung (?:nur )?für (\d+) Personen angefordert, die Gesamtstärke ist aber (\d+)/.exec(text);
   if (verpflegung) return `Verpflegung ${verpflegung[1]} statt Stärke ${verpflegung[2]}`;
   if (/^Sofortbedarf: mehr Vegetarier\/Veganer/.test(text)) return "mehr Vegetarier als Verpflegte";
   if (/^Verpflegung: .* übersteigen die Gesamtstärke/.test(text)) return "vegetarisch/vegan > Stärke";

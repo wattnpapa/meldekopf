@@ -37,7 +37,7 @@ import {
   verpflegung,
 } from "@bos/eeb-format/model";
 import { bogenBefund } from "./bogen-pruefung";
-import { einsatzVorgabe, uhrzeitAus, uhrzeitZuIso } from "./zeitraum-eingabe";
+import { einsatzVorgabe, uhrzeitAus, uhrzeitZuIso, zeitraumLeer } from "./zeitraum-eingabe";
 import { emailProblem, emailSatz } from "./email-pruefung";
 import {
   EEB_URL_PREFIX,
@@ -946,13 +946,20 @@ export function pruefpunkte(
     uhrzeitAus(ez.zeitraumVonIso),
     uhrzeitAus(ez.zeitraumBisIso),
   ];
+  const ohneZeitraum = zeitraumLeer(ez);
+  if (ohneZeitraum && heute != null) {
+    hinweise.push({
+      text: "Einsatzzeitraum ist nicht angegeben.",
+      schritt: S_EINSATZ,
+    });
+  }
   const bisVorVon =
     ez.zeitraumBis < ez.zeitraumVon ||
     (ez.zeitraumBis === ez.zeitraumVon &&
       uVon != null &&
       uBis != null &&
       uBis < uVon);
-  if (heute != null && !bisVorVon && b.einsatz.zeitraumBis < heute) {
+  if (heute != null && !ohneZeitraum && !bisVorVon && b.einsatz.zeitraumBis < heute) {
     hinweise.push({
       text: `Einsatzzeitraum ${zeitraumDeutsch(b)} ist vorbei — gilt dieser Bogen noch für den aktuellen Einsatz? Sonst Zeitraum und Ort/Auftrag neu eintragen.`,
       schritt: S_EINSATZ,
@@ -1153,7 +1160,7 @@ export function pruefpunkte(
       }
     }
   });
-  if (b.einsatz.einsatzbeginn != null) {
+  if (b.einsatz.einsatzbeginn != null && !ohneZeitraum) {
     const tag = Math.floor(b.einsatz.einsatzbeginn / MINUTEN_JE_TAG);
     if (tag < b.einsatz.zeitraumVon || tag > b.einsatz.zeitraumBis) {
       hinweise.push({
@@ -1164,6 +1171,7 @@ export function pruefpunkte(
   }
   if (
     heute != null &&
+    !ohneZeitraum &&
     !bisVorVon &&
     (Math.abs(b.einsatz.zeitraumVon - heute) > 365 ||
       b.einsatz.zeitraumBis - heute > 365)
@@ -1181,13 +1189,18 @@ export function pruefpunkte(
   hinweise.push(
     ...staerkePlausibilitaet(s).map((text) => ({ text, schritt: S_PERSONAL })),
   );
+  // Beide Richtungen: zu viele Portionen sind Verschwendung, zu wenige lassen
+  // Leute ohne Essen stehen (Wunsch aus der Erprobung, 11/2026). 0 bleibt ohne
+  // Hinweis — das ist die bewusste Meldung „Selbstversorger“ (R12-W2).
   if (
     b.sofortbedarf &&
     s.gesamt > 0 &&
-    b.sofortbedarf.verpflegungPersonen > s.gesamt
+    b.sofortbedarf.verpflegungPersonen > 0 &&
+    b.sofortbedarf.verpflegungPersonen !== s.gesamt
   ) {
+    const nur = b.sofortbedarf.verpflegungPersonen < s.gesamt ? "nur " : "";
     hinweise.push({
-      text: `Verpflegung für ${b.sofortbedarf.verpflegungPersonen} Personen angefordert, die Gesamtstärke ist aber ${s.gesamt}.`,
+      text: `Verpflegung ${nur}für ${b.sofortbedarf.verpflegungPersonen} Personen angefordert, die Gesamtstärke ist aber ${s.gesamt}.`,
       schritt: S_SOFORTBEDARF,
     });
   }
@@ -1392,6 +1405,7 @@ export function heuteDatum(): EebDatum {
  */
 export function zeitraumDeutsch(b: Pick<Erfassungsbogen, "einsatz">): string {
   const ez = b.einsatz;
+  if (zeitraumLeer(ez)) return "nicht angegeben";
   const von = datumAnzeige(ez.zeitraumVon);
   const bis = datumAnzeige(ez.zeitraumBis);
   const [uVon, uBis] = [
@@ -1417,6 +1431,8 @@ export function zeitraumGrenze(
 /** „von – bis" immer mit beiden Enden (Übersicht, PDF, Sammlung), mit Uhrzeit, wo gesetzt. */
 export function zeitraumVonBis(b: Pick<Erfassungsbogen, "einsatz">): string {
   const ez = b.einsatz;
+  // Nicht angegeben: Das Feld bleibt auf dem Papier frei für den Stift.
+  if (zeitraumLeer(ez)) return "";
   return `${zeitraumGrenze(ez.zeitraumVon, uhrzeitAus(ez.zeitraumVonIso))} – ${zeitraumGrenze(ez.zeitraumBis, uhrzeitAus(ez.zeitraumBisIso))}`;
 }
 
