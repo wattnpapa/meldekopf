@@ -26,6 +26,10 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > der Einsatz-Sammlung im Erfassungsbogen (Phase 7 der Übernahme) wandert
 > dieser Teil der Risiken von dort hierher (ADR-001).
 >
+> **Nachgezogen 2026-11-15 — Schema 13:** Je Fahrzeug kommt die Farbe des
+> taktischen Zeichens hinzu (kommunal oder grau, für Gerät von Partnern; 5.4).
+> Sachangabe zum Gerät ohne Personenbezug, keine Änderung der Risikobewertung.
+>
 > **Nachgezogen 2026-11-09 — Schema 10 bis 12:** Die Submodule stehen auf dem
 > Stand des Erfassungsbogens vom 2026-11-09. Je Person kommen die Dienststelle
 > (wenn abweichend) und der Funkrufname als Erreichbarkeit hinzu (5.4); der
@@ -266,7 +270,7 @@ Datenschutzbeauftragte/n zu bestätigen.
 | Funktion/Qualifikation | Funktionen, Zusatzqualifikationen, Fahrerlaubnisse, Zählrolle; Dienststelle der Person, wenn sie von der der Einheit abweicht (ab Schema 10) | Teils Pflicht, teils optional | `Person` |
 | Unterbringungs-/Verpflegungsangaben | Geschlecht (M/W/D), Ernährungsform | Je Person | `Person` — kein Gesundheitsdatum nach Art. 9 |
 | Kontaktdaten | Telefon, E-Mail, Funkrufname der Person (ab Schema 12, stets dienstlich; i. d. R. Führungskräfte und Ebenen) | Optional | `Kontakt` |
-| Fahrzeugbezogen | Kennzeichen, Funkrufname | Optional | `Fahrzeug` |
+| Fahrzeugbezogen | Kennzeichen, Funkrufname; ohne Personenbezug: Farbe des taktischen Zeichens (ab Schema 13) | Optional | `Fahrzeug` |
 | Absenderangabe fremder Geräte | Name, E-Mail, Telefon | Freiwillig beim Sender | Signaturnachweis am `MeldeEintrag` (`signatur`), Rohpayload (`herkunft`) |
 | Einsatzkontext, Anwesenheit | Einsatz, Ort, Zeitraum des Bogens; **Eintreff- und Abrückzeit, Status, Zug je Einheit**; Bewegungen | Teils Pflicht | `Einsatz`, Zusatzfelder `eingetroffenAm`, `abgerueckAm` (`eintrag-zeiten.ts`) — ergibt mit den Personaldaten, wer wann wo im Einsatz war |
 | Führungsstellen-Zusätze | Auftrag/Notiz (**Freitext**), `vermerke` (jede Handlung mit Uhrzeit, Vorwerte inklusive) | Optional | `eintrag-zeiten.ts` — nicht von der Datenschutzfrist erfasst (5.7) |

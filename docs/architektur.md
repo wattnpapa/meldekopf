@@ -203,7 +203,7 @@ flowchart LR
 | Baustein | Verantwortung | Herkunft |
 | --- | --- | --- |
 | Web-App (`src/app/`) | Einsatzliste, Einsatzansicht, Eingänge, Schnellerfassung, Lagemonitor, Papier-Abgleich, Exporte, Persistenz-Anbindung, Plattform. | Erfassungsbogen `src/app/`, Meldekopf-Anteil (rund 14.700 Zeilen Produktivcode, siehe Übernahme-Doku) |
-| `@bos/eeb-format` | Datenmodell (`SCHEMA_VERSION` 9), Codec, Signatur, Datenschutzfrist. | vorhanden |
+| `@bos/eeb-format` | Datenmodell (`SCHEMA_VERSION` 13), Codec, Signatur, Datenschutzfrist. | vorhanden |
 | `@bos/meldekopf` | Einsatz-Sammlung als reine Logik: Revisionen, Dedupe, Fristen, Aufteilen, Zusammenführen, Diff, Papierkorb, Text-Darstellung. | vorhanden (3.167 Zeilen) |
 | `@bos/vokabulare`, `@bos/taktische-zeichen` | Nachschlagetabellen, Zeichenauflösung. | vorhanden |
 | `@bos/eeb-satz` (<https://github.com/wattnpapa/bos-eeb-satz>) | Was beide Apps ausgeben und keine Oberfläche ist: pdfmake-Dokumentdefinition (Einzel- und Sammel-PDF, Lageblatt), CSV-Schreiber, XLSX-Schreiber, Oldenburg-Spalten, QR-Gruppierung mehrteiliger Bögen, PDF-Bild-Leser. | neu, aus `pdf-dokument.ts` (2.258), `bogen-csv.ts` (423), `einsatz-csv.ts` (290), `oldenburg-xlsx.ts` (615), `xlsx.ts` (319), `csv.ts` (51), `qr-boegen.ts` (48), `pdf-bilder.ts`, `pdf-stroeme.ts`, `pdf-qr.ts`. **Ist-Stand Phase 1:** erste Stufe `csv`, `xlsx`, `pdf-stroeme`, `pdf-bilder`, `taktische-zeichen-bogen`, `uebung-wasserzeichen`; der Rest hängt im Erfassungsbogen an App-Modulen (ADR-005, Nachtrag) |
@@ -669,6 +669,14 @@ unbekannte Felder am `MeldeEintrag` werden vom Kern unverändert mitkopiert
 `vermerke`, `ersetztDurch`, `vomPapier`). Sammlungen aus dem Erfassungsbogen
 werden ohne Migration gelesen (ADR-007).
 
+Ein nicht angegebener Einsatzzeitraum kommt als Tag 0 an beiden Enden
+(01.01.2020), ohne Formatänderung: So meldet der Erfassungsbogen einen
+Beispielbogen, dessen Zeitraum niemand eingetragen hat (11/2026).
+`zeitraumLeer` in `src/app/zeitraum-eingabe.ts` erkennt das; Karte, PDF, CSV
+und Excel lassen das Feld frei, die Prüfpunkte nennen „Zeitraum fehlt“ statt
+„Zeitraum vorbei“. Der Meldungsvergleich im Kern (`@bos/meldekopf`,
+`meldung-diff.ts`) kennt die Konvention noch nicht und zeigt „01.01.2020“.
+
 ### 8.5 Tests
 
 Vitest neben dem Code, Kern-Tests im Submodul; Cucumber + Playwright gegen den
@@ -687,9 +695,16 @@ den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
 `bos-taktische-zeichen` `cb9c227`; am 2026-11-09 auf den Stand des
 Erfassungsbogens `1d7ed5f` gehoben: `eeb-format` `7ce601f` (Schema 12),
-`bos-meldekopf` `63429e6`, `bos-vokabulare` `c725bf9`,
+`bos-meldekopf` `63429e6`, `bos-vokabulare` `b17e579`,
 `bos-taktische-zeichen` `a54364a`; `bos-eeb-satz` steht seit dem Abgleich
-auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`), `bos-oberflaeche`
+auf `2defaf9` (`csv` mit Nachtrag-Spalte, `typografie`); am 2026-11-15 für
+die Einzelperson (`einheit.einzelperson`) und die Farbe des taktischen
+Zeichens je Fahrzeug (Schema 13, `Fahrzeug.zeichenfarbe`) gehoben auf
+`eeb-format` `f845f6d`, `bos-meldekopf` `f784ce0` (`zeichenfarbeText`,
+Zeile im Abgleich), `bos-taktische-zeichen` `bf4b7fc` (Personenzeichen,
+Farbvarianten kommunal/grau) und `bos-eeb-satz` `fcf8edc` (Brücke: Raute
+für Einzelpersonen, Farbe des Fahrzeugzeichens), jeweils `main`;
+`bos-oberflaeche`
 auf dem Stand `1d7ed5f` des Erfassungsbogens (Dialoge, Quittungen,
 Tipp-Schutz, Bausteine, `schreibweise`). Seit Phase 1 dazu `bos-eeb-satz`
 und `bos-oberflaeche` `acd5273` (beide aus dem Erfassungsbogen
@@ -767,12 +782,14 @@ Spielraum; das Budget bleibt. Nur der Brocken der Tafel wächst, um 1,4 KB
 (Wahl des Funkrufnamens, Mindestes der Marken in der knappen Karte,
 Kennziffer in der breiten, Messung der Marken und Schutz der Messung).
 **Suche nach neuen Fassungen im Betrieb, Neuladen aller Fenster
-(2026-11-13):** 4.367.087 / 639.148 Byte, im Spielraum; das Budget bleibt. Das
-Startbündel wächst um 2,6 KB: `aktualisierung.tsx` läuft einmal je Fenster ab
-`main.tsx`, mit stündlicher Suche, Messung der Pause, eigener Verfolgung der
-Installation und der Prüfung „veraltet“. Der Brocken des Monitors gewinnt nur
-das Festhalten von Stufe und Vollbild über das Neuladen; seine Stilvorlagen
-sind dieselben wie in `ba9cb89`.
+(2026-11-13, am 2026-11-16 mit Einzelperson und Farbe des taktischen Zeichens
+aus `main` zusammengeführt):** 4.372.271 / 639.813 Byte, im Spielraum (Grenze
+642.929); das Budget bleibt. Das Startbündel wächst um 2,6 KB durch
+`aktualisierung.tsx`, das einmal je Fenster ab `main.tsx` läuft, mit
+stündlicher Suche, Messung der Pause, eigener Verfolgung der Installation und
+der Prüfung „veraltet“; rund 0,7 KB kommen mit Einzelperson und Farbe dazu.
+Der Brocken des Monitors gewinnt nur das Festhalten von Stufe und Vollbild
+über das Neuladen; seine Stilvorlagen sind dieselben wie in `ba9cb89`.
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab

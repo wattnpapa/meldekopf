@@ -89,6 +89,9 @@ export function AufteilenPanel(props: {
   const [unterbringung, setUnterbringung] = useState({ m: 0, w: 0, d: 0 });
   const [verpflegung, setVerpflegung] = useState({ vegetarisch: 0, vegan: 0 });
   const [abgerueckt, setAbgerueckt] = useState(false);
+  // Der Abgeteilte ist eine Person mit Sonderaufgabe (Fachberater/in): als Einzelperson führen, Raute statt Formation.
+  const [einzel, setEinzel] = useState(false);
+  const einzelMoeglich = !nurStaerke && personal.length === 1;
 
   const zeigeUnterbringung = nurStaerke && bogen.unterbringungManuell != null;
   const zeigeVerpflegung = nurStaerke && bogen.verpflegungManuell != null;
@@ -100,6 +103,7 @@ export function AufteilenPanel(props: {
     staerke: nurStaerke ? teilStaerke : undefined,
     unterbringung: zeigeUnterbringung ? unterbringung : undefined,
     verpflegung: zeigeVerpflegung ? verpflegung : undefined,
+    alsEinzelperson: einzel && einzelMoeglich ? true : undefined,
   };
   const fehler = aufteilungFehler(bogen, wahl);
   // Vorschau nur, wenn die Auswahl trägt — teileBogen wirft sonst.
@@ -200,6 +204,14 @@ export function AufteilenPanel(props: {
               sub={funktionsText(p, org)}
             />
           ))}
+          {einzelMoeglich && (
+            <AnkreuzZeile
+              an={einzel}
+              umschalten={() => setEinzel(!einzel)}
+              name="Als Einzelperson führen"
+              sub="Raute der Person statt Zeichen einer Einheit, z. B. für Fachberater/innen"
+            />
+          )}
         </>
       )}
 

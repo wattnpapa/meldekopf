@@ -67,7 +67,7 @@ import {
   vokabularFuer,
   zeitpunktDeutsch,
 } from "../hilfen";
-import { uhrzeitAus, uhrzeitZuIso } from "../zeitraum-eingabe";
+import { uhrzeitAus, uhrzeitZuIso, zeitraumLeer } from "../zeitraum-eingabe";
 import { csvDatei, csvZeile, jaNein, mitNachtragSpalte } from "@bos/eeb-satz/csv";
 import { berufText, qualifikationenUndBerufe } from "../beruf";
 import { telefonAlsTabellenText } from "../telefon-eingabe";
@@ -76,6 +76,7 @@ import { meldungsNummern } from "../einheiten-tabelle";
 import { MeldeStatus, type Einsatzsammlung, type MeldeEintrag, type MeldeQuelle } from "@bos/meldekopf/einsaetze";
 import { geltendeJeEinheit } from "../fassung-vorrang";
 import { exportKennzeile, nachtragGrundText, ortHinweisText, ortHinweise } from "./export-stand";
+import { zeichenfarbeText } from "@bos/meldekopf/darstellung";
 
 // ------------------------------------------------------------------ Spalten
 
@@ -161,6 +162,8 @@ const SPALTEN = [
   "Sitzplätze",
   "StAN-konform",
   "Änderungen/Sondergerät",
+  // Hinten angefügt, damit die Spalten davor ihre Stelle behalten.
+  "Zeichenfarbe",
 ] as const;
 
 type Spalte = (typeof SPALTEN)[number];
@@ -283,8 +286,8 @@ function einheitSatz(b: Erfassungsbogen, k: Kontext): Satz {
     "Telefon Einheit": telefonAlsTabellenText(ebene0?.telefon),
     "E-Mail Einheit": ebene0?.email ?? "",
     "Ort/Auftrag (Bogen)": b.einsatz.ortAuftrag,
-    "Zeitraum von": datumText(b.einsatz.zeitraumVon),
-    "Zeitraum bis": datumText(b.einsatz.zeitraumBis),
+    "Zeitraum von": zeitraumLeer(b.einsatz) ? "" : datumText(b.einsatz.zeitraumVon),
+    "Zeitraum bis": zeitraumLeer(b.einsatz) ? "" : datumText(b.einsatz.zeitraumBis),
     // Ab Schema 11; ältere Bögen tragen nur den Tag.
     // Wandzeit ohne Offset, wie in der Oberfläche; der volle ISO-Zeitpunkt steht in der Bogen-Datei.
     "Uhrzeit von": uhrzeitText(b.einsatz.zeitraumVonIso),
@@ -360,6 +363,8 @@ function fahrzeugSatz(b: Erfassungsbogen, k: Kontext, f: Fahrzeug, nr: number): 
     // undefined = Frage für diesen Fahrzeugtyp nicht anwendbar → leer lassen.
     "StAN-konform": f.stanKonform == null ? "" : jaNein(f.stanKonform),
     "Änderungen/Sondergerät": f.aenderungen ?? "",
+    // Leer = Farbe der Organisation; sonst „kommunal (orange)" oder „grau".
+    Zeichenfarbe: zeichenfarbeText(f),
   };
 }
 

@@ -14,6 +14,7 @@ import { EEB_URL_PREFIX } from "../../vendor/eeb-format/src/codec";
 import { V2_FRAGMENT } from "../fixtures";
 import type { EebWelt } from "../support/welt";
 import { dateiKnopf } from "./sammlung.steps";
+import { einzelpersonFragment } from "../support/sammlung";
 
 Given("ich öffne einen geteilten Bogen-Link eines alten Bogens", async function (this: EebWelt) {
   await this.oeffneApp(V2_FRAGMENT);
@@ -22,4 +23,9 @@ Given("ich öffne einen geteilten Bogen-Link eines alten Bogens", async function
 When("ich den QR-Code des alten Bogens über {string} einlese", async function (this: EebWelt, beschriftung: string) {
   const bild = await QRCode.toBuffer(EEB_URL_PREFIX + V2_FRAGMENT, { errorCorrectionLevel: "M", margin: 4, scale: 6 });
   await dateiKnopf(this, beschriftung).setInputFiles({ name: "qr-code.png", mimeType: "image/png", buffer: bild });
+});
+
+/** Ein Bogen-Link, wie ihn der Erfassungsbogen für eine einzeln anrückende Person teilt (Baufachberater, Siegburg). */
+When("ich einen geteilten Bogen-Link einer Einzelperson öffne", async function (this: EebWelt) {
+  await this.oeffneApp(einzelpersonFragment());
 });

@@ -446,7 +446,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
   ): Promise<boolean> {
     ablageFehler.current = null;
     const einsatz = einsaetzeLaden().find((s) => s.id === zielId);
-    const schl = einheitSchluessel(b.einheit);
+    const schl = einheitSchluessel(b.einheit, b.personal);
     // Gleicher Inhalt schon da? Dann gibt es nichts zu fragen — der Kern
     // überspringt ihn ohnehin, die Rückfrage davor war nur Stapel-Bremse
     // (Audit „Stress", S1; „Offline", O3).
@@ -1363,7 +1363,7 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
         (q) =>
           q.signatur.zustand !== "unsigniert" &&
           q.bogen.stand === bogen.stand &&
-          einheitSchluessel(q.bogen.einheit) === einheitSchluessel(bogen.einheit),
+          einheitSchluessel(q.bogen.einheit, q.bogen.personal) === einheitSchluessel(bogen.einheit, bogen.personal),
       );
       return passend ?? ohne;
     } catch {
