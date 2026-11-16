@@ -83,7 +83,10 @@ Funktionalität: Eine Sammlung nachträglich als Übung führen
     Wenn ich auf "Neue Einsatz-Sammlung…" klicke
     Und ich im Dialog "Name" mit "Wattsturm" fülle
     Und ich im Dialog auf "Einsatz anlegen" klicke
-    Dann sehe ich den Hinweis "Einsatz"
+    # Erst die neue Sammlung abwarten: „Einsatz“ steht schon auf der Startseite („Neue Einsatz-Sammlung…“), der Link
+    # kam sonst mitunter vor der Sammlung an, und der Dialog bot nur eine neue Sammlung an (Release 2026-11-16).
+    Dann sehe ich die Überschrift "Wattsturm"
+    Und sehe ich den Hinweis "Einsatz"
     Wenn ich einen geteilten Bogen-Link eines Übungsbogens öffne
     Dann sehe ich den Dialog "Meldung von"
     Wenn ich im Dialog auf "In „Wattsturm“ aufnehmen" klicke
