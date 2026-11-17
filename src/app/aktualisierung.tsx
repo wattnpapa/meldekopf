@@ -13,7 +13,8 @@
  * Betrieb selbst nach einer neuen Fassung, und jedes Fenster lädt neu, sobald
  * eine neue Fassung die Steuerung übernimmt, auch das Fenster des
  * Lagemonitors. Der Ablauf läuft einmal je Fenster (`aktualisierungStarten`),
- * nicht einmal je Ansicht.
+ * nicht einmal je Ansicht. Seit 2026-11-17 bleibt der Hinweis beim Rollen
+ * oben stehen, und ein Fenster, das von selbst neu gestartet ist, sagt es.
  */
 
 import { useEffect, useSyncExternalStore } from "react";
@@ -61,6 +62,8 @@ export const SUCHE_MS = 60 * 60_000;
 export const SUCHE_NACH_PAUSE_MS = 10 * 60_000;
 /** Merkt, für welche Fassung dieses Fenster schon einmal wegen „veraltet" neu geladen hat (sessionStorage, je Fenster). */
 export const VERALTET_SCHLUESSEL = "eeb.fassung.veraltet";
+/** Merkt über ein Neuladen hinweg, dass das Hauptfenster von selbst neu gestartet ist, nicht auf eigenes „Neu laden" (sessionStorage). */
+export const NEU_GESTARTET_SCHLUESSEL = "eeb.fassung.neu-gestartet";
 
 /**
  * Welches Fenster: Das Hauptfenster sucht und meldet eine neue Fassung; eine reine Anzeige (das Fenster des
@@ -77,6 +80,10 @@ export interface NeueVersion {
   neuLaden: () => void;
   /** Den Hinweis ausblenden; er kommt mit dem nächsten Laden oder der nächsten Suche wieder, solange die Fassung wartet. */
   spaeter: () => void;
+  /** Dieses Fenster ist eben von selbst neu gestartet (neue Fassung aus einem anderen Fenster oder vom Browser aktiviert). */
+  neuGestartet: boolean;
+  /** Die Erklärung dazu ausblenden. */
+  verstanden: () => void;
 }
 
 /** Ändern nur die Tests: die Adresse des Bausteins, der diesen Code trägt (im Bau ein `assets/…js` dieser Fassung). */
@@ -94,9 +101,12 @@ export async function fassungVeraltet(adresse: string = fassungsQuelle.adresse):
     if (typeof caches === "undefined") return false;
     const url = new URL(adresse);
     if (!/^https?:$/.test(url.protocol) || !/\/assets\/[^/]+\.js$/.test(url.pathname)) return false;
-    const vorrat = (await caches.keys()).find((name) => name.startsWith("workbox-precache"));
-    if (!vorrat) return false;
-    return (await (await caches.open(vorrat)).match(url.href)) === undefined;
+    // Alle Vorräte der Herkunft: Workbox benennt sie je Bereich (workbox-precache-v2-<scope>). Liegt auf derselben Herkunft
+    // eine zweite App unter einem anderen Pfad, stand ihr Vorrat womöglich vorn, und die Seite galt grundlos als veraltet.
+    const vorraete = (await caches.keys()).filter((name) => name.startsWith("workbox-precache"));
+    if (vorraete.length === 0) return false;
+    for (const name of vorraete) if ((await (await caches.open(name)).match(url.href)) !== undefined) return false;
+    return true;
   } catch {
     return false;
   }
@@ -136,7 +146,9 @@ interface Lauf {
   beenden: () => void;
 }
 let lauf: Lauf | null = null;
-let stand: { da: boolean; laedt: boolean } = { da: false, laedt: false };
+let stand: { da: boolean; laedt: boolean; neuGestartet: boolean } = { da: false, laedt: false, neuGestartet: false };
+// In diesem Fenster wurde „Neu laden" getippt: Das folgende Neuladen braucht keine Erklärung.
+let selbstGetippt = false;
 const zuhoerer = new Set<() => void>();
 
 function melden(neu: Partial<typeof stand>): void {
@@ -190,16 +202,20 @@ export function aktualisierungStarten(art: FensterArt, vorDemNeuladen?: () => vo
     if (!laeuft()) return;
     try {
       l.vorDemNeuladen?.();
+      // Ein Hauptfenster, das von selbst neu startet, sagt es danach: Wer in einem Dialog tippte, fände die Eingabe sonst
+      // ohne Erklärung nicht mehr.
+      if (hauptfenster && !selbstGetippt) sessionStorage.setItem(NEU_GESTARTET_SCHLUESSEL, "1");
     } catch {
-      /* Nur Bequemlichkeit (Stufe, Vollbild); neu geladen wird trotzdem. */
+      /* Nur Bequemlichkeit (Stufe, Vollbild, Erklärung); neu geladen wird trotzdem. */
     }
     window.location.reload();
   };
 
-  // Eine neue Fassung wartet. Nur das Hauptfenster meldet sie; bei der Erstinstallation (keine Steuerung) gibt es nichts zu melden.
-  // Wurde sie mit „Später“ weggelegt, steht der Hinweis nach der nächsten Suche wieder da.
+  // Eine neue Fassung wartet. Nur das Hauptfenster meldet sie; bei der Erstinstallation (noch keine aktive Fassung) gibt es
+  // nichts zu melden. Gefragt wird die Registrierung, nicht die Steuerung dieser Seite: Ein hart neu geladenes Fenster ist
+  // ungesteuert, und nach „Später“ kam der Hinweis dort nie wieder. Weggelegt steht er nach der nächsten Suche wieder da.
   const wartet = () => {
-    if (!hauptfenster || !laeuft() || !registrierung?.waiting || !container.controller) return;
+    if (!hauptfenster || !laeuft() || !registrierung?.waiting || !registrierung.active) return;
     l.aktivieren = () => aktualisieren?.(true);
     melden({ da: true });
   };
@@ -236,12 +252,9 @@ export function aktualisierungStarten(art: FensterArt, vorDemNeuladen?: () => vo
     const sw = container.controller;
     if (!sw || !(await aktiviert(sw)) || !laeuft() || container.controller !== sw) return;
     if (!(await fassungVeraltet()) || !laeuft()) return;
-    if (veraltetNeuLadenErlaubt()) return neuLaden();
-    // Schon einmal deshalb neu geladen und weiter veraltet: nicht noch einmal selbst, aber im Hauptfenster anbieten.
-    if (hauptfenster) {
-      l.aktivieren = () => window.location.reload();
-      melden({ da: true });
-    }
+    // Einmal je Fassung und Fenster. Ist die Seite danach weiter „veraltet“, irrt die Prüfung (etwa ein beschädigter Vorrat):
+    // Dann bleibt es still, statt eine neue Version zu melden, die „Neu laden“ nie herbeiholt.
+    if (veraltetNeuLadenErlaubt()) neuLaden();
   };
 
   const wechsel = () => {
@@ -253,6 +266,27 @@ export function aktualisierungStarten(art: FensterArt, vorDemNeuladen?: () => vo
   container.addEventListener("controllerchange", wechsel);
   void veraltetPruefen();
 
+  l.beenden = () => {
+    window.clearInterval(takt);
+    container.removeEventListener("controllerchange", wechsel);
+    document.removeEventListener("visibilitychange", sichtbarkeit);
+    window.removeEventListener("online", suchen);
+    registrierung?.removeEventListener("updatefound", gefunden);
+  };
+
+  // Das Fenster des Lagemonitors meldet den Service Worker nicht an, wie vor 2026-11-13: Es sucht und aktiviert nichts, und
+  // seine Anmeldung kurz nach dem Öffnen ließ im Wettlauf mit „Neu laden“ das Hauptfenster hängen (Gegenprüfung
+  // 2026-11-16). Wechsel der Steuerung und Prüfung „veraltet“ brauchen die Registrierung nicht.
+  if (!hauptfenster) return;
+  try {
+    if (sessionStorage.getItem(NEU_GESTARTET_SCHLUESSEL)) {
+      sessionStorage.removeItem(NEU_GESTARTET_SCHLUESSEL);
+      melden({ neuGestartet: true });
+    }
+  } catch {
+    /* Ohne sessionStorage keine Erklärung. */
+  }
+
   // Dynamischer Import: das virtuelle Modul liefert vite-plugin-pwa erst im
   // Build/Dev; so bleibt der native Bundle-Pfad unberührt.
   import("virtual:pwa-register")
@@ -261,7 +295,7 @@ export function aktualisierungStarten(art: FensterArt, vorDemNeuladen?: () => vo
       const updateSW: (neuLaden?: boolean) => Promise<void> = registerSW({
         // Neue Version wartet im Hintergrund → Hinweis einblenden (nur im Hauptfenster).
         onNeedRefresh() {
-          if (!hauptfenster || !laeuft()) return;
+          if (!laeuft()) return;
           l.aktivieren = () => updateSW(true);
           melden({ da: true });
         },
@@ -272,7 +306,6 @@ export function aktualisierungStarten(art: FensterArt, vorDemNeuladen?: () => vo
           if (!laeuft() || !r) return;
           registrierung = r;
           aktualisieren = updateSW;
-          if (!hauptfenster) return;
           takt = window.setInterval(suchen, SUCHE_MS);
           document.addEventListener("visibilitychange", sichtbarkeit);
           window.addEventListener("online", suchen);
@@ -283,21 +316,14 @@ export function aktualisierungStarten(art: FensterArt, vorDemNeuladen?: () => vo
     .catch(() => {
       /* SW-Registrierung fehlgeschlagen – App läuft weiter (nur ohne Offline-Cache). */
     });
-
-  l.beenden = () => {
-    window.clearInterval(takt);
-    container.removeEventListener("controllerchange", wechsel);
-    document.removeEventListener("visibilitychange", sichtbarkeit);
-    window.removeEventListener("online", suchen);
-    registrierung?.removeEventListener("updatefound", gefunden);
-  };
 }
 
 /** Nur für Tests: den Lauf abbauen und den Stand vergessen. */
 export function aktualisierungBeenden(): void {
   lauf?.beenden();
   lauf = null;
-  stand = { da: false, laedt: false };
+  stand = { da: false, laedt: false, neuGestartet: false };
+  selbstGetippt = false;
   zuhoerer.clear();
 }
 
@@ -309,6 +335,7 @@ const standLesen = () => stand;
 
 function neuLadenGetippt(): void {
   if (stand.laedt) return;
+  selbstGetippt = true;
   melden({ laedt: true });
   neuLadenMitRueckfall(() => lauf?.aktivieren?.(), () => window.location.reload());
 }
@@ -319,22 +346,53 @@ export function useNeueVersion(): NeueVersion {
     aktualisierungStarten("hauptfenster");
   }, []);
   const s = useSyncExternalStore(abonnieren, standLesen, standLesen);
-  return { da: s.da, laedt: s.laedt, neuLaden: neuLadenGetippt, spaeter: () => melden({ da: false }) };
+  return {
+    da: s.da,
+    laedt: s.laedt,
+    neuLaden: neuLadenGetippt,
+    spaeter: () => melden({ da: false }),
+    neuGestartet: s.neuGestartet,
+    verstanden: () => melden({ neuGestartet: false }),
+  };
 }
 
 export function WebUpdateBanner() {
   const v = useNeueVersion();
-  if (!v.da) return null;
-
-  return (
-    <div className="update-banner" role="status">
-      <span>{v.laedt ? "Die neue Version wird geladen …" : "Neue Version verfügbar."}</span>
-      <button type="button" className="primaer" disabled={v.laedt} onClick={v.neuLaden}>
-        Neu laden
-      </button>
-      <button type="button" className="link" onClick={v.spaeter}>Später</button>
-    </div>
-  );
+  if (v.da) {
+    return (
+      <div className="update-banner" role="status">
+        <p className="update-banner-text">
+          <span>{v.laedt ? "Die neue Version wird geladen …" : "Neue Version verfügbar."}</span>
+          {/* Gegenprüfung 2026-11-16: Wer hier tippt, erfuhr nicht, dass die anderen Fenster mit neu starten. */}
+          {!v.laedt && (
+            <>
+              {" "}
+              <span>„Neu laden“ startet alle Fenster dieser App neu.</span>
+            </>
+          )}
+        </p>
+        <span className="update-banner-knoepfe">
+          <button type="button" className="primaer" disabled={v.laedt} onClick={v.neuLaden}>
+            Neu laden
+          </button>
+          <button type="button" className="link" onClick={v.spaeter}>Später</button>
+        </span>
+      </div>
+    );
+  }
+  if (v.neuGestartet) {
+    return (
+      <div className="update-banner" role="status">
+        <p className="update-banner-text">
+          Neue Version geladen: Dieses Fenster ist von selbst neu gestartet. Eingaben in einem offenen Dialog wurden nicht übernommen.
+        </p>
+        <span className="update-banner-knoepfe">
+          <button type="button" className="primaer" onClick={v.verstanden}>Verstanden</button>
+        </span>
+      </div>
+    );
+  }
+  return null;
 }
 
 /**

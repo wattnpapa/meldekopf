@@ -124,22 +124,31 @@ function nachNeuladenMerken(w: NachNeuladen): void {
   try { globalThis.sessionStorage?.setItem(NACH_NEULADEN_SCHLUESSEL, JSON.stringify(w)); } catch { /* dann eben die Vorgabe */ }
 }
 
+/** Das Vollbild soll zurückkommen, ist aber noch nicht zurückgeholt: Ein weiteres Neuladen merkt es dann weiter. */
+let vollbildWartet = false;
+
 /**
  * Nach dem selbsttätigen Neuladen ist das Vollbild weg: Der Browser schaltet es nur auf einen Tipp hin ein. Der erste
- * Tipp ins Fenster holt es zurück. Knöpfe behalten ihre Aufgabe („Vollbild“ schaltete es sonst gleich wieder aus), und
- * wer das Vollbild selbst ein- oder ausschaltet, hat entschieden: Dann horcht nichts mehr.
+ * Klick oder Tipp ins Fenster holt es zurück. Gehorcht wird auf „click“: Ein Tipp per Touch gilt erst beim Loslassen als
+ * Geste, auf „pointerdown“ lehnte der Browser ab (Gegenprüfung 2026-11-16). Scheitert es, bleibt der Zuhörer für den
+ * nächsten Tipp. Knöpfe behalten ihre Aufgabe („Vollbild“ schaltete es sonst gleich wieder aus), und wer das Vollbild
+ * selbst ein- oder ausschaltet, hat entschieden: Dann horcht nichts mehr.
  */
 function vollbildBeimErstenTipp(): () => void {
+  vollbildWartet = true;
   const tipp = (e: Event) => {
     if (e.target instanceof Element && e.target.closest("button, summary, a, input, select, textarea, label")) return;
-    weg();
-    if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
+    if (document.fullscreenElement) return weg();
+    const versuch = document.documentElement.requestFullscreen?.();
+    if (versuch) void versuch.then(weg, () => { /* ohne Geste abgelehnt: beim nächsten Tipp wieder */ });
+    else weg();
   };
   const weg = () => {
-    document.removeEventListener("pointerdown", tipp, true);
+    vollbildWartet = false;
+    document.removeEventListener("click", tipp, true);
     document.removeEventListener("fullscreenchange", weg);
   };
-  document.addEventListener("pointerdown", tipp, true);
+  document.addEventListener("click", tipp, true);
   document.addEventListener("fullscreenchange", weg);
   return weg;
 }
@@ -410,7 +419,8 @@ export function Lagemonitor({ einsatzId }: { einsatzId: string }) {
   stufeJetzt.current = stufe;
   useEffect(() => {
     try { globalThis.sessionStorage?.removeItem(NACH_NEULADEN_SCHLUESSEL); } catch { /* gesperrt */ }
-    aktualisierungStarten("anzeige", () => nachNeuladenMerken({ stufe: stufeJetzt.current, vollbild: document.fullscreenElement != null }));
+    // Steht das Vollbild noch aus (kein Tipp seit dem letzten Neuladen), gilt es weiter als gewollt.
+    aktualisierungStarten("anzeige", () => nachNeuladenMerken({ stufe: stufeJetzt.current, vollbild: document.fullscreenElement != null || vollbildWartet }));
   }, []);
   useEffect(() => (nachNeuladen?.vollbild ? vollbildBeimErstenTipp() : undefined), [nachNeuladen]);
   const klasse = `lm${stufe === "hell" ? " lm-hell" : stufe === "gedimmt" ? " lm-gedimmt" : ""}`;

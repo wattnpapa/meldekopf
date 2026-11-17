@@ -24,8 +24,17 @@ vi.mock("virtual:pwa-register", () => ({
   },
 }));
 
-const { WebUpdateBanner, SUCHE_MS, SUCHE_NACH_PAUSE_MS, VERALTET_SCHLUESSEL, aktualisierungStarten, aktualisierungBeenden, fassungVeraltet, fassungsQuelle } =
-  await import("./aktualisierung");
+const {
+  WebUpdateBanner,
+  SUCHE_MS,
+  SUCHE_NACH_PAUSE_MS,
+  VERALTET_SCHLUESSEL,
+  NEU_GESTARTET_SCHLUESSEL,
+  aktualisierungStarten,
+  aktualisierungBeenden,
+  fassungVeraltet,
+  fassungsQuelle,
+} = await import("./aktualisierung");
 const { Lagemonitor, NACH_NEULADEN_SCHLUESSEL } = await import("./lagemonitor-ui");
 
 type Arbeiter = ServiceWorker & { name: string; state: ServiceWorkerState };
@@ -55,17 +64,22 @@ function container(gesteuert: boolean) {
 const EIGEN = "https://meldekopf.test/assets/index-Alt12345.js";
 /** Vorrat (Workbox-Precache) mit diesen Adressen; `null`: gar keiner. */
 function vorrat(adressen: string[] | null) {
+  vorraete(adressen ? { "workbox-precache-v2-https://meldekopf.test/": adressen } : {});
+}
+/** Mehrere Vorräte je Name, in dieser Reihenfolge angelegt (wie caches.keys()), dazu der Laufzeit-Cache der App. */
+function vorraete(je: Record<string, string[]>) {
   vi.stubGlobal("caches", {
-    keys: async () => (adressen ? ["eeb-zusatz", "workbox-precache-v2-https://meldekopf.test/"] : ["eeb-zusatz"]),
-    open: async () => ({ match: async (u: string) => (adressen?.includes(u) ? {} : undefined) }),
+    keys: async () => [...Object.keys(je), "eeb-zusatz"],
+    open: async (name: string) => ({ match: async (u: string) => ((je[name] ?? []).includes(u) ? {} : undefined) }),
   });
 }
 
-/** Registrierung mit gezählten Abfragen und von Hand setzbarem `installing`/`waiting`. */
+/** Registrierung mit gezählten Abfragen und von Hand setzbarem `installing`/`waiting`; aktiv ist die bisherige Fassung. */
 function registrierung() {
   const r = Object.assign(new EventTarget(), {
     installing: null as Arbeiter | null,
     waiting: null as Arbeiter | null,
+    active: arbeiter("alt") as Arbeiter | null,
     update: vi.fn(async () => {}),
   });
   return r;
@@ -130,6 +144,16 @@ describe("Prüfung „veraltet“", () => {
     vi.stubGlobal("caches", { keys: async () => { throw new Error("gesperrt"); } });
     expect(await fassungVeraltet(EIGEN)).toBe(false);
   });
+
+  it("sucht in allen Vorräten der Herkunft, nicht nur im ersten", async () => {
+    // Eine zweite App unter einem anderen Pfad derselben Herkunft hat ihren Vorrat zuerst angelegt (Gegenprüfung 2026-11-16).
+    const fremd = "workbox-precache-v2-https://meldekopf.test/andere/";
+    const eigen = "workbox-precache-v2-https://meldekopf.test/";
+    vorraete({ [fremd]: ["https://meldekopf.test/andere/assets/index-Fremd111.js"], [eigen]: [EIGEN] });
+    expect(await fassungVeraltet(EIGEN)).toBe(false);
+    vorraete({ [fremd]: ["https://meldekopf.test/andere/assets/index-Fremd111.js"], [eigen]: ["https://meldekopf.test/assets/index-Neu67890.js"] });
+    expect(await fassungVeraltet(EIGEN)).toBe(true);
+  });
 });
 
 describe("Hauptfenster", () => {
@@ -140,12 +164,16 @@ describe("Hauptfenster", () => {
     expect(screen.queryByText("Neue Version verfügbar.")).toBeNull();
     act(() => o.onNeedRefresh!());
     expect(screen.getByText("Neue Version verfügbar.")).toBeTruthy();
+    // Wer tippt, erfährt, dass die anderen Fenster mitstarten.
+    expect(screen.getByText("„Neu laden“ startet alle Fenster dieser App neu.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Neu laden" }));
     expect(pwa.updateSW).toHaveBeenCalledWith(true);
     expect(neuladen).not.toHaveBeenCalled();
     expect(screen.getByText("Die neue Version wird geladen …")).toBeTruthy();
     sw.wechseln();
     expect(neuladen).toHaveBeenCalledTimes(1);
+    // Selbst getippt: Nach dem Neuladen braucht es keine Erklärung.
+    expect(sessionStorage.getItem(NEU_GESTARTET_SCHLUESSEL)).toBeNull();
   });
 
   it("lädt neu, sobald eine neue Fassung in einem anderen Fenster aktiv wird, auch nach „Später“ und ohne Hinweis", async () => {
@@ -167,6 +195,26 @@ describe("Hauptfenster", () => {
     await registriert();
     ohne.wechseln();
     expect(neuladen).toHaveBeenCalledTimes(1);
+  });
+
+  it("erklärt nach dem Neustart, dass das Fenster von selbst neu gestartet ist", async () => {
+    // Ein Kollege tippt im anderen Fenster „Neu laden“; hier war ein Dialog offen (Gegenprüfung 2026-11-16).
+    const sw = container(true);
+    render(<WebUpdateBanner />);
+    await registriert();
+    sw.wechseln();
+    expect(neuladen).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(NEU_GESTARTET_SCHLUESSEL)).toBe("1");
+    // Das neu geladene Fenster.
+    cleanup();
+    aktualisierungBeenden();
+    container(true);
+    render(<WebUpdateBanner />);
+    await ruhe();
+    expect(screen.getByText(/Dieses Fenster ist von selbst neu gestartet\. Eingaben in einem offenen Dialog wurden nicht übernommen\./)).toBeTruthy();
+    expect(sessionStorage.getItem(NEU_GESTARTET_SCHLUESSEL)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Verstanden" }));
+    expect(screen.queryByText(/von selbst neu gestartet/)).toBeNull();
   });
 
   it("überlässt das Neuladen dem eigenen Wechsel der Steuerung, nicht der Bibliothek", async () => {
@@ -197,6 +245,40 @@ describe("Hauptfenster", () => {
     expect(screen.getByText("Neue Version verfügbar.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Neu laden" }));
     expect(pwa.updateSW).toHaveBeenCalledWith(true);
+  });
+
+  it("meldet eine wartende Fassung auch in einem hart neu geladenen, ungesteuerten Fenster nach „Später“ wieder", async () => {
+    // Strg+Umschalt+R: Die Seite ist ungesteuert, die Registrierung hat aber eine aktive und eine wartende Fassung.
+    container(false);
+    render(<WebUpdateBanner />);
+    const o = await registriert();
+    const r = registrierung();
+    r.waiting = arbeiter("neu", "installed");
+    act(() => o.onRegisteredSW!("/sw.js", r as unknown as ServiceWorkerRegistration));
+    act(() => o.onNeedRefresh!());
+    fireEvent.click(screen.getByRole("button", { name: "Später" }));
+    await act(async () => {
+      vi.advanceTimersByTime(SUCHE_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Neue Version verfügbar.")).toBeTruthy();
+  });
+
+  it("meldet bei der ersten Installation nichts, auch wenn die neue Fassung kurz wartet", async () => {
+    container(false);
+    render(<WebUpdateBanner />);
+    const o = await registriert();
+    const r = registrierung();
+    r.active = null;
+    act(() => o.onRegisteredSW!("/sw.js", r as unknown as ServiceWorkerRegistration));
+    const erste = arbeiter("erste", "installing");
+    r.installing = erste;
+    act(() => void r.dispatchEvent(new Event("updatefound")));
+    r.installing = null;
+    r.waiting = erste;
+    act(() => weiter(erste, "installed"));
+    expect(screen.queryByText("Neue Version verfügbar.")).toBeNull();
   });
 
   it("meldet eine Fassung, deren Installation erst nach der Suche fertig wird", async () => {
@@ -250,16 +332,16 @@ describe("Hauptfenster", () => {
     await ruhe();
     expect(neuladen).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(VERALTET_SCHLUESSEL)).toBe(EIGEN);
-    // Dieselbe Fassung noch einmal (die Prüfung irrte): nicht wieder selbst neu laden, aber anbieten.
+    // Dieselbe Fassung noch einmal (die Prüfung irrte, etwa ein beschädigter Vorrat): nicht wieder neu laden und keine
+    // neue Version melden, die „Neu laden“ nie herbeiholt.
+    sessionStorage.removeItem(NEU_GESTARTET_SCHLUESSEL);
     cleanup();
     aktualisierungBeenden();
     render(<WebUpdateBanner />);
     await ruhe();
     expect(neuladen).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Neue Version verfügbar.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Neu laden" }));
-    expect(neuladen).toHaveBeenCalledTimes(2);
-    expect(pwa.updateSW).not.toHaveBeenCalled();
+    expect(screen.queryByText("Neue Version verfügbar.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Neu laden" })).toBeNull();
   });
 
   it("lädt beim Start nicht neu, solange die eigene Fassung im Vorrat liegt", async () => {
@@ -336,25 +418,26 @@ describe("Fenster des Lagemonitors", () => {
     const sw = container(true);
     aktualisierungStarten("anzeige"); // wie main.tsx
     monitor();
-    const o = await registriert();
-    act(() => o.onNeedRefresh!());
+    await ruhe();
     expect(document.body.textContent).not.toContain("Neue Version");
     expect(screen.queryByRole("button", { name: "Neu laden" })).toBeNull();
     sw.wechseln();
     expect(neuladen).toHaveBeenCalledTimes(1);
     expect(pwa.updateSW).not.toHaveBeenCalled();
+    // Keine Erklärung im Fernseher: Er zeigt nur die Lage.
+    expect(sessionStorage.getItem(NEU_GESTARTET_SCHLUESSEL)).toBeNull();
   });
 
-  it("sucht nicht selbst nach neuen Fassungen", async () => {
+  it("meldet den Service Worker nicht an und sucht nicht selbst", async () => {
+    // Seine Anmeldung kurz nach dem Öffnen ließ im Wettlauf mit „Neu laden“ das Hauptfenster hängen (Gegenprüfung 2026-11-16).
     container(true);
     aktualisierungStarten("anzeige");
     monitor();
-    const o = await registriert();
-    const r = registrierung();
-    act(() => o.onRegisteredSW!("/sw.js", r as unknown as ServiceWorkerRegistration));
+    await ruhe();
     act(() => void vi.advanceTimersByTime(SUCHE_MS * 3));
     act(() => void window.dispatchEvent(new Event("online")));
-    expect(r.update).not.toHaveBeenCalled();
+    await ruhe();
+    expect(pwa.optionen).toBeNull();
   });
 
   it("behält die Stufe „Hell“ über das selbsttätige Neuladen, aber nicht über ein eigenes", async () => {
@@ -379,21 +462,52 @@ describe("Fenster des Lagemonitors", () => {
     expect(klasse()).not.toContain("lm-hell");
   });
 
-  it("holt das Vollbild nach dem selbsttätigen Neuladen mit dem ersten Tipp ins Fenster zurück", () => {
+  it("holt das Vollbild nach dem selbsttätigen Neuladen mit dem ersten Klick oder Tipp ins Fenster zurück", async () => {
     sessionStorage.setItem(NACH_NEULADEN_SCHLUESSEL, JSON.stringify({ stufe: "dunkel", vollbild: true }));
     const vollbild = vi.fn(async () => {});
     Object.defineProperty(document.documentElement, "requestFullscreen", { value: vollbild, configurable: true });
     try {
       monitor();
       // Ein Knopf behält seine Aufgabe.
-      fireEvent.pointerDown(screen.getByRole("button", { name: "Dunkler" }));
+      fireEvent.click(screen.getByRole("button", { name: "Dunkler" }));
       expect(vollbild).not.toHaveBeenCalled();
-      fireEvent.pointerDown(document.querySelector("main.lm")!);
+      fireEvent.click(document.querySelector("main.lm")!);
       expect(vollbild).toHaveBeenCalledTimes(1);
-      fireEvent.pointerDown(document.querySelector("main.lm")!);
+      await ruhe();
+      fireEvent.click(document.querySelector("main.lm")!);
       expect(vollbild).toHaveBeenCalledTimes(1);
     } finally {
       Reflect.deleteProperty(document.documentElement, "requestFullscreen");
     }
+  });
+
+  it("versucht es beim nächsten Tipp wieder, wenn der Browser das Vollbild ablehnt", async () => {
+    // Per Touch zählte „pointerdown“ nicht als Geste; ein abgelehnter Versuch nahm den Zuhörer mit (Gegenprüfung 2026-11-16).
+    sessionStorage.setItem(NACH_NEULADEN_SCHLUESSEL, JSON.stringify({ stufe: "dunkel", vollbild: true }));
+    const vollbild = vi.fn().mockRejectedValueOnce(new Error("API can only be initiated by a user gesture")).mockResolvedValue(undefined);
+    Object.defineProperty(document.documentElement, "requestFullscreen", { value: vollbild, configurable: true });
+    try {
+      monitor();
+      fireEvent.click(document.querySelector("main.lm")!);
+      await ruhe();
+      fireEvent.click(document.querySelector("main.lm")!);
+      await ruhe();
+      expect(vollbild).toHaveBeenCalledTimes(2);
+      fireEvent.click(document.querySelector("main.lm")!);
+      expect(vollbild).toHaveBeenCalledTimes(2);
+    } finally {
+      Reflect.deleteProperty(document.documentElement, "requestFullscreen");
+    }
+  });
+
+  it("merkt das Vollbild weiter, solange es nach einem Neuladen nicht zurückgeholt ist", () => {
+    // Zwei Fassungen nacheinander, niemand tippt dazwischen: Auch nach dem zweiten Neuladen soll es zurückkommen.
+    sessionStorage.setItem(NACH_NEULADEN_SCHLUESSEL, JSON.stringify({ stufe: "hell", vollbild: true }));
+    const sw = container(true);
+    aktualisierungStarten("anzeige");
+    monitor();
+    sw.wechseln();
+    expect(neuladen).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(sessionStorage.getItem(NACH_NEULADEN_SCHLUESSEL)!)).toEqual({ stufe: "hell", vollbild: true });
   });
 });

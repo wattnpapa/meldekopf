@@ -488,11 +488,19 @@
     .kopfzeile > span { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; justify-content: flex-end; }
     .kopfzeile > span > * { max-width: 100%; }
 
-    /* Aktualisierungsband (aktualisierung.tsx): Kennfarbe als Fläche, Zweitschrift gerechnet. */
+    /* Aktualisierungsband (aktualisierung.tsx): Kennfarbe als Fläche, Zweitschrift gerechnet. Es klebt oben im Bild,
+       unter der festen Warnleiste, wenn sie steht: Seit das Hauptfenster stündlich sucht, kommt es mitten in der Arbeit,
+       und im Seitenfluss stand es dann über dem Bildrand (Gegenprüfung 2026-11-16). Knöpfe mit voller Trefferfläche. */
     .update-banner {
+      position: sticky; top: var(--fest-warnung-hoehe, 0px); z-index: 24;
       display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
       background: var(--blau); color: var(--auf-akzent); padding: 0.5rem 1rem; font-size: var(--t-s);
     }
+    .update-banner-text { flex: 1 1 16rem; margin: 0; }
+    .update-banner-knoepfe { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .update-banner button { min-height: 44px; }
+    /* Spezifischer als die allgemeine Regel für Textknöpfe weiter unten (button.link, min-height 0). */
+    .update-banner button.link { min-height: 44px; display: inline-flex; align-items: center; padding-inline: 0.75rem; }
     .update-banner .primaer { background: var(--auf-akzent); color: var(--blau); border-color: var(--auf-akzent); }
     .update-banner .link { color: var(--auf-akzent-2); }
     .update-banner .fehler { color: var(--alarm-auf-akzent); flex-basis: 100%; }

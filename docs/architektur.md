@@ -479,10 +479,16 @@ Zurückkommen und wenn das Netz wiederkommt (`aktualisierungStarten` in
 fragte die App nur beim Laden; ein Laptop, der den ganzen Einsatz lief,
 erfuhr von einer neuen Fassung nichts. Aktiviert wird eine neue Fassung weiter
 nur auf „Neu laden“ im Hinweis des Hauptfensters, oder wenn alle Fenster der
-App geschlossen waren. Nach „Später“ steht der Hinweis mit der nächsten Suche
-wieder da, solange die Fassung wartet. Die Installation verfolgt die App
-selbst; die Bibliothek hört nach einer abgebrochenen nicht mehr hin, und der
-Hinweis kam dann eine Stunde zu spät.
+App geschlossen waren; ein einzelnes, hart neu geladenes Fenster zählt für
+den Browser wie geschlossen, dort aktiviert er die Fassung mit der nächsten
+Suche selbst. Nach „Später“ steht der Hinweis mit der nächsten Suche wieder
+da, solange die Fassung wartet, auch in einem hart neu geladenen Fenster:
+Gefragt wird die Registrierung, nicht die Steuerung der Seite. Die
+Installation verfolgt die App selbst; die Bibliothek hört nach einer
+abgebrochenen nicht mehr hin, und der Hinweis kam dann eine Stunde zu spät.
+Seit 2026-11-17 klebt der Hinweis oben im Bild (unter der festen Warnleiste),
+statt im Seitenfluss über dem Bildrand zu stehen, mit Knöpfen in voller
+Trefferfläche, und er sagt, dass „Neu laden“ alle Fenster der App neu startet.
 
 Sobald eine neue Fassung die Steuerung übernimmt, lädt jedes Fenster der App
 neu, gleich in welchem sie aktiviert wurde. Weiterlaufen kann keins: Die neue
@@ -493,13 +499,24 @@ Hauptfenster, die den Hinweis gesehen hatten, tat das schon die Bibliothek;
 jetzt gilt es für alle, auch für das Fenster des Lagemonitors, das vorher alt
 blieb, selbst wenn man es neu lud. Eine angefangene Erfassung übersteht das
 Neuladen (Entwurf), ein an einer Karte angefangener Auftrag wird beim Verlassen
-der Seite gesichert (R11-O1). Übernimmt die Fassung eine Seite, die vorher ungesteuert
-war (Erstinstallation, oder an Service Worker und Vorrat vorbei hart neu
-geladen), oder lief die Übernahme, während die Seite lud, entscheidet der
-Vorrat: Liegt der Baustein der Seite nicht mehr darin, lädt sie neu, einmal je
-Fassung und Fenster (`fassungVeraltet`).
+der Seite gesichert (R11-O1). Verloren gehen, wie schon vorher beim Neuladen
+durch die Bibliothek, Eingaben in offenen Dialogen (Stärke, Ort, Aufteilen,
+Zeitkorrektur), eine laufende Übergabe-PDF, „Rückgängig“ an einer Quittung
+sowie Suche, Filter und Sortierung der Tabelle. Ein Hauptfenster, das so von
+selbst neu startet, sagt es danach: „Neue Version geladen: Dieses Fenster ist
+von selbst neu gestartet. Eingaben in einem offenen Dialog wurden nicht
+übernommen.“ Übernimmt die Fassung eine Seite, die vorher ungesteuert war
+(Erstinstallation, oder an Service Worker und Vorrat vorbei hart neu geladen),
+oder lief die Übernahme, während die Seite lud, entscheidet der Vorrat: Liegt
+der Baustein der Seite in keinem Workbox-Vorrat der Herkunft mehr, lädt sie
+neu, einmal je Fassung und Fenster (`fassungVeraltet`). Durchsucht werden alle
+Vorräte; liegt auf derselben Herkunft eine zweite App, stand ihr Vorrat
+womöglich vorn. Ist die Seite nach dem einen Neuladen weiter „veraltet“, irrt
+die Prüfung (etwa ein beschädigter Vorrat), und es bleibt still.
 
-Das Fenster des Lagemonitors zeigt keinen Hinweis und sucht nicht selbst; es
+Das Fenster des Lagemonitors zeigt keinen Hinweis, sucht nicht selbst und
+meldet den Service Worker nicht an (wie vor 2026-11-13; seine Anmeldung kurz
+nach dem Öffnen ließ im Wettlauf mit „Neu laden“ das Hauptfenster hängen); es
 folgt dem Hauptfenster. Ein Monitor ohne Hauptfenster läuft mit seiner Fassung
 weiter, deren Bausteine im Vorrat bleiben, bis eine neue aktiv ist; die
 aktiviert das nächste Hauptfenster auf „Neu laden“. Ein Hinweis im Monitor
@@ -508,9 +525,11 @@ Ende von „Abgerückt“, und eine dort aktivierte Fassung hätte das Hauptfens
 unter einer laufenden Eingabe neu geladen. Stufe und Vollbild überstehen das
 selbsttätige Neuladen einmal: „Hell“ bleibt, obwohl es sonst nie gemerkt wird
 (R7-L3), und das Vollbild, das der Browser nur auf einen Tipp hin einschaltet,
-holt der erste Tipp ins Fenster zurück. Offen bleibt ein Fall, der nur per
-Skript erreichbar ist: „Neu laden“ in den ersten 40 ms nach dem Öffnen des
-Monitors lässt dessen Fenster leer, wie vorher; F5 hilft.
+holt der erste Klick oder Tipp ins Fenster zurück, auch per Touch (gehorcht
+wird auf „click“). Bis dahin gilt es weiter als gewollt, auch über ein
+weiteres Neuladen. Offen bleibt ein Fall, der nur per Skript erreichbar ist:
+„Neu laden“ in den ersten Hundertstelsekunden nach dem Öffnen des Monitors
+lässt dessen Fenster leer, wie vorher; F5 hilft.
 
 ## 7. Verteilungssicht
 
@@ -598,7 +617,7 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `eeb.schnellOrganisation.v1` | Zuletzt gewählte Organisation der Schnellerfassung (nur die Zahl) | `schnell-organisation.ts` |
 | `eeb.einheiten-tabelle-alle-spalten` | Tabelle mit allen Spalten oder nur Kernspalten (Gerätewert) | `einsaetze-ui.tsx` |
 | `sessionStorage`: `eeb.import-laeuft.v1`, `eeb.karte-offen.v1`, `eeb.ansicht-stelle.v1`, `eeb.einsatz.rueckweg`, `eeb.funkruf.merker.<Index>`, `eeb.abgleich.fortsetzen` | Unterbrochener Import; offene Einheitenkarten (Kennungen); Bildlaufstelle; Rückweg nach „Einsatz bearbeiten“; ausgeschaltete Funkrufnamen je Fahrzeug, 15 Minuten; Merker nach dem Fensterabgleich | `eingang/import-unterbrochen.ts`, `einsaetze-ui.tsx`, `ansicht-stelle.ts`, `einsatz-notweg.ts`, `schnellerfassung/fahrzeuge.tsx`, `fenster-abgleich.tsx` |
-| `sessionStorage`: `eeb.fassung.veraltet`, `eeb.lagemonitor.nach-neuladen` | Fassung, für die das Fenster schon einmal wegen „veraltet“ neu geladen hat (Schutz gegen eine Schleife); Stufe und Vollbild des Lagemonitors über das selbsttätige Neuladen nach einer neuen Fassung, einmal. Beide neu im Meldekopf (2026-11-13) | `aktualisierung.tsx`, `lagemonitor-ui.tsx` |
+| `sessionStorage`: `eeb.fassung.veraltet`, `eeb.fassung.neu-gestartet`, `eeb.lagemonitor.nach-neuladen` | Fassung, für die das Fenster schon einmal wegen „veraltet“ neu geladen hat (Schutz gegen eine Schleife); Merker, dass das Hauptfenster von selbst neu gestartet ist (für die Erklärung danach, seit 2026-11-17); Stufe und Vollbild des Lagemonitors über das selbsttätige Neuladen nach einer neuen Fassung, einmal. Neu im Meldekopf (2026-11-13) | `aktualisierung.tsx`, `lagemonitor-ui.tsx` |
 
 **Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen; eine
 eingespielte Sicherung aus dem Erfassungsbogen bringt sie mit, die
@@ -790,6 +809,11 @@ stündlicher Suche, Messung der Pause, eigener Verfolgung der Installation und
 der Prüfung „veraltet“; rund 0,7 KB kommen mit Einzelperson und Farbe dazu.
 Der Brocken des Monitors gewinnt nur das Festhalten von Stufe und Vollbild
 über das Neuladen; seine Stilvorlagen sind dieselben wie in `ba9cb89`.
+**Befunde der Gegenprüfung zur Aktualisierung (2026-11-17):** 4.373.262 /
+640.760 Byte, im Spielraum; das Budget bleibt. Das Startbündel wächst um
+0,9 KB (Erklärung nach einem Neustart von selbst, Suche über alle Vorräte,
+Prüfung der Registrierung statt der Steuerung). Bis zur Grenze bleiben im
+Startbündel 2,2 KB.
 
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab
