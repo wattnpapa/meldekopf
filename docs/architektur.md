@@ -295,7 +295,7 @@ Kennfarbe), liegen unter `src/test/`.
 | Lagemonitor | `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lage-angaben.ts`; Tafel-Ansicht `lagetafel-ui.tsx`, `lagetafel.ts`, Wahl der Ansicht `lagemonitor-ansicht.ts` |
 | Weitergabe | `weitergabe/*`, `@bos/eeb-satz`, `export-stand.ts`, `einsatz-transport.ts` |
 | Ablösung und Rückimport | `einsatz-abgleich.ts`, `entfernte-meldungen.ts` |
-| Zwei Geräte am selben Meldekopf | `kopplung/*`: `signal.ts` (Kopplungs-Code), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
+| Zwei Geräte am selben Meldekopf | `kopplung/*`: `signal.ts` (Kopplungs-Code), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx` (Lampe, Leiste), `sammler-ansicht.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
 | Papier-Rückfallebene | `papier-abgleich-ui.tsx`, `papier-abgleich-entwurf.ts` |
 | Fristen | `@bos/eeb-format/datenschutzfrist`, `datenschutz-uhr.ts`, `@bos/meldekopf` (Papierkorb, Aufräumfrist) |
 
@@ -553,16 +553,38 @@ sequenceDiagram
   R->>T: „Antwort scannen…" liest den Code (Kamera oder Handscanner)
   R-->T: Datenkanal steht (direkt, verschlüsselt, lokales Netz)
   R->>T: Stand der Sammlung (Umschlag der Einsatz-Datei)
-  T->>T: Sammlung anlegen oder abgleichen (einsatzAbgleichen)
-  T->>R: eigener Stand, sobald er sich ändert (Scan, Abrücken, Auftrag)
-  R->>R: abgleichen, Ansicht und Lagemonitor lesen neu
+  R->>T: Kopf der Sammlung (Name, Art, Ort; keine Meldungen)
+  T->>T: leere Sammlung anlegen, Sammler-Ansicht zeigen
+  T->>R: eigener Stand, sobald er sich ändert (jeder Scan)
+  R->>R: abgleichen (einsatzAbgleichen), Ansicht und Lagemonitor lesen neu
+  R->>T: Quittung
+  T->>T: Meldung als „übertragen" zeigen
 ```
 
-- Ein Stand ist immer die ganze Sammlung als Umschlag der Einsatz-Datei, dazu
-  die Kennungen der entfernten und der zurückgeholten Einträge. Die Gegenseite
-  gleicht ihn ab wie eine importierte Datei (je Feld, Widersprüche bleiben an
-  der Einsatzansicht stehen); Rückfragen gibt es dabei nicht: Entfernen und
-  Zurückholen gelten für beide Geräte.
+- **Rollen (seit 2026-11-24).** Das erste Gerät ist die Zentrale und führt
+  die Lage. Das zweite ist ein reiner Sammler: Es nimmt auf und schickt seinen
+  ganzen Stand, also alles, was es selbst aufgenommen hat (Umschlag der
+  Einsatz-Datei, dazu die Kennungen der dort entfernten und zurückgeholten
+  Einträge). Die Zentrale gleicht ihn ab wie eine importierte Datei (je Feld,
+  Widersprüche bleiben an der Einsatzansicht stehen; Rückfragen gibt es nicht)
+  und quittiert ihn. Dem Sammler schickt sie nur den Kopf der Sammlung
+  (Kennung, Name, Art, Ort), keine Meldungen: Das Telefon draußen trägt nie
+  die Lage, nur seine eigenen Scans. Der Sammler verwirft Meldungen der
+  Gegenstelle auch dann, wenn eine sie schickte (`standUebernehmen`,
+  `nurKopf`).
+- Was die Zentrale an einer Einheit des Sammlers ändert (Auftrag, Abrücken,
+  Entfernen), bleibt an der Zentrale gültig, auch wenn der Sammler seinen
+  älteren Stand der Einheit weiter mitschickt. Entfernt oder ändert der
+  Sammler eine seiner Einheiten, übernimmt die Zentrale es.
+- **Anzeige.** Auf beiden Geräten dieselbe Lampe mit einem Wort: Punkt
+  „Verbindung aktiv“, Ring „Verbindung unterbrochen“, Quadrat „Verbindung
+  getrennt“. An der Zentrale als Leiste, die oben im Bild klebt, mit der
+  Uhrzeit des letzten Eingangs. Am Sammler als Kopf einer eigenen Ansicht
+  (`sammler-ansicht.tsx`), die die Einsatzansicht ersetzt, solange gekoppelt
+  ist: Lampe, „Bogen scannen…“, „Einheit von Hand erfassen…“ und die Liste
+  des selbst Aufgenommenen, je Meldung „✓ übertragen“ oder „… wartet“.
+  „Übertragen“ heißt: Die Zentrale hat den Stand eingespielt und quittiert,
+  nicht bloß, dass er gesendet wurde.
 - Jedes Gerät schaut im Sekundentakt, ob sich sein Speicher geändert hat, und
   schickt dann seinen Stand. Verglichen wird ein Abdruck ohne
   Änderungszeitpunkt und ohne Reihenfolge der Einträge, damit zwei Geräte sich
@@ -605,6 +627,8 @@ sequenceDiagram
 - Solange gekoppelt ist, hält die App den Bildschirm wach (Screen Wake Lock,
   wo der Browser es anbietet); wer ihn von Hand ausschaltet, löst das
   Wiederverbinden beim Einschalten aus.
+- „Kopplung trennen“ am Sammler führt in die gewöhnliche App zurück; die
+  Sammlung dort enthält, was das Gerät selbst aufgenommen hat.
 - Gekoppelt ist genau eine Sammlung und genau ein zweites Gerät. Wird die
   Sammlung auf einem Gerät gelöscht, endet die Kopplung; das andere Gerät
   holt sie nicht zurück.
@@ -1085,6 +1109,12 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   der Browser gibt ihr die Kamera nicht. (b) Ein Vermittlungsdienst im
   Internet für den Verbindungsaufbau: braucht Netz und wäre ein zweiter
   Fremd-Host. (c) Nur Dateien wie bisher: kein laufendes Bild am Rechner.
+- **Nachtrag 2026-11-24, Rollen:** Zunächst glichen beide Geräte die ganze
+  Sammlung in beide Richtungen ab. Entschieden: Im gekoppelten Betrieb ist das
+  zweite Gerät ein reiner Datensammler. Die Lage liegt nur auf der Zentrale;
+  der Sammler bekommt den Kopf der Sammlung und eine Quittung je Stand. Das
+  nimmt dem Telefon die Vollkopie (DSFA R16) und der Bedienung am Eingang
+  alles, was dort nicht gebraucht wird.
 - **Grenzen, die bleiben:** genau zwei Geräte und eine Sammlung je Kopplung;
   keine Anmeldung, keine Rollen, kein Mehrbenutzerbetrieb über das hinaus;
   keine Kräfteübersicht über mehrere Meldeköpfe; keine Verbindung über das
@@ -1110,7 +1140,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Einheit ohne Bogen am Tablet | Unter drei Minuten bis zum gedruckten Nur-Stärke-Bogen und zur Aufnahme in die Sammlung. |
 | Sammlung mit 5 Mio. Zeichen im Speicher | Startseite und Einsatzansicht ohne spürbare Verzögerung (Lese-Ergebnis gemerkt, solange der Text gleich ist). |
 | Ablösung mit zweitem Gerät, beide ändern Status und Auftrag | Rückimport ergänzt Neues, gleicht je Feld ab, nennt Widersprüche; nichts still überschrieben. |
-| Telefon gekoppelt, scannt draußen eine Einheit | Die Einheit steht innerhalb weniger Sekunden auf dem Rechner und dem Lagemonitor; die Leiste nennt die Uhrzeit des Abgleichs. |
+| Telefon gekoppelt, scannt draußen eine Einheit | Die Einheit steht innerhalb weniger Sekunden auf dem Rechner und dem Lagemonitor; dessen Leiste nennt die Uhrzeit des Eingangs, das Telefon zeigt an der Meldung „✓ übertragen“. |
+| Blick auf eines der beiden Geräte: Steht die Verbindung? | Ohne Rollen und ohne Lesen eines Satzes erkennbar: Lampe und Wort oben im Bild, an der Zentrale wie am Sammler. |
 | Telefon gekoppelt, Bildschirm aus, nach Minuten wieder an | Beim Einschalten verbindet sich das Telefon ohne neuen Code (im Prüfstand in unter einer Sekunde) und gleicht ab; bis dahin meldet der Rechner „unterbrochen“, nach 45 Sekunden „getrennt“. |
 | Telefon gekoppelt, draußen außer Reichweite des WLAN | Beide nehmen weiter auf und speichern bei sich; das Telefon ruft alle 30 Sekunden an und verbindet sich, sobald es wieder im Netz ist. |
 | Seite auf einem der Geräte neu geladen | „Kopplung getrennt“; neu koppeln über beide Codes, danach stehen alle Einheiten auf beiden. |
@@ -1137,7 +1168,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Seite neu geladen (auch selbsttätig nach einer neuen Fassung der App) | Trennt die Kopplung endgültig; neu koppeln kostet zwei Scans. Abhilfe wäre, Zertifikat und Plätze des Rufers über das Neuladen zu retten (IndexedDB); nicht gebaut. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
-| Startbündel nach der Kopplung 29 Byte unter der Grenze des Budgets | Der nächste Zuwachs im Startbündel braucht eine Entscheidung (`npm run bundle-budget -- --setze`). Das Budget für JavaScript gesamt ist mit der Kopplung auf 4.407.186 Byte gesetzt (rund 45 KB für `kopplung/*`, nachgeladen). |
+| Bundle-Budget mit der Kopplung zweimal angehoben | JavaScript gesamt 4.413.510 Byte (rund 52 KB für `kopplung/*`, nachgeladen); Startbündel 643.035 Byte (rund 2,4 KB: Zustand, Scanner-Weiche, Knopf, die Wege der Aufnahme für die Sammler-Ansicht). |
+| Der Sammler sieht nicht, was die Zentrale schon führt | Scannt er eine Einheit, die an der Zentrale schon steht, entsteht dort eine weitere Fassung derselben Einheit (Historie), keine doppelte Einheit; eine Warnung am Telefon gibt es nicht. |
 | Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 
 ## 12. Glossar
@@ -1154,6 +1186,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Export-Stand | Je Einsatz und Format: welche Meldungen und welchen Zustand je Einheit der Empfänger schon hat. |
 | DTG | Datum-Zeit-Gruppe, NATO-Zeitstempel („171806feb24"). |
 | Einsatz-Datei | JSON-Umschlag mit Sammlung, Export-Ständen und Lage-Angaben für S1-Control und Ablösung. |
-| Kopplung | Direkte Verbindung zweier Geräte am selben Meldekopf im lokalen Netz; beide führen dieselbe Sammlung und schicken einander jeden geänderten Stand (ADR-009). |
+| Kopplung | Direkte Verbindung zweier Geräte am selben Meldekopf im lokalen Netz: Die Zentrale führt die Lage, der Sammler nimmt auf und schickt ihr jeden geänderten Stand (ADR-009). |
+| Zentrale, Sammler | Rollen der Kopplung. Zentrale ist das Gerät, das „Zweites Gerät koppeln…“ getippt hat; Sammler das, das den Code gescannt hat. |
 | Kopplungs-Code | QR-Code mit `MKK1.`: Fingerabdruck des Verbindungsschlüssels, Verbindungskennwörter und lokale Adressen eines Geräts; als Angebot (erstes Gerät) oder Antwort (zweites Gerät). Trägt keine Einsatzdaten. |
 | Payload | Base41-kodierter, komprimierter, optional signierter Bogen im QR und im Link-Fragment. |

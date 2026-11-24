@@ -5,16 +5,17 @@
  */
 
 import { lazy, Suspense, useSyncExternalStore } from "react";
+import type { SammlerWege } from "./kopplung-leiste";
 import { kopplungsZustand, kopplungsZustandAbonnieren } from "./zustand";
 
 const Kopplung = lazy(() => import("./kopplung-leiste").then((m) => ({ default: m.Kopplung })));
 
-export function KopplungsRahmen() {
+export function KopplungsRahmen({ sammler }: { sammler?: SammlerWege }) {
   const z = useSyncExternalStore(kopplungsZustandAbonnieren, kopplungsZustand, kopplungsZustand);
   if (z.phase === "aus" && !z.dialog) return null;
   return (
     <Suspense fallback={null}>
-      <Kopplung />
+      <Kopplung sammler={sammler} />
     </Suspense>
   );
 }

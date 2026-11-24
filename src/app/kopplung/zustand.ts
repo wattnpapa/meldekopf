@@ -40,6 +40,13 @@ export interface KopplungsZustand {
   einsatzId: string | null;
   /** Wann der letzte Stand hinüber- oder herüberging (Date.now()). */
   abgleichAm: number | null;
+  /**
+   * `zentrale`: Dieses Gerät führt die Lage (es hat die Kopplung begonnen). `sammler`: Es nimmt nur auf und schickt
+   * alles an die Zentrale; die Lage selbst bekommt es nicht.
+   */
+  rolle?: "zentrale" | "sammler";
+  /** Sammler: so viele eigene Meldungen hat die Zentrale noch nicht bestätigt. */
+  offen?: number;
   /** Gerissen, aber dieses Gerät verbindet sich ohne neuen Code wieder, sobald das andere erreichbar ist. */
   wartet?: boolean;
   /** Seit wann getrennt oder unterbrochen. */

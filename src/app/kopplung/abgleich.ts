@@ -8,6 +8,14 @@
  * Feld, Widersprüche werden genannt). Die Kopplung ist nur ein schnellerer Weg
  * für die Datei; was sie nicht überträgt, überträgt die Datei auch nicht.
  *
+ * Rollen (seit 2026-11-24): Das erste Gerät ist die Zentrale und führt die
+ * Lage; das zweite ist ein reiner Sammler. Der Sammler schickt seinen ganzen
+ * Stand, also alles, was er selbst aufgenommen hat. Die Zentrale schickt dem
+ * Sammler nur den Kopf der Sammlung (Kennung, Name, Art, Ort), keine
+ * Meldungen: Das Telefon draußen trägt so nie die Lage, nur seine eigenen
+ * Scans. Jeden eingespielten Stand quittiert die Zentrale; der Sammler weiß
+ * damit, was wirklich angekommen ist.
+ *
  * Drei Dinge kommen dazu, weil hier niemand eine Rückfrage beantwortet:
  *
  * 1. Entfernte Meldungen. Der Datei-Import fragt („Hier entfernte Meldungen in
@@ -44,12 +52,20 @@ import { nummernHinweisMerken } from "../weitergabe/nummern-hinweis";
 /** Was ein Gerät dem anderen schickt, wenn sich sein Stand geändert hat. */
 export interface StandNachricht {
   art: "stand";
+  /** Abdruck des gesendeten Stands; die Quittung nennt ihn zurück. */
+  kennung?: string;
   /** Der Umschlag der Einsatz-Datei als Text (Sammlung, Stände der Exporte, Lage-Angaben). */
   einsatz: string;
   /** Kennungen der Einträge, die auf dem sendenden Gerät aus dieser Sammlung entfernt wurden. */
   entfernt: string[];
   /** Kennungen, die das sendende Gerät in dieser Sitzung aus dem Papierkorb zurückgeholt hat. */
   zurueckgeholt: string[];
+}
+
+/** Die Zentrale bestätigt dem Sammler einen eingespielten Stand. */
+export interface ErhaltenNachricht {
+  art: "erhalten";
+  kennung: string;
 }
 
 function bekannteIds(): string[] {
@@ -86,9 +102,10 @@ function sammlungKanonisch(s: Einsatzsammlung): unknown {
  * nichts geändert hat, was das andere Gerät erfahren müsste. `null`, wenn es
  * die Sammlung hier nicht (mehr) gibt.
  */
-export function standAbdruck(einsatzId: string, zurueckgeholt: readonly string[] = []): string | null {
+export function standAbdruck(einsatzId: string, zurueckgeholt: readonly string[] = [], nurKopf = false): string | null {
   const s = einsaetzeLaden().find((x) => x.id === einsatzId);
   if (!s) return null;
+  if (nurKopf) return pruefsumme(stabil(sammlungKanonisch({ ...s, eintraege: [] })));
   return pruefsumme(
     stabil({
       einsatz: sammlungKanonisch(s),
@@ -101,9 +118,11 @@ export function standAbdruck(einsatzId: string, zurueckgeholt: readonly string[]
 }
 
 /** Der Stand dieses Geräts als Nachricht; `null`, wenn es die Sammlung hier nicht (mehr) gibt. */
-export function standNachricht(einsatzId: string, zurueckgeholt: readonly string[] = []): StandNachricht | null {
+export function standNachricht(einsatzId: string, zurueckgeholt: readonly string[] = [], nurKopf = false): StandNachricht | null {
   const s = einsaetzeLaden().find((x) => x.id === einsatzId);
   if (!s) return null;
+  // Nur der Kopf: die Sammlung ohne Meldungen, ohne Stände der Exporte, ohne Lage-Angaben (Zentrale an Sammler).
+  if (nurKopf) return { art: "stand", einsatz: einsatzDateiInhalt({ ...s, eintraege: [] }), entfernt: [], zurueckgeholt: [] };
   return {
     art: "stand",
     einsatz: einsatzDateiInhalt(s, exportStaendeLaden(einsatzId), lageAngabenLaden(einsatzId)),
@@ -120,7 +139,13 @@ function kennungen(x: unknown): string[] {
 export function standNachrichtPruefen(x: unknown): StandNachricht {
   const o = x as Partial<StandNachricht> | null;
   if (!o || o.art !== "stand" || typeof o.einsatz !== "string") throw new Error("Unbekannte Nachricht vom anderen Gerät.");
-  return { art: "stand", einsatz: o.einsatz, entfernt: kennungen(o.entfernt), zurueckgeholt: kennungen(o.zurueckgeholt) };
+  return {
+    art: "stand",
+    einsatz: o.einsatz,
+    entfernt: kennungen(o.entfernt),
+    zurueckgeholt: kennungen(o.zurueckgeholt),
+    ...(typeof o.kennung === "string" && o.kennung.length <= 64 ? { kennung: o.kennung } : {}),
+  };
 }
 
 export interface UebernahmeErgebnis {
@@ -183,8 +208,21 @@ function entfernenWieDort(einsatzId: string, ids: ReadonlySet<string>): number {
  * `eigeneZurueckgeholt`: was dieses Gerät in dieser Sitzung zurückgeholt hat —
  * das Entfernen des anderen Geräts gilt dafür nicht noch einmal.
  */
-export function standUebernehmen(n: StandNachricht, einsatzId: string | null, eigeneZurueckgeholt: readonly string[] = [], jetzt = Date.now()): UebernahmeErgebnis {
-  const sammlung = einsatzAusDatei(n.einsatz);
+export function standUebernehmen(
+  nachricht: StandNachricht,
+  einsatzId: string | null,
+  eigeneZurueckgeholt: readonly string[] = [],
+  jetzt = Date.now(),
+  /** Sammler: Von der Zentrale gilt nur der Kopf. Meldungen und Entfern-Listen fallen weg, gleich was die Nachricht trägt. */
+  nurKopf = false,
+): UebernahmeErgebnis {
+  const sammlung = einsatzAusDatei(nachricht.einsatz);
+  const n: StandNachricht = nurKopf ? { ...nachricht, entfernt: [], zurueckgeholt: [] } : nachricht;
+  if (nurKopf) {
+    sammlung.eintraege = [];
+    delete sammlung.exportStaende;
+    delete sammlung.lageAngaben;
+  }
   const id = sammlung.id;
   const ergebnis: UebernahmeErgebnis = { einsatzId: id, geaendert: false, neuerEinsatz: false, hinzugefuegt: 0, entfernt: 0, widersprueche: 0, zurueckgeholtBestaetigt: [] };
   if (einsatzId != null && id !== einsatzId) return { ...ergebnis, abgelehnt: "andere-sammlung" };

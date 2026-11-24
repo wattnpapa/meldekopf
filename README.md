@@ -56,11 +56,13 @@ Verlauf über Tage oder Aufträge braucht, ist S1-Control.
   „Einsatz“ angelegte Sammlung lässt sich nachträglich als Übung führen: am
   Hinweis „Nichts gezählt“, unter „Einsatz bearbeiten…“ oder beim Aufnehmen
   des ersten Übungsbogens. Die Art reist beim Abgleich zweier Geräte mit.
-- Zweites Gerät koppeln: Das Telefon scannt draußen, der Rechner im Fahrzeug
-  zeigt die Übersicht. Zwei QR-Codes verbinden die Geräte direkt im selben
-  Netz (WLAN, Hotspot), ohne Internet und ohne Server; jedes speichert für
-  sich und arbeitet weiter, wenn die Verbindung reißt; geht am Telefon der
-  Bildschirm aus, verbinden sich beide danach von selbst wieder.
+- Zweites Gerät koppeln: Das Telefon scannt draußen als reiner Datensammler,
+  der Rechner im Fahrzeug führt die Lage und zeigt die Übersicht. Zwei
+  QR-Codes verbinden die Geräte direkt im selben Netz (WLAN, Hotspot), ohne
+  Internet und ohne Server. Eine Lampe auf beiden Geräten zeigt, ob die
+  Verbindung steht; das Telefon zeigt je Einheit, ob sie angekommen ist. Geht
+  am Telefon der Bildschirm aus, nimmt es danach weiter auf und verbindet sich
+  von selbst wieder.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
   Daten, Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.

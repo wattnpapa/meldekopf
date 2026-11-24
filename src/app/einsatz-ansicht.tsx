@@ -285,7 +285,7 @@ export function EinsatzAnsicht({
         onGeaendert={onGeaendert}
         onScannen={() => aufnahme.scanneInEinsatz(einsatz.id)}
         onManuell={onManuell}
-        onKoppeln={typeof RTCPeerConnection === "function" ? () => kopplungBeginnen(einsatz.id) : undefined}
+        onKoppeln={() => kopplungBeginnen(einsatz.id)}
         angefangeneErfassung={angefangeneErfassung}
         onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
         onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}

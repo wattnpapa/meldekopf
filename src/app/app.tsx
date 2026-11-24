@@ -295,6 +295,17 @@ export function App() {
     />
   );
 
+  // Gekoppelt als Sammler (ADR-009): Das zweite Gerät zeigt statt der Lage nur Verbindung, Aufnahme und das selbst Aufgenommene.
+  const sammler = {
+    onScannen: (id: string | null) => (id ? aufnahme.scanneInEinsatz(id) : void aufnahme.scanneQr()),
+    onManuell: (id: string) => {
+      setOffenerEinsatzId(id);
+      void manuellErfassen(id);
+    },
+    meldung: aufnahme.einlese?.meldung || meldung,
+    fehler: aufnahme.einlese?.fehler || fehler,
+  };
+
   if (offenerEinsatz && erfassungOffen) {
     return (
       <>
@@ -321,7 +332,7 @@ export function App() {
     return (
       <>
         <Aktualisierungshinweise />
-        <KopplungsRahmen />
+        <KopplungsRahmen sammler={sammler} />
         <EinsatzAnsicht
           einsatz={offenerEinsatz}
           einsaetze={einsaetze}
@@ -385,7 +396,7 @@ export function App() {
   return (
     <>
       <Aktualisierungshinweise />
-      <KopplungsRahmen />
+      <KopplungsRahmen sammler={sammler} />
       <SeitenKopf variante="start-kopf" vorspann={web ? <Kopfnav quelle={KOPFNAV} /> : undefined}>
         <div className="titelzeile">
           <h1>Meldekopf</h1>

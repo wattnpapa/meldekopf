@@ -1,14 +1,18 @@
 /**
- * Statusleiste der Kopplung (neu im Meldekopf, ADR-009): steht über jeder
- * Ansicht, solange zwei Geräte gekoppelt sind oder die Kopplung gerissen ist.
+ * Anzeige der Kopplung (neu im Meldekopf, ADR-009): die Leiste über jeder
+ * Ansicht der Zentrale und die Sammler-Ansicht des zweiten Geräts.
  *
- * Wer mit zwei Geräten arbeitet, muss ohne Nachdenken sehen, ob das andere
- * Gerät den eigenen Stand hat. Die Leiste sagt darum nie nur „verbunden",
- * sondern wann zuletzt abgeglichen wurde, und im Fall der Trennung, dass hier
- * weiter gespeichert wird und was zu tun ist. Reißt die Verbindung, weil ein
- * Gerät einschläft, verbinden sich beide von selbst wieder (kopplung.ts); die
- * Leiste sagt dann „unterbrochen" und nach einer Dreiviertelminute
- * „getrennt", ohne dass das Wiederverbinden aufhört.
+ * Wer mit zwei Geräten arbeitet, muss ohne Nachdenken sehen, ob die
+ * Verbindung steht. Vorn steht darum immer dieselbe Lampe mit einem Wort:
+ * gefüllter Punkt „Verbindung aktiv", offener Ring „Verbindung unterbrochen",
+ * Quadrat „Verbindung getrennt". Form und Wort tragen die Aussage, die Farbe
+ * kommt dazu (Nacht-Modus, Sonne, Farbfehlsichtigkeit). Dahinter steht, was
+ * daraus folgt: wann zuletzt etwas ankam, dass hier weiter gespeichert wird,
+ * was zu tun ist. Die Leiste klebt oben im Bild.
+ *
+ * Reißt die Verbindung, weil ein Gerät einschläft, verbinden sich beide von
+ * selbst wieder (kopplung.ts); die Anzeige sagt dann „unterbrochen" und nach
+ * einer Dreiviertelminute „getrennt", ohne dass das Wiederverbinden aufhört.
  *
  * Lädt mit der ersten Kopplung (kopplung-rahmen.tsx); Verbindung und Dialog folgen bei Bedarf.
  */
@@ -17,38 +21,74 @@ import { lazy, Suspense, useSyncExternalStore } from "react";
 import "./kopplung.css";
 import { einsaetzeLaden } from "../einsaetze-lesen";
 import { GETRENNT_SATZ, WARTET_SATZ } from "./texte";
-import { kopplungBeginnen, kopplungsZustand, kopplungsZustandAbonnieren, type KopplungsZustand } from "./zustand";
+import { kopplungBeginnen, kopplungsZustand, kopplungsZustandAbonnieren, type KopplungsPhase, type KopplungsZustand } from "./zustand";
+
+export { GETRENNT_SATZ, WARTET_SATZ };
 
 const KopplungDialog = lazy(() => import("./kopplung-dialog"));
+const SammlerAnsicht = lazy(() => import("./sammler-ansicht"));
 
 export function useKopplung(): KopplungsZustand {
   return useSyncExternalStore(kopplungsZustandAbonnieren, kopplungsZustand, kopplungsZustand);
 }
 
-function uhr(ms: number | null, sekunden = false): string {
+export function uhr(ms: number | null | undefined, sekunden = false): string {
   if (ms == null) return "";
   return new Date(ms).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", ...(sekunden ? { second: "2-digit" } : {}) });
 }
 
-function trennen(): void {
+export function trennen(): void {
   void import("./kopplung").then((m) => m.kopplungBeenden());
 }
 
-export { GETRENNT_SATZ, WARTET_SATZ };
+export const LAMPE_WORT: Partial<Record<KopplungsPhase, string>> = {
+  verbunden: "Verbindung aktiv",
+  unterbrochen: "Verbindung unterbrochen",
+  getrennt: "Verbindung getrennt",
+};
 
-/** Leiste und, solange Codes getauscht werden, der Dialog. */
-export function Kopplung() {
+/** Die Lampe mit ihrem Wort: auf beiden Geräten dieselbe, immer an derselben Stelle. */
+export function Lampe({ phase }: { phase: KopplungsPhase }) {
+  return (
+    <strong className="kopplung-lampe-wort">
+      <span className="kopplung-lampe" data-phase={phase} aria-hidden="true" />
+      {LAMPE_WORT[phase] ?? ""}
+    </strong>
+  );
+}
+
+/** Was die App dem Sammler bereitstellt (app.tsx): die Wege der Aufnahme und die Rückmeldung der letzten. */
+export interface SammlerWege {
+  /** Scanner öffnen; mit Kennung nimmt er in diese Sammlung auf. */
+  onScannen: (einsatzId: string | null) => void;
+  /** Einheit von Hand erfassen (Schnellerfassung) in dieser Sammlung. */
+  onManuell: (einsatzId: string) => void;
+  /** Rückmeldung der letzten Aufnahme. */
+  meldung?: string;
+  fehler?: string;
+}
+
+/** Leiste oder Sammler-Ansicht und, solange Codes getauscht werden, der Dialog. */
+export function Kopplung({ sammler }: { sammler?: SammlerWege }) {
   const z = useKopplung();
   const name = z.einsatzId ? einsaetzeLaden().find((s) => s.id === z.einsatzId)?.name : undefined;
   const sammlung = name ? ` · „${name}“` : "";
+  const sammlerBild = z.rolle === "sammler" && sammler && !z.dialog && z.phase !== "aus" && z.phase !== "verbindet";
   let leiste = null;
   if (z.phase === "verbunden") {
     leiste = (
       <div className="kopplung-leiste" role="status" data-phase="verbunden">
         <p>
-          <strong>⇄ Gekoppelt mit zweitem Gerät</strong>
+          <Lampe phase="verbunden" />
+          {z.rolle === "sammler" ? " · dieses Gerät sammelt" : " · zweites Gerät sammelt"}
           {sammlung}
-          {z.abgleichAm != null ? ` · abgeglichen ${uhr(z.abgleichAm, true)}` : " · Abgleich läuft …"}
+          {z.rolle === "sammler"
+            ? z.offen
+              ? ` · ${z.offen} noch nicht übertragen`
+              : " · alles übertragen"
+            : z.abgleichAm != null
+              ? ` · letzter Eingang ${uhr(z.abgleichAm, true)}`
+              : " · noch kein Eingang"}
           {z.hinweis && <span className="kopplung-hinweis"> {z.hinweis}</span>}
         </p>
         <button type="button" className="link" onClick={trennen}>Trennen</button>
@@ -58,7 +98,7 @@ export function Kopplung() {
     leiste = (
       <div className="kopplung-leiste warnung" role="status" data-phase="unterbrochen">
         <p>
-          <strong>⚠ Verbindung zum zweiten Gerät stockt</strong>
+          <Lampe phase="unterbrochen" />
           {z.seit != null ? ` seit ${uhr(z.seit)}` : ""}.{" "}
           {z.wartet
             ? "Sie wird von selbst wiederhergestellt, sobald das andere Gerät erreichbar ist. Dieses Gerät speichert weiter."
@@ -71,12 +111,12 @@ export function Kopplung() {
     leiste = (
       <div className="kopplung-leiste warnung" role="alert" data-phase="getrennt">
         <p>
-          <strong>⚠ Kopplung getrennt</strong>
+          <Lampe phase="getrennt" />
           {z.seit != null ? ` seit ${uhr(z.seit)}` : ""}
-          {z.abgleichAm != null ? `, zuletzt abgeglichen ${uhr(z.abgleichAm)}` : ""}. {z.hinweis || (z.wartet ? WARTET_SATZ : GETRENNT_SATZ)}
+          {z.abgleichAm != null ? `, letzter Eingang ${uhr(z.abgleichAm)}` : ""}. {z.hinweis || (z.wartet ? WARTET_SATZ : GETRENNT_SATZ)}
         </p>
         <div className="kopplung-knoepfe">
-          {z.einsatzId && name && (
+          {z.einsatzId && name && z.rolle !== "sammler" && (
             <button type="button" onClick={() => kopplungBeginnen(z.einsatzId!)}>Neu koppeln…</button>
           )}
           <button type="button" className="link" onClick={trennen}>Schließen</button>
@@ -86,7 +126,13 @@ export function Kopplung() {
   }
   return (
     <>
-      {leiste}
+      {sammlerBild ? (
+        <Suspense fallback={null}>
+          <SammlerAnsicht wege={sammler} />
+        </Suspense>
+      ) : (
+        leiste
+      )}
       {z.dialog && (
         <Suspense fallback={null}>
           <KopplungDialog />

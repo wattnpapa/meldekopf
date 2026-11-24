@@ -335,6 +335,7 @@ function pulsSchlag(): void {
   const stand = jetzt - pulsZuletzt;
   pulsZuletzt = jetzt;
   if (stand > SCHLAF_MS) aufgewacht();
+  offenMelden();
 }
 
 function fehlerSatz(e: unknown): string {
@@ -348,6 +349,7 @@ function pruefen(): void {
   if (jetzt === schnappschuss) return;
   schnappschuss = jetzt;
   if (sitzung.pruefen() === null) kopplungBeenden("Die Sammlung gibt es auf diesem Gerät nicht mehr. Die Kopplung ist beendet.");
+  else offenMelden();
 }
 
 function steuerNachricht(nr: number, n: { art?: unknown; nr?: unknown; sdp?: unknown }): boolean {
@@ -358,6 +360,11 @@ function steuerNachricht(nr: number, n: { art?: unknown; nr?: unknown; sdp?: unk
   if (n.art === "pong") {
     clearTimeout(pongOffen);
     pongOffen = undefined;
+    return true;
+  }
+  if (n.art === "erhalten") {
+    if (sitzung?.quittung((n as { kennung?: unknown }).kennung)) kopplungsZustandSetzen({ abgleichAm: Date.now() });
+    offenMelden();
     return true;
   }
   if (n.art === "ende") {
@@ -468,7 +475,8 @@ function horcher(nr: number, marke: object): VerbindungsHorcher {
         schnappschuss = speicherSchnappschuss();
         kopplungsZustandSetzen({
           einsatzId: r.einsatzId,
-          abgleichAm: Date.now(),
+          // Die Zentrale hat eben einen Stand des Sammlers eingespielt; der Sammler wartet auf die Quittung.
+          ...(sitzung.rolle === "zentrale" ? { abgleichAm: Date.now() } : {}),
           hinweis: r.widersprueche > 0 ? "Beide Geräte haben dasselbe geändert. Die Einsatzansicht nennt die Stellen." : kopplungsZustand().hinweis,
         });
         if (r.geaendert) kopplungsStandMelden(r.einsatzId);
@@ -479,20 +487,32 @@ function horcher(nr: number, marke: object): VerbindungsHorcher {
   };
 }
 
-function neueSitzung(einsatzId: string | null, nr: number): AbgleichSitzung {
-  return new AbgleichSitzung(einsatzId, (n) => {
-    const v = aktiv;
-    if (!v || nr !== lauf) return;
-    v.senden(n).then(
-      () => {
-        if (nr === lauf) kopplungsZustandSetzen({ abgleichAm: Date.now() });
-      },
-      () => {
+function neueSitzung(einsatzId: string | null, nr: number, als: "zentrale" | "sammler"): AbgleichSitzung {
+  return new AbgleichSitzung(
+    einsatzId,
+    (n) => {
+      const v = aktiv;
+      if (!v || nr !== lauf) return;
+      // Ob etwas angekommen ist, sagt erst die Quittung der Zentrale, nicht das gelungene Senden.
+      v.senden(n).catch(() => {
         // Nicht hinausgegangen: Beim nächsten Verbindungsaufbau geht der ganze Stand neu.
         if (nr === lauf) sitzung?.neuVerbunden();
-      },
-    );
-  });
+      });
+    },
+    als,
+  );
+}
+
+/** Sammler: Wie viele eigene Meldungen hat die Zentrale noch nicht bestätigt? Zählt auch ohne Verbindung weiter. */
+function offenMelden(): void {
+  if (!sitzung || sitzung.rolle !== "sammler") return;
+  const offen = sitzung.offen();
+  if (offen !== kopplungsZustand().offen) kopplungsZustandSetzen({ offen });
+}
+
+/** Sammler: Hat die Zentrale diese Meldung bestätigt? */
+export function kopplungUebertragen(eintragId: string): boolean {
+  return !!sitzung?.uebertragen(eintragId);
 }
 
 function beginnen(): number {
@@ -508,13 +528,13 @@ function beginnen(): number {
 /** Erstes Gerät: Kopplung für die offene Sammlung beginnen und den ersten Code zeigen. */
 export async function kopplungStarten(einsatzId: string): Promise<void> {
   const nr = beginnen();
-  kopplungsZustandSetzen({ phase: "verbindet", einsatzId, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "angebot", code: "" } });
+  kopplungsZustandSetzen({ phase: "verbindet", rolle: "zentrale", offen: 0, einsatzId, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "angebot", code: "" } });
   if (!kopplungMoeglich()) {
     kopplungsZustandSetzen({ phase: "aus", dialog: { art: "angebot", code: "", fehler: KEIN_WEBRTC_SATZ } });
     return;
   }
   try {
-    sitzung = neueSitzung(einsatzId, nr);
+    sitzung = neueSitzung(einsatzId, nr, "zentrale");
     rolle = "hoerer";
     const marke = {};
     ersteMarke = marke;
@@ -566,9 +586,9 @@ export async function kopplungAngebotGescannt(text: string): Promise<void> {
   if (s.art !== "angebot") throw new Error(ANTWORT_STATT_ANGEBOT_SATZ);
   if (!kopplungMoeglich()) throw new Error(KEIN_WEBRTC_SATZ);
   const nr = beginnen();
-  kopplungsZustandSetzen({ phase: "verbindet", einsatzId: null, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "antwort", code: "" } });
+  kopplungsZustandSetzen({ phase: "verbindet", rolle: "sammler", offen: 0, einsatzId: null, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "antwort", code: "" } });
   try {
-    sitzung = neueSitzung(null, nr);
+    sitzung = neueSitzung(null, nr, "sammler");
     rolle = "rufer";
     zertifikat = rufZertifikat();
     const marke = {};

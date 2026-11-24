@@ -2,8 +2,9 @@
 # Neu im Meldekopf (ADR-009, docs/architektur.md): keine Vorlage im Erfassungsbogen.
 Funktionalität: Zweites Gerät koppeln
   Am Meldekopf im Fahrzeug scannt das Telefon draußen, der Rechner zeigt die
-  Übersicht. Beide führen dieselbe Sammlung und verbinden sich direkt im selben
-  Netz, ohne Server und ohne Internet. Zwei Codes stellen die Verbindung her:
+  Übersicht. Das Telefon ist dabei ein reiner Sammler: Es schickt, was es
+  aufnimmt, und bekommt die Lage nicht. Die Geräte verbinden sich direkt im
+  selben Netz, ohne Server und ohne Internet. Zwei Codes stellen die Verbindung her:
   Das erste Gerät zeigt einen, das zweite scannt ihn und zeigt die Antwort.
 
   Im Prüfstand ersetzt der Handscanner-Weg die Kamera: Der Code wird getippt,
@@ -20,10 +21,12 @@ Funktionalität: Zweites Gerät koppeln
     Wenn das zweite Gerät meinen Kopplungs-Code scannt
     Dann zeigt das zweite Gerät den Dialog "Antwort-Code für das erste Gerät"
     Wenn ich den Antwort-Code des zweiten Geräts scanne
-    Dann meldet die Kopplungsleiste "Gekoppelt mit zweitem Gerät"
-    Und meldet die Kopplungsleiste des zweiten Geräts "Gekoppelt mit zweitem Gerät"
+    Dann meldet die Kopplungsleiste "Verbindung aktiv"
+    Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
     Und zeigt das zweite Gerät die Überschrift "Hochwasser Weser"
-    Und zeigt das zweite Gerät den Text "THW Oldenburg"
+    Und zeigt das zweite Gerät den Text "Dieses Gerät sammelt"
+    Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (0)"
+    Und zeigt das zweite Gerät "THW Oldenburg" nicht
 
   Szenario: Was das zweite Gerät scannt, steht auf der Übersicht des ersten
     Angenommen beide Geräte sind gekoppelt
@@ -31,14 +34,17 @@ Funktionalität: Zweites Gerät koppeln
     Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
     Dann zählt die Übersicht 2 Einheiten
     Und führt die Übersicht die Einheit "DLRG Wardenburg"
+    Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (1)"
+    Und zeigt das zweite Gerät den Text "✓ übertragen"
+    Und zeigt das zweite Gerät den Text "Alles übertragen"
 
   Szenario: Schläft das zweite Gerät ein, verbindet es sich beim Aufwachen von selbst wieder
     Angenommen beide Geräte sind gekoppelt
     Wenn die Verbindung am zweiten Gerät abreißt
-    Dann meldet die Kopplungsleiste des zweiten Geräts "Gekoppelt mit zweitem Gerät"
+    Dann meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
     Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
     Dann zählt die Übersicht 2 Einheiten
-    Und meldet die Kopplungsleiste "Gekoppelt mit zweitem Gerät"
+    Und meldet die Kopplungsleiste "Verbindung aktiv"
 
   Szenario: Auch nach mehrmaligem Abreißen kommt die Verbindung ohne neuen Code zurück
     Angenommen beide Geräte sind gekoppelt
@@ -51,7 +57,7 @@ Funktionalität: Zweites Gerät koppeln
   Szenario: Trennt das zweite Gerät, sagt es die Leiste, und das erste arbeitet weiter
     Angenommen beide Geräte sind gekoppelt
     Wenn das zweite Gerät die Kopplung trennt
-    Dann meldet die Kopplungsleiste "Kopplung getrennt"
+    Dann meldet die Kopplungsleiste "Verbindung getrennt"
     Und meldet die Kopplungsleiste "Das andere Gerät hat die Kopplung getrennt"
     Und meldet die Kopplungsleiste "bleibt auf diesem Gerät gespeichert"
     Und sehe ich die Schaltfläche "Neu koppeln…"

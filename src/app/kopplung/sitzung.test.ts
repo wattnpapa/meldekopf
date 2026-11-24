@@ -1,6 +1,8 @@
 /**
  * Kopplung zweier Geräte ohne Netz: zwei Speicher, zwei Sitzungen, die
  * Nachrichten wandern über eine Warteschlange (neu im Meldekopf, ADR-009).
+ * Der Rechner ist die Zentrale und führt die Lage, das Telefon ist ein reiner
+ * Sammler: Es schickt, was es aufnimmt, und bekommt nur den Kopf der Sammlung.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +13,7 @@ import { entfernteLaden, entfernteVergessen } from "../entfernte-meldungen";
 import { meldungenImPapierkorb } from "../meldungs-papierkorb";
 import { einsaetzeLesenZuruecksetzen } from "../einsaetze-lesen";
 import { widerspruchLaden } from "../eingang/widerspruch-merker";
-import { standAbdruck, type StandNachricht } from "./abgleich";
+import { type ErhaltenNachricht, type StandNachricht } from "./abgleich";
 import { AbgleichSitzung } from "./sitzung";
 
 class MemStorage {
@@ -24,10 +26,12 @@ class MemStorage {
   key(i: number) { return [...this.m.keys()][i] ?? null; }
 }
 
+type Post = StandNachricht | ErhaltenNachricht;
+
 interface Geraet {
   speicher: MemStorage;
   sitzung: AbgleichSitzung;
-  eingang: StandNachricht[];
+  eingang: Post[];
 }
 
 let laptop: Geraet;
@@ -48,16 +52,21 @@ function geraet(): Geraet {
   return { speicher: new MemStorage(), sitzung: undefined as unknown as AbgleichSitzung, eingang: [] };
 }
 
-/** Sitzungen anlegen: Der Laptop koppelt die Sammlung, das Telefon kennt sie noch nicht (oder schon, bei `telefonKennt`). */
+/** Sitzungen anlegen: Der Laptop koppelt die Sammlung als Zentrale, das Telefon sammelt (und kennt sie bei `telefonKennt` schon). */
 function koppeln(einsatzId: string, telefonKennt = false) {
   auf(laptop, () => {
-    laptop.sitzung = new AbgleichSitzung(einsatzId, (n) => { gesendet++; telefon.eingang.push(JSON.parse(JSON.stringify(n))); });
+    laptop.sitzung = new AbgleichSitzung(einsatzId, (n) => { gesendet++; telefon.eingang.push(JSON.parse(JSON.stringify(n))); }, "zentrale");
   });
   auf(telefon, () => {
-    telefon.sitzung = new AbgleichSitzung(telefonKennt ? einsatzId : null, (n) => { gesendet++; laptop.eingang.push(JSON.parse(JSON.stringify(n))); });
+    telefon.sitzung = new AbgleichSitzung(telefonKennt ? einsatzId : null, (n) => { gesendet++; laptop.eingang.push(JSON.parse(JSON.stringify(n))); }, "sammler");
   });
   auf(laptop, () => laptop.sitzung.pruefen());
   auf(telefon, () => telefon.sitzung.pruefen());
+}
+
+function zustellen(g: Geraet) {
+  const post = g.eingang.splice(0);
+  for (const n of post) auf(g, () => (n.art === "erhalten" ? g.sitzung.quittung(n.kennung) : g.sitzung.empfangen(n)));
 }
 
 /** Wie der Takt im Betrieb: beide prüfen, alles Unterwegs-Befindliche wird zugestellt, bis Ruhe ist. */
@@ -67,10 +76,8 @@ function abgleichen(): number {
     auf(laptop, () => laptop.sitzung.pruefen());
     auf(telefon, () => telefon.sitzung.pruefen());
     if (laptop.eingang.length === 0 && telefon.eingang.length === 0) return gesendet - start;
-    for (const g of [laptop, telefon]) {
-      const post = g.eingang.splice(0);
-      for (const n of post) auf(g, () => g.sitzung.empfangen(n));
-    }
+    zustellen(laptop);
+    zustellen(telefon);
   }
   throw new Error("Der Abgleich kommt nicht zur Ruhe.");
 }
@@ -94,10 +101,6 @@ function orte(g: Geraet, id: string): string[] {
 
 function kopf(id: string, ort: string) {
   return neuesteJeEinheit(einsaetzeLaden().find((s) => s.id === id)!.eintraege).find((e) => e.bogen.einheit.hierarchie[0]!.name === ort)!;
-}
-
-function gleicherStand(id: string) {
-  expect(auf(laptop, () => standAbdruck(id))).toBe(auf(telefon, () => standAbdruck(id)));
 }
 
 beforeEach(() => {
@@ -125,15 +128,26 @@ function buehne(): string {
   return id;
 }
 
-describe("Kopplung: Abgleich zweier Geräte", () => {
-  it("legt die Sammlung auf dem zweiten Gerät an", () => {
+/** Wie {@link buehne}, dazu Biberach vom Telefon aufgenommen und übertragen. */
+function buehneMitBiberach(): string {
+  const id = buehne();
+  auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
+  abgleichen();
+  return id;
+}
+
+describe("Kopplung: Zentrale und Sammler", () => {
+  it("legt auf dem Sammler die Sammlung an, ohne ihm die Lage zu geben", () => {
     const id = buehne();
     expect(telefon.sitzung.einsatzId).toBe(id);
-    expect(orte(telefon, id)).toEqual(["Ulm"]);
-    gleicherStand(id);
+    const s = auf(telefon, () => einsaetzeLaden().find((x) => x.id === id)!);
+    expect(s.name).toBe("Hochwasser");
+    expect(s.eintraege).toEqual([]);
+    // Auch im Speicher des Telefons steht kein Wort von Ulm.
+    expect(JSON.stringify([...Array(telefon.speicher.length).keys()].map((i) => telefon.speicher.getItem(telefon.speicher.key(i)!)))).not.toContain("Ulm");
   });
 
-  it("bringt draußen gescannte Einheiten auf die Übersicht und umgekehrt", () => {
+  it("bringt draußen gescannte Einheiten auf die Übersicht; was die Zentrale aufnimmt, bleibt dort", () => {
     const id = buehne();
     auf(telefon, () => {
       meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" });
@@ -142,104 +156,122 @@ describe("Kopplung: Abgleich zweier Geräte", () => {
     auf(laptop, () => meldungAufnehmen(id, bogen("Ehingen"), { quelle: "scan" }));
     abgleichen();
     expect(orte(laptop, id)).toEqual(["Albstadt", "Biberach", "Ehingen", "Ulm"]);
-    expect(orte(telefon, id)).toEqual(["Albstadt", "Biberach", "Ehingen", "Ulm"]);
-    gleicherStand(id);
+    expect(orte(telefon, id)).toEqual(["Albstadt", "Biberach"]);
+  });
+
+  it("quittiert dem Sammler, was angekommen ist", () => {
+    const id = buehne();
+    const eintrag = auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }))!.eintrag;
+    expect(auf(telefon, () => telefon.sitzung.offen())).toBe(1);
+    expect(telefon.sitzung.uebertragen(eintrag.id)).toBe(false);
+    // Hinaus, aber noch nicht quittiert: gilt weiter als offen.
+    auf(telefon, () => telefon.sitzung.pruefen());
+    expect(auf(telefon, () => telefon.sitzung.offen())).toBe(1);
+    abgleichen();
+    expect(auf(telefon, () => telefon.sitzung.offen())).toBe(0);
+    expect(telefon.sitzung.uebertragen(eintrag.id)).toBe(true);
+  });
+
+  it("zählt nach einem Abriss wieder als offen, was nicht quittiert wurde", () => {
+    const id = buehne();
+    auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
+    auf(telefon, () => telefon.sitzung.pruefen());
+    // Die Nachricht geht verloren, die Verbindung kommt neu.
+    laptop.eingang.splice(0);
+    telefon.sitzung.neuVerbunden();
+    laptop.sitzung.neuVerbunden();
+    expect(auf(telefon, () => telefon.sitzung.offen())).toBe(1);
+    abgleichen();
+    expect(auf(telefon, () => telefon.sitzung.offen())).toBe(0);
+    expect(orte(laptop, id)).toEqual(["Biberach", "Ulm"]);
   });
 
   it("schweigt, solange sich nichts ändert", () => {
     const id = buehne();
     expect(abgleichen()).toBe(0);
     auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
-    // Das Telefon schickt seinen Stand; der Laptop hat danach denselben und antwortet höchstens einmal.
-    expect(abgleichen()).toBeLessThanOrEqual(2);
+    // Der Stand des Telefons und die Quittung der Zentrale.
+    expect(abgleichen()).toBe(2);
+    expect(abgleichen()).toBe(0);
+    // Was die Zentrale an der Lage tut, geht nicht zum Sammler.
+    auf(laptop, () => meldungAufnehmen(id, bogen("Ehingen"), { quelle: "scan" }));
+    auf(laptop, () => statusMitZeitSetzen(id, kopf(id, "Biberach").id, MeldeStatus.ABGERUECKT, Date.now()));
     expect(abgleichen()).toBe(0);
   });
 
-  it("überträgt Abrücken und Auftrag je Feld", () => {
-    const id = buehne();
-    auf(telefon, () => notizSetzen(id, kopf(id, "Ulm").id, "Deich Nord"));
+  it("übernimmt Auftrag und Abrücken, die der Sammler an seinen Einheiten setzt", () => {
+    const id = buehneMitBiberach();
+    auf(telefon, () => notizSetzen(id, kopf(id, "Biberach").id, "Deich Nord"));
+    auf(telefon, () => statusMitZeitSetzen(id, kopf(id, "Biberach").id, MeldeStatus.ABGERUECKT, Date.now()));
     abgleichen();
-    auf(laptop, () => statusMitZeitSetzen(id, kopf(id, "Ulm").id, MeldeStatus.ABGERUECKT, Date.now()));
-    abgleichen();
-    for (const g of [laptop, telefon]) {
-      auf(g, () => {
-        expect(kopf(id, "Ulm").notiz).toBe("Deich Nord");
-        expect(kopf(id, "Ulm").status).toBe(MeldeStatus.ABGERUECKT);
-      });
-    }
-    gleicherStand(id);
+    auf(laptop, () => {
+      expect(kopf(id, "Biberach").notiz).toBe("Deich Nord");
+      expect(kopf(id, "Biberach").status).toBe(MeldeStatus.ABGERUECKT);
+    });
   });
 
-  it("kommt auch bei einem Widerspruch zur Ruhe und nennt ihn", () => {
-    const id = buehne();
-    // Beide ändern denselben Auftrag, bevor sie voneinander hören.
-    auf(telefon, () => notizSetzen(id, kopf(id, "Ulm").id, "Deich Nord"));
-    auf(laptop, () => notizSetzen(id, kopf(id, "Ulm").id, "Deich Süd"));
+  it("lässt gelten, was die Zentrale an einer Einheit des Sammlers geändert hat", () => {
+    const id = buehneMitBiberach();
+    auf(laptop, () => notizSetzen(id, kopf(id, "Biberach").id, "Deich Süd"));
+    // Der Sammler nimmt weiter auf und schickt dabei seinen alten Stand von Biberach wieder mit.
+    auf(telefon, () => meldungAufnehmen(id, bogen("Albstadt"), { quelle: "scan" }));
     abgleichen();
-    const aufLaptop = auf(laptop, () => kopf(id, "Ulm").notiz);
-    const aufTelefon = auf(telefon, () => kopf(id, "Ulm").notiz);
-    expect(aufLaptop).toBe(aufTelefon);
-    const zeilen = [...auf(laptop, () => widerspruchLaden(id)), ...auf(telefon, () => widerspruchLaden(id))];
-    expect(zeilen.join(" ")).toMatch(/Deich/);
-    expect(abgleichen()).toBe(0);
-    gleicherStand(id);
+    expect(auf(laptop, () => kopf(id, "Biberach").notiz)).toBe("Deich Süd");
+    expect(auf(laptop, () => widerspruchLaden(id))).toEqual([]);
+    expect(orte(laptop, id)).toEqual(["Albstadt", "Biberach", "Ulm"]);
   });
 
-  it("bremst, wenn beide Geräte auf ihrem Wert bestehen, und gleicht ab, sobald jemand entscheidet", () => {
-    const id = buehne();
-    // Dieselbe Millisekunde auf beiden Geräten: Keiner ist jünger, jeder behält seinen Wert.
-    tickt = false;
-    auf(telefon, () => notizSetzen(id, kopf(id, "Ulm").id, "Deich Nord"));
-    auf(laptop, () => notizSetzen(id, kopf(id, "Ulm").id, "Deich Süd"));
-    tickt = true;
-    expect(abgleichen()).toBeLessThanOrEqual(2 + 2 * 3);
-    expect(abgleichen()).toBe(0);
+  it("nennt den Widerspruch, wenn beide denselben Auftrag ändern, und kommt zur Ruhe", () => {
+    const id = buehneMitBiberach();
+    auf(laptop, () => notizSetzen(id, kopf(id, "Biberach").id, "Deich Süd"));
+    auf(telefon, () => notizSetzen(id, kopf(id, "Biberach").id, "Deich Nord"));
+    abgleichen();
+    // Die jüngere Änderung gilt in der Lage, und die Zentrale nennt, dass beide geändert haben.
+    expect(auf(laptop, () => kopf(id, "Biberach").notiz)).toBe("Deich Nord");
     expect(auf(laptop, () => widerspruchLaden(id)).join(" ")).toMatch(/Deich/);
-    // Der Laptop entscheidet: Der jüngere Vermerk gilt auf beiden.
-    auf(laptop, () => notizSetzen(id, kopf(id, "Ulm").id, "Deich Mitte"));
-    abgleichen();
-    expect(auf(telefon, () => kopf(id, "Ulm").notiz)).toBe("Deich Mitte");
-    expect(auf(laptop, () => kopf(id, "Ulm").notiz)).toBe("Deich Mitte");
     expect(abgleichen()).toBe(0);
   });
 
-  it("entfernt eine Einheit auf beiden Geräten und legt sie dort in den Papierkorb", () => {
-    const id = buehne();
-    auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
-    abgleichen();
+  it("hält an der Zentrale entfernt, was sie entfernt hat, auch wenn der Sammler es weiter führt", () => {
+    const id = buehneMitBiberach();
     auf(laptop, () => einheitEntfernen(id, kopf(id, "Biberach").einheitSchluessel));
+    auf(telefon, () => meldungAufnehmen(id, bogen("Albstadt"), { quelle: "scan" }));
+    abgleichen();
+    expect(orte(laptop, id)).toEqual(["Albstadt", "Ulm"]);
+    expect(orte(telefon, id)).toEqual(["Albstadt", "Biberach"]);
+  });
+
+  it("entfernt an der Zentrale, was der Sammler entfernt, und legt es dort in den Papierkorb", () => {
+    const id = buehneMitBiberach();
+    auf(telefon, () => einheitEntfernen(id, kopf(id, "Biberach").einheitSchluessel));
     abgleichen();
     expect(orte(laptop, id)).toEqual(["Ulm"]);
-    expect(orte(telefon, id)).toEqual(["Ulm"]);
-    expect(auf(telefon, () => meldungenImPapierkorb(id)).map((m) => m.name).join()).toContain("Biberach");
+    expect(auf(laptop, () => meldungenImPapierkorb(id)).map((m) => m.name).join()).toContain("Biberach");
     expect(abgleichen()).toBe(0);
   });
 
-  it("holt eine zurückgeholte Einheit auch auf dem anderen Gerät zurück", () => {
-    const id = buehne();
-    auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
+  it("holt zurück, was der Sammler zurückholt, und lässt die Zentrale es danach wieder entfernen", () => {
+    const id = buehneMitBiberach();
+    const vorher = auf(telefon, () => JSON.parse(JSON.stringify(einsaetzeLaden().find((s) => s.id === id)!)));
+    const weg = auf(telefon, () => einheitEntfernen(id, kopf(id, "Biberach").einheitSchluessel));
     abgleichen();
-    const vorher = auf(laptop, () => JSON.parse(JSON.stringify(einsaetzeLaden().find((s) => s.id === id)!)));
-    const weg = auf(laptop, () => einheitEntfernen(id, kopf(id, "Biberach").einheitSchluessel));
-    abgleichen();
-    expect(orte(telefon, id)).toEqual(["Ulm"]);
-    // „Rückgängig" auf dem Laptop: Einträge wieder hinein, nicht mehr als entfernt führen.
-    auf(laptop, () => {
+    expect(orte(laptop, id)).toEqual(["Ulm"]);
+    // „Rückgängig" auf dem Telefon: Einträge wieder hinein, nicht mehr als entfernt führen.
+    auf(telefon, () => {
       sammlungZuruecksetzen(vorher);
       entfernteVergessen(id, weg.map((e) => e.id));
     });
     abgleichen();
     expect(orte(laptop, id)).toEqual(["Biberach", "Ulm"]);
-    expect(orte(telefon, id)).toEqual(["Biberach", "Ulm"]);
-    expect(auf(telefon, () => entfernteLaden()[id] ?? [])).toEqual([]);
-    // Danach lässt sie sich wieder entfernen, und auch das kommt an.
-    auf(telefon, () => einheitEntfernen(id, kopf(id, "Biberach").einheitSchluessel));
+    expect(auf(laptop, () => entfernteLaden()[id] ?? [])).toEqual([]);
+    // Jetzt entfernt die Zentrale; der Sammler nimmt weiter auf, Biberach bleibt draußen.
+    auf(laptop, () => einheitEntfernen(id, kopf(id, "Biberach").einheitSchluessel));
+    auf(telefon, () => meldungAufnehmen(id, bogen("Albstadt"), { quelle: "scan" }));
     abgleichen();
-    expect(orte(laptop, id)).toEqual(["Ulm"]);
-    expect(orte(telefon, id)).toEqual(["Ulm"]);
+    expect(orte(laptop, id)).toEqual(["Albstadt", "Ulm"]);
   });
 
-  it("gleicht nach einer Trennung ab, was beide inzwischen aufgenommen haben", () => {
+  it("gleicht nach einer Trennung ab, was der Sammler inzwischen aufgenommen hat", () => {
     const id = buehne();
     // Getrennt: Beide arbeiten weiter, nichts wird zugestellt.
     auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
@@ -248,26 +280,35 @@ describe("Kopplung: Abgleich zweier Geräte", () => {
     koppeln(id, true);
     abgleichen();
     expect(orte(laptop, id)).toEqual(["Biberach", "Ehingen", "Ulm"]);
-    expect(orte(telefon, id)).toEqual(["Biberach", "Ehingen", "Ulm"]);
-    gleicherStand(id);
+    expect(orte(telefon, id)).toEqual(["Biberach"]);
+    expect(auf(telefon, () => telefon.sitzung.offen())).toBe(0);
   });
 
-  it("holt eine hier gelöschte Sammlung nicht zurück", () => {
+  it("nimmt als Sammler keine Meldungen an, auch wenn eine Zentrale sie schickte", () => {
     const id = buehne();
-    auf(telefon, () => einsatzLoeschen(id));
-    auf(laptop, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
-    auf(laptop, () => laptop.sitzung.pruefen());
-    const n = telefon.eingang.splice(0)[0]!;
-    const r = auf(telefon, () => telefon.sitzung.empfangen(n));
+    // Ein voller Stand statt des Kopfs, wie ihn nur eine fehlerhafte oder fremde Gegenstelle schickte.
+    const voll = new AbgleichSitzung(id, (n) => telefon.eingang.push(n), "sammler");
+    auf(laptop, () => voll.pruefen());
+    zustellen(telefon);
+    expect(orte(telefon, id)).toEqual([]);
+  });
+
+  it("holt eine an der Zentrale gelöschte Sammlung nicht zurück", () => {
+    const id = buehne();
+    auf(laptop, () => einsatzLoeschen(id));
+    auf(telefon, () => meldungAufnehmen(id, bogen("Biberach"), { quelle: "scan" }));
+    auf(telefon, () => telefon.sitzung.pruefen());
+    const n = laptop.eingang.splice(0)[0]!;
+    const r = auf(laptop, () => laptop.sitzung.empfangen(n));
     expect(r.abgelehnt).toBe("geloescht");
-    expect(auf(telefon, () => einsaetzePapierkorb().map((s) => s.id))).toEqual([id]);
-    expect(auf(telefon, () => telefon.sitzung.pruefen())).toBeNull();
+    expect(auf(laptop, () => einsaetzePapierkorb().map((s) => s.id))).toEqual([id]);
+    expect(auf(laptop, () => laptop.sitzung.pruefen())).toBeNull();
   });
 
   it("weist den Stand einer anderen Sammlung ab", () => {
     const id = buehne();
     const andere = auf(telefon, () => einsatzAnlegen("Sturm", EinsatzArt.EINSATZ).id);
-    const fremd = new AbgleichSitzung(andere, (n) => laptop.eingang.push(n));
+    const fremd = new AbgleichSitzung(andere, (n) => laptop.eingang.push(n), "sammler");
     auf(telefon, () => fremd.pruefen());
     const r = auf(laptop, () => laptop.sitzung.empfangen(laptop.eingang.splice(0)[0]!));
     expect(r.abgelehnt).toBe("andere-sammlung");
@@ -279,5 +320,6 @@ describe("Kopplung: Abgleich zweier Geräte", () => {
     expect(() => auf(laptop, () => laptop.sitzung.empfangen({ art: "stand", einsatz: "{kaputt" }))).toThrow();
     expect(() => auf(laptop, () => laptop.sitzung.empfangen({ art: "anderes" }))).toThrow();
     expect(orte(laptop, id)).toEqual(["Ulm"]);
+    expect(telefon.sitzung.quittung("falsch")).toBe(false);
   });
 });
