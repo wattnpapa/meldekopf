@@ -39,6 +39,8 @@ import type { ExportUmfang } from "./weitergabe/export-stand";
 import { entwurfLaden, entwurfSpeichern, entwurfVerwerfen } from "./entwurf";
 import { useAnsichtVerlauf, type Ansicht } from "./ansicht-verlauf";
 import { QrScannerWeb } from "./eingang/qr-scanner-web";
+import { KopplungsRahmen } from "./kopplung/kopplung-rahmen";
+import { kopplungsStandAbonnieren } from "./kopplung/zustand";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
 import { SpeicherWarnung } from "./speicher-warnung";
 import { UhrWarnung } from "./uhr-warnung";
@@ -150,6 +152,21 @@ export function App() {
   // einlesen, wenn das andere Fenster sie ändert (R2-O4). Den Entwurf der
   // Schnellerfassung gleicht schnellerfassung.tsx selbst ab.
   useFensterAbgleich(erfassungOffen, einsaetzeNeuLaden, { rueckholplatz: false });
+  // Gekoppeltes zweites Gerät (ADR-009): Sein Stand ist eingespielt, die Ansicht liest neu. Kam die Sammlung dabei erst an
+  // (dieses Gerät hat den Code gescannt und steht auf der Startseite), öffnet sie sich.
+  const offenerEinsatzRef = useRef(offenerEinsatzId);
+  offenerEinsatzRef.current = offenerEinsatzId;
+  useEffect(
+    () =>
+      kopplungsStandAbonnieren((id) => {
+        setEinsaetze(einsaetzeLaden());
+        if (offenerEinsatzRef.current == null) {
+          setOffenerEinsatzIdRoh(id);
+          letztenEinsatzMerken(id);
+        }
+      }),
+    [],
+  );
 
   // R14-S2: Bildlaufstelle über ein Neuladen hinweg. Gemerkt wird beim Rollen, Ausblenden und Verlassen der Seite; nach dem
   // Neuladen rollt die erste Ansicht dorthin zurück, wenn sie dieselbe ist (höchstens 12 Stunden alt). Die Schnellerfassung
@@ -282,6 +299,7 @@ export function App() {
     return (
       <>
         <Aktualisierungshinweise />
+        <KopplungsRahmen />
         <Suspense fallback={<main id="inhalt" className="schnellerfassung"><p className="hinweis" role="status">Schnellerfassung lädt …</p></main>}>
         <Schnellerfassung
           key={offenerEinsatz.id}
@@ -303,6 +321,7 @@ export function App() {
     return (
       <>
         <Aktualisierungshinweise />
+        <KopplungsRahmen />
         <EinsatzAnsicht
           einsatz={offenerEinsatz}
           einsaetze={einsaetze}
@@ -366,6 +385,7 @@ export function App() {
   return (
     <>
       <Aktualisierungshinweise />
+      <KopplungsRahmen />
       <SeitenKopf variante="start-kopf" vorspann={web ? <Kopfnav quelle={KOPFNAV} /> : undefined}>
         <div className="titelzeile">
           <h1>Meldekopf</h1>

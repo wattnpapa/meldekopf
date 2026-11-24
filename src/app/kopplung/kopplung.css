@@ -1,0 +1,33 @@
+/* Kopplung zweier Geräte (neu im Meldekopf, ADR-009): Statusleiste über der Ansicht und Zusätze zum Code-Dialog.
+   Der Dialog selbst nutzt das Vollbild der QR-Anzeige (`dialog.qr-vollbild`, index.html). */
+
+.kopplung-leiste {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--r-2) var(--r-4);
+  padding: var(--r-2) var(--r-4);
+  border-bottom: var(--strich) solid var(--linie-stark);
+  font-size: var(--t-s);
+}
+.kopplung-leiste:not(.warnung) { background: var(--flaeche); color: var(--text); }
+.kopplung-leiste p { margin: 0; flex: 1 1 16rem; min-width: 0; }
+.kopplung-leiste.warnung { border-radius: 0; border-width: 0 0 var(--strich-stark); padding: var(--r-3) var(--r-4); }
+/* Getrennt bleibt im Bild, auch tief in der Liste: Wer weiterarbeitet, soll es nicht erst beim Hochrollen erfahren. */
+.kopplung-leiste[data-phase="getrennt"], .kopplung-leiste[data-phase="unterbrochen"] {
+  position: sticky; top: var(--fest-warnung-hoehe, 0px); z-index: 30;
+}
+.kopplung-leiste .kopplung-hinweis { color: var(--warn-text); font-weight: 600; }
+.kopplung-leiste .kopplung-knoepfe { display: flex; flex-wrap: wrap; align-items: center; gap: var(--r-3); }
+.kopplung-leiste button.link { min-height: calc(44px + var(--ziel)); }
+
+dialog.kopplung-dialog h2 { margin: 0; text-align: center; }
+dialog.kopplung-dialog .kopplung-schritte { max-width: 34rem; margin: 0; text-align: left; }
+dialog.kopplung-dialog ol.kopplung-schritte { padding-left: 1.4em; }
+dialog.kopplung-dialog ol.kopplung-schritte li + li { margin-top: 0.35em; }
+dialog.kopplung-dialog .hinweis { max-width: 34rem; }
+/* Der Code soll groß bleiben, die Anleitung darunter aber ohne Rollen lesbar: etwas weniger Höhe als das Vollbild eines Bogens. */
+dialog.kopplung-dialog img { width: min(calc(92vw - 3rem), calc(52vh - 3rem)); }
+dialog.kopplung-dialog .aktionen { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--r-3); padding-bottom: min(1rem, 16px); }
+
+@media print {
+  .kopplung-leiste { display: none !important; }
+}

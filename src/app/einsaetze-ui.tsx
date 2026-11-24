@@ -1191,6 +1191,8 @@ export function EinsatzDetail(props: {
   onGeaendert: () => void;
   onScannen: () => void;
   onManuell: () => void;
+  /** „Zweites Gerät koppeln…": Kopplung für diese Sammlung beginnen (kopplung/, ADR-009). Fehlt, wenn der Browser es nicht kann. */
+  onKoppeln?: () => void;
   /** Schnellerfassung (nur Stärke) für diese Sammlung (R16-W3). */
   onSchnell?: () => void;
   /** Fertige Bögen aus JSON-/PDF-Dateien. */
@@ -2146,6 +2148,13 @@ export function EinsatzDetail(props: {
       {/* Datei, PDF, einzelne Bilder, viele Bilder, ganzer Ordner: ein Knopf,
           der die Sorte am Dateityp erkennt (siehe BoegenEinlesenKnopf). */}
       <BoegenEinlesenKnopf onDaten={onDateiImport} onBilder={onBilderImport} onEinlesen={props.onEinlesen} />
+      {/* Neu im Meldekopf (ADR-009): ein zweites Gerät am selben Meldekopf, etwa das Telefon draußen und der Rechner im Fahrzeug. */}
+      {props.onKoppeln && (
+        <button type="button" className="mit-zusatz" onClick={props.onKoppeln} aria-describedby="aufnahme-zusatz-koppeln">
+          Zweites Gerät koppeln…
+          <span className="knopf-zusatz" id="aufnahme-zusatz-koppeln" aria-hidden="true">Telefon scannt, Rechner zeigt die Lage</span>
+        </button>
+      )}
     </>
   );
 

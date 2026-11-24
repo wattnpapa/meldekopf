@@ -26,6 +26,7 @@ erklären, warum etwas so ist, wie es ist. Diese Begründungen gehen mit.
 | Einsatz löschen, Papierkorb | Gelöschte Sammlungen liegen 30 Tage im Papierkorb und kommen zurück; endgültiges Löschen fragt in der App zurück. | `@bos/meldekopf/papierkorb`, `papierkorb-frist.ts`, `papierkorb-ui.test.tsx` | erledigt (Phase 2) |
 | Ruhende Sammlungen | Nach 90 Tagen ohne Änderung löscht der Kern die Sammlung; die App merkt sich Name, Zeitraum und Zahl der Meldungen und sagt es einmal auf der Startseite. | `aufraeum-hinweis.ts` | erledigt (Phase 2) |
 | Zwei Fenster, ein Speicher | Änderungen aus einem anderen Fenster derselben App werden sofort übernommen (`storage`-Ereignis), nichts überschreibt sich still. | `fenster-abgleich.tsx`, `fenster-unterschied.ts` | erledigt: Sammlungen frischen sich bei Änderungen aus dem anderen Fenster auf (`app.tsx`); die Schnellerfassung warnt, wenn ein anderes Fenster dieselbe Erfassung ändert, und fragt vor jedem Verwerfen. Ohne Rückholplatz: Die Rückfragen sagen, welche Fassung verloren geht (Option `rueckholplatz: false`) |
+| Zweites Gerät koppeln | Zwei Geräte am selben Meldekopf führen dieselbe Sammlung, etwa das Telefon draußen am Eingang und der Rechner im Fahrzeug mit der Übersicht. „Zweites Gerät koppeln…“ in der Einsatzansicht zeigt einen Code; das zweite Gerät scannt ihn mit „Bogen scannen…“ und zeigt einen Antwort-Code, den das erste über „Antwort scannen…“ liest (Kamera oder Handscanner). Danach schickt jedes Gerät dem anderen jeden geänderten Stand: neue Einheiten, Abrücken, Auftrag, Eintreffzeit, Entfernen und Zurückholen. Direkte Verbindung im selben Netz (WLAN, Hotspot), ohne Internet und ohne Server. Eine Leiste über jeder Ansicht nennt den Zustand: gekoppelt mit Uhrzeit des letzten Abgleichs, stockend, getrennt. Getrennt arbeiten beide weiter und speichern bei sich; neu koppeln gleicht ab. Ein Neuladen der Seite oder ein gesperrter Bildschirm trennt die Kopplung. | neu im Meldekopf (ADR-009): `kopplung/*`, `geraete-koppeln.feature` | erledigt (2026-11-24); Gerätetest mit zwei echten Geräten offen (Architektur Kap. 11) |
 
 ## 2. Eingänge: Bögen aufnehmen
 
@@ -154,8 +155,8 @@ erklären, warum etwas so ist, wie es ist. Diese Begründungen gehen mit.
 | Eigene Vorlagen, Musterung, Landes- und Organisations-Beispielbögen | Erfassungsbogen |
 | Eigener Bogen, Entwurf, Absenderkarte als Sender | Erfassungsbogen |
 | Zug aus Teileinheiten zusammenstellen | Erfassungsbogen (geplant, nach Fertigstellung dieser App) |
-| Lagekarte, Einsatztagebuch, Aufträge, Kräfteübersicht über mehrere Meldeköpfe, mehrere Geräte, Verlauf über Tage | S1-Control |
-| Server, Anmeldung, Cloud, Synchronisation | nirgends |
+| Lagekarte, Einsatztagebuch, Aufträge, Kräfteübersicht über mehrere Meldeköpfe, mehr als zwei Geräte, Mehrbenutzerbetrieb mit Rollen, Verlauf über Tage | S1-Control |
+| Server, Anmeldung, Cloud, Synchronisation über das Internet | nirgends (die Kopplung zweier Geräte läuft direkt im lokalen Netz, Abschnitt 1) |
 
 ## 11. Übernommene Gherkin-Szenarien
 
@@ -167,3 +168,7 @@ Datensicherung, Alle Daten löschen, Offline-Start, Erststart, kaputter Link),
 `uebung.feature`. Die Schritt-Definitionen unter `features/schritte/` und
 `features/support/` sind die Grundlage; Formulierungen, die den Assistenten
 voraussetzen, werden auf die Schnellerfassung umgeschrieben.
+
+Ohne Vorlage im Erfassungsbogen: `geraete-koppeln.feature` (5 Szenarien, seit
+2026-11-24) mit eigenen Schritten in `features/schritte/kopplung.steps.ts`;
+das zweite Gerät ist dort ein zweites Browser-Profil.

@@ -94,6 +94,7 @@ import {
 import { exportStaendeUebernehmen, weitergabeUmImportErgaenzen } from "../weitergabe/export-stand";
 import { lageAngabenUebernehmen } from "../weitergabe/lage-angaben";
 import { dateiFehlerMeldung } from "./datei-fehler";
+import { istKopplungsCode } from "../kopplung/zustand";
 import { istWordDatei } from "./word-bogen-fehler";
 import { widerspruchMerken } from "./widerspruch-merker";
 import type { DateiFehler } from "../fehler-buendeln";
@@ -1206,6 +1207,20 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
    * Fehlertext zeigt weiterhin, was TATSÄCHLICH ankam.
    */
   async function uebernehmeQrText(rohText: string, opt: { ohneKiosk?: boolean } = {}): Promise<boolean> {
+    // Kopplungs-Code eines zweiten Geräts (ADR-009): kein Bogen. Dieses Gerät antwortet mit seinem eigenen Code;
+    // der Scanner schließt, der Dialog der Kopplung übernimmt.
+    if (istKopplungsCode(rohText)) {
+      const satz = await (await import("../kopplung/kopplung")).kopplungCodeGescannt(rohText);
+      if (satz) {
+        scanFehlerRef.current = satz;
+        setFehler(satz);
+        return false;
+      }
+      setzeSegmentTeile([]);
+      setScanFortschritt("");
+      setFehler("");
+      return true;
+    }
     const text = entwirreScanText(rohText, istLesbarerScan);
     const fertig = await uebernehmeText(text, scanFehlertext(rohText), opt);
     // Nach der Übernahme melden: Sie setzt ihrerseits Meldungen, die den
