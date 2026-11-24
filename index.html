@@ -1521,7 +1521,12 @@
        erste Zeile über Kopfzahlen und Liste, statt — wie R6-K5 will — hinter
        die Export-Knöpfe. Er bekommt Zeile 4, die Verwaltung rückt auf 5. */
     main.einsatz-detail > .lm-block { grid-row: 4; }
-    main.einsatz-detail > .einsatz-verwalten { grid-row: 5; }
+    /* Rollenaudit Runde 2 (U2): Dem Block „Übergabe und Abschluss" fehlte hier
+       die Zeile. Die automatische Platzierung legte ihn in die leere erste
+       Zeile; am Laptop standen Summe und Aufnahme-Knöpfe unter dem
+       Bildschirmrand. Er bekommt Zeile 5, die Verwaltung rückt auf 6. */
+    main.einsatz-detail > .einsatz-abschluss { grid-row: 5; }
+    main.einsatz-detail > .einsatz-verwalten { grid-row: 6; }
     html:has(main.einsatz-detail) .anzeige-balken > .anzeige-leiste { max-width: 84rem; }
     /* Die Aufnahme-Knöpfe füllen die schmale Spalte, statt ungleich lang darin zu stehen. */
     main.einsatz-detail .einsatz-seite > .aktionen { display: flex; flex-direction: column; align-items: stretch; }
@@ -1830,6 +1835,12 @@
       background: var(--warn-fond); color: var(--warn-text); border: 2px solid var(--warn-linie);
     }
     span.kompakt-merkmal.luecken-merkmal { color: var(--warn-text); }
+    /* Rollenaudit Runde 2 (U3): Funkrufname, Führung und Fahrzeuge an der zugeklappten Karte, ohne Rahmen und
+       ohne Fettdruck, damit sie nicht wie eine Marke aussehen, die etwas verlangt. */
+    span.kompakt-merkmal.ruhig-merkmal { border-color: transparent; padding-inline: 0; font-weight: 400; color: var(--text-2); overflow-wrap: anywhere; }
+    .muster-sub.erreichbar-zeile, .muster-sub.kfz-zeile { display: block; overflow-wrap: anywhere; }
+    .einheiten-tabelle td .kfz-typen { display: block; font-size: var(--t-xs); font-weight: 400; color: var(--text-2); white-space: normal; min-width: 7rem; }
+    .einheiten-tabelle .funkruf-zelle, .einheiten-tabelle .fuehrung-zelle { min-width: 8rem; max-width: 14rem; overflow-wrap: anywhere; }
     /* R3-K5: Laufende Sammlung direkt aus der Weiche öffnen — darunter
        klein, wann zuletzt etwas einging. */
     button.sammlung-oeffnen { flex-direction: column; align-items: flex-start; text-align: left; }

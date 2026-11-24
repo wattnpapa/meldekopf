@@ -44,8 +44,6 @@ import {
   StaerkeRolle,
   alleFahrerlaubnisse,
   staerke,
-  unterbringungMWD,
-  verpflegung,
   datumZuIso,
   type EebDatum,
   type EebZeitpunkt,
@@ -53,6 +51,7 @@ import {
   type Fahrzeug,
   type Person,
 } from "@bos/eeb-format/model";
+import { unterbringungLage, verpflegungLage } from "../auswertung";
 import {
   FE_TEXT,
   datumAnzeige,
@@ -271,8 +270,11 @@ function kontextFelder(b: Erfassungsbogen, k: Kontext, satzart: string, nr?: num
 
 function einheitSatz(b: Erfassungsbogen, k: Kontext): Satz {
   const st = staerke(b);
-  const vp = verpflegung(b);
-  const u = unterbringungMWD(b);
+  // Wie Übersicht-CSV, Lageblatt und Summen: Eine Schnellerfassung nur mit Stärke trägt in der
+  // Personalliste bloß die Führungskraft. Das Model zählte dort „Verpflegung 1" bei Stärke 9
+  // (Rollenaudit Runde 2, U1); die Lage-Rechnung nimmt die Stärke und leitet kein Geschlecht ab.
+  const vp = verpflegungLage(b);
+  const u = unterbringungLage(b);
   const sb = b.sofortbedarf;
   const ebene0 = b.einheit.hierarchie[0];
   return {

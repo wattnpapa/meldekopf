@@ -11,7 +11,8 @@
  *  - SUCHE: alle Wörter müssen treffen (UND), Groß/Klein und Akzente egal.
  *    Gesucht wird über das, was auf der Karte bzw. im Funkverkehr steht —
  *    Einheit, Organisation, Ort/Zugehörigkeit, Teil-Etikett,
- *    Kennzeichen und Funkrufname, Auftrag/Notiz der Führungsstelle und der
+ *    Kennzeichen, Fahrzeugtyp und Sondergerät, Funkrufname (auch der der
+ *    Führungskraft aus der Schnellerfassung), Auftrag/Notiz der Führungsstelle und der
  *    Ort/Auftrag des Bogens (Audit Runde 2, R2-K8: „Deich" fand 0 Einheiten,
  *    obwohl „Deichabschnitt Nord" auf einer Karte stand) sowie die Bemerkung
  *    der Einheit („Sonstiges", Audit Runde 3, R3-K3). Nicht über Personennamen: die Liste ist eine
@@ -29,7 +30,8 @@
 
 import { OrganisationsTyp, alleFahrerlaubnisse, type Person } from "@bos/eeb-format/model";
 import { MeldeStatus, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
-import { FE_EINGESCHLOSSEN, FE_TEXT, vokabText, einheitAnzeigename, funkrufText, kennzeichenText, orgLabel, vokabularFuer } from "./hilfen";
+import { fahrzeugSuchtext, funkrufnamen } from "./erreichbarkeit";
+import { FE_EINGESCHLOSSEN, FE_TEXT, vokabText, einheitAnzeigename, kennzeichenText, orgLabel, vokabularFuer } from "./hilfen";
 import { eintreffzeit } from "./eintrag-zeiten";
 import { angabenZeit } from "./angaben-alter";
 import { falte } from "@bos/oberflaeche/schreibweise";
@@ -73,7 +75,13 @@ function suchtext(e: MeldeEintrag): string {
     ...einheit.hierarchie.flatMap((h) => [h.name, h.kurz ?? "", vokabText(h.bezeichnung, vokabularFuer(einheit.organisation, "ebene"))]),
     // Das Kürzel des Typs, wie es am Funk fällt: „ZTr", „FGr O" (R11-H3).
     vokabText(einheit.einheitsTyp, vokabularFuer(einheit.organisation, "einheitstyp"), "kurz"),
-    ...e.bogen.fahrzeuge.flatMap((f) => [kennzeichenText(f), funkrufText(f, einheit)]),
+    ...e.bogen.fahrzeuge.map((f) => kennzeichenText(f)),
+    // Auch der Funkrufname der Führungskraft aus der Schnellerfassung: „22/51" fand die Einheit
+    // nicht, die genau so hieß (Rollenaudit Runde 2, U3).
+    ...funkrufnamen(e.bogen),
+    // Fahrzeugtyp in Kurzform und ausgeschrieben, dazu das Sondergerät: „Radlader", „NEA" und
+    // „Bagger" fanden 0 von 19 (Rollenaudit Runde 2, Bereitstellungsraum P1-1).
+    ...fahrzeugSuchtext(e.bogen),
     e.notiz ?? "",
     e.bogen.einsatz.ortAuftrag,
     // Freitext der Einheit („Ölsperre verbraucht, Nachschub nötig"): die
@@ -305,6 +313,40 @@ const VERALTET_MS = 60 * 60_000;
 export function passtZuStatusfilter(e: MeldeEintrag, f: StatusFilter, jetzt: number = Date.now()): boolean {
   if (f === "veraltet") return e.status === MeldeStatus.ANWESEND && jetzt - angabenZeit(e) >= VERALTET_MS;
   return f === "anwesend" ? e.status === MeldeStatus.ANWESEND : e.status !== MeldeStatus.ANWESEND;
+}
+
+/**
+ * Die Aufträge, die im Einsatz vergeben sind, für den Filter „Auftrag" (Rollenaudit Runde 2, Bereitstellungsraum
+ * P1-2): „Was ist im EA 2, was ist entlassen?" ließ sich nur aus den Notizen zusammenlesen, der Filter kannte nur
+ * „ohne Auftrag". Gleiche Texte zählen zusammen, Groß/Klein und Leerraum egal („EA 2" = „ea  2"); angezeigt wird die
+ * zuerst gefundene Schreibweise. Auch Abgerückte zählen: Bei ihnen steht dort, wohin sie abgerückt sind.
+ */
+export interface AuftragEintrag {
+  schluessel: string;
+  text: string;
+  einheiten: number;
+}
+
+/** Vergleichsschlüssel eines Auftrags; leer ohne Auftrag. */
+export function auftragSchluessel(notiz: string | undefined): string {
+  return normalisiere(notiz ?? "");
+}
+
+export function auftraegeImEinsatz(eintraege: readonly MeldeEintrag[]): AuftragEintrag[] {
+  const gefunden = new Map<string, AuftragEintrag>();
+  for (const e of eintraege) {
+    const schluessel = auftragSchluessel(e.notiz);
+    if (!schluessel) continue;
+    const da = gefunden.get(schluessel);
+    if (da) da.einheiten++;
+    else gefunden.set(schluessel, { schluessel, text: (e.notiz ?? "").replace(/\s+/g, " ").trim(), einheiten: 1 });
+  }
+  return [...gefunden.values()].sort((a, b) => a.text.localeCompare(b.text, "de", { numeric: true }));
+}
+
+/** Trägt die Einheit genau diesen Auftrag? Anwesende wie Abgerückte. */
+export function passtZuAuftrag(e: MeldeEintrag, schluessel: string): boolean {
+  return auftragSchluessel(e.notiz) === schluessel;
 }
 
 /** Einschränkung auf Einheiten, denen noch etwas fehlt (R7-K6). */

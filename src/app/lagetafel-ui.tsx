@@ -613,6 +613,7 @@ function Zelle({ zelle, tb, fassung, jetzt }: { zelle: TafelZelle; tb: Tafelbild
         <li className="lt-abgang">
           <span className="lt-abgang-zeit">{a.zeit != null ? uhrzeitText(a.zeit, jetzt) : "–"}</span>
           <span className="lt-abgang-name">{a.name}</span>
+          {a.auftrag && <span className="lt-abgang-auftrag">→ {a.auftrag}</span>}
           {a.uebung && <span className="lt-abgang-uebung">({UEBUNG_WORT})</span>}
         </li>
       );
@@ -903,6 +904,7 @@ export default function Lagetafel({ einsatz, jetzt, beginn, funkruf, staleSeit, 
                 <li key={a.id}>
                   <span className="lt-ab-zeit">{a.zeit != null ? uhrzeitText(a.zeit, jetzt) : "–"}</span>
                   <span className="lt-ab-name">{a.name}</span>
+                  {a.auftrag && <span className="lt-ab-auftrag">→ {a.auftrag}</span>}
                   {/* Neben dem Namen, nicht in ihm: Bei Platzmangel wird der Name gekürzt, das Kennzeichen bleibt. */}
                   {a.uebung && <span className="lt-ab-uebung">({UEBUNG_WORT})</span>}
                 </li>

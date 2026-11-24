@@ -17,7 +17,8 @@ import { aggregiere, aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage,
 import { eintreffzeit } from "./eintrag-zeiten";
 import { bedarfMarken, letzteMeldung, sollstaerkeAnteil } from "./einheiten-tabelle";
 import { geltendeJeEinheit } from "./fassung-vorrang";
-import { einheitAnzeigename, funkrufText, nurSollstaerke, natoZeitstempel, orgLabel, vokabText, vokabularFuer } from "./hilfen";
+import { funkrufDerEinheit } from "./erreichbarkeit";
+import { einheitAnzeigename, nurSollstaerke, natoZeitstempel, orgLabel, vokabText, vokabularFuer } from "./hilfen";
 
 /** Datum-Zeit-Gruppe in ihren Teilen: „17" „1806" „feb" „24" (Tag, Uhrzeit, Monat, Jahr). */
 export function dtgTeile(d: Date): { tag: string; zeit: string; monat: string; jahr: string } {
@@ -350,7 +351,8 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
         id: m.id,
         orga: e.organisationName?.trim() || orgLabel(e.organisation),
         ort: einheitOrt(e),
-        funkruf: m.bogen.fahrzeuge.map((f) => funkrufText(f, e)).find((t) => t !== "") ?? "",
+        // Sonst der Funkrufname der Führungskraft aus der Schnellerfassung (Rollenaudit Runde 2, U3).
+        funkruf: funkrufDerEinheit(m.bogen),
         typ: vokabText(e.einheitsTyp, vokabularFuer(e.organisation, "einheitstyp"), "name").trim(),
         fuehrer: st.fuehrer,
         unterfuehrer: st.unterfuehrer,

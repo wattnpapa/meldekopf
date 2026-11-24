@@ -59,6 +59,7 @@ export function EinsatzAnsicht({
   onGeaendert,
   onGeloescht,
   onManuell,
+  onBerichtigen,
   angefangeneErfassung,
   exportUmfang,
   setExportUmfang,
@@ -77,6 +78,8 @@ export function EinsatzAnsicht({
   onGeloescht: () => void;
   /** „Einheit manuell erfassen…": die Schnellerfassung für diesen Einsatz (app.tsx). */
   onManuell: () => void;
+  /** „Angaben berichtigen…" an der Karte einer von Hand erfassten Einheit. */
+  onBerichtigen?: (eintragId: string) => void;
   /** Name einer angefangenen Schnellerfassung dieses Einsatzes — die Löschrückfrage nennt sie. */
   angefangeneErfassung?: string;
   /**
@@ -284,6 +287,7 @@ export function EinsatzAnsicht({
         onGeaendert={onGeaendert}
         onScannen={() => aufnahme.scanneInEinsatz(einsatz.id)}
         onManuell={onManuell}
+        onBerichtigen={onBerichtigen}
         angefangeneErfassung={angefangeneErfassung}
         onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
         onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}

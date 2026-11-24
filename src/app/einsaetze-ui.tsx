@@ -131,12 +131,15 @@ import { ZusammenfuehrenPanel } from "./zusammenfuehren-ui";
 import type { AufteilungsWahl } from "@bos/meldekopf/aufteilen";
 import { absenderLabel, type Absenderkarte } from "@bos/eeb-format/signatur";
 import { AbsenderKontakt, KontaktLink, PersonKontakt } from "./kontakt-link";
+import { fahrzeugKurzformen, fuehrungDerEinheit, funkrufDerEinheit } from "./erreichbarkeit";
 import { ANONYM_ERKLAERUNG } from "./weitergabe/anonym-hinweis";
 import { STAND_NACH_EINTREFFEN_TEXT, standLiegtNachEintreffen } from "./weitergabe/stand-uhr";
 import { aggregiere, aktuelleMeldungen, bedarfNichtErfasst, mwdText, uebungenAusserhalbDerLage, verpflegungBogenText, verpflegungText, type EinsatzSummen } from "./auswertung";
 import {
   SORTIERUNGEN,
   passtZuLueckenfilter,
+  auftraegeImEinsatz,
+  passtZuAuftrag,
   passtZuStatusfilter,
   type StatusFilter,
   einheitenAnsicht,
@@ -267,6 +270,21 @@ import {
 
 /** Zeichen des Auftrags auf der zugeklappten Karte (R8-K3): der Auftrag steht bis hierhin ungekürzt da. */
 const AUFTRAG_KARTE_MAX = 80;
+/**
+ * Lässt sich die Einheit über „Angaben berichtigen…" ändern? Nur die eigene Erfassung des Meldekopfs (von Hand, nur
+ * Stärke), anwesend oder abgerückt, kein Teil einer Aufteilung: Dessen Angaben gehören zur Stammeinheit.
+ */
+export function berichtigbar(kopf: Pick<MeldeEintrag, "quelle" | "bogen" | "teilEtikett" | "status">): boolean {
+  return (
+    kopf.quelle === "manuell" &&
+    kopf.bogen.personalErfassung === PersonalErfassung.NUR_STAERKE &&
+    !kopf.teilEtikett &&
+    kopf.status !== MeldeStatus.AUFGEGANGEN
+  );
+}
+
+/** So viele Fahrzeuge nennt die zugeklappte Karte; der Rest als „+2" (alle nach dem Aufklappen). */
+const KFZ_KARTE_MAX = 4;
 
 import { ART_LABEL, ART_WAHL } from "./einsaetze-konstanten";
 import { WORD_DATEI_ARTEN } from "./eingang/word-bogen-fehler";
@@ -1191,6 +1209,8 @@ export function EinsatzDetail(props: {
   onGeaendert: () => void;
   onScannen: () => void;
   onManuell: () => void;
+  /** „Angaben berichtigen…" an der Karte einer von Hand erfassten Einheit (Rollenaudit Runde 2, Meldekopf P1-1). */
+  onBerichtigen?: (eintragId: string) => void;
   /** Schnellerfassung (nur Stärke) für diese Sammlung (R16-W3). */
   onSchnell?: () => void;
   /** Fertige Bögen aus JSON-/PDF-Dateien. */
@@ -1361,6 +1381,8 @@ export function EinsatzDetail(props: {
   const nurBedarf = bedarfsFilter != null;
   // „ohne Auftrag": Lücke, die die Führung schließen will (R7-K6).
   const [lueckenFilter, setLueckenFilter] = useState<LueckenFilter | null>(null);
+  // Ein bestimmter Auftrag: „Was ist im EA 2, was ist entlassen?" (Rollenaudit Runde 2, Bereitstellungsraum P1-2).
+  const [auftragFilter, setAuftragFilter] = useState<string | null>(null);
   // „Wer ist noch da?": nur Anwesende oder nur Abgerückte; abgerückte Karten bleiben sonst an ihrem Platz stehen (R11-K2).
   const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null);
   // Suche, Sortierung und Filter am Telefon hinter einer Zeile, solange die Liste kurz ist (R4-K5).
@@ -1981,7 +2003,11 @@ export function EinsatzDetail(props: {
   const kopfOhneBedarfsfilter = einheitenAnsicht(alleEinheiten, suche, sortierung, quali, nummern);
   const kopfNachBedarf = bedarfsFilter ? kopfOhneBedarfsfilter.filter((e) => passtZuBedarfsfilter(e, bedarfsFilter)) : kopfOhneBedarfsfilter;
   const kopfNachLuecke = lueckenFilter ? kopfNachBedarf.filter((e) => passtZuLueckenfilter(e, lueckenFilter)) : kopfNachBedarf;
-  const kopf = statusFilter ? kopfNachLuecke.filter((e) => passtZuStatusfilter(e, statusFilter)) : kopfNachLuecke;
+  // Die Aufträge des Einsatzes; ein gewählter, den es nicht mehr gibt (geändert, Einheit entfernt), filtert nicht weiter.
+  const auftraege = auftraegeImEinsatz(alleEinheiten);
+  const gewaehlterAuftrag = auftragFilter ? auftraege.find((a) => a.schluessel === auftragFilter) : undefined;
+  const kopfNachAuftrag = gewaehlterAuftrag ? kopfNachLuecke.filter((e) => passtZuAuftrag(e, gewaehlterAuftrag.schluessel)) : kopfNachLuecke;
+  const kopf = statusFilter ? kopfNachAuftrag.filter((e) => passtZuStatusfilter(e, statusFilter)) : kopfNachAuftrag;
   // Erste nicht anwesende Karte, falls vor ihr anwesende stehen: dort beginnt der Abschnitt „Abgerückt" (R17-E6, K4).
   const abgerueckteStelle = kopf.some((e) => e.status === MeldeStatus.ANWESEND) ? kopf.findIndex((e) => e.status !== MeldeStatus.ANWESEND) : -1;
   const anwesendAnzahl = alleEinheiten.filter((e) => passtZuStatusfilter(e, "anwesend")).length;
@@ -1991,9 +2017,9 @@ export function EinsatzDetail(props: {
   const ohneAuftragAnzahl = alleEinheiten.filter((e) => passtZuLueckenfilter(e, "ohne-auftrag")).length;
   const gefiltert = kopf.length !== alleEinheiten.length;
   /** Irgendeine Einschränkung wirkt: dann bleibt die Suchleiste auch am Telefon offen (R4-K5). */
-  const filterAktiv = suche.trim() !== "" || quali !== "" || nurBedarf || lueckenFilter != null || statusFilter != null;
+  const filterAktiv = suche.trim() !== "" || quali !== "" || nurBedarf || lueckenFilter != null || statusFilter != null || gewaehlterAuftrag != null;
   // Der Lückenfilter („n ohne Auftrag") klappt das Feld nicht auf: Er steht in der Zeile darüber, samt „Filter aufheben" (R10-K2).
-  const filterAktivOhneLuecke = suche.trim() !== "" || quali !== "" || nurBedarf || statusFilter != null;
+  const filterAktivOhneLuecke = suche.trim() !== "" || quali !== "" || nurBedarf || statusFilter != null || gewaehlterAuftrag != null;
   // Meldeköpfe melden oft nur die Stärke — dort steht keine Person und damit
   // keine Qualifikation. Ohne diesen Hinweis sähe der Filter wie ein Fehler aus.
   const ohnePersonen = alleEinheiten.filter(
@@ -2104,11 +2130,21 @@ export function EinsatzDetail(props: {
         Auftrag
         <Auswahl
           beschriftung="Auftrag"
-          value={lueckenFilter ?? ""}
-          onChange={(e) => setLueckenFilter((e.target.value || null) as LueckenFilter | null)}
+          value={gewaehlterAuftrag ? `a:${gewaehlterAuftrag.schluessel}` : lueckenFilter ?? ""}
+          onChange={(e) => {
+            const wert = e.target.value;
+            // Ein bestimmter Auftrag und „ohne Auftrag" schließen sich aus.
+            setAuftragFilter(wert.startsWith("a:") ? wert.slice(2) : null);
+            setLueckenFilter(wert === "ohne-auftrag" ? "ohne-auftrag" : null);
+          }}
         >
           <option value="">alle</option>
           <option value="ohne-auftrag">ohne Auftrag ({ohneAuftragAnzahl})</option>
+          {auftraege.map((a) => (
+            <option key={a.schluessel} value={`a:${a.schluessel}`}>
+              {kuerzeAnWortgrenze(a.text, 40)} ({a.einheiten})
+            </option>
+          ))}
         </Auswahl>
       </label>
       {/* Status: „wer ist noch da?" ohne die durchgestrichenen Karten (R11-K2). */}
@@ -2905,7 +2941,7 @@ export function EinsatzDetail(props: {
         {alleEinheiten.length > 0 && kopf.length === 0 && (
           <p className="hinweis">
             Keine Einheit passt zu{" "}
-            {[suche.trim() && `„${suche.trim()}“`, gewaehlteQuali && `„${gewaehlteQuali.label}“`, nurBedarf && bedarfsFilterText, lueckenFilter && "„ohne Auftrag“", statusFilter && (statusFilter === "anwesend" ? "„nur Anwesende“" : statusFilter === "veraltet" ? "„nur ältere als 1 Std“" : "„nur Abgerückte“")]
+            {[suche.trim() && `„${suche.trim()}“`, gewaehlteQuali && `„${gewaehlteQuali.label}“`, nurBedarf && bedarfsFilterText, lueckenFilter && "„ohne Auftrag“", gewaehlterAuftrag && `Auftrag „${gewaehlterAuftrag.text}“`, statusFilter && (statusFilter === "anwesend" ? "„nur Anwesende“" : statusFilter === "veraltet" ? "„nur ältere als 1 Std“" : "„nur Abgerückte“")]
               .filter(Boolean)
               .join(" und ")}
             .{" "}
@@ -2998,6 +3034,7 @@ export function EinsatzDetail(props: {
                 onHandlung={andereHandlung}
                 onAuftragGesetzt={(a) => { andereHandlung(); setAuftragGesetzt(a); }}
                 onVerschoben={(v) => { andereHandlung(); setVerschobenQuittung(v); }}
+                onBerichtigen={props.onBerichtigen}
               />
               </Fragment>
             ))}
@@ -3604,6 +3641,8 @@ function EinheitenTabelle({ meldungen, historie = meldungen, art, eingang, numme
     benzin: summe.kraftstoff.benzinLiter,
     gemisch: summe.kraftstoff.gemischLiter,
     fahrzeuge: summe.fahrzeuge,
+    funkruf: "",
+    fuehrung: "",
     bedarf: "",
     eingetroffen: "",
     meldung: "",
@@ -3819,8 +3858,27 @@ function TabellenZelle({ spalte, zeile: z, kern = false, stern = false }: { spal
     }
     // Zahl plus Typen: „3" beantwortet die Summenfrage, „GKW / MzKW" die
     // nach dem, was tatsächlich dasteht.
+    // Die Typen stehen in der vollen Tabelle unter der Zahl, nicht nur im Tooltip, den es am Tablet nicht gibt:
+    // „Welche Fachgruppe mit Radlader steht noch hier?" (Rollenaudit Runde 2, Bereitstellungsraum P1-1).
     case "fahrzeuge":
-      return <td className="zahl" title={z.fahrzeugTypen}>{z.fahrzeuge}</td>;
+      return (
+        <td className="zahl" title={z.fahrzeugTypen}>
+          {z.fahrzeuge}
+          {!kern && z.fahrzeugTypen ? <span className="kfz-typen">{z.fahrzeugTypen}</span> : null}
+        </td>
+      );
+    case "funkruf":
+      return <td className="funkruf-zelle">{z.funkruf}</td>;
+    case "fuehrung": {
+      const f = fuehrungDerEinheit(z.eintrag.bogen);
+      return (
+        <td className="fuehrung-zelle">
+          {f?.name}
+          {f?.name && f.telefon ? <br /> : null}
+          {f?.telefon?.wert ? <KontaktLink art="tel" wert={f.telefon.wert} /> : null}
+        </td>
+      );
+    }
     case "bedarf":
       // Jede Marke unteilbar („Diesel 745 l" bricht nicht), die Zelle bricht zwischen den Marken (R8-K2): statt einer
       // langen Zeile eine schmale Spalte, und Auftrag und Eintreffen davor bleiben im Bild.
@@ -4311,6 +4369,8 @@ function EinheitKarte(props: {
   onHandlung?: () => void;
   /** Eine Einheit wurde in einen anderen Einsatz verschoben und der Ergebnisdialog ist zu — Quittung mit Rückgängig (R14-D4). */
   onVerschoben?: (v: Verschoben) => void;
+  /** „Angaben berichtigen…": öffnet die Berichtigung für die geltende Fassung dieser Einheit (schnellerfassung/berichtigung.tsx). */
+  onBerichtigen?: (eintragId: string) => void;
 }) {
   const { einsatzId, kopf, alle, onGeaendert, onEntfernt, qualifikation = "", qualifikationKurz = "", eingang, onStatusWechsel, kompakt = false } = props;
   // Auf dem Telefon zugeklappt, bis die Einheit angetippt wird (R2-K7).
@@ -4414,6 +4474,9 @@ function EinheitKarte(props: {
   // Rückfrage kommt, solange die Einheit noch vor dem Meldekopf steht (K3).
   const luecken = pruefpunkteEintrag(kopf);
   const bedarf = bedarfMarken(kopf.bogen);
+  const funkruf = funkrufDerEinheit(kopf.bogen);
+  const fuehrung = fuehrungDerEinheit(kopf.bogen);
+  const kfzKurz = fahrzeugKurzformen(kopf.bogen);
   const revs = revisionenJe(alle, kopf.einheitSchluessel);
   // Folgemeldung: die direkt ältere Fassung derselben Einheit ist der Bezug für
   // „was hat sich seit der letzten Meldung geändert?".
@@ -5286,6 +5349,19 @@ function EinheitKarte(props: {
               {bemerkungNeu && (
                 <span className="kompakt-merkmal bemerkung-merkmal" title={`Bemerkung der Einheit: ${bemerkung}`}>Bemerkung neu</span>
               )}
+              {/* Rollenaudit Runde 2 (U3, Bereitstellungsraum P1-1): Funkrufname, Führung und Fahrzeuge standen nur in den Details.
+                  Ruhig gesetzt und hinter den Marken, die etwas verlangen. */}
+              {funkruf && <span className="kompakt-merkmal ruhig-merkmal funkruf-merkmal">Funk: {funkruf}</span>}
+              {fuehrung && (
+                <span className="kompakt-merkmal ruhig-merkmal fuehrung-merkmal">
+                  Führung: {[fuehrung.name, fuehrung.telefon?.wert].filter(Boolean).join(" · ")}
+                </span>
+              )}
+              {kfzKurz.length > 0 && (
+                <span className="kompakt-merkmal ruhig-merkmal kfz-merkmal" title={kfzKurz.join(" · ")}>
+                  Kfz: {kfzKurz.length > KFZ_KARTE_MAX ? `${kfzKurz.slice(0, KFZ_KARTE_MAX).join(" · ")} · +${kfzKurz.length - KFZ_KARTE_MAX}` : kfzKurz.join(" · ")}
+                </span>
+              )}
               {zeitHinweis && (
                 <span className="kompakt-merkmal luecken-merkmal" title={zeitHinweis}>⚠ Zeit prüfen</span>
               )}
@@ -5321,6 +5397,21 @@ function EinheitKarte(props: {
           {absenderLabel(kopf.signatur?.absender) && (
             <span className="muster-sub absender-zeile">Absender: <AbsenderKontakt karte={kopf.signatur?.absender} /></span>
           )}
+          {/* Wer führt, wie erreiche ich ihn, unter welchem Namen rufe ich die Einheit? (Rollenaudit Runde 2, U3) */}
+          {(fuehrung || funkruf) && (
+            <span className="muster-sub erreichbar-zeile">
+              {fuehrung && (
+                <>
+                  Führung: {fuehrung.name}
+                  {fuehrung.name && fuehrung.telefon?.wert ? " · " : ""}
+                  {fuehrung.telefon?.wert ? <KontaktLink art="tel" wert={fuehrung.telefon.wert} /> : null}
+                </>
+              )}
+              {fuehrung && funkruf ? " · " : ""}
+              {funkruf && <>Funkrufname: {funkruf}</>}
+            </span>
+          )}
+          {kfzKurz.length > 0 && <span className="muster-sub kfz-zeile">Fahrzeuge: {kfzKurz.join(" · ")}</span>}
           {/* Die Zeiten der Führungsstelle zuerst, der Absender-Stand nur als
               Zusatz: „eingetroffen 09:40" ist die Zeile fürs Einsatztagebuch,
               „Stand 161923jul26" war die einzige Zeit und sagte nichts über
@@ -5678,6 +5769,16 @@ function EinheitKarte(props: {
           {kopf.bogen.einheit.hierarchie[0] && (
             <>
               <button type="button" aria-describedby={nameId} onClick={() => void ortAendern()}>Ort der Einheit ändern…</button>{" "}
+            </>
+          )}
+          {/* Rollenaudit Runde 2 (Meldekopf P1-1): Einheitstyp, Organisation, Fahrzeuge und Führungskraft einer von Hand
+              erfassten Einheit ließen sich nicht berichtigen; die Neuerfassung zählte doppelt. Nur für die eigene Erfassung
+              (nur Stärke): Was die Einheit selbst gemeldet hat, ändert eine Folgemeldung der Einheit. */}
+          {props.onBerichtigen && berichtigbar(kopf) && (
+            <>
+              <button type="button" className="berichtigen" aria-describedby={nameId} onClick={() => { mehrSchliessen(); props.onBerichtigen?.(kopf.id); }}>
+                Angaben berichtigen…
+              </button>{" "}
             </>
           )}
           <button type="button" aria-describedby={nameId} onClick={() => void verschieben()}>Verschieben…</button>{" "}

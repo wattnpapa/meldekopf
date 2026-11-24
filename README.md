@@ -36,7 +36,8 @@ Tage oder Aufträge braucht, ist S1-Control.
 - Bögen eintreffender Einheiten aufnehmen: Kamera-Scan, USB-Handscanner,
   Bilderstapel (Fotos, Screenshots, ganzer Ordner), Datei, PDF, Link.
 - Einheit ohne Bogen in Minuten erfassen: nur Stärke, Führungskraft,
-  Fahrzeuge; Bogen drucken, fertig.
+  Fahrzeuge; Bogen drucken, fertig. Die eigene Erfassung lässt sich danach
+  unter derselben Nummer berichtigen.
 - Laufende Summen über alle anwesenden Einheiten;
   Karten- und Tabellensicht mit Suche, Qualifikations- und Kraftfahrer-Filter.
 - Folgemeldungen als Historie je Einheit; Schichtübergabe-Diff („Stärke

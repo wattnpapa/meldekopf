@@ -31,6 +31,11 @@ export interface AngabenSeit {
   kennzeichnung?: boolean;
   /** Der Ort der Einheit wurde am Meldekopf geändert (R20-H1); `kennzeichnung` ist dann ebenfalls gesetzt. */
   name?: boolean;
+  /**
+   * Die Angaben einer von Hand erfassten Einheit wurden am Meldekopf berichtigt (Einheitstyp, Organisation, Fahrzeuge,
+   * Führungskraft; Rollenaudit Runde 2, Meldekopf P1-1); `kennzeichnung` ist dann ebenfalls gesetzt.
+   */
+  berichtigt?: boolean;
   /** Wann am Meldekopf geändert wurde (ms). */
   geaendertAm: number;
 }
@@ -59,13 +64,15 @@ export function standLiegtWeitVorEingang(e: MitStand): boolean {
 }
 
 /** Die Angaben einer neuen Handänderung: das Alter der Vorgängerin bleibt (R17-K1). */
-export function angabenErben(vorgaengerin: MitStand, kennzeichnung: boolean | "name" = false, jetzt = Date.now()): AngabenSeit {
+export function angabenErben(vorgaengerin: MitStand, kennzeichnung: boolean | "name" | "berichtigt" = false, jetzt = Date.now()): AngabenSeit {
   return {
     seit: angabenZeit(vorgaengerin),
     wort: standLiegtWeitVorEingang(vorgaengerin) ? "Stand" : "Meldung",
     ...(kennzeichnung ? { kennzeichnung: true } : {}),
     // R20-H1: „Ort der Einheit ändern…" – keine Folgemeldung (wie die Kennzeichnung), der Vermerk sagt „Name".
     ...(kennzeichnung === "name" ? { name: true } : {}),
+    // „Angaben berichtigen…": dieselbe Einheit mit richtigen Angaben, keine Folgemeldung der Einheit.
+    ...(kennzeichnung === "berichtigt" ? { berichtigt: true } : {}),
     geaendertAm: jetzt,
   };
 }
@@ -90,6 +97,7 @@ export function eintreffzeitStapelHinweis(neu: number, jetzt: number = Date.now(
  */
 export function handAenderungText(e: { angaben?: AngabenSeit }): string {
   if (!e.angaben) return "";
+  if (e.angaben.berichtigt) return `Angaben am Meldekopf berichtigt ${zeitLang(e.angaben.geaendertAm)}`;
   return `${e.angaben.name ? "Ort der Einheit" : e.angaben.kennzeichnung ? "Kennzeichnung" : "Stärke"} am Meldekopf geändert ${zeitLang(e.angaben.geaendertAm)}`;
 }
 

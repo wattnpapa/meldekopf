@@ -19,6 +19,7 @@
  * einer angeklickten Spalte um.
  */
 
+import { fuehrungText, funkrufDerEinheit } from "./erreichbarkeit";
 import { EEB_EPOCHE_MS, staerke, type EebDatum, type Erfassungsbogen } from "@bos/eeb-format/model";
 import { einheitAnzeigename, nurSollstaerke, orgLabel, pruefpunkte, vokabText, vokabularFuer, zeitpunktDeutsch, type Pruefpunkt } from "./hilfen";
 import { MeldeStatus, type EinsatzArt, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
@@ -731,6 +732,10 @@ export interface TabellenZeile {
   gemisch: number;
   fahrzeuge: number;
   fahrzeugTypen: string;
+  /** Funkrufname der Einheit (erstes Fahrzeug, sonst Führungskraft); leer = keiner (Rollenaudit Runde 2, U3). */
+  funkruf: string;
+  /** „Petra Lang · 0171 2345678": wer führt und wie man zurückruft; leer nach Ablauf der Datenschutzfrist. */
+  fuehrung: string;
   /** Sofortbedarf als Kurztext (siehe {@link bedarfKurztext}); leer = keiner. */
   bedarf: string;
   /** Eintreffzeit als Uhrzeit (bei anderem Tag mit Datum). */
@@ -779,6 +784,8 @@ export type TabellenSpalte =
   | "benzin"
   | "gemisch"
   | "fahrzeuge"
+  | "funkruf"
+  | "fuehrung"
   | "bedarf"
   | "eingetroffen"
   | "meldung"
@@ -856,6 +863,10 @@ export const TABELLEN_SPALTEN: SpaltenDefinition[] = [
   { schluessel: "auftrag", kopf: "Auftrag", titel: "Auftrag / Notiz der Führungsstelle", zahl: false },
   { schluessel: "eingetroffen", kopf: "Eingetr.", titel: "Eingetroffen", zahl: false, sortiertNach: "eingetroffenAm" },
   { schluessel: "bedarf", kopf: "Bedarf", titel: "Sofortbedarf", zahl: false },
+  // „Wer ist Heros 22/51, wer führt die FGr N, wie erreiche ich ihn?": die Rückfragen am Funk standen nur in den
+  // Details jeder einzelnen Einheit (Rollenaudit Runde 2, U3). Hinter Auftrag, Eintreffen und Bedarf (R8-K2).
+  { schluessel: "funkruf", kopf: "Funkruf", titel: "Funkrufname der Einheit", zahl: false },
+  { schluessel: "fuehrung", kopf: "Führung", titel: "Führungskraft und Rückrufnummer", zahl: false },
   // Alter der geltenden Meldung: Ältestes oben statt „Eingetr." (absolut) und „Stand" (vom Absender gesetzt) (R12-K3).
   { schluessel: "meldung", kopf: "Alter", titel: "Alter der Angaben (Stand im Bogen, höchstens der Eingang)", zahl: false, sortiertNach: "angabenAm" },
   { schluessel: "abgerueckt", kopf: "Abger.", titel: "Abgerückt", zahl: false, sortiertNach: "abgerueckAm" },
@@ -948,6 +959,8 @@ export function tabellenZeilen(eintraege: MeldeEintrag[], art?: EinsatzArt, jetz
       gemisch: sb?.gemischLiter ?? 0,
       fahrzeuge: b.fahrzeuge.length,
       fahrzeugTypen: fahrzeugTypen(e),
+      funkruf: funkrufDerEinheit(b),
+      fuehrung: fuehrungText(b),
       bedarf: bedarfKurztext(b),
       // Eine Zeitform für Karte, Tabelle und Lageblatt: „29.09.2026, 14:05".
       // Vorher stand hier „14:05" neben „170805jul26", auf dem Blatt
