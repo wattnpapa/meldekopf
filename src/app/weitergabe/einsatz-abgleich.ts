@@ -348,9 +348,16 @@ export function artText(a: ArtAbgleich | undefined): string {
 /** Satz der Quittung, wenn die Datei nichts Neueres enthielt. */
 export const NICHTS_UEBERNOMMEN_SATZ = "Datei war älter oder gleich: keine Änderung übernommen, dieser Stand bleibt.";
 
-function kurzname(e: MeldeEintrag): string {
+/**
+ * Name der Einheit in den Meldungen des Abgleichs: kurz der Ort („Ulm abgerückt 20:47"). Führt die Sammlung mehrere
+ * Einheiten aus diesem Ort, steht der volle Anzeigename da: Ein Zug kommt fast immer aus einem Ortsverband, und
+ * „Oldenburg (NI) abgerückt" ließ sich bei Zugtrupp, Bergungsgruppe und FGr N nicht zuordnen (Rollenaudit Runde 2,
+ * UEAL U8).
+ */
+function kurzname(e: MeldeEintrag, alle: readonly MeldeEintrag[] = []): string {
   const ort = e.bogen.einheit.hierarchie[0]?.name?.trim();
-  const basis = ort || einheitAnzeigename(e.bogen.einheit);
+  const mehrdeutig = !!ort && alle.some((x) => x.einheitSchluessel !== e.einheitSchluessel && x.bogen.einheit.hierarchie[0]?.name?.trim() === ort);
+  const basis = (mehrdeutig ? "" : ort) || einheitAnzeigename(e.bogen.einheit);
   return e.teilEtikett ? `${basis} (${e.teilEtikett})` : basis;
 }
 
@@ -479,7 +486,7 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
       if (ent.widerspruch && hierWert !== dateiWert) {
         ergebnis.widersprueche.push({
           einheitSchluessel: schl,
-          einheit: kurzname(ziel),
+          einheit: kurzname(ziel, s.eintraege),
           feld: FELD_NAME[feld],
           hier: hierWert,
           datei: dateiWert,
@@ -495,7 +502,7 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
     }
     const vermerke = vereinigeVermerke([hier.vermerke, datei.vermerke, ziel.vermerke ?? [], notizen]);
     if (vermerke.length > 0) ziel.vermerke = vermerke;
-    if (was.length > 0) ergebnis.aktualisiert.push({ einheitSchluessel: schl, einheit: kurzname(ziel), was });
+    if (was.length > 0) ergebnis.aktualisiert.push({ einheitSchluessel: schl, einheit: kurzname(ziel, s.eintraege), was });
     if (JSON.stringify(ziel) !== vorZiel) geschrieben = true;
   }
   if (geschrieben) {

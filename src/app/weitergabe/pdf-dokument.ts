@@ -929,6 +929,12 @@ export function ohneVorbelegung(b: Erfassungsbogen): Erfassungsbogen {
   };
 }
 
+/** „, davon 7 vegetarisch, 1 vegan" für die Bedarfszeile; leer, wenn niemand abweichend isst. */
+export function verpflegungKostText(vp: { vegetarisch: number; vegan: number }): string {
+  const teile = [vp.vegetarisch > 0 ? `${vp.vegetarisch} vegetarisch` : "", vp.vegan > 0 ? `${vp.vegan} vegan` : ""].filter(Boolean);
+  return teile.length > 0 ? `, davon ${teile.join(", ")}` : "";
+}
+
 /**
  * Wie erreiche ich die Einheit ohne Gerät? Funkrufname des ersten Fahrzeugs
  * mit Funkrufnamen und die Rückrufnummer der Führungskraft (sonst die des
@@ -1750,7 +1756,9 @@ function lageKopfleiste(
   const kraftstoff = kraftstoffText(s.kraftstoff);
   const bedarfZeile = [
     { text: nachtrag ? "Bedarf (nur Nachtrag): " : "Bedarf: ", bold: true },
-    { text: `${verpflegungText(s)} · ` },
+    // Vegetarisch und vegan gehören zur Bestellung: Das Lageblatt hängt aus, und der Verpflegungstrupp las sie dort
+    // nicht (Rollenaudit Runde 2, Bereitstellungsraum P2-3).
+    { text: `${verpflegungText(s)}${verpflegungKostText(s.verpflegung)} · ` },
     angefordert
       ? {
           text: `Unterbringung angefordert: ${angefordert}${ohneText}`,

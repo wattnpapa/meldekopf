@@ -54,6 +54,10 @@ export function schnellerfassungsBogen(): Erfassungsbogen {
   return {
     ...grund,
     einheit: { ...grund.einheit, organisation, hierarchie: [ersteEbene(organisation)] },
+    // Den Zeitraum fragt die Schnellerfassung nicht ab. Die Vorgabe „heute 08:00–18:00" stand an jeder Einheit, auch an
+    // einer um 20:52 erfassten, und ging so in die CSV (Rollenaudit Runde 2, Meldekopf P2-7, UEAL U14). Leer wie im
+    // Blanko-Vordruck: Karte, Bogen und CSV sagen „nicht angegeben".
+    einsatz: { zeitraumVon: 0, zeitraumBis: 0, ortAuftrag: "" },
     personalErfassung: PersonalErfassung.NUR_STAERKE,
     staerkeManuell: { fuehrer: 0, unterfuehrer: 0, mannschaft: 0, gesamt: 0 },
   };
@@ -86,6 +90,14 @@ export function Schnellerfassung({
   const [nummer, setNummer] = useState(start?.fremd?.zettel?.nr ?? "");
   const [gespeichert, setGespeichert] = useState(true);
   const staerkeAbschnitt = useRef<HTMLDivElement>(null);
+  // Ein Gerät mit Maus oder Touchpad hat in aller Regel auch eine Tastatur.
+  const [mitTastatur] = useState(() => {
+    try {
+      return window.matchMedia("(pointer: fine)").matches;
+    } catch {
+      return false;
+    }
+  });
   const beendet = useRef(false);
 
   // Jede Änderung landet sofort im Entwurf: Ein Neuladen oder ein leerer Akku
@@ -369,14 +381,27 @@ export function Schnellerfassung({
           </span>
         </div>
       </SeitenKopf>
-      <main id="inhalt" tabIndex={-1} className="schnellerfassung mit-uebernehmen">
+      {/* Strg+Eingabetaste übernimmt aus jedem Feld (U9): „In Einsatz übernehmen" lag sonst hinter der ganzen Tabulatorfolge. */}
+      <main
+        id="inhalt"
+        tabIndex={-1}
+        className="schnellerfassung mit-uebernehmen"
+        onKeyDown={(ev) => {
+          if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+            ev.preventDefault();
+            void uebernehmen();
+          }
+        }}
+      >
         <p className="hinweis">
           Es reichen der Ort der Einheit und die Stärke; Fahrzeuge, Führungskraft und Kontaktstellen können offen bleiben.
           {!gespeichert && !fenster.konflikt && <strong> Nicht gespeichert — der Gerätespeicher nimmt nichts an. Bitte zügig übernehmen.</strong>}
         </p>
         {/* Die Uhrzeit vom Meldeblock gleich oben mitnehmen, statt sie danach je Karte über „ändern" (R2-A5). */}
         <EintreffzeitFeld wert={zeit} onAendern={setZeit} abgerueckt={abgerueckt} onAbgerueckt={setAbgerueckt} nummer={nummer} onNummer={setNummer} />
-        <AbschnittEinheit bogen={bogen} aendern={aendern} kompakt />
+        {/* Mit Tastatur (Laptop in der Führungsstelle) steht der Cursor gleich im Ort; am Telefon nicht, dort schöbe die
+            Bildschirmtastatur die Seite weg (Rollenaudit Runde 2, UEAL U9). */}
+        <AbschnittEinheit bogen={bogen} aendern={aendern} kompakt ortFokus={mitTastatur} />
         <div ref={staerkeAbschnitt} id="abschnitt-staerke">
           <AbschnittStaerke bogen={bogen} aendern={aendern} />
         </div>
@@ -393,7 +418,7 @@ export function Schnellerfassung({
       {fenster.konflikt && <FensterKonflikt abgleich={fenster} />}
       {/* Der Abschluss in der festen Leiste, in eigener Zeile (R3-G3). */}
       <footer className="nav assistent-nav mit-uebernehmen">
-        <button type="button" className="uebernehmen" onClick={() => void uebernehmen()}>
+        <button type="button" className="uebernehmen" onClick={() => void uebernehmen()} aria-keyshortcuts="Control+Enter" title={mitTastatur ? "Strg+Eingabetaste" : undefined}>
           In Einsatz übernehmen
         </button>
       </footer>

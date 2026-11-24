@@ -1838,6 +1838,15 @@
     /* Rollenaudit Runde 2 (U3): Funkrufname, Führung und Fahrzeuge an der zugeklappten Karte, ohne Rahmen und
        ohne Fettdruck, damit sie nicht wie eine Marke aussehen, die etwas verlangt. */
     span.kompakt-merkmal.ruhig-merkmal { border-color: transparent; padding-inline: 0; font-weight: 400; color: var(--text-2); overflow-wrap: anywhere; }
+    /* Rollenaudit Runde 2: Fahrzeuge, Stärke je Organisation und Abgerückte unter den Summenkacheln; jeder Teil bricht als Ganzes um. */
+    p.lage-zusatz { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.9rem; margin: var(--r-2) 0; }
+    p.lage-zusatz .lage-zusatz-teil { white-space: nowrap; }
+    p.lage-zusatz strong { color: var(--text); }
+    p.lage-zusatz button.link, p.erfassung-angefangen button.link { min-height: 44px; display: inline-flex; align-items: center; }
+    p.erfassung-angefangen { color: var(--warn-text); font-weight: 600; margin: var(--r-2) 0; }
+    .muster-sub.alter-zeile button.link, .muster-sub.stand-bestaetigt button.link { min-height: 44px; display: inline-flex; align-items: center; padding-inline: 4px; font-weight: 600; }
+    .muster-sub.stand-bestaetigt { display: block; }
+    p.staerkemeldung-text { font-size: var(--t-l); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; user-select: all; }
     .muster-sub.erreichbar-zeile, .muster-sub.kfz-zeile { display: block; overflow-wrap: anywhere; }
     .einheiten-tabelle td .kfz-typen { display: block; font-size: var(--t-xs); font-weight: 400; color: var(--text-2); white-space: normal; min-width: 7rem; }
     .einheiten-tabelle .funkruf-zelle, .einheiten-tabelle .fuehrung-zelle { min-width: 8rem; max-width: 14rem; overflow-wrap: anywhere; }

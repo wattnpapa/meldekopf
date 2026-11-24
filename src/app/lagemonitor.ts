@@ -127,6 +127,8 @@ export interface EinheitZeile {
  * als Zahl. Kraftstoff bleibt in der Einsatzansicht (Audit Meldekopf R1, F4).
  */
 export interface BedarfZeile {
+  /** Verpflegung als Satz wie in Einsatzansicht und Lageblatt („Verpflegung: 49 angefordert (105 Personen vor Ort)"). */
+  verpflegungZeile?: string;
   verpflegung: number;
   ruhezeit: number;
   unterbringungEinheiten: number;
@@ -145,6 +147,14 @@ export function alterKurz(min: number): string {
   // Ausgeschrieben: Auf dem Fernseher liest sich „103 T" nicht als „Tage" (R18-K5).
   if (min >= 1440) return `${Math.floor(min / 1440)} ${Math.floor(min / 1440) === 1 ? "Tag" : "Tage"}`;
   return `${Math.floor(min / 60)} Std ${min % 60} Min`;
+}
+
+/**
+ * Verpflegung am Lagemonitor, kurz für die Ferne: eine Zahl, wenn Anforderung und Stärke übereinstimmen, sonst beide
+ * benannt wie in der Einsatzansicht.
+ */
+export function verpflegungMonitorText(angefordert: number, vorOrt: number): string {
+  return angefordert === vorOrt ? `Verpflegung ${vorOrt}` : `Verpflegung ${angefordert} angefordert (${vorOrt} vor Ort)`;
 }
 
 /** Auftrag für die Monitorzeile: eine Zeile, höchstens 48 Zeichen. */
@@ -368,6 +378,9 @@ export function lagebild(einsatz: Einsatzsammlung, jetzt: number = Date.now()): 
   const summen = aggregiere(einsatz.eintraege, einsatz.art);
   const bedarf: BedarfZeile = {
     verpflegung: summen.verpflegung.gesamt,
+    // Dieselbe Aussage wie Einsatzansicht und Lageblatt: Bei 105 Anwesenden und 49 angeforderten Portionen stand hier
+    // „Verpflegung 105", dort „49 angefordert" (Rollenaudit Runde 2, Bereitstellungsraum P2-3).
+    verpflegungZeile: verpflegungMonitorText(summen.verpflegungAngefordert, summen.verpflegung.gesamt),
     ruhezeit: summen.ruhezeitErforderlich,
     unterbringungEinheiten: summen.unterbringungBenoetigt,
     unterbringungPersonen: summen.unterbringungAngefordert.personen,

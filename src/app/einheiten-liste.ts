@@ -64,8 +64,8 @@ function normalisiere(text: string): string {
     .trim();
 }
 
-/** Durchsuchbarer Text einer Meldung (siehe Modul-Kopf: was auf der Karte steht). */
-function suchtext(e: MeldeEintrag): string {
+/** Durchsuchbare Felder einer Meldung, jedes für sich normalisiert (siehe Modul-Kopf: was auf der Karte steht). */
+function suchfelder(e: MeldeEintrag): string[] {
   const einheit = e.bogen.einheit;
   const teile = [
     einheitAnzeigename(einheit),
@@ -88,7 +88,7 @@ function suchtext(e: MeldeEintrag): string {
     // Suche „Nachschub" fand 0 von 14 (Audit Runde 3, R3-K3).
     e.bogen.sonstiges ?? "",
   ];
-  return normalisiere(teile.filter(Boolean).join(" "));
+  return teile.filter(Boolean).map(normalisiere);
 }
 
 /**
@@ -96,12 +96,29 @@ function suchtext(e: MeldeEintrag): string {
  * (gleiche Referenz), damit die Liste ohne Sucheingabe nichts kostet.
  */
 export function einheitenFiltern(eintraege: MeldeEintrag[], suche: string): MeldeEintrag[] {
-  const woerter = normalisiere(suche).split(" ").filter(Boolean);
-  if (woerter.length === 0) return eintraege;
+  const { woerter, folgen } = suchbegriffe(suche);
+  if (woerter.length === 0 && folgen.length === 0) return eintraege;
   return eintraege.filter((e) => {
-    const text = suchtext(e);
-    return woerter.every((w) => text.includes(w));
+    const felder = suchfelder(e);
+    const text = felder.join(" ");
+    return woerter.every((w) => text.includes(w)) && folgen.every((f) => felder.some((feld) => feld.includes(f)));
   });
+}
+
+/**
+ * Zerlegt die Eingabe: einzelne Wörter (alle müssen irgendwo treffen) und Wortfolgen in Anführungszeichen, die als
+ * Ganzes in EINEM Feld stehen müssen. „EA 2" ohne Anführungszeichen traf auch die Einheit im EA 1, weil „EA" im Auftrag
+ * und „2" im Kennzeichen stand (Rollenaudit Runde 2, Bereitstellungsraum P2-1). Alle üblichen Anführungszeichen gelten;
+ * ein offenes am Ende reicht bis zum Schluss.
+ */
+export function suchbegriffe(suche: string): { woerter: string[]; folgen: string[] } {
+  const folgen: string[] = [];
+  const rest = suche.replace(/["„“”«»]([^"„“”«»]*)(?:["„“”«»]|$)/g, (_, folge: string) => {
+    const f = normalisiere(folge);
+    if (f) folgen.push(f);
+    return " ";
+  });
+  return { woerter: normalisiere(rest).split(" ").filter(Boolean), folgen };
 }
 
 // ------------------------------------------------------- Qualifikationsfilter
@@ -347,6 +364,16 @@ export function auftraegeImEinsatz(eintraege: readonly MeldeEintrag[]): AuftragE
 /** Trägt die Einheit genau diesen Auftrag? Anwesende wie Abgerückte. */
 export function passtZuAuftrag(e: MeldeEintrag, schluessel: string): boolean {
   return auftragSchluessel(e.notiz) === schluessel;
+}
+
+/** Die Organisationen der Liste mit der Zahl ihrer Einheiten, nach Namen — für den Filter „Organisation" (UEAL U12). */
+export function organisationenImEinsatz(eintraege: readonly MeldeEintrag[]): { name: string; einheiten: number }[] {
+  const gefunden = new Map<string, number>();
+  for (const e of eintraege) {
+    const name = orgLabel(e.bogen.einheit.organisation);
+    gefunden.set(name, (gefunden.get(name) ?? 0) + 1);
+  }
+  return [...gefunden.entries()].map(([name, einheiten]) => ({ name, einheiten })).sort((a, b) => a.name.localeCompare(b.name, "de"));
 }
 
 /** Einschränkung auf Einheiten, denen noch etwas fehlt (R7-K6). */

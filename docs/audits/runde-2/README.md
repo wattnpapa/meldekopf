@@ -66,18 +66,84 @@ der Runde 1 (Telefon nicht bedienbar) ist behoben.
 Alle Korrekturen liegen in der App selbst; der geteilte Kern unter `vendor/`
 ist unverändert.
 
-Das Startbündel wächst dadurch von 640.760 auf 645.480 Byte und liegt über der
-Grenze des Bundle-Budgets (642.929). Das Budget ist nicht angehoben: Ob der
-Zuwachs gewollt ist, entscheidet nach ADR-003 (Aufnahmeregel 5), wer den Stand
-übernimmt (`npm run bundle-budget -- --setze` mit Begründung im Commit).
+Das Startbündel wuchs dadurch von 640.760 auf 645.480 Byte; das Bundle-Budget
+ist dafür angehoben (ADR-003, Aufnahmeregel 5).
+
+## P2: behoben (Stand 24.11.2026)
+
+Gebündelt nach Ursache; jede Korrektur hat einen Test, die mit Oberfläche ein
+Szenario (`lage-nachfuehren.feature`, `rollenaudit-runde2-p2.test.tsx`).
+
+7. **Die Schnellerfassung setzt Angaben, die niemand gemacht hat (Meldekopf
+   P2-7, UEAL U5, U14).** Der Einsatzzeitraum bleibt leer („nicht angegeben")
+   statt „heute 08:00–18:00". Rolle, Geschlecht und Ernährung der
+   Ansprechperson stehen in der CSV „Alle Daten" leer; die Details nennen
+   keine Rolle und beim Geschlecht „ohne Angabe". Der Satz „die 1 Namen
+   stammen aus der Meldung davor" entfällt bei einer Erstmeldung.
+8. **„Bedarf nicht erfasst" hängt am Fahrzeug (UEAL U4).** Die Marke gilt für
+   jede Schnellerfassung ohne Sofortbedarf, mit oder ohne Fahrzeug.
+9. **Sofortbedarf lässt sich nicht nachtragen (Bereitstellungsraum P2-4).**
+   „Bedarf ändern…" an der Karte, nach dem Muster von „Stärke ändern…": neue
+   Fassung, Vermerk, „Rückgängig".
+10. **Fahrzeuge, Abgerückte und Stärke je Organisation fehlen bei der Summe
+    (Meldekopf P2-1, Bereitstellungsraum P2-2, UEAL U12).** Eine Zeile unter
+    den Kacheln nennt Fahrzeuge, die Stärke je Organisation und die
+    Abgerückten mit Stärke und Fahrzeugen. Dazu der Filter „Organisation";
+    die Summenzeile der Tabelle rechnet die Auswahl.
+11. **Keine Kurzmeldung zum Durchgeben (Meldekopf P2-6).** „Stärkemeldung…"
+    zeigt eine Zeile mit DTG, Einheiten, Stärke und Fahrzeugen zum Vorlesen
+    und Kopieren.
+12. **Angefangene Erfassung unsichtbar (Meldekopf P2-3, offen aus Runde 1).**
+    Unter der Summe steht „Erfassung angefangen, noch nicht in der Lage" mit
+    „Fortsetzen…".
+13. **„Einheit manuell erfassen…" hinter „Weitere Wege" (Meldekopf P2-2).**
+    Die Zeile bleibt am Telefon offen, solange die jüngste Meldung von Hand
+    kam.
+14. **Organisationswechsel löscht den getippten Ort (Meldekopf P2-4).** Der
+    Ort bleibt stehen.
+15. **Suche verknüpft Wörter über Felder hinweg (Bereitstellungsraum P2-1).**
+    Eine Wortfolge in Anführungszeichen muss als Ganzes in einem Feld stehen.
+    Ohne Anführungszeichen sucht die App wie bisher.
+16. **Verpflegungszahl heißt je Ansicht etwas anderes (Bereitstellungsraum
+    P2-3).** Lagemonitor und Tafel nennen Anforderung und Anwesende wie die
+    Einsatzansicht; das Lageblatt nennt vegetarisch und vegan.
+17. **Nach einer Stunde warnt jede Karte dauerhaft (Bereitstellungsraum
+    P2-5).** „Stand bestätigen" setzt das Alter neu, mit Vermerk und
+    „Rückgängig".
+18. **Abgleich-Meldungen nennen nur den Ort (UEAL U8).** Führt die Sammlung
+    mehrere Einheiten aus einem Ort, steht der volle Name der Einheit da.
+19. **Tastatur (UEAL U9).** In der Schnellerfassung steht der Cursor mit
+    Tastatur im Ort, Strg+Eingabetaste übernimmt; „/" springt in die Suche.
+20. **Suche über Funkrufname (Meldekopf P2-8)** und **Auftrag als Filter
+    (Meldekopf P2-5, UEAL U6)** sind mit den P1 erledigt.
 
 ## Offen
 
-- Die P2 und P3 der drei Berichte, darunter: Angaben, die die Schnellerfassung
-  setzt, ohne dass jemand sie gemacht hat (Zeitraum 08:00–18:00, Führungskraft
-  als „männlich / Fleisch"), die unsichtbare angefangene Erfassung, die
-  fehlende Kurzmeldung zum Durchgeben, DTG und Absender im Lageblatt,
-  Sofortbedarf für Einheiten ohne Bogen, Tastaturbedienung.
+P2, bewusst nicht umgesetzt, weil sie eine Produktentscheidung oder einen
+eigenen Entwurf brauchen:
+
+- **Einzelperson in der Schnellerfassung, Ort nicht als Pflicht (Meldekopf
+  P2-9).** Berührt den Schlüssel der Einheit und die Zählung.
+- **Eigener Zustand für eingesetzt, Ruhe, abgelöst (UEAL U6) und
+  Mehrfachauswahl „Markierte abrücken…" (Bereitstellungsraum P2-7).** Die
+  Auftragsverfolgung verweist `PRODUCT.md` nach S1-Control. Der Tipp-Schutz
+  nach einem Statuswechsel ist unverändert.
+- **Verlauf über den ganzen Einsatz (UEAL U7).** Das Einsatztagebuch gehört
+  nach S1-Control.
+- **Mehrere angefangene Erfassungen (UEAL U10).** Es bleibt bei einem
+  Entwurf je Gerät; er ist jetzt sichtbar (Punkt 12).
+- **Feste Zeile mit Summe beim Blättern (UEAL U11), dichtere Karten und
+  Tabelle (Bereitstellungsraum P2-6), Tafel als Vorgabe des Lagemonitors
+  (UEAL U13).** Gestaltungsfragen mit Folgen für Telefon und Fernseher.
+- Die Zwischensumme je Auftrag (Meldekopf P2-5) gibt es nur über den Filter
+  und die Summenzeile der Tabelle.
+
+Außerdem:
+
+- Die P3 der drei Berichte.
+- Ein von Hand auf „kein Bedarf" gestellter Sofortbedarf trägt weiter die
+  Marke „Bedarf nicht erfasst": Das Format unterscheidet „nicht gefragt" und
+  „nichts nötig" nicht.
 - Zu U2: Die Kachel „Gesamt" bricht in der schmalen Seitenspalte weiter in
   eine zweite Zeile um. Sie steht im ersten Bildschirm.
 - Nicht geprüft wurden Kamera und Handscanner, echter Druck, die Electron- und

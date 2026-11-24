@@ -36,6 +36,15 @@ export interface AngabenSeit {
    * Führungskraft; Rollenaudit Runde 2, Meldekopf P1-1); `kennzeichnung` ist dann ebenfalls gesetzt.
    */
   berichtigt?: boolean;
+  /** Der Sofortbedarf wurde am Meldekopf nachgetragen oder geändert („Bedarf ändern…", Rollenaudit Runde 2). */
+  bedarf?: boolean;
+  /**
+   * „Stand bestätigen" (Rollenaudit Runde 2, Bereitstellungsraum P2-5): Die Einheit steht planmäßig seit Stunden da, und
+   * jemand hat nachgefragt, dass die Angaben noch stimmen. `seit` ist dann dieser Zeitpunkt, das Alter beginnt neu.
+   */
+  bestaetigtAm?: number;
+  /** Nur bestätigt, sonst nichts von Hand geändert: Der Vermerk nennt dann allein die Bestätigung. */
+  nurBestaetigt?: boolean;
   /** Wann am Meldekopf geändert wurde (ms). */
   geaendertAm: number;
 }
@@ -63,8 +72,19 @@ export function standLiegtWeitVorEingang(e: MitStand): boolean {
   return e.empfangenAm - standMs(e.bogen.stand) >= STAND_VOR_EINGANG_MS;
 }
 
+/**
+ * Die Angaben nach „Stand bestätigen": Das Alter beginnt jetzt neu, ein früherer Vermerk einer Handänderung bleibt.
+ * Keine Folgemeldung (`kennzeichnung`): Die Einheit hat nichts Neues gemeldet, und am Lagemonitor ist es keine Bewegung.
+ */
+export function angabenBestaetigt(e: { angaben?: AngabenSeit }, jetzt = Date.now()): AngabenSeit {
+  const alt = e.angaben;
+  return alt
+    ? { ...alt, seit: jetzt, wort: "Stand", bestaetigtAm: jetzt }
+    : { seit: jetzt, wort: "Stand", kennzeichnung: true, nurBestaetigt: true, bestaetigtAm: jetzt, geaendertAm: jetzt };
+}
+
 /** Die Angaben einer neuen Handänderung: das Alter der Vorgängerin bleibt (R17-K1). */
-export function angabenErben(vorgaengerin: MitStand, kennzeichnung: boolean | "name" | "berichtigt" = false, jetzt = Date.now()): AngabenSeit {
+export function angabenErben(vorgaengerin: MitStand, kennzeichnung: boolean | "name" | "berichtigt" | "bedarf" = false, jetzt = Date.now()): AngabenSeit {
   return {
     seit: angabenZeit(vorgaengerin),
     wort: standLiegtWeitVorEingang(vorgaengerin) ? "Stand" : "Meldung",
@@ -73,6 +93,7 @@ export function angabenErben(vorgaengerin: MitStand, kennzeichnung: boolean | "n
     ...(kennzeichnung === "name" ? { name: true } : {}),
     // „Angaben berichtigen…": dieselbe Einheit mit richtigen Angaben, keine Folgemeldung der Einheit.
     ...(kennzeichnung === "berichtigt" ? { berichtigt: true } : {}),
+    ...(kennzeichnung === "bedarf" ? { bedarf: true } : {}),
     geaendertAm: jetzt,
   };
 }
@@ -97,6 +118,14 @@ export function eintreffzeitStapelHinweis(neu: number, jetzt: number = Date.now(
  */
 export function handAenderungText(e: { angaben?: AngabenSeit }): string {
   if (!e.angaben) return "";
+  const bestaetigt = e.angaben.bestaetigtAm != null ? `Stand am Meldekopf bestätigt ${zeitLang(e.angaben.bestaetigtAm)}` : "";
+  if (e.angaben.nurBestaetigt) return bestaetigt;
+  return [handAenderungGrund(e.angaben), bestaetigt].filter(Boolean).join(" · ");
+}
+
+function handAenderungGrund(angaben: AngabenSeit): string {
+  const e = { angaben };
+  if (e.angaben.bedarf) return `Bedarf am Meldekopf geändert ${zeitLang(e.angaben.geaendertAm)}`;
   if (e.angaben.berichtigt) return `Angaben am Meldekopf berichtigt ${zeitLang(e.angaben.geaendertAm)}`;
   return `${e.angaben.name ? "Ort der Einheit" : e.angaben.kennzeichnung ? "Kennzeichnung" : "Stärke"} am Meldekopf geändert ${zeitLang(e.angaben.geaendertAm)}`;
 }

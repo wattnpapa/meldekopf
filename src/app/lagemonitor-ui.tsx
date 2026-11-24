@@ -368,7 +368,7 @@ function EinheitenTabelle({ einheiten }: { einheiten: readonly EinheitZeile[] })
 
 /** Bedarfszeile: Verpflegung als Zahl, dazu nur, was offen ist; das Dringende mit Warnzeichen (F4). */
 export function bedarfTeile(b: BedarfZeile): { text: string; dringend: boolean }[] {
-  const teile: { text: string; dringend: boolean }[] = [{ text: `Verpflegung ${b.verpflegung}`, dringend: false }];
+  const teile: { text: string; dringend: boolean }[] = [{ text: b.verpflegungZeile ?? `Verpflegung ${b.verpflegung}`, dringend: false }];
   if (b.ruhezeit > 0) teile.push({ text: `Ruhezeit ${b.ruhezeit}×`, dringend: true });
   if (b.unterbringungEinheiten > 0) {
     teile.push({
