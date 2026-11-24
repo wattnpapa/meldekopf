@@ -17,7 +17,19 @@ import { entwirreScanText } from "../eingang/tastaturbelegung";
 import { SpeicherVollFehler } from "../eintrag-zeiten";
 import { AbgleichSitzung } from "./sitzung";
 import { signalDekodieren, signalKodieren, type KopplungsSignal } from "./signal";
-import { angebotErzeugen, antwortErzeugen, kopplungMoeglich, type Angebot, type Verbindung, type VerbindungsHorcher, type VerbindungsLage } from "./verbindung";
+import { GETRENNT_SATZ as GETRENNT_HIER_SATZ } from "./texte";
+import {
+  angebotErzeugen,
+  antwortErzeugen,
+  kopplungMoeglich,
+  rufPlatzVorbereiten,
+  rufZertifikat,
+  type Angebot,
+  type RufPlatz,
+  type Verbindung,
+  type VerbindungsHorcher,
+  type VerbindungsLage,
+} from "./verbindung";
 import { kopplungsStandMelden, kopplungsZustand, kopplungsZustandSetzen, kopplungsZustandZuruecksetzen } from "./zustand";
 
 /** So oft schaut die Kopplung, ob sich der Stand dieses Geräts geändert hat. */
@@ -30,13 +42,48 @@ export const ANGEBOT_STATT_ANTWORT_SATZ =
   "Das ist kein Antwort-Code. Hier wird der Code gebraucht, den das zweite Gerät nach dem Scannen zeigt.";
 
 let sitzung: AbgleichSitzung | null = null;
-let verbindung: Verbindung | null = null;
+/** Die Verbindung, über die gerade abgeglichen wird. */
+let aktiv: Verbindung | null = null;
+/** Erkennungsmarke der aktiven Verbindung: Ereignisse anderer Verbindungen gelten ihr nicht. */
+let aktivMarke: object | null = null;
 let angebot: Angebot | null = null;
+/** Die erste Verbindung der Kopplung, aus dem Code-Tausch. */
+let erste: Verbindung | null = null;
+let ersteMarke: object | null = null;
 let takt: ReturnType<typeof setInterval> | undefined;
-/** Zählt jede neue Kopplung hoch: Ereignisse einer abgelösten Verbindung gelten nicht mehr. */
+/** Zählt jede neue Kopplung hoch: Ereignisse einer abgelösten Kopplung gelten nicht mehr. */
 let lauf = 0;
 let schnappschuss = "";
 let wachsperre: { release: () => Promise<void> } | null = null;
+
+// Wiederverbinden ohne neuen Code (verbindung.ts, „Rückruf-Plätze"). Das erste Gerät hört, das zweite ruft.
+let rolle: "hoerer" | "rufer" | null = null;
+/** Hörer: wartende Verbindungen, die das zweite Gerät anrufen kann. */
+const plaetze = new Map<number, { angebot: Angebot; marke: object; beantwortet: boolean }>();
+let platzNr = 0;
+/** Rufer: Plätze des Hörers, zu denen dieses Gerät eine Antwort bereithält. */
+let rufPlaetze: { nr: number; platz: RufPlatz }[] = [];
+let zertifikat: Promise<RTCCertificate | undefined> | null = null;
+let rufVersuch: { marke: object; verbindung: Verbindung | null; uhr: ReturnType<typeof setTimeout> } | null = null;
+let rufUhr: ReturnType<typeof setTimeout> | undefined;
+let rufZahl = 0;
+let aufgebenUhr: ReturnType<typeof setTimeout> | undefined;
+let puls: ReturnType<typeof setInterval> | undefined;
+let pulsZuletzt = 0;
+let pongOffen: ReturnType<typeof setTimeout> | undefined;
+
+/** So viele wartende Plätze hält der Hörer bereit. */
+const PLAETZE = 2;
+/** Kommt ein Anruf in dieser Zeit nicht durch, wird er abgebrochen und später wiederholt. */
+const RUF_FRIST_MS = 15_000;
+/** Pausen zwischen den Anrufen; danach bleibt es bei der letzten. */
+const RUF_PAUSEN_MS = [1000, 3000, 5000, 10_000, 20_000, 30_000];
+/** So lange heißt eine gerissene Verbindung „unterbrochen"; danach „getrennt", auch wenn das Gerät es weiter versucht. */
+const AUFGEBEN_MS = 45_000;
+/** Stand die Uhr dieses Fensters länger still, war das Gerät eingeschlafen: Die Verbindung wird geprüft. */
+const SCHLAF_MS = 20_000;
+/** So lange hat das andere Gerät Zeit, auf die Nachfrage zu antworten. */
+const PONG_FRIST_MS = 3000;
 
 function lesen(text: string): KopplungsSignal {
   // Ein Handscanner mit falscher Tastaturbelegung verdreht den Code; das lässt sich zurückrechnen.
@@ -89,11 +136,12 @@ function beiSichtwechsel(): void {
   }
   const phase = kopplungsZustand().phase;
   if (phase === "verbunden" || phase === "unterbrochen") void wachHalten();
+  aufgewacht();
 }
 
 function beiSeitenende(): void {
-  // Das andere Gerät soll sofort „getrennt" sehen, nicht erst nach einer halben Minute Funkstille.
-  verbindung?.schliessen();
+  // Das andere Gerät soll wissen, dass von hier niemand mehr anruft und niemand mehr wartet.
+  aktiv?.sofortSenden({ art: "ende" });
 }
 
 function taktStoppen(): void {
@@ -101,16 +149,192 @@ function taktStoppen(): void {
   takt = undefined;
 }
 
+function rufenStoppen(): void {
+  clearTimeout(rufUhr);
+  rufUhr = undefined;
+  if (rufVersuch) {
+    clearTimeout(rufVersuch.uhr);
+    const v = rufVersuch.verbindung;
+    rufVersuch = null;
+    v?.schliessen();
+  }
+}
+
 function aufraeumen(): void {
   taktStoppen();
+  rufenStoppen();
+  clearTimeout(aufgebenUhr);
+  clearTimeout(pongOffen);
+  pongOffen = undefined;
+  clearInterval(puls);
+  puls = undefined;
   wachLassen();
   document.removeEventListener("visibilitychange", beiSichtwechsel);
   window.removeEventListener("pagehide", beiSeitenende);
-  const v = verbindung;
-  verbindung = null;
+  window.removeEventListener("online", aufgewacht);
+  const v = aktiv;
+  const e = erste;
+  aktiv = null;
+  aktivMarke = null;
   angebot = null;
+  erste = null;
+  ersteMarke = null;
   sitzung = null;
+  rolle = null;
+  zertifikat = null;
   v?.schliessen();
+  e?.schliessen();
+  for (const p of plaetze.values()) p.angebot.verbindung.schliessen();
+  plaetze.clear();
+  for (const p of rufPlaetze) p.platz.verwerfen();
+  rufPlaetze = [];
+  rufZahl = 0;
+}
+
+/** Kann sich dieses Gerät ohne neuen Code wieder verbinden? */
+function wiederverbindbar(): boolean {
+  if (rolle === "hoerer") return [...plaetze.values()].some((p) => p.beantwortet);
+  return rolle === "rufer" && rufPlaetze.some((p) => p.platz.nutzbar());
+}
+
+/** Hörer: genug wartende Plätze bereithalten und dem zweiten Gerät anbieten. */
+function plaetzeAuffuellen(nr: number): void {
+  if (rolle !== "hoerer" || nr !== lauf) return;
+  // Angebote, auf die noch keine Antwort kam (die Verbindung riss dazwischen), gehen noch einmal hinaus.
+  for (const [platz, p] of plaetze) if (!p.beantwortet) void aktiv?.senden({ art: "platz", nr: platz, sdp: p.angebot.sdp }).catch(() => undefined);
+  for (let i = plaetze.size; i < PLAETZE; i++) {
+    const platz = ++platzNr;
+    const marke = {};
+    void angebotErzeugen(horcher(nr, marke)).then(
+      (a) => {
+        if (nr !== lauf || rolle !== "hoerer") {
+          a.verbindung.schliessen();
+          return;
+        }
+        plaetze.set(platz, { angebot: a, marke, beantwortet: false });
+        void aktiv?.senden({ art: "platz", nr: platz, sdp: a.sdp }).catch(() => undefined);
+      },
+      () => undefined,
+    );
+  }
+}
+
+/** Rufer: Das erste Gerät bietet einen wartenden Platz an. */
+async function platzAnnehmen(nr: number, platz: number, sdp: string): Promise<void> {
+  const da = rufPlaetze.find((p) => p.nr === platz);
+  if (da) {
+    void aktiv?.senden({ art: "platz-antwort", nr: platz, sdp: da.platz.antwortSdp }).catch(() => undefined);
+    return;
+  }
+  zertifikat ??= rufZertifikat();
+  const z = await zertifikat;
+  const neu = await rufPlatzVorbereiten(sdp, z);
+  if (nr !== lauf || rolle !== "rufer") {
+    neu.verwerfen();
+    return;
+  }
+  rufPlaetze.push({ nr: platz, platz: neu });
+  // Ältere Plätze sind beim Hörer verbraucht oder ersetzt.
+  while (rufPlaetze.length > PLAETZE + 1) rufPlaetze.shift()?.platz.verwerfen();
+  void aktiv?.senden({ art: "platz-antwort", nr: platz, sdp: neu.antwortSdp }).catch(() => undefined);
+}
+
+/** Rufer: einen wartenden Platz des ersten Geräts anrufen. Scheitert der Anruf, folgt der nächste nach einer Pause. */
+function rufen(nr: number): void {
+  clearTimeout(rufUhr);
+  rufUhr = undefined;
+  if (nr !== lauf || rolle !== "rufer" || aktiv || rufVersuch) return;
+  const nutzbar = rufPlaetze.filter((p) => p.platz.nutzbar());
+  if (nutzbar.length === 0) {
+    endgueltigGetrennt();
+    return;
+  }
+  // Eine eingefrorene oder verdeckte Seite ruft nicht: Der Anruf liefe ins Leere. Beim Aufwachen geht es weiter.
+  if (document.visibilityState !== "visible") return;
+  const ziel = nutzbar[rufZahl % nutzbar.length]!;
+  const pause = RUF_PAUSEN_MS[Math.min(rufZahl, RUF_PAUSEN_MS.length - 1)]!;
+  rufZahl++;
+  const marke = {};
+  const naechster = () => {
+    if (rufVersuch?.marke !== marke) return;
+    clearTimeout(rufVersuch.uhr);
+    const v = rufVersuch.verbindung;
+    rufVersuch = null;
+    v?.schliessen();
+    if (nr === lauf && !aktiv) rufUhr = setTimeout(() => rufen(nr), pause);
+  };
+  rufVersuch = { marke, verbindung: null, uhr: setTimeout(naechster, RUF_FRIST_MS) };
+  ziel.platz.anrufen(horcher(nr, marke)).then(
+    (v) => {
+      if (rufVersuch?.marke === marke) rufVersuch.verbindung = v;
+      else if (aktivMarke !== marke) v.schliessen();
+    },
+    naechster,
+  );
+}
+
+function endgueltigGetrennt(): void {
+  const z = kopplungsZustand();
+  clearTimeout(aufgebenUhr);
+  rufenStoppen();
+  wachLassen();
+  kopplungsZustandSetzen({ phase: "getrennt", wartet: false, seit: z.seit ?? Date.now(), dialog: null });
+}
+
+/** Die aktive Verbindung ist weg (gerissen oder von hier aufgegeben). */
+function aktivVerloren(nr: number): void {
+  const z = kopplungsZustand();
+  taktStoppen();
+  aktiv = null;
+  aktivMarke = null;
+  angebot = null;
+  clearTimeout(pongOffen);
+  pongOffen = undefined;
+  if (!wiederverbindbar()) {
+    endgueltigGetrennt();
+    return;
+  }
+  const seit = z.phase === "unterbrochen" && z.seit != null ? z.seit : Date.now();
+  kopplungsZustandSetzen({ phase: "unterbrochen", wartet: true, seit, dialog: null });
+  clearTimeout(aufgebenUhr);
+  aufgebenUhr = setTimeout(() => {
+    if (nr !== lauf || aktiv) return;
+    wachLassen();
+    kopplungsZustandSetzen({ phase: "getrennt", wartet: true });
+  }, AUFGEBEN_MS);
+  rufZahl = 0;
+  rufen(nr);
+}
+
+/** Lebt die Verbindung noch? Nach dem Aufwachen sagt es der Browser erst nach vielen Sekunden; eine Nachfrage sagt es sofort. */
+function nachfragen(nr: number): void {
+  if (!aktiv || pongOffen) return;
+  const marke = aktivMarke;
+  aktiv.sofortSenden({ art: "ping" });
+  pongOffen = setTimeout(() => {
+    pongOffen = undefined;
+    if (nr !== lauf || aktivMarke !== marke || !aktiv) return;
+    const v = aktiv;
+    aktivVerloren(nr);
+    v.schliessen();
+  }, PONG_FRIST_MS);
+}
+
+/** Das Fenster ist wieder da (Bildschirm an, Netz zurück, Uhr stand still): Verbindung prüfen, sonst gleich anrufen. */
+function aufgewacht(): void {
+  const nr = lauf;
+  if (aktiv) nachfragen(nr);
+  else if (rolle === "rufer" && !rufVersuch && kopplungsZustand().wartet) {
+    rufZahl = 0;
+    rufen(nr);
+  }
+}
+
+function pulsSchlag(): void {
+  const jetzt = Date.now();
+  const stand = jetzt - pulsZuletzt;
+  pulsZuletzt = jetzt;
+  if (stand > SCHLAF_MS) aufgewacht();
 }
 
 function fehlerSatz(e: unknown): string {
@@ -126,31 +350,101 @@ function pruefen(): void {
   if (sitzung.pruefen() === null) kopplungBeenden("Die Sammlung gibt es auf diesem Gerät nicht mehr. Die Kopplung ist beendet.");
 }
 
-function horcher(nr: number): VerbindungsHorcher {
+function steuerNachricht(nr: number, n: { art?: unknown; nr?: unknown; sdp?: unknown }): boolean {
+  if (n.art === "ping") {
+    aktiv?.sofortSenden({ art: "pong" });
+    return true;
+  }
+  if (n.art === "pong") {
+    clearTimeout(pongOffen);
+    pongOffen = undefined;
+    return true;
+  }
+  if (n.art === "ende") {
+    kopplungBeenden(`Das andere Gerät hat die Kopplung getrennt. ${GETRENNT_HIER_SATZ}`, false);
+    return true;
+  }
+  if (n.art === "platz" && typeof n.nr === "number" && typeof n.sdp === "string") {
+    if (rolle === "rufer") void platzAnnehmen(nr, n.nr, n.sdp).catch(() => undefined);
+    return true;
+  }
+  if (n.art === "platz-antwort" && typeof n.nr === "number" && typeof n.sdp === "string") {
+    const p = rolle === "hoerer" ? plaetze.get(n.nr) : undefined;
+    if (p && !p.beantwortet) {
+      p.beantwortet = true;
+      p.angebot.antwortAnnehmen(n.sdp).catch(() => {
+        p.angebot.verbindung.schliessen();
+        plaetze.delete(n.nr as number);
+      });
+    }
+    return true;
+  }
+  return false;
+}
+
+/** Horcher einer Verbindung. `marke` unterscheidet sie von den anderen dieser Kopplung (wartende Plätze, Anrufe). */
+function horcher(nr: number, marke: object): VerbindungsHorcher {
+  let verbindung: Verbindung | null = null;
+  const eigene = (): Verbindung | null => {
+    if (verbindung) return verbindung;
+    if (rufVersuch?.marke === marke) return rufVersuch.verbindung;
+    for (const p of plaetze.values()) if (p.marke === marke) return p.angebot.verbindung;
+    return ersteMarke === marke ? erste : null;
+  };
   return {
     onLage: (lage: VerbindungsLage) => {
       if (nr !== lauf) return;
       if (lage === "verbunden") {
-        const wieder = kopplungsZustand().phase === "unterbrochen";
-        kopplungsZustandSetzen({ phase: "verbunden", seit: null, hinweis: "", dialog: null });
+        if (aktivMarke !== marke) {
+          // Eine neue Verbindung steht: die erste nach dem Code-Tausch, ein angerufener Platz oder ein gelungener Anruf.
+          const neu = eigene();
+          if (!neu) return;
+          verbindung = neu;
+          const alt = aktiv;
+          aktiv = neu;
+          aktivMarke = marke;
+          alt?.schliessen();
+          for (const [platz, p] of plaetze) if (p.marke === marke) plaetze.delete(platz);
+          if (rufVersuch?.marke === marke) {
+            clearTimeout(rufVersuch.uhr);
+            rufVersuch = null;
+          }
+          clearTimeout(rufUhr);
+          clearTimeout(aufgebenUhr);
+          clearTimeout(pongOffen);
+          pongOffen = undefined;
+          rufZahl = 0;
+          sitzung?.neuVerbunden();
+        }
+        kopplungsZustandSetzen({ phase: "verbunden", wartet: false, seit: null, hinweis: "", dialog: null });
         void wachHalten();
-        if (!wieder) sitzung?.neuVerbunden();
         schnappschuss = "";
         if (!takt) takt = setInterval(pruefen, TAKT_MS);
         pruefen();
+        plaetzeAuffuellen(nr);
       } else if (lage === "unterbrochen") {
-        kopplungsZustandSetzen({ phase: "unterbrochen", seit: Date.now() });
+        if (aktivMarke !== marke) return;
+        kopplungsZustandSetzen({ phase: "unterbrochen", wartet: wiederverbindbar(), seit: Date.now() });
+        // Der Browser wartet noch rund zehn Sekunden, bevor er aufgibt; die Nachfrage klärt es in drei.
+        nachfragen(nr);
       } else if (lage === "getrennt") {
-        const z = kopplungsZustand();
-        const warVerbunden = z.phase === "verbunden" || z.phase === "unterbrochen";
-        taktStoppen();
-        wachLassen();
-        verbindung = null;
-        angebot = null;
-        if (warVerbunden) {
-          kopplungsZustandSetzen({ phase: "getrennt", seit: z.seit ?? Date.now(), dialog: null });
-        } else {
+        if (aktivMarke === marke) {
+          aktivVerloren(nr);
+          return;
+        }
+        // Eine Nebenverbindung ist zu Ende: ein wartender Platz, ein Anruf, oder die abgelöste alte Verbindung.
+        for (const [platz, p] of plaetze) if (p.marke === marke) plaetze.delete(platz);
+        if (rufVersuch?.marke === marke) {
+          const v = rufVersuch;
+          clearTimeout(v.uhr);
+          rufVersuch = null;
+          if (!aktiv) rufUhr = setTimeout(() => rufen(nr), RUF_PAUSEN_MS[Math.min(rufZahl, RUF_PAUSEN_MS.length - 1)]);
+          return;
+        }
+        if (ersteMarke === marke && !aktiv && kopplungsZustand().phase === "verbindet") {
           // Vor dem ersten Stand gescheitert: Der Dialog sagt es, eine Leiste „getrennt" gäbe es für nichts.
+          const z = kopplungsZustand();
+          angebot = null;
           kopplungsZustandSetzen({
             phase: "aus",
             dialog: z.dialog ? { ...z.dialog, fehler: "Die Verbindung kam nicht zustande. Sind beide Geräte im selben Netz (WLAN oder Hotspot)? Bitte neu koppeln." } : null,
@@ -159,7 +453,8 @@ function horcher(nr: number): VerbindungsHorcher {
       }
     },
     onNachricht: (nachricht: unknown) => {
-      if (nr !== lauf || !sitzung) return;
+      if (nr !== lauf || !sitzung || aktivMarke !== marke) return;
+      if (nachricht && typeof nachricht === "object" && steuerNachricht(nr, nachricht as { art?: unknown })) return;
       try {
         const r = sitzung.empfangen(nachricht);
         if (r.abgelehnt) {
@@ -186,7 +481,7 @@ function horcher(nr: number): VerbindungsHorcher {
 
 function neueSitzung(einsatzId: string | null, nr: number): AbgleichSitzung {
   return new AbgleichSitzung(einsatzId, (n) => {
-    const v = verbindung;
+    const v = aktiv;
     if (!v || nr !== lauf) return;
     v.senden(n).then(
       () => {
@@ -204,26 +499,32 @@ function beginnen(): number {
   aufraeumen();
   document.addEventListener("visibilitychange", beiSichtwechsel);
   window.addEventListener("pagehide", beiSeitenende);
+  window.addEventListener("online", aufgewacht);
+  pulsZuletzt = Date.now();
+  puls = setInterval(pulsSchlag, 2000);
   return ++lauf;
 }
 
 /** Erstes Gerät: Kopplung für die offene Sammlung beginnen und den ersten Code zeigen. */
 export async function kopplungStarten(einsatzId: string): Promise<void> {
   const nr = beginnen();
-  kopplungsZustandSetzen({ phase: "verbindet", einsatzId, abgleichAm: null, seit: null, hinweis: "", dialog: { art: "angebot", code: "" } });
+  kopplungsZustandSetzen({ phase: "verbindet", einsatzId, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "angebot", code: "" } });
   if (!kopplungMoeglich()) {
     kopplungsZustandSetzen({ phase: "aus", dialog: { art: "angebot", code: "", fehler: KEIN_WEBRTC_SATZ } });
     return;
   }
   try {
     sitzung = neueSitzung(einsatzId, nr);
-    const a = await angebotErzeugen(horcher(nr));
+    rolle = "hoerer";
+    const marke = {};
+    ersteMarke = marke;
+    const a = await angebotErzeugen(horcher(nr, marke));
     if (nr !== lauf) {
       a.verbindung.schliessen();
       return;
     }
     angebot = a;
-    verbindung = a.verbindung;
+    erste = a.verbindung;
     kopplungsZustandSetzen({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }) } });
   } catch {
     if (nr === lauf) kopplungsZustandSetzen({ phase: "aus", dialog: { art: "angebot", code: "", fehler: "Dieses Gerät konnte keine Verbindung vorbereiten." } });
@@ -265,15 +566,20 @@ export async function kopplungAngebotGescannt(text: string): Promise<void> {
   if (s.art !== "angebot") throw new Error(ANTWORT_STATT_ANGEBOT_SATZ);
   if (!kopplungMoeglich()) throw new Error(KEIN_WEBRTC_SATZ);
   const nr = beginnen();
-  kopplungsZustandSetzen({ phase: "verbindet", einsatzId: null, abgleichAm: null, seit: null, hinweis: "", dialog: { art: "antwort", code: "" } });
+  kopplungsZustandSetzen({ phase: "verbindet", einsatzId: null, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "antwort", code: "" } });
   try {
     sitzung = neueSitzung(null, nr);
-    const a = await antwortErzeugen(s.sdp, horcher(nr));
+    rolle = "rufer";
+    zertifikat = rufZertifikat();
+    const marke = {};
+    ersteMarke = marke;
+    const a = await antwortErzeugen(s.sdp, horcher(nr, marke), (v) => {
+      if (nr === lauf && ersteMarke === marke) erste = v;
+    });
     if (nr !== lauf) {
       a.verbindung.schliessen();
       return;
     }
-    verbindung = a.verbindung;
     // Die Verbindung kann schon stehen, bevor der Code gezeigt wird (derselbe Rechner im Test): dann keinen Dialog mehr öffnen.
     if (kopplungsZustand().phase === "verbindet") kopplungsZustandSetzen({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: a.sdp }) } });
   } catch {
@@ -295,14 +601,26 @@ export async function kopplungCodeGescannt(text: string): Promise<string> {
   }
 }
 
-/** Kopplung beenden; mit `hinweis` bleibt die Leiste mit dem Grund stehen, ohne verschwindet sie. */
-export function kopplungBeenden(hinweis = ""): void {
+/**
+ * Kopplung beenden; mit `hinweis` bleibt die Leiste mit dem Grund stehen, ohne verschwindet sie. `melden`: dem anderen
+ * Gerät sagen, dass von hier niemand mehr anruft oder wartet — es zeigt dann gleich „getrennt" statt zu warten.
+ */
+export function kopplungBeenden(hinweis = "", melden = true): void {
   lauf++;
   const z = kopplungsZustand();
+  const v = aktiv;
+  if (v && melden && v.sofortSenden({ art: "ende" })) {
+    // Erst hinausgehen lassen, dann schließen: Ein sofort geschlossener Kanal verwirft, was noch nicht gesendet ist.
+    aktiv = null;
+    setTimeout(() => v.schliessen(), 400);
+  }
   aufraeumen();
-  if (hinweis) kopplungsZustandSetzen({ phase: "getrennt", seit: z.seit ?? Date.now(), hinweis, dialog: null });
+  if (hinweis) kopplungsZustandSetzen({ phase: "getrennt", wartet: false, seit: z.seit ?? Date.now(), hinweis, dialog: null });
   else kopplungsZustandZuruecksetzen();
 }
+
+// Für die Verhaltenstests: die laufende Verbindung ohne Abschied kappen, wie es ein eingeschlafenes Telefon tut.
+(globalThis as { __eebKopplungAbriss?: () => void }).__eebKopplungAbriss = () => aktiv?.schliessen();
 
 /** Den Code-Dialog schließen. Steht die Verbindung noch nicht, ist die Kopplung damit abgebrochen. */
 export function kopplungDialogSchliessen(): void {

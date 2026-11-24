@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { EinsatzArt, einsatzAnlegen } from "@bos/meldekopf/einsaetze";
-import { GETRENNT_SATZ, Kopplung } from "./kopplung-leiste";
+import { GETRENNT_SATZ, Kopplung, WARTET_SATZ } from "./kopplung-leiste";
 import { istKopplungsCode, kopplungAktiv, kopplungsZustandSetzen, kopplungsZustandZuruecksetzen } from "./zustand";
 
 describe("Kopplungsleiste", () => {
@@ -47,6 +47,15 @@ describe("Kopplungsleiste", () => {
     expect(leiste.textContent).toContain(GETRENNT_SATZ);
     expect(screen.getByRole("button", { name: "Neu koppeln…" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Schließen" })).toBeTruthy();
+  });
+
+  it("sagt bei einer gerissenen Verbindung, dass sie von selbst wiederkommt", () => {
+    render(<Kopplung />);
+    act(() => kopplungsZustandSetzen({ phase: "unterbrochen", wartet: true, einsatzId: id, seit: new Date(2026, 10, 24, 14, 35).getTime() }));
+    expect(screen.getByRole("status").textContent).toMatch(/stockt seit 14:35\. Sie wird von selbst wiederhergestellt/);
+    act(() => kopplungsZustandSetzen({ phase: "getrennt", wartet: true }));
+    expect(screen.getByRole("alert").textContent).toContain(WARTET_SATZ);
+    expect(screen.getByRole("button", { name: "Neu koppeln…" })).toBeTruthy();
   });
 
   it("nennt den Grund, wenn die Kopplung von selbst endete, und bietet ohne Sammlung kein Neu-Koppeln an", () => {

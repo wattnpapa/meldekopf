@@ -113,8 +113,21 @@ When("das zweite Gerät den Bogen der DLRG Wardenburg scannt", async function (t
   await scannen(b, encodePayloadUrl(weitereEinheit(OrganisationsTyp.DLRG, "Wardenburg"), KOMPRESSOR));
 });
 
-When("das zweite Gerät die App schließt", async function (this: EebWelt) {
-  await zweitesGeraet(this).close();
+When("das zweite Gerät die Kopplung trennt", async function (this: EebWelt) {
+  await leiste(zweitesGeraet(this)).getByRole("button", { name: "Trennen" }).click();
+});
+
+/**
+ * Wie ein Telefon, das eingeschlafen war: Die Verbindung ist ohne Abschied weg. Der Haken sitzt in kopplung.ts; danach
+ * muss das Gerät von selbst über einen wartenden Platz des ersten Geräts zurückfinden. Gewartet wird, bis das erste
+ * Gerät wieder zwei wartende Plätze hat, also bis der nächste Abriss wieder aufgefangen würde.
+ */
+When("die Verbindung am zweiten Gerät abreißt", async function (this: EebWelt) {
+  const b = zweitesGeraet(this);
+  await b.waitForTimeout(1500);
+  await b.evaluate("globalThis.__eebKopplungAbriss()");
+  await leisteMit(b, "Gekoppelt mit zweitem Gerät");
+  await b.waitForTimeout(1500);
 });
 
 Then("zeigt das zweite Gerät den Dialog {string}", async function (this: EebWelt, titel: string) {

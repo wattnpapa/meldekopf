@@ -40,6 +40,8 @@ export interface KopplungsZustand {
   einsatzId: string | null;
   /** Wann der letzte Stand hinüber- oder herüberging (Date.now()). */
   abgleichAm: number | null;
+  /** Gerissen, aber dieses Gerät verbindet sich ohne neuen Code wieder, sobald das andere erreichbar ist. */
+  wartet?: boolean;
   /** Seit wann getrennt oder unterbrochen. */
   seit: number | null;
   /** Warum getrennt, oder was beim letzten Abgleich auffiel. */

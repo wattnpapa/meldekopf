@@ -5,7 +5,10 @@
  * Wer mit zwei Geräten arbeitet, muss ohne Nachdenken sehen, ob das andere
  * Gerät den eigenen Stand hat. Die Leiste sagt darum nie nur „verbunden",
  * sondern wann zuletzt abgeglichen wurde, und im Fall der Trennung, dass hier
- * weiter gespeichert wird und was zu tun ist.
+ * weiter gespeichert wird und was zu tun ist. Reißt die Verbindung, weil ein
+ * Gerät einschläft, verbinden sich beide von selbst wieder (kopplung.ts); die
+ * Leiste sagt dann „unterbrochen" und nach einer Dreiviertelminute
+ * „getrennt", ohne dass das Wiederverbinden aufhört.
  *
  * Lädt mit der ersten Kopplung (kopplung-rahmen.tsx); Verbindung und Dialog folgen bei Bedarf.
  */
@@ -13,6 +16,7 @@
 import { lazy, Suspense, useSyncExternalStore } from "react";
 import "./kopplung.css";
 import { einsaetzeLaden } from "../einsaetze-lesen";
+import { GETRENNT_SATZ, WARTET_SATZ } from "./texte";
 import { kopplungBeginnen, kopplungsZustand, kopplungsZustandAbonnieren, type KopplungsZustand } from "./zustand";
 
 const KopplungDialog = lazy(() => import("./kopplung-dialog"));
@@ -30,7 +34,7 @@ function trennen(): void {
   void import("./kopplung").then((m) => m.kopplungBeenden());
 }
 
-export const GETRENNT_SATZ = "Was hier aufgenommen wird, bleibt auf diesem Gerät gespeichert und geht beim nächsten Koppeln hinüber.";
+export { GETRENNT_SATZ, WARTET_SATZ };
 
 /** Leiste und, solange Codes getauscht werden, der Dialog. */
 export function Kopplung() {
@@ -55,7 +59,10 @@ export function Kopplung() {
       <div className="kopplung-leiste warnung" role="status" data-phase="unterbrochen">
         <p>
           <strong>⚠ Verbindung zum zweiten Gerät stockt</strong>
-          {z.seit != null ? ` seit ${uhr(z.seit)}` : ""}. Dieses Gerät speichert weiter; der Abgleich folgt, sobald die Verbindung wieder steht.
+          {z.seit != null ? ` seit ${uhr(z.seit)}` : ""}.{" "}
+          {z.wartet
+            ? "Sie wird von selbst wiederhergestellt, sobald das andere Gerät erreichbar ist. Dieses Gerät speichert weiter."
+            : "Dieses Gerät speichert weiter; der Abgleich folgt, sobald die Verbindung wieder steht."}
         </p>
         <button type="button" className="link" onClick={trennen}>Trennen</button>
       </div>
@@ -66,7 +73,7 @@ export function Kopplung() {
         <p>
           <strong>⚠ Kopplung getrennt</strong>
           {z.seit != null ? ` seit ${uhr(z.seit)}` : ""}
-          {z.abgleichAm != null ? `, zuletzt abgeglichen ${uhr(z.abgleichAm)}` : ""}. {z.hinweis || GETRENNT_SATZ}
+          {z.abgleichAm != null ? `, zuletzt abgeglichen ${uhr(z.abgleichAm)}` : ""}. {z.hinweis || (z.wartet ? WARTET_SATZ : GETRENNT_SATZ)}
         </p>
         <div className="kopplung-knoepfe">
           {z.einsatzId && name && (

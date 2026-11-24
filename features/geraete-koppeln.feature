@@ -32,10 +32,27 @@ Funktionalität: Zweites Gerät koppeln
     Dann zählt die Übersicht 2 Einheiten
     Und führt die Übersicht die Einheit "DLRG Wardenburg"
 
-  Szenario: Reißt die Verbindung, sagt es die Leiste, und das Gerät arbeitet weiter
+  Szenario: Schläft das zweite Gerät ein, verbindet es sich beim Aufwachen von selbst wieder
     Angenommen beide Geräte sind gekoppelt
-    Wenn das zweite Gerät die App schließt
+    Wenn die Verbindung am zweiten Gerät abreißt
+    Dann meldet die Kopplungsleiste des zweiten Geräts "Gekoppelt mit zweitem Gerät"
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+    Und meldet die Kopplungsleiste "Gekoppelt mit zweitem Gerät"
+
+  Szenario: Auch nach mehrmaligem Abreißen kommt die Verbindung ohne neuen Code zurück
+    Angenommen beide Geräte sind gekoppelt
+    Wenn die Verbindung am zweiten Gerät abreißt
+    Und die Verbindung am zweiten Gerät abreißt
+    Und die Verbindung am zweiten Gerät abreißt
+    Und das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+
+  Szenario: Trennt das zweite Gerät, sagt es die Leiste, und das erste arbeitet weiter
+    Angenommen beide Geräte sind gekoppelt
+    Wenn das zweite Gerät die Kopplung trennt
     Dann meldet die Kopplungsleiste "Kopplung getrennt"
+    Und meldet die Kopplungsleiste "Das andere Gerät hat die Kopplung getrennt"
     Und meldet die Kopplungsleiste "bleibt auf diesem Gerät gespeichert"
     Und sehe ich die Schaltfläche "Neu koppeln…"
     Und zählt die Übersicht 1 Einheiten

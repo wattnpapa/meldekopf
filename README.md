@@ -59,7 +59,8 @@ Verlauf über Tage oder Aufträge braucht, ist S1-Control.
 - Zweites Gerät koppeln: Das Telefon scannt draußen, der Rechner im Fahrzeug
   zeigt die Übersicht. Zwei QR-Codes verbinden die Geräte direkt im selben
   Netz (WLAN, Hotspot), ohne Internet und ohne Server; jedes speichert für
-  sich und arbeitet weiter, wenn die Verbindung reißt.
+  sich und arbeitet weiter, wenn die Verbindung reißt; geht am Telefon der
+  Bildschirm aus, verbinden sich beide danach von selbst wieder.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
   Daten, Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.

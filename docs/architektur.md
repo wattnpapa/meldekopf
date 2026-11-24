@@ -568,14 +568,43 @@ sequenceDiagram
   Änderungszeitpunkt und ohne Reihenfolge der Einträge, damit zwei Geräte sich
   nicht endlos denselben Stand zuspielen; nach drei Runden ohne Handgriff an
   einem der Geräte schweigt die Sitzung (`sitzung.ts`).
-- Jedes Gerät schreibt alles in seinen eigenen Speicher. Reißt die Verbindung
-  (Bildschirm aus, Funkschatten, Seite neu geladen), arbeitet jedes für sich
-  weiter; die Leiste meldet „Kopplung getrennt", und der nächste Code-Tausch
-  gleicht ab, was beide inzwischen aufgenommen haben. Eine stockende
-  Verbindung kommt innerhalb von rund 30 Sekunden von selbst wieder.
+- Jedes Gerät schreibt alles in seinen eigenen Speicher. Reißt die
+  Verbindung, arbeitet jedes für sich weiter.
+- **Wiederverbinden ohne neuen Code (seit 2026-11-24).** Am Telefon geht der
+  Bildschirm regelmäßig aus; der Browser friert die Seite dann ein, und nach
+  rund 15 Sekunden Funkstille ist die Verbindung endgültig tot (gemessen,
+  Chromium 158: Sie kommt auch nach der Rückkehr des Netzes nicht wieder).
+  Einen Vermittler für eine neue Verabredung gibt es nicht, also verabreden
+  sich die Geräte im Voraus, über die noch stehende Verbindung
+  („Rückruf-Plätze“, `verbindung.ts`): Das erste Gerät (Hörer) hält zwei
+  wartende Verbindungen mit offenen Ports bereit und schickt deren Angebote
+  hinüber. Das zweite (Rufer) erzeugt zu jedem eine Antwort, setzt sie aber
+  nicht, öffnet also nichts, was ablaufen könnte, und schickt sie zurück.
+  Wacht der Rufer auf und ist die Verbindung tot, setzt er eine Antwort; der
+  Hörer erkennt ihn an Kennwort und Schlüssel-Fingerabdruck und lernt seine
+  Adresse aus dem ersten Paket. In diesem Augenblick wird nichts getauscht.
+  Danach legen beide neue Plätze an.
+- Ein Anruf ins Leere (Telefon außer Reichweite) verbraucht den Platz nicht:
+  Der Rufer ruft mit einem frischen Verbindungsobjekt erneut an, das dasselbe
+  Zertifikat (eines je Kopplung, nur im Arbeitsspeicher) und dieselben
+  Kennwörter trägt; die Kennwörter setzt er in seine neue Antwort ein. Pausen
+  1, 3, 5, 10, 20, dann alle 30 Sekunden, solange die Seite sichtbar ist. Lehnt
+  ein Browser das Einsetzen ab, bleibt je Platz ein Versuch.
+- Ob die Verbindung nach dem Aufwachen noch lebt, sagt der Browser erst nach
+  vielen Sekunden. Die App fragt darum nach (kurze Steuernachricht, Antwort
+  binnen drei Sekunden), wenn die Seite wieder sichtbar wird, das Netz
+  zurückkommt oder die Uhr des Fensters länger als 20 Sekunden stillstand,
+  und ruft sonst sofort an.
+- Die Leiste sagt „unterbrochen, wird von selbst wiederhergestellt“ und nach
+  45 Sekunden „Kopplung getrennt“; das Wiederverbinden läuft dabei weiter.
+  „Trennen“ und das Schließen der Seite sagen dem anderen Gerät Bescheid, es
+  zeigt dann sofort „getrennt“ und wartet nicht.
+- Nicht überbrückt wird ein Neuladen der Seite (auch nach einer neuen Fassung
+  der App) und ein vom Browser verworfener Tab: Die Verbindungsobjekte sind
+  dann weg, es braucht den Code-Tausch. Das gilt für beide Geräte.
 - Solange gekoppelt ist, hält die App den Bildschirm wach (Screen Wake Lock,
-  wo der Browser es anbietet): Ein Telefon, das den Bildschirm abschaltet,
-  friert die Seite ein und verliert die Verbindung.
+  wo der Browser es anbietet); wer ihn von Hand ausschaltet, löst das
+  Wiederverbinden beim Einschalten aus.
 - Gekoppelt ist genau eine Sammlung und genau ein zweites Gerät. Wird die
   Sammlung auf einem Gerät gelöscht, endet die Kopplung; das andere Gerät
   holt sie nicht zurück.
@@ -749,7 +778,9 @@ Kopplungs-Code (`MKK1.`, `kopplung/signal.ts`) trägt keine Einsatzdaten, nur
 Fingerabdruck, Verbindungskennwörter und bis zu vier lokale Adressen. Was über
 den Kanal kommt, wird behandelt wie eine importierte Einsatz-Datei
 (`einsatzAusDatei`, Bogenprüfung je Eintrag) und ist gedeckelt (24 MiB gepackt,
-64 MiB entpackt je Nachricht). Eine Anmeldung der Gegenstelle gibt es nicht:
+64 MiB entpackt je Nachricht). Daneben gehen nur kurze Steuernachrichten über
+den Kanal: Nachfrage und Antwort, Abschied, und die Angebote und Antworten der
+Rückruf-Plätze (Kap. 6.6), die wie die QR-Codes nur Verbindungsangaben tragen. Eine Anmeldung der Gegenstelle gibt es nicht:
 Wer beide Codes tauschen kann, erhält die Sammlung als Vollkopie. Electron
 braucht dafür keine zusätzliche Berechtigung; die Kamera ist schon erlaubt.
 
@@ -782,7 +813,8 @@ Speichern und einer Warteschlange statt eines Netzes (Abgleich, Widerspruch,
 Entfernen, Zurückholen, Trennung), `kopplung/signal.test.ts` den Code, und
 `features/geraete-koppeln.feature` den ganzen Weg mit zwei Browser-Profilen
 und einer echten Verbindung über die lokale Schleife; die Codes gehen dort
-über den Handscanner-Weg. Zwei echte Geräte in einem WLAN ersetzt das nicht
+über den Handscanner-Weg, und ein Haken (`__eebKopplungAbriss`) kappt die
+Verbindung ohne Abschied, um das Wiederverbinden zu prüfen. Zwei echte Geräte in einem WLAN ersetzt das nicht
 (Kap. 11).
 
 ### 8.6 Abhängigkeiten
@@ -1056,9 +1088,10 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 - **Grenzen, die bleiben:** genau zwei Geräte und eine Sammlung je Kopplung;
   keine Anmeldung, keine Rollen, kein Mehrbenutzerbetrieb über das hinaus;
   keine Kräfteübersicht über mehrere Meldeköpfe; keine Verbindung über das
-  Internet. Jeder neue Verbindungsaufbau braucht den Tausch beider Codes, auch
-  nach einem Neuladen der Seite: Ohne Vermittler gibt es kein stilles
-  Wiederverbinden.
+  Internet. Schläft ein Gerät ein oder verliert es das Netz, verbinden sich
+  beide danach von selbst wieder (Kap. 6.6); nach einem Neuladen der Seite
+  braucht es den Tausch beider Codes, denn ohne Vermittler lässt sich nur
+  wiederverbinden, was vorher verabredet war.
 - **Konsequenz:** Prinzip 6 in PRODUCT.md heißt jetzt „Ein Meldekopf, eine
   Weitergabe". Kap. 3.2 und 8.3 führen die Verbindung; ISK und DSFA sind
   nachgezogen (zweites Gerät als Empfänger einer Vollkopie). Der Abgleich je
@@ -1078,7 +1111,9 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Sammlung mit 5 Mio. Zeichen im Speicher | Startseite und Einsatzansicht ohne spürbare Verzögerung (Lese-Ergebnis gemerkt, solange der Text gleich ist). |
 | Ablösung mit zweitem Gerät, beide ändern Status und Auftrag | Rückimport ergänzt Neues, gleicht je Feld ab, nennt Widersprüche; nichts still überschrieben. |
 | Telefon gekoppelt, scannt draußen eine Einheit | Die Einheit steht innerhalb weniger Sekunden auf dem Rechner und dem Lagemonitor; die Leiste nennt die Uhrzeit des Abgleichs. |
-| Telefon gekoppelt, verliert das WLAN oder sperrt den Bildschirm | Beide Geräte melden „stockt", dann „Kopplung getrennt" mit Uhrzeit; beide nehmen weiter auf und speichern bei sich; nach neuem Koppeln stehen alle Einheiten auf beiden. |
+| Telefon gekoppelt, Bildschirm aus, nach Minuten wieder an | Beim Einschalten verbindet sich das Telefon ohne neuen Code (im Prüfstand in unter einer Sekunde) und gleicht ab; bis dahin meldet der Rechner „unterbrochen“, nach 45 Sekunden „getrennt“. |
+| Telefon gekoppelt, draußen außer Reichweite des WLAN | Beide nehmen weiter auf und speichern bei sich; das Telefon ruft alle 30 Sekunden an und verbindet sich, sobald es wieder im Netz ist. |
+| Seite auf einem der Geräte neu geladen | „Kopplung getrennt“; neu koppeln über beide Codes, danach stehen alle Einheiten auf beiden. |
 | Geräteausfall, nur das Lageblatt auf Papier | Bögen scannen, Zeiten, Status und Nummer in einer Liste nachtragen, Abgleich in einem Schritt. |
 | Uhr springt um ein Jahr | Keine Löschung, keine Anonymisierung, bis „Geräteuhr stimmt" bestätigt ist. |
 | Erste Nutzung ohne Netz nach Installation | Alles aus dem Vorrat; Sammel-PDF und QR entstehen offline. |
@@ -1098,9 +1133,11 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Doppelte Pflege, bis der Erfassungsbogen abbaut | Übergangszeit bewusst kurz halten; Abbau ist der erste Schritt nach Fertigstellung. |
 | Kopplung nur im Prüfstand erprobt (zwei Profile eines Chromium, lokale Schleife) | Gerätetest offen: Chrome auf Android gegen Chrome und Edge am Rechner, Safari auf iOS, Firefox; installierte PWA gegen Browser-Tab. Offen ist vor allem, ob die Browser einander im jeweiligen Netz finden: Ohne erteilte Kamerafreigabe nennen sie statt der IP-Adresse einen Namen im lokalen Netz (mDNS), den das andere Gerät auflösen muss. Rückfallebene bleibt die Einsatz-Datei. |
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
-| Verbindung reißt, sobald das Telefon den Bildschirm sperrt oder die Seite neu lädt (auch nach einer neuen Fassung der App) | Wachhalten des Bildschirms, solange gekoppelt ist; klare Leiste „getrennt"; neu koppeln kostet zwei Scans. Kein stilles Wiederverbinden ohne Vermittler (ADR-009). |
+| Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
+| Seite neu geladen (auch selbsttätig nach einer neuen Fassung der App) | Trennt die Kopplung endgültig; neu koppeln kostet zwei Scans. Abhilfe wäre, Zertifikat und Plätze des Rufers über das Neuladen zu retten (IndexedDB); nicht gebaut. |
+| Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
-| Startbündel nach der Kopplung 60 Byte unter der Grenze des Budgets | Der nächste Zuwachs im Startbündel braucht eine Entscheidung (`npm run bundle-budget -- --setze`). |
+| Startbündel nach der Kopplung 29 Byte unter der Grenze des Budgets | Der nächste Zuwachs im Startbündel braucht eine Entscheidung (`npm run bundle-budget -- --setze`). Das Budget für JavaScript gesamt ist mit der Kopplung auf 4.407.186 Byte gesetzt (rund 45 KB für `kopplung/*`, nachgeladen). |
 | Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 
 ## 12. Glossar

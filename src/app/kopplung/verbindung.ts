@@ -13,6 +13,33 @@
  * Nachrichten sind JSON-Texte, gepackt (deflate) und in Stücke geteilt: Eine
  * Sammlung mit vielen Einheiten ist größer als eine einzelne Kanal-Nachricht
  * sein darf.
+ *
+ * Wiederverbinden ohne neuen Code (Rückruf-Plätze). Ein Telefon, dessen
+ * Bildschirm ausgeht, friert die Seite ein; nach rund 15 Sekunden Funkstille
+ * gibt der Browser die Verbindung endgültig auf, und sie kommt nicht wieder,
+ * auch wenn das Netz zurück ist (gemessen, Chromium 158). Einen Vermittler,
+ * über den sich die Geräte neu verabreden könnten, gibt es nicht. Darum
+ * verabreden sie sich im Voraus, solange die Verbindung steht:
+ *
+ * - Das erste Gerät (der Hörer) legt wartende Verbindungen an
+ *   ({@link angebotErzeugen}): Ports offen, Angebot gesetzt. Das Angebot
+ *   schickt es über den bestehenden Kanal.
+ * - Das zweite Gerät (der Rufer) erzeugt dazu eine Antwort, setzt sie aber
+ *   nicht ({@link rufPlatzVorbereiten}): Es öffnet keine Ports, nichts kann
+ *   ablaufen. Die Antwort, noch ohne Adressen, schickt es zurück; der Hörer
+ *   setzt sie. Seine wartende Verbindung kennt jetzt Kennwörter und
+ *   Schlüssel-Fingerabdruck des Rufers und wartet auf dessen erstes Paket.
+ * - Wacht der Rufer auf und ist die Verbindung tot, ruft er an: Er setzt die
+ *   Antwort, der Browser sammelt die Adressen und klopft beim Hörer an. Der
+ *   erkennt ihn an Kennwort und Fingerabdruck; seine Adresse lernt er aus dem
+ *   Paket selbst. Kein Austausch ist in diesem Augenblick nötig.
+ *
+ * Ein Anruf ins Leere (Telefon außer Reichweite) lässt den Platz des Hörers
+ * unberührt. Der Rufer kann ihn mit einem frischen Verbindungsobjekt erneut
+ * anrufen, wenn dieses denselben Schlüssel (festes Zertifikat der Sitzung)
+ * und dieselben Kennwörter trägt; die Kennwörter setzt er dafür in seine neue
+ * Antwort ein. Nimmt ein Browser das nicht an, bleibt je Platz der eine
+ * Versuch mit dem ursprünglichen Objekt.
  */
 
 import { deflateRaw } from "pako";
@@ -39,6 +66,11 @@ export interface VerbindungsHorcher {
 export interface Verbindung {
   /** Eine Nachricht (JSON-fähig) schicken; wirft, wenn der Kanal nicht offen ist. */
   senden: (nachricht: unknown) => Promise<void>;
+  /**
+   * Eine kurze Steuernachricht sofort schicken, an der Warteschlange vorbei (Nachfrage, Abschied). Rückgabe: ob sie
+   * an den Kanal ging.
+   */
+  sofortSenden: (nachricht: unknown) => boolean;
   schliessen: () => void;
 }
 
@@ -46,19 +78,37 @@ export function kopplungMoeglich(): boolean {
   return typeof RTCPeerConnection === "function";
 }
 
+/** Nach der ersten eigenen Adresse wartet der Aufbau noch so lange auf weitere. */
+const NACHLAUF_MS = 350;
+
+/**
+ * Wartet auf die eigenen Netzadressen. „Fertig" meldet mancher Browser erst nach Sekunden, obwohl ohne fremde Server
+ * nur die Adressen der eigenen Netzkarten zu sammeln sind: Nach der ersten Adresse genügt ein kurzer Nachlauf.
+ */
 function fertigGesammelt(pc: RTCPeerConnection): Promise<void> {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
   return new Promise((fertig) => {
+    let nachlauf: ReturnType<typeof setTimeout> | undefined;
     const uhr = setTimeout(ende, SAMMELN_MS);
     function ende() {
       clearTimeout(uhr);
+      clearTimeout(nachlauf);
       pc.removeEventListener("icegatheringstatechange", pruefen);
+      pc.removeEventListener("icecandidate", adresse);
       fertig();
     }
     function pruefen() {
       if (pc.iceGatheringState === "complete") ende();
     }
+    function adresse(e: RTCPeerConnectionIceEvent) {
+      if (!e.candidate) ende();
+      else {
+        clearTimeout(nachlauf);
+        nachlauf = setTimeout(ende, NACHLAUF_MS);
+      }
+    }
     pc.addEventListener("icegatheringstatechange", pruefen);
+    pc.addEventListener("icecandidate", adresse);
   });
 }
 
@@ -101,6 +151,15 @@ function verdrahten(pc: RTCPeerConnection, h: VerbindungsHorcher): { kanalSetzen
   function empfangen(daten: ArrayBuffer) {
     const stueck = new Uint8Array(daten);
     if (stueck.length < 1) return;
+    if (stueck[0] === 2) {
+      // Steuernachricht in einem Stück: Sie darf zwischen den Stücken einer großen Nachricht liegen.
+      try {
+        h.onNachricht(JSON.parse(new TextDecoder().decode(inflateRawBegrenzt(stueck.subarray(1), STUECK * 8))));
+      } catch {
+        /* Unlesbares fällt weg */
+      }
+      return;
+    }
     groesse += stueck.length - 1;
     if (groesse > MAX_GEPACKT) {
       schliessen();
@@ -174,14 +233,29 @@ function verdrahten(pc: RTCPeerConnection, h: VerbindungsHorcher): { kanalSetzen
         schlange = lauf.catch(() => undefined);
         return lauf;
       },
+      sofortSenden: (nachricht) => {
+        try {
+          const k = kanal;
+          if (!k || k.readyState !== "open") return false;
+          const gepackt = deflateRaw(new TextEncoder().encode(JSON.stringify(nachricht)));
+          if (gepackt.length >= STUECK) return false;
+          const stueck = new Uint8Array(gepackt.length + 1);
+          stueck[0] = 2;
+          stueck.set(gepackt, 1);
+          k.send(stueck);
+          return true;
+        } catch {
+          return false;
+        }
+      },
       schliessen,
     },
   };
 }
 
-function neuePc(): RTCPeerConnection {
+function neuePc(zertifikat?: RTCCertificate): RTCPeerConnection {
   // Bewusst ohne iceServers: keine Verbindung zu einem fremden Rechner, nur Adressen im lokalen Netz.
-  return new RTCPeerConnection({ iceServers: [] });
+  return new RTCPeerConnection({ iceServers: [], ...(zertifikat ? { certificates: [zertifikat] } : {}) });
 }
 
 export interface Angebot {
@@ -212,9 +286,15 @@ export async function angebotErzeugen(h: VerbindungsHorcher): Promise<Angebot> {
 }
 
 /** Zweites Gerät: aus dem gescannten Angebot die Antwort erzeugen. */
-export async function antwortErzeugen(angebotSdp: string, h: VerbindungsHorcher): Promise<{ sdp: string; verbindung: Verbindung }> {
+export async function antwortErzeugen(
+  angebotSdp: string,
+  h: VerbindungsHorcher,
+  /** Die Verbindung, sobald es sie gibt: Sie kann offen sein, bevor diese Funktion zurückkehrt. */
+  bekannt?: (v: Verbindung) => void,
+): Promise<{ sdp: string; verbindung: Verbindung }> {
   const pc = neuePc();
   const { kanalSetzen, verbindung } = verdrahten(pc, h);
+  bekannt?.(verbindung);
   pc.addEventListener("datachannel", (e) => kanalSetzen(e.channel));
   try {
     await pc.setRemoteDescription({ type: "offer", sdp: angebotSdp });
@@ -230,4 +310,110 @@ export async function antwortErzeugen(angebotSdp: string, h: VerbindungsHorcher)
     throw new Error("Dieses Gerät konnte keine Verbindung vorbereiten.");
   }
   return { sdp, verbindung };
+}
+
+/** Ein Platz, den der Rufer anrufen kann, wenn die Verbindung gerissen ist. */
+export interface RufPlatz {
+  /** Die Antwort ohne Adressen, für den Hörer. */
+  antwortSdp: string;
+  /** Anrufen. Die Verbindung meldet sich über `h`; kommt sie nicht zustande, schließt sie der Aufrufer. Wirft, wenn kein Versuch mehr möglich ist. */
+  anrufen: (h: VerbindungsHorcher) => Promise<Verbindung>;
+  /** Ist noch ein Versuch möglich? */
+  nutzbar: () => boolean;
+  verwerfen: () => void;
+}
+
+/** Ein festes Zertifikat für alle Rückrufe einer Kopplung; `undefined`, wenn der Browser keines erzeugt. */
+export async function rufZertifikat(): Promise<RTCCertificate | undefined> {
+  try {
+    return await RTCPeerConnection.generateCertificate({ name: "ECDSA", namedCurve: "P-256" } as AlgorithmIdentifier);
+  } catch {
+    return undefined;
+  }
+}
+
+function sdpFeld(sdp: string, name: string): string {
+  return new RegExp(`^a=${name}:(.*)$`, "m").exec(sdp)?.[1]?.trim() ?? "";
+}
+
+/** Rufer: zu einem wartenden Angebot des Hörers die Antwort erzeugen, ohne sie zu setzen. */
+export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCertificate | undefined): Promise<RufPlatz> {
+  // Die Ereignisse des ursprünglichen Objekts gehen erst mit dem Anruf an einen Horcher.
+  let ziel: VerbindungsHorcher | null = null;
+  const weiche: VerbindungsHorcher = { onLage: (l) => ziel?.onLage(l), onNachricht: (n) => ziel?.onNachricht(n) };
+  let erstes: { pc: RTCPeerConnection; verbindung: Verbindung; antwort: RTCSessionDescriptionInit } | null = null;
+  const pc = neuePc(zertifikat);
+  const { kanalSetzen, verbindung } = verdrahten(pc, weiche);
+  pc.addEventListener("datachannel", (e) => kanalSetzen(e.channel));
+  let antwort: RTCSessionDescriptionInit;
+  try {
+    await pc.setRemoteDescription({ type: "offer", sdp: angebotSdp });
+    antwort = await pc.createAnswer();
+  } catch (e) {
+    verbindung.schliessen();
+    throw e;
+  }
+  const antwortSdp = antwort.sdp ?? "";
+  const ufrag = sdpFeld(antwortSdp, "ice-ufrag");
+  const pwd = sdpFeld(antwortSdp, "ice-pwd");
+  if (!ufrag || !pwd) {
+    verbindung.schliessen();
+    throw new Error("Antwort ohne Kennwörter.");
+  }
+  erstes = { pc, verbindung, antwort };
+  // Ein frisches Objekt kann den Platz nur treffen, wenn es denselben Schlüssel trägt.
+  let frischMoeglich = !!zertifikat;
+
+  async function frisch(h: VerbindungsHorcher): Promise<Verbindung> {
+    let hin: VerbindungsHorcher | null = null;
+    const neu = neuePc(zertifikat);
+    const draht = verdrahten(neu, { onLage: (l) => hin?.onLage(l), onNachricht: (n) => hin?.onNachricht(n) });
+    neu.addEventListener("datachannel", (e) => draht.kanalSetzen(e.channel));
+    try {
+      await neu.setRemoteDescription({ type: "offer", sdp: angebotSdp });
+      const a = await neu.createAnswer();
+      const sdp = (a.sdp ?? "").replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${pwd}`);
+      if (sdpFeld(sdp, "fingerprint") !== sdpFeld(antwortSdp, "fingerprint")) throw new Error("anderer Schlüssel");
+      hin = h;
+      await neu.setLocalDescription({ type: "answer", sdp });
+      if (sdpFeld(neu.localDescription?.sdp ?? "", "ice-ufrag") !== ufrag) throw new Error("Kennwörter nicht übernommen");
+      return draht.verbindung;
+    } catch (e) {
+      hin = null;
+      draht.verbindung.schliessen();
+      throw e;
+    }
+  }
+
+  return {
+    antwortSdp,
+    nutzbar: () => frischMoeglich || erstes != null,
+    async anrufen(h) {
+      if (frischMoeglich) {
+        try {
+          return await frisch(h);
+        } catch {
+          frischMoeglich = false; // dieser Browser nimmt die eingesetzten Kennwörter nicht: Es bleibt der eine Versuch unten
+        }
+      }
+      const e = erstes;
+      if (!e) throw new Error("Kein Versuch mehr möglich.");
+      erstes = null;
+      ziel = h;
+      try {
+        await e.pc.setLocalDescription(e.antwort);
+      } catch (fehler) {
+        ziel = null;
+        e.verbindung.schliessen();
+        throw fehler;
+      }
+      return e.verbindung;
+    },
+    verwerfen() {
+      frischMoeglich = false;
+      ziel = null;
+      erstes?.verbindung.schliessen();
+      erstes = null;
+    },
+  };
 }
