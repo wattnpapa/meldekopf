@@ -3,8 +3,11 @@
  * dieses Geräts und nimmt auf dem ersten Gerät die Antwort des zweiten an.
  *
  * Ablauf: Das erste Gerät zeigt einen Code, das zweite scannt ihn mit „Bogen
- * scannen…" und zeigt seinerseits einen Antwort-Code, den das erste scannt.
- * Zwei Scans, weil kein Server zwischen den Geräten vermittelt.
+ * scannen…". Danach verbinden sich die Geräte von selbst: Das zweite klopft
+ * seinen Schlüssel-Fingerabdruck beim ersten an (signal.ts, „Anklopfen"). Am
+ * Rechner im Fahrzeug gibt es oft weder Kamera noch Handscanner; er muss
+ * darum nichts lesen und nichts eingeben. Der Antwort-Code des zweiten Geräts
+ * bleibt als Ausweichweg stehen, falls das Anklopfen nicht durchkommt.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -84,13 +87,15 @@ export default function KopplungDialog() {
       />
     );
   }
-  return <Rahmen dialogRef={dialogRef} art={d.art} fehler={d.fehler} bild={bild} code={code} angenommen={angenommen} scanFehler={scanFehler} onAntwortScannen={() => void antwortScannen()} onNeu={z.einsatzId ? () => void kopplungStarten(z.einsatzId!) : undefined} />;
+  return <Rahmen dialogRef={dialogRef} art={d.art} selbst={d.selbst} fehler={d.fehler} bild={bild} code={code} angenommen={angenommen} scanFehler={scanFehler} onAntwortScannen={() => void antwortScannen()} onNeu={z.einsatzId ? () => void kopplungStarten(z.einsatzId!) : undefined} />;
 }
 
 /** Eigener Baustein, damit der modale Dialog beim Wechsel zum Scanner sauber schließt und danach neu öffnet. */
 function Rahmen(props: {
   dialogRef: React.RefObject<HTMLDialogElement | null>;
   art: "angebot" | "antwort";
+  /** Die Geräte verbinden sich nach dem einen Scan von selbst; `false`: Der Antwort-Code ist der Weg. */
+  selbst?: boolean;
   fehler?: string;
   bild: string;
   code: string;
@@ -103,7 +108,7 @@ function Rahmen(props: {
   const angebot = props.art === "angebot";
   return (
     <dialog ref={props.dialogRef} className="qr-vollbild kopplung-dialog" tabIndex={-1} aria-labelledby="kopplung-titel" data-art={props.art}>
-      <h2 id="kopplung-titel">{angebot ? "Zweites Gerät koppeln" : "Antwort-Code für das erste Gerät"}</h2>
+      <h2 id="kopplung-titel">{angebot ? "Zweites Gerät koppeln" : props.selbst ? "Verbindung wird aufgebaut" : "Antwort-Code für das erste Gerät"}</h2>
       {props.fehler ? (
         <p className="fehler" role="alert">{props.fehler}</p>
       ) : props.angenommen ? (
@@ -119,10 +124,22 @@ function Rahmen(props: {
           <ol className="kopplung-schritte">
             <li>Beide Geräte ins selbe Netz bringen (WLAN des Fahrzeugs oder Hotspot). Internet braucht es nicht.</li>
             <li>Am zweiten Gerät die Meldekopf-App öffnen, „Bogen scannen…“ tippen und diesen Code scannen.</li>
-            <li>Das zweite Gerät zeigt einen Antwort-Code: hier „Antwort scannen…“ tippen und ihn vor die Kamera halten.</li>
+            {props.selbst ? (
+              <li>Die Geräte verbinden sich danach von selbst; das dauert einige Sekunden. Hier ist nichts weiter zu tun.</li>
+            ) : (
+              <li>Das zweite Gerät zeigt einen Antwort-Code: hier „Antwort scannen…“ tippen und ihn vor die Kamera halten.</li>
+            )}
           </ol>
+        ) : props.selbst ? (
+          <>
+            <p className="kopplung-wartet" role="status">
+              <strong>Die Geräte verbinden sich …</strong> Das dauert einige Sekunden. Am ersten Gerät ist nichts zu tun.
+            </p>
+            <p className="hinweis">Nur falls es nicht von selbst klappt: am ersten Gerät „Antwort scannen…“ tippen und diesen Code vor dessen Kamera halten.</p>
+          </>
         ) : (
           <p className="kopplung-schritte">
+            {props.selbst === false ? "Von selbst hat es nicht geklappt. " : ""}
             Am ersten Gerät „Antwort scannen…“ tippen und diesen Code vor dessen Kamera halten. Danach verbinden sich die Geräte von selbst.
           </p>
         )
@@ -130,12 +147,13 @@ function Rahmen(props: {
       {angebot && !props.fehler && !props.angenommen && (
         <p className="hinweis">
           Die App muss auf dem zweiten Gerät schon einmal geladen worden sein; ohne Internet lässt sie sich dort nicht erst holen.
+          {props.selbst ? " Klappt es nicht von selbst, zeigt das zweite Gerät einen Antwort-Code: dann „Antwort scannen…“." : ""}
         </p>
       )}
       {props.scanFehler && <p className="fehler" role="alert">{props.scanFehler}</p>}
       <div className="aktionen">
         {angebot && !props.fehler && !props.angenommen && (
-          <button type="button" className="primaer" disabled={!props.bild} onClick={props.onAntwortScannen}>Antwort scannen…</button>
+          <button type="button" className={props.selbst ? "" : "primaer"} disabled={!props.bild} onClick={props.onAntwortScannen}>Antwort scannen…</button>
         )}
         {props.fehler && angebot && props.onNeu && (
           <button type="button" className="primaer" onClick={props.onNeu}>Neu beginnen</button>

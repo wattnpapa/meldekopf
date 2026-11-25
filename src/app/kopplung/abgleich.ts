@@ -8,13 +8,24 @@
  * Feld, Widersprüche werden genannt). Die Kopplung ist nur ein schnellerer Weg
  * für die Datei; was sie nicht überträgt, überträgt die Datei auch nicht.
  *
- * Rollen (seit 2026-11-24): Das erste Gerät ist die Zentrale und führt die
- * Lage; das zweite ist ein reiner Sammler. Der Sammler schickt seinen ganzen
- * Stand, also alles, was er selbst aufgenommen hat. Die Zentrale schickt dem
- * Sammler nur den Kopf der Sammlung (Kennung, Name, Art, Ort), keine
- * Meldungen: Das Telefon draußen trägt so nie die Lage, nur seine eigenen
- * Scans. Jeden eingespielten Stand quittiert die Zentrale; der Sammler weiß
- * damit, was wirklich angekommen ist.
+ * Rollen: Das erste Gerät ist die Zentrale, jedes weitere ein Sammler. Seit
+ * 2026-11-25 gilt dabei, was man von Server und Client kennt: Maßgeblich ist
+ * der Stand der Zentrale.
+ *
+ * - Die Zentrale schickt jedem verbundenen Sammler ihren ganzen Stand, sooft
+ *   er sich ändert. Der Sammler ersetzt damit seine Sammlung
+ *   ({@link zentraleStandUebernehmen}): Er zeigt, was die Zentrale führt, auch
+ *   was sie entfernt oder geändert hat und was andere Sammler aufgenommen
+ *   haben. Nur was er selbst aufgenommen hat und die Zentrale noch nicht
+ *   kennt, behält er darüber hinaus.
+ * - Der Sammler schickt der Zentrale genau das: seine Meldungen, die sie noch
+ *   nicht bestätigt hat. Die Zentrale gleicht sie ab wie eine importierte
+ *   Datei ({@link standUebernehmen}), quittiert und schickt danach wieder
+ *   ihren Stand. War beim Aufnehmen keine Verbindung da, bleibt die Meldung
+ *   am Sammler als wartend stehen und geht mit der nächsten Verbindung.
+ *
+ * (Am 2026-11-24 bekam der Sammler bewusst nur den Kopf der Sammlung; der
+ * Anwender will den Stand der Zentrale auf jedem verbundenen Telefon.)
  *
  * Drei Dinge kommen dazu, weil hier niemand eine Rückfrage beantwortet:
  *
@@ -102,10 +113,11 @@ function sammlungKanonisch(s: Einsatzsammlung): unknown {
  * nichts geändert hat, was das andere Gerät erfahren müsste. `null`, wenn es
  * die Sammlung hier nicht (mehr) gibt.
  */
-export function standAbdruck(einsatzId: string, zurueckgeholt: readonly string[] = [], nurKopf = false): string | null {
+export function standAbdruck(einsatzId: string, zurueckgeholt: readonly string[] = [], auswahl?: (e: MeldeEintrag) => boolean): string | null {
   const s = einsaetzeLaden().find((x) => x.id === einsatzId);
   if (!s) return null;
-  if (nurKopf) return pruefsumme(stabil(sammlungKanonisch({ ...s, eintraege: [] })));
+  // Sammler: nur die Meldungen, die die Zentrale noch nicht kennt. Ohne solche ist der Abdruck immer derselbe.
+  if (auswahl) return pruefsumme(stabil([...s.eintraege].filter(auswahl).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))));
   return pruefsumme(
     stabil({
       einsatz: sammlungKanonisch(s),
@@ -117,12 +129,14 @@ export function standAbdruck(einsatzId: string, zurueckgeholt: readonly string[]
   );
 }
 
-/** Der Stand dieses Geräts als Nachricht; `null`, wenn es die Sammlung hier nicht (mehr) gibt. */
-export function standNachricht(einsatzId: string, zurueckgeholt: readonly string[] = [], nurKopf = false): StandNachricht | null {
+/**
+ * Der Stand dieses Geräts als Nachricht; `null`, wenn es die Sammlung hier nicht (mehr) gibt. Mit `auswahl` nur diese
+ * Meldungen, ohne Stände der Exporte, Lage-Angaben und Entfern-Listen (Sammler an Zentrale).
+ */
+export function standNachricht(einsatzId: string, zurueckgeholt: readonly string[] = [], auswahl?: (e: MeldeEintrag) => boolean): StandNachricht | null {
   const s = einsaetzeLaden().find((x) => x.id === einsatzId);
   if (!s) return null;
-  // Nur der Kopf: die Sammlung ohne Meldungen, ohne Stände der Exporte, ohne Lage-Angaben (Zentrale an Sammler).
-  if (nurKopf) return { art: "stand", einsatz: einsatzDateiInhalt({ ...s, eintraege: [] }), entfernt: [], zurueckgeholt: [] };
+  if (auswahl) return { art: "stand", einsatz: einsatzDateiInhalt({ ...s, eintraege: s.eintraege.filter(auswahl) }), entfernt: [], zurueckgeholt: [] };
   return {
     art: "stand",
     einsatz: einsatzDateiInhalt(s, exportStaendeLaden(einsatzId), lageAngabenLaden(einsatzId)),
@@ -208,21 +222,8 @@ function entfernenWieDort(einsatzId: string, ids: ReadonlySet<string>): number {
  * `eigeneZurueckgeholt`: was dieses Gerät in dieser Sitzung zurückgeholt hat —
  * das Entfernen des anderen Geräts gilt dafür nicht noch einmal.
  */
-export function standUebernehmen(
-  nachricht: StandNachricht,
-  einsatzId: string | null,
-  eigeneZurueckgeholt: readonly string[] = [],
-  jetzt = Date.now(),
-  /** Sammler: Von der Zentrale gilt nur der Kopf. Meldungen und Entfern-Listen fallen weg, gleich was die Nachricht trägt. */
-  nurKopf = false,
-): UebernahmeErgebnis {
-  const sammlung = einsatzAusDatei(nachricht.einsatz);
-  const n: StandNachricht = nurKopf ? { ...nachricht, entfernt: [], zurueckgeholt: [] } : nachricht;
-  if (nurKopf) {
-    sammlung.eintraege = [];
-    delete sammlung.exportStaende;
-    delete sammlung.lageAngaben;
-  }
+export function standUebernehmen(n: StandNachricht, einsatzId: string | null, eigeneZurueckgeholt: readonly string[] = [], jetzt = Date.now()): UebernahmeErgebnis {
+  const sammlung = einsatzAusDatei(n.einsatz);
   const id = sammlung.id;
   const ergebnis: UebernahmeErgebnis = { einsatzId: id, geaendert: false, neuerEinsatz: false, hinzugefuegt: 0, entfernt: 0, widersprueche: 0, zurueckgeholtBestaetigt: [] };
   if (einsatzId != null && id !== einsatzId) return { ...ergebnis, abgelehnt: "andere-sammlung" };
@@ -273,5 +274,52 @@ export function standUebernehmen(
   lageAngabenUebernehmen(id, lage, ids);
 
   ergebnis.geaendert = standAbdruck(id, eigeneZurueckgeholt) !== vorher;
+  return ergebnis;
+}
+
+/**
+ * Sammler: den Stand der Zentrale übernehmen. Er ist maßgeblich und ersetzt die Sammlung dieses Geräts; es wird nicht
+ * je Feld abgeglichen. Darüber hinaus bleibt nur, was dieses Gerät selbst aufgenommen hat und die Zentrale noch nicht
+ * kennt (`bekannt`: Kennungen, die sie bestätigt oder selbst geschickt hat): Das wartet auf seine Übertragung. Eine
+ * Meldung, die die Zentrale kannte und nicht mehr schickt, hat sie entfernt; sie fällt hier weg.
+ *
+ * Rückgabe: wie {@link standUebernehmen}, dazu die Kennungen aller Meldungen der Zentrale.
+ */
+export function zentraleStandUebernehmen(n: StandNachricht, einsatzId: string | null, bekannt: ReadonlySet<string>): UebernahmeErgebnis & { zentraleIds: string[] } {
+  const sammlung = einsatzAusDatei(n.einsatz);
+  const id = sammlung.id;
+  const ergebnis = { einsatzId: id, geaendert: false, neuerEinsatz: false, hinzugefuegt: 0, entfernt: 0, widersprueche: 0, zurueckgeholtBestaetigt: [], zentraleIds: [] as string[] };
+  if (einsatzId != null && id !== einsatzId) return { ...ergebnis, abgelehnt: "andere-sammlung" };
+  // Wer die Sammlung hier gelöscht hat, hat die Kopplung damit beendet; sie stünde sonst nach Sekunden wieder da.
+  if (einsaetzePapierkorb().some((x) => x.id === id)) return { ...ergebnis, abgelehnt: "geloescht" };
+
+  const vorher = standAbdruck(id);
+  const staende = sammlung.exportStaende;
+  delete sammlung.exportStaende;
+  const lage = sammlung.lageAngaben;
+  delete sammlung.lageAngaben;
+  delete sammlung.nachtragSeit;
+
+  // Frisch aus dem Kern, nicht aus dem Lese-Zwischenspeicher: Die Liste wird an Ort und Stelle geändert.
+  const liste = [...kernEinsaetzeLaden(), ...kernEinsaetzePapierkorb()];
+  const stelle = liste.findIndex((x) => x.id === id);
+  const hier = stelle >= 0 ? liste[stelle] : undefined;
+  const dort = new Set(sammlung.eintraege.map((e) => e.id));
+  const wartend = (hier?.eintraege ?? []).filter((e) => !dort.has(e.id) && !bekannt.has(e.id));
+  const neu: Einsatzsammlung = { ...sammlung, eintraege: [...sammlung.eintraege, ...wartend] };
+  if (!hier || stabil(sammlungKanonisch(hier)) !== stabil(sammlungKanonisch(neu))) {
+    const kannte = new Set(hier?.eintraege.map((e) => e.id) ?? []);
+    ergebnis.neuerEinsatz = !hier;
+    ergebnis.hinzugefuegt = sammlung.eintraege.filter((e) => !kannte.has(e.id)).length;
+    ergebnis.entfernt = (hier?.eintraege.length ?? 0) - wartend.length - sammlung.eintraege.filter((e) => kannte.has(e.id)).length;
+    if (stelle >= 0) liste[stelle] = neu;
+    else liste.push(neu);
+    sammlungenSchreiben(liste);
+  }
+  const ids = bekannteIds();
+  exportStaendeUebernehmen(id, staende, ids);
+  lageAngabenUebernehmen(id, lage, ids);
+  ergebnis.zentraleIds = [...dort];
+  ergebnis.geaendert = standAbdruck(id) !== vorher;
   return ergebnis;
 }

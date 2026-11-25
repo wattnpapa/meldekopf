@@ -56,8 +56,8 @@ sobald der Meldekopf sie vollständig trägt.
   Pflicht, nicht Zierde.
 - Ein zweiter Bildschirm (Fernseher per Kabel) zeigt die Lage in großer
   Schrift für alle im Raum.
-- Ein zweites Gerät am selben Meldekopf (Telefon draußen am Eingang, Rechner
-  im Fahrzeug) kann gekoppelt werden: direkt im WLAN des Fahrzeugs oder im
+- Weitere Geräte am selben Meldekopf (bis zu fünf Telefone draußen an den
+  Eingängen, Rechner im Fahrzeug) können gekoppelt werden: direkt im WLAN des Fahrzeugs oder im
   Hotspot, ohne Internet.
 - Eingänge ohne Netz: Kamera, USB-Handscanner am PC, Fotos aus Messenger
   und Mail, Datei, PDF, AirDrop/Quick Share, Link.
@@ -117,11 +117,11 @@ eigenem Icon und eigener Kennfarbe unterscheidbar bleiben.
    endgültigem Löschen, Historie statt Überschreiben.
 5. **Sofort nutzbar.** Keine Anmeldung, keine Installationspflicht, keine
    Schulung; ein Scan genügt.
-6. **Ein Meldekopf, eine Weitergabe.** Zwei Geräte am selben Meldekopf
-   dürfen sich koppeln (Telefon draußen, Rechner im Fahrzeug), direkt im
-   lokalen Netz und ohne Server; jedes bleibt für sich vollständig. Was
-   mehrere Meldeköpfe, Rollen oder Verlauf über Tage braucht, gehört nach
-   S1-Control, nicht hierher.
+6. **Ein Meldekopf, eine Weitergabe.** Mehrere Geräte am selben Meldekopf
+   dürfen sich koppeln (bis zu fünf Telefone draußen als Sammler, der Rechner
+   im Fahrzeug als Zentrale), direkt im lokalen Netz und ohne Server; jedes
+   bleibt für sich vollständig. Was mehrere Meldeköpfe, Rollen oder Verlauf
+   über Tage braucht, gehört nach S1-Control, nicht hierher.
 
 ## Accessibility & Inclusion
 

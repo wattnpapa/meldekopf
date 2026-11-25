@@ -57,18 +57,21 @@ async function leisteMit(seite: Page, text: string): Promise<void> {
   await leiste(seite).filter({ hasText: text }).waitFor({ state: "visible", timeout: 25_000 });
 }
 
+/** Koppeln, wie es im Betrieb geht: ein Scan am zweiten Gerät, der Rest von selbst. */
 async function koppeln(welt: EebWelt): Promise<void> {
   const b = zweitesGeraet(welt);
   await welt.page.getByRole("button", { name: "Zweites Gerät koppeln…" }).click();
   const angebot = await codeVon(welt.page, "angebot");
   await (await scanKnopf(b)).click();
   await scannen(b, angebot);
-  const antwort = await codeVon(b, "antwort");
-  await welt.page.getByRole("button", { name: "Antwort scannen…" }).click();
-  await scannen(welt.page, antwort);
   await leisteMit(welt.page, "Verbindung aktiv");
   await leisteMit(b, "Verbindung aktiv");
 }
+
+/** Der Haken sitzt in kopplung.ts: ohne Türen bleibt der Antwort-Code der einzige Weg, wie in einem Browser, der sie nicht öffnen kann. */
+Given("das erste Gerät öffnet keine Türen zum Anklopfen", async function (this: EebWelt) {
+  await this.page.evaluate("globalThis.__eebKopplungOhneTueren = true");
+});
 
 Given("ein zweites Gerät hat die App geöffnet", async function (this: EebWelt) {
   const browser = this.page.context().browser();
@@ -181,4 +184,171 @@ Then("zählt die Übersicht {int} Einheiten", async function (this: EebWelt, anz
 
 Then("führt die Übersicht die Einheit {string}", async function (this: EebWelt, name: string) {
   await this.page.locator("main").getByText(name).first().waitFor({ state: "visible" });
+});
+
+Then("meldet der Dialog {string}", async function (this: EebWelt, text: string) {
+  await this.page.locator("dialog[open]").getByText(text).first().waitFor({ state: "visible" });
+});
+
+/**
+ * Neu laden wie ein vom Browser weggeräumter Tab: Die Verbindungsobjekte sind weg, das Gemerkte (merker.ts) bleibt.
+ * Vorher kurz warten, bis das erste Gerät wieder wartende Plätze angeboten hat und sie gemerkt sind.
+ */
+When("das zweite Gerät seine Seite neu lädt", async function (this: EebWelt) {
+  const b = zweitesGeraet(this);
+  await b.waitForTimeout(1500);
+  const getrennt = (await b.locator("dialog.sammler").count()) === 0;
+  await b.reload({ waitUntil: "domcontentloaded" });
+  // Die gemerkte Kopplung setzt sich nach dem Laden fort; erst dann steht die Sammler-Ansicht wieder.
+  if (!getrennt) await b.locator("dialog.sammler").waitFor({ state: "visible" });
+});
+
+Then("zeigt das zweite Gerät keine Kopplung", async function (this: EebWelt) {
+  const b = zweitesGeraet(this);
+  await b.getByRole("button", { name: "Bogen scannen…" }).first().waitFor({ state: "visible" });
+  await b.waitForTimeout(1500);
+  if ((await b.locator(".kopplung-leiste, dialog.sammler").count()) > 0) throw new Error("Das zweite Gerät zeigt weiter eine Kopplung.");
+});
+
+/** Vorher kurz warten, bis das zweite Gerät seine wartenden Plätze angeboten hat und das erste sie gemerkt hat. */
+When("das erste Gerät seine Seite neu lädt", async function (this: EebWelt) {
+  await this.page.waitForTimeout(1500);
+  await this.page.reload({ waitUntil: "domcontentloaded" });
+});
+
+When("beide Geräte ihre Seite zugleich neu laden", async function (this: EebWelt) {
+  await this.page.waitForTimeout(1500);
+  await Promise.all([this.page.reload({ waitUntil: "domcontentloaded" }), zweitesGeraet(this).reload({ waitUntil: "domcontentloaded" })]);
+});
+
+// ---------------------------------------------------------------------------------------------- mehrere Sammler
+
+const dritte = new WeakMap<EebWelt, Page>();
+
+function drittesGeraet(welt: EebWelt): Page {
+  const seite = dritte.get(welt);
+  if (!seite) throw new Error("Das Szenario hat kein drittes Gerät geöffnet.");
+  return seite;
+}
+
+Given("ein drittes Gerät hat die App geöffnet", async function (this: EebWelt) {
+  const browser = this.page.context().browser();
+  if (!browser) throw new Error("Kein Browser für das dritte Gerät.");
+  const kontext = await browser.newContext({ viewport: { width: 390, height: 780 } });
+  await kontext.clock.install({ time: PRUEFSTAND_ZEIT });
+  await kontext.clock.resume();
+  await kontext.addInitScript(`globalThis.__EEB_PRELLSCHUTZ_MS = 0;`);
+  const seite = await kontext.newPage();
+  seite.on("dialog", async (dialog) => {
+    this.systemdialoge.push(`drittes Gerät, ${dialog.type()}: ${dialog.message()}`);
+    await dialog.dismiss();
+  });
+  dritte.set(this, seite);
+  await seite.goto(`${this.basisUrl}/`, { waitUntil: "domcontentloaded" });
+  await seite.getByRole("button", { name: "Bogen scannen…" }).waitFor();
+});
+
+After(async function (this: EebWelt) {
+  const seite = dritte.get(this);
+  if (seite && !seite.isClosed()) await seite.context().close();
+});
+
+When("das dritte Gerät meinen Kopplungs-Code scannt", async function (this: EebWelt) {
+  const c = drittesGeraet(this);
+  const angebot = await codeVon(this.page, "angebot");
+  await (await scanKnopf(c)).click();
+  await scannen(c, angebot);
+});
+
+When("das dritte Gerät den Bogen der Feuerwehr Aschhausen scannt", async function (this: EebWelt) {
+  const c = drittesGeraet(this);
+  await (await scanKnopf(c)).click();
+  await scannen(c, encodePayloadUrl(weitereEinheit(OrganisationsTyp.FEUERWEHR, "Aschhausen"), KOMPRESSOR));
+  // Der Scanner bleibt für den nächsten Bogen offen; hier ist der Durchgang zu Ende.
+  await c.keyboard.press("Escape");
+});
+
+When("das dritte Gerät sich {string} nennt", async function (this: EebWelt, name: string) {
+  const c = drittesGeraet(this);
+  await c.locator("dialog.sammler").getByRole("button", { name: "Name ändern…" }).click();
+  const dialog = c.locator("dialog[open]").filter({ hasText: "Name dieses Geräts" });
+  await dialog.getByRole("textbox").fill(name);
+  await dialog.getByRole("button", { name: "Übernehmen" }).click();
+});
+
+When("das dritte Gerät die Kopplung trennt", async function (this: EebWelt) {
+  await drittesGeraet(this).getByRole("button", { name: "Kopplung trennen" }).click();
+});
+
+/** Wie ein Telefon, das ausgeht und aus bleibt: Die Seite ist weg, niemand ruft zurück. */
+When("die Verbindung am dritten Gerät abreißt und es nicht zurückfindet", async function (this: EebWelt) {
+  const c = drittesGeraet(this);
+  await c.waitForTimeout(1500);
+  await c.context().close();
+});
+
+Then("meldet die Kopplungsleiste des dritten Geräts {string}", async function (this: EebWelt, text: string) {
+  await leisteMit(drittesGeraet(this), text);
+});
+
+Then("zeigt das dritte Gerät den Text {string}", async function (this: EebWelt, text: string) {
+  await drittesGeraet(this).locator("dialog.sammler").getByText(text).first().waitFor({ state: "visible" });
+});
+
+Then("zeigt das dritte Gerät {string} nicht", async function (this: EebWelt, text: string) {
+  const c = drittesGeraet(this);
+  await c.locator("dialog.sammler").waitFor({ state: "visible" });
+  if ((await c.locator("dialog.sammler").getByText(text).count()) > 0) throw new Error(`Das dritte Gerät zeigt „${text}".`);
+  const speicher = String(await c.evaluate("JSON.stringify(Object.fromEntries(Object.entries(localStorage)))"));
+  if (speicher.includes(text)) throw new Error(`Im Speicher des dritten Geräts steht „${text}".`);
+});
+
+/** Ohne Liste führt die Leiste genau einen Sammler (sie nennt ihn im Satz); mit Liste zählen deren Zeilen. */
+Then("führt die Kopplungsleiste genau {int} Sammler", async function (this: EebWelt, anzahl: number) {
+  await this.page.waitForTimeout(1500);
+  const zeilen = await this.page.locator(".kopplung-leiste .kopplung-geraete li").count();
+  const ist = zeilen === 0 ? 1 : zeilen;
+  if (ist !== anzahl) throw new Error(`Die Leiste führt ${ist} Sammler, erwartet waren ${anzahl}.`);
+});
+
+// ------------------------------------------------------------------------------------- Stand der Zentrale, Nachsenden
+
+/**
+ * Die Zentrale ist weg, ohne sich zu verabschieden (Rechner zugeklappt, außer Reichweite): Ihre Seite verlässt die App.
+ * Das Telefon merkt es an der ausbleibenden Antwort und nimmt weiter auf.
+ */
+When("das erste Gerät nicht erreichbar ist", async function (this: EebWelt) {
+  await this.page.waitForTimeout(1500);
+  await this.page.goto("about:blank");
+  await leisteMit(zweitesGeraet(this), "Verbindung unterbrochen");
+});
+
+/** Die Zentrale kommt zurück und setzt ihre gemerkte Kopplung fort (merker.ts): Sie ruft das Telefon an. */
+When("das erste Gerät wieder erreichbar ist", async function (this: EebWelt) {
+  await this.oeffneApp();
+  await leisteMit(this.page, "Verbindung aktiv");
+});
+
+When("ich die Einheit {string} an der Zentrale entferne", async function (this: EebWelt, name: string) {
+  const id = String(
+    await this.page.evaluate(`(() => {
+      const s = JSON.parse(localStorage.getItem("eeb.einsaetze.v1"))[0];
+      return s.id;
+    })()`),
+  );
+  // Über denselben Weg wie die Karte der Einheit („Mehr… → Entfernen"): hier direkt im Speicher, die Ansicht liest neu.
+  await this.page.evaluate(
+    `(() => {
+      const liste = JSON.parse(localStorage.getItem("eeb.einsaetze.v1"));
+      const s = liste.find((x) => x.id === ${JSON.stringify(id)});
+      const weg = s.eintraege.filter((e) => JSON.stringify(e.bogen.einheit).includes(${JSON.stringify(name.replace(/^DLRG /, ""))}));
+      s.eintraege = s.eintraege.filter((e) => !weg.includes(e));
+      s.geaendert = Date.now();
+      localStorage.setItem("eeb.einsaetze.v1", JSON.stringify(liste));
+      const entfernt = JSON.parse(localStorage.getItem("eeb.entfernt.v1") || "{}");
+      entfernt[s.id] = [...(entfernt[s.id] || []), ...weg.map((e) => e.id)];
+      localStorage.setItem("eeb.entfernt.v1", JSON.stringify(entfernt));
+      window.dispatchEvent(new StorageEvent("storage", { key: "eeb.einsaetze.v1" }));
+    })()`,
+  );
 });

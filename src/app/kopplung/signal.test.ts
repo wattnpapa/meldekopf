@@ -5,7 +5,21 @@
 import { describe, expect, it } from "vitest";
 import QRCode from "qrcode";
 import { usBelegungZurueck } from "../eingang/tastaturbelegung";
-import { signalDekodieren, signalKodieren } from "./signal";
+import {
+  KLOPFER,
+  TUEREN,
+  angebotAdressen,
+  antwortAusFingerabdruck,
+  fingerabdruckVon,
+  kennwoerterAbleiten,
+  klopfLesen,
+  klopfZeichen,
+  signalDekodieren,
+  signalKodieren,
+  tuerAngebote,
+  tuerKennwoerter,
+  tuerPortsLesen,
+} from "./signal";
 import { KOPPLUNG_MARKE, istKopplungsCode } from "./zustand";
 
 const FP = "7B:1A:0F:9C:D4:E2:33:58:A1:00:FF:6E:21:9B:C7:45:10:8D:F3:2A:64:B9:5E:77:C0:1D:E8:92:3F:AB:06:D5";
@@ -96,5 +110,88 @@ describe("Kopplungs-Code", () => {
   it("sagt, wenn das Gerät in keinem Netz hängt", () => {
     const ohne = CHROME_ANGEBOT.split("\r\n").filter((z) => !z.startsWith("a=candidate:")).join("\r\n");
     expect(() => signalKodieren({ art: "angebot", sdp: ohne })).toThrow(/keine Adresse in einem Netz/);
+  });
+});
+
+describe("Anklopfen: Fingerabdruck ohne Scan und ohne Eingabe", () => {
+  const ANTWORT = CHROME_ANGEBOT.replace("a=setup:actpass", "a=setup:active");
+  const PORTS = Array.from({ length: TUEREN }, (_, i) => [40000 + i, 41000 + i, 0]);
+
+  it("schreibt den Fingerabdruck als 66 Türnummern und liest ihn daraus wieder", () => {
+    const fp = fingerabdruckVon(ANTWORT);
+    const zeichen = klopfZeichen(fp);
+    expect(zeichen).toHaveLength(KLOPFER);
+    expect(zeichen.every((z) => z >= 0 && z < TUEREN)).toBe(true);
+    expect([...klopfLesen(zeichen)!]).toEqual([...fp]);
+  });
+
+  it("verwirft eine Folge mit falschem Prüfbyte, falscher Länge oder vertauschten Klopfern", () => {
+    const zeichen = klopfZeichen(fingerabdruckVon(ANTWORT));
+    expect(klopfLesen(zeichen.slice(1))).toBeNull();
+    expect(klopfLesen([...zeichen.slice(0, 10), (zeichen[10]! + 1) % TUEREN, ...zeichen.slice(11)])).toBeNull();
+    const vertauscht = [...zeichen];
+    const i = vertauscht.findIndex((z, k) => k < 60 && z !== vertauscht[k + 1]);
+    [vertauscht[i], vertauscht[i + 1]] = [vertauscht[i + 1]!, vertauscht[i]!];
+    expect(klopfLesen(vertauscht)).toBeNull();
+  });
+
+  it("trägt die Ports der Türen im Angebot, und das zweite Gerät setzt daraus deren Beschreibungen zusammen", async () => {
+    const code = signalKodieren({ art: "angebot", sdp: CHROME_ANGEBOT }, PORTS);
+    expect(QRCode.create(code, { errorCorrectionLevel: "L" }).version).toBeLessThanOrEqual(16);
+    const s = signalDekodieren(code);
+    expect(s.tueren).toEqual(PORTS);
+    const tueren = await tuerAngebote(s.sdp, s.tueren!);
+    expect(tueren).toHaveLength(TUEREN);
+    const k3 = await tuerKennwoerter(CHROME_ANGEBOT, 3);
+    expect(tueren[3]).toContain(`a=ice-ufrag:${k3.ufrag}\r\n`);
+    expect(tueren[3]).toContain(`a=ice-pwd:${k3.pwd}\r\n`);
+    expect(tueren[3]).toContain(`a=fingerprint:sha-256 ${FP}`);
+    expect(tueren[3]).toContain(" 192.168.178.20 40003 typ host");
+    expect(tueren[3]).toContain(".local 41003 typ host");
+    // Die dritte Adresse hat diese Tür nicht (Port 0): Sie fehlt.
+    expect(tueren[3]!.match(/a=candidate:/g)).toHaveLength(2);
+    // Jede Tür hat eigene Kennwörter, und keine die des Angebots.
+    expect(new Set(tueren.map((x) => /a=ice-pwd:(.*)/.exec(x)![1])).size).toBe(TUEREN);
+    expect(tueren.join("")).not.toContain("kQ3vW9zR1tY5uI8oP2aS4dF6");
+  });
+
+  it("liest die Ports einer Tür zu den Adressen des Angebots", () => {
+    const adressen = angebotAdressen(CHROME_ANGEBOT);
+    expect(adressen).toEqual(["192.168.178.20", "3d5c7a10-2b4e-4f6a-8c9d-0e1f2a3b4c5d.local", "fd00::1a2b:3c4d"]);
+    const tuer = CHROME_ANGEBOT.replace(" 54321 typ host", " 50111 typ host").replace(" 49152 typ host", " 50222 typ host").replace(/a=candidate:2222222222.*\r\n/, "");
+    expect(tuerPortsLesen(tuer, adressen)).toEqual([50111, 50222, 0]);
+  });
+
+  it("ein Angebot ohne Türen bleibt lesbar und nennt keine", () => {
+    expect(signalDekodieren(signalKodieren({ art: "angebot", sdp: CHROME_ANGEBOT })).tueren).toBeUndefined();
+  });
+
+  it("setzt am ersten Gerät aus dem angeklopften Fingerabdruck die Antwort zusammen, ohne Adressen", () => {
+    const sdp = antwortAusFingerabdruck(fingerabdruckVon(ANTWORT), CHROME_ANGEBOT, { ufrag: "ABCD1234", pwd: "0123456789ABCDEFGHJKMNPQRSTVWXYZ" });
+    expect(sdp).toContain(`a=fingerprint:sha-256 ${FP}`);
+    expect(sdp).toContain("a=ice-ufrag:ABCD1234\r\n");
+    expect(sdp).toContain("a=setup:active");
+    expect(sdp).not.toContain("a=candidate:");
+    expect(sdp).not.toContain("a=end-of-candidates");
+  });
+
+  it("leitet auf beiden Geräten dieselben Kennwörter aus dem Angebot ab, für ein anderes Angebot andere", async () => {
+    const a = await kennwoerterAbleiten(CHROME_ANGEBOT);
+    // Das zweite Gerät kennt das Angebot nur aus dem Code: in anderer Zeilenfolge und ohne Formalien.
+    const b = await kennwoerterAbleiten(signalDekodieren(signalKodieren({ art: "angebot", sdp: CHROME_ANGEBOT }, PORTS)).sdp);
+    expect(b).toEqual(a);
+    expect(a.ufrag).toMatch(/^[0-9A-Z]{8}$/);
+    expect(a.pwd).toMatch(/^[0-9A-Z]{32}$/);
+    const c = await kennwoerterAbleiten(CHROME_ANGEBOT.replace("kQ3vW9zR1tY5uI8oP2aS4dF6", "kQ3vW9zR1tY5uI8oP2aS4dF7"));
+    expect(c.pwd).not.toBe(a.pwd);
+    expect((await tuerKennwoerter(CHROME_ANGEBOT, 0)).pwd).not.toBe(a.pwd);
+  });
+
+  it("nimmt eine gescannte Antwort auch ohne Adressen an", () => {
+    const ohne = ANTWORT.split("\r\n").filter((z) => !z.startsWith("a=candidate:")).join("\r\n");
+    const s = signalDekodieren(signalKodieren({ art: "antwort", sdp: ohne }));
+    expect(s.sdp).not.toContain("a=candidate:");
+    expect(s.sdp).not.toContain("a=end-of-candidates");
+    expect(s.sdp).toContain(FP);
   });
 });

@@ -73,6 +73,48 @@ describe("Kopplungsleiste", () => {
   });
 });
 
+describe("Kopplungsleiste mit mehreren Sammlern", () => {
+  let id: string;
+  beforeEach(() => {
+    localStorage.clear();
+    id = einsatzAnlegen("Hochwasser", EinsatzArt.EINSATZ).id;
+  });
+  afterEach(() => act(() => kopplungsZustandZuruecksetzen()));
+  const geraet = (kennung: string, name: string, phase: "verbunden" | "unterbrochen" | "getrennt", wartet = false) => ({ kennung, name, phase, wartet, seit: phase === "verbunden" ? null : new Date(2026, 10, 25, 9, 5).getTime(), abgleichAm: new Date(2026, 10, 25, 9, 1, 30).getTime(), hinweis: "" });
+
+  it("nennt einen einzelnen Sammler beim Namen", () => {
+    render(<Kopplung />);
+    act(() => kopplungsZustandSetzen({ phase: "verbunden", rolle: "zentrale", einsatzId: id, geraete: [geraet("a", "Eingang Nord", "verbunden")] }));
+    const leiste = screen.getByRole("status");
+    expect(leiste.textContent).toContain("Verbindung aktiv · Eingang Nord sammelt");
+    expect(leiste.querySelector(".kopplung-geraete")).toBeNull();
+    expect(screen.getByRole("button", { name: "Weiteres Gerät koppeln…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Trennen" })).toBeTruthy();
+  });
+
+  it("zählt mehrere Sammler und führt jeden mit eigener Lampe", () => {
+    render(<Kopplung />);
+    act(() => kopplungsZustandSetzen({ phase: "unterbrochen", rolle: "zentrale", wartet: true, einsatzId: id, seit: new Date(2026, 10, 25, 9, 5).getTime(), geraete: [geraet("a", "Eingang Nord", "verbunden"), geraet("b", "Eingang Süd", "unterbrochen", true)] }));
+    const leiste = screen.getByRole("status");
+    expect(leiste.textContent).toContain("Verbindung unterbrochen · 1 von 2 Sammlern verbunden seit 09:05.");
+    const zeilen = [...leiste.querySelectorAll(".kopplung-geraete li")];
+    expect(zeilen.map((z) => z.getAttribute("data-phase"))).toEqual(["verbunden", "unterbrochen"]);
+    expect(zeilen[0]!.textContent).toContain("Eingang Nord verbunden · letzter Eingang 09:01:30");
+    expect(zeilen[1]!.textContent).toContain("Eingang Süd unterbrochen seit 09:05");
+    expect(screen.getByRole("button", { name: "Eingang Süd trennen" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alle trennen" })).toBeTruthy();
+  });
+
+  it("bietet bei fünf Sammlern kein weiteres Gerät an und lässt einen getrennten aus der Liste nehmen", () => {
+    render(<Kopplung />);
+    const fuenf = ["A", "B", "C", "D"].map((n) => geraet(n, `Sammler ${n}`, "verbunden"));
+    act(() => kopplungsZustandSetzen({ phase: "verbunden", rolle: "zentrale", einsatzId: id, geraete: [...fuenf, geraet("E", "Eingang Ost", "getrennt")] }));
+    expect(screen.queryByRole("button", { name: "Weiteres Gerät koppeln…" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Eingang Ost aus der Liste nehmen" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("4 von 5 Sammlern verbunden");
+  });
+});
+
 describe("Sammler-Ansicht", () => {
   let id: string;
   const wege = { onScannen: vi.fn(), onManuell: vi.fn() };
@@ -93,7 +135,7 @@ describe("Sammler-Ansicht", () => {
     expect(bild.textContent).toContain("Verbindung aktiv");
     expect(bild.textContent).toContain("1 Meldung wird übertragen");
     expect(bild.textContent).toContain(SAMMLER_ROLLE_SATZ);
-    expect(bild.textContent).toContain("Von diesem Gerät aufgenommen (1)");
+    expect(bild.textContent).toContain("Stand der Zentrale (1 Einheit, davon 1 noch nicht übertragen)");
     expect(bild.textContent).toContain("Wardenburg");
     // Ohne Quittung der Zentrale gilt nichts als übertragen.
     expect(bild.querySelector("li")?.getAttribute("data-uebertragen")).toBe("nein");

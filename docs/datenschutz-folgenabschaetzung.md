@@ -35,7 +35,24 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > schickt, was es selbst aufnimmt, und erhält von der Zentrale nur Name, Art
 > und Ort der Sammlung, keine Meldungen. Es hält damit keine Vollkopie mehr,
 > sondern die Bögen, die es selbst gescannt hat; R16 ist entsprechend
-> herabgestuft. Kein neuer
+> herabgestuft.
+> **Nachgezogen 2026-11-25:** Zum Koppeln genügt ein Scan am zweiten Gerät.
+> Beide Geräte merken sich die Kopplung bis zu 30 Tage (`localStorage`
+> `eeb.kopplung.v1`, IndexedDB `eeb-kopplung`): Rolle, Kennung der Sammlung,
+> Verbindungsangaben und am zweiten Gerät die Kennungen bestätigter Meldungen, keine Inhalte
+> von Bögen. Gelöscht mit „Kopplung trennen“, einer neuen Kopplung, nach
+> Fristablauf und mit „Alle Daten löschen“.
+> Eine Zentrale führt bis zu fünf Sammler; keiner erhält, was ein anderer
+> aufgenommen hat. Jedes Gerät nennt für die Kopplung einen Namen und eine
+> zufällige Kennung (`eeb.geraet.v1`); der Name ist frei eingebbar und wird
+> der Zentrale übermittelt. Personenbezogen ist er nur, wenn jemand einen
+> Personennamen eintippt: Gerätenamen nach dem Ort wählen („Eingang Nord“).
+> **Geändert am 2026-11-25, zurück zur Vollkopie:** Der Anwender will den
+> Stand der Zentrale auf jedem verbundenen Telefon. Jeder Sammler erhält
+> seitdem laufend die ganze Sammlung (alle Bögen mit Personendaten, Zeiten,
+> Notizen) und hält sie in seinem `localStorage`, auch die Meldungen der
+> anderen Sammler. R16 ist entsprechend wieder heraufgestuft; die Zeilen in
+> 3, 5.5 und 5.8 gelten in dieser Fassung. Kein neuer
 > Empfänger außerhalb des Meldekopfs, kein Server, kein neuer Speicherort der
 > App; die Fristen und Löschwege gelten auf jedem der beiden Geräte für sich.
 >
@@ -157,9 +174,9 @@ die für die DSFA relevante Kurzfassung:
 - **Kopplung zweier Geräte (seit 2026-11-24, ADR-009):** Zwei Geräte am selben
   Meldekopf tauschen von Hand zwei QR-Codes und verbinden sich danach direkt
   im lokalen Netz (WebRTC-Datenkanal, verschlüsselt, ohne Server und ohne
-  Internet). Das zweite Gerät ist ein reiner Sammler: Was es aufnimmt, geht
-  an das erste (die Zentrale); zurück kommen nur Name, Art und Ort der
-  Sammlung und eine Quittung. Die QR-Codes tragen keine Einsatzdaten, nur
+  Internet). Eine Zentrale führt bis zu fünf Sammler. Was ein Sammler
+  aufnimmt, geht an die Zentrale; deren ganzer Stand geht laufend an jeden
+  verbundenen Sammler zurück. Die QR-Codes tragen keine Einsatzdaten, nur
   Verbindungsangaben (Schlüssel-Fingerabdruck, Adressen im lokalen Netz).
 - **Eingang** (live seit Phase 3; `src/app/eingang/`): QR-Code per Kamera
   oder USB-Handscanner, Fotos aus Messenger und Mail (Bilderstapel),
@@ -326,16 +343,18 @@ versehentlich in Freitexten, M7), biometrische Daten, strafrechtliche Daten.
   gescannter Bogen, als `quelle: "manuell"` ohne Signatur. „Im
   Erfassungsbogen vollständig erfassen…“ öffnet `erfassungsbogen.app` mit dem
   bisher Erfassten im Fragment (kein Netzversand des Inhalts).
-- **Abgleich mit dem gekoppelten Gerät (seit 2026-11-24):** Der Sammler
-  schickt bei jeder Änderung den Umschlag der Einsatz-Datei mit den
-  Meldungen, die er selbst aufgenommen hat (Bögen mit Personendaten, Zeiten),
-  und die Kennungen der bei ihm entfernten Einträge. Die Zentrale gleicht das
-  in ihrem `localStorage` ab wie eine importierte Datei. In der Gegenrichtung
-  gehen nur der Kopf der Sammlung (Kennung, Name, Art, Ort/Auftrag als
-  Freitext) und Quittungen; Meldungen anderer Einheiten erreichen den Sammler
-  nicht, und er verwürfe sie. Auf dem Sammler bleiben seine eigenen Scans
-  gespeichert, bis die Sammlung dort gelöscht wird oder die Fristen greifen;
-  die Datenschutzfrist wirkt auf jedem Gerät für sich.
+- **Abgleich mit den gekoppelten Geräten (seit 2026-11-24, in dieser Form seit
+  2026-11-25):** Der Sammler schickt der Zentrale die Meldungen, die er
+  selbst aufgenommen hat und die sie noch nicht kennt (Bögen mit
+  Personendaten, Zeiten). Die Zentrale gleicht sie in ihrem `localStorage` ab
+  wie eine importierte Datei und schickt jedem verbundenen Sammler ihren
+  ganzen Stand zurück: den Umschlag der Einsatz-Datei mit allen Meldungen der
+  Sammlung, Export-Ständen und Lage-Angaben. Der Sammler ersetzt damit seine
+  Sammlung. Auf jedem Sammler liegt so die ganze Sammlung, bis sie dort
+  gelöscht wird oder die Fristen greifen; die Datenschutzfrist wirkt auf
+  jedem Gerät für sich. Entfernt die Zentrale eine Meldung, fällt sie mit dem
+  nächsten Stand auch an den verbundenen Sammlern weg; an einem Sammler ohne
+  Verbindung bleibt sie bis dahin stehen.
 - **Eingang heute:** „Sicherung einspielen" ersetzt nach Rückfrage den ganzen
   Gerätebestand durch den der Datei (Prüfung vorher, Aufzählung beider
   Bestände, Haken bei Verlust).
@@ -493,7 +512,7 @@ Ergänzend:
 | Übersichts-CSV | Lagekarte, Stab | Ja (Notiz, Bemerkung, Hinweise; keine Personenliste) | Zweckgemäß |
 | CSV mit allen Daten | Stab, Auswertung | **Ja — jede Person mit Namen, Funktionen, Erreichbarkeiten** | Nur wo erforderlich (M7) |
 | Einsatz-Datei | S1-Control, zweites Meldekopf-Gerät | **Ja — Vollkopie** der Sammlung | Zweckgemäß; unverschlüsselt, unsigniert |
-| Kopplung (laufender Abgleich, seit 2026-11-24) | Vom Sammler an die Zentrale am selben Meldekopf, im selben lokalen Netz | **Ja** — die vom Sammler aufgenommenen Bögen, bei jeder Änderung neu. Zurück an den Sammler: nein (nur Name, Art, Ort der Sammlung und Quittungen) | Keine Übermittlung an Dritte, solange beide Geräte derselben Stelle gehören; verschlüsselte Direktverbindung ohne Server; keine Anmeldung der Gegenstelle (R16) |
+| Kopplung (laufender Abgleich, seit 2026-11-24) | Zwischen der Zentrale und bis zu fünf Sammlern am selben Meldekopf, im selben lokalen Netz | **Ja — Vollkopie** der gekoppelten Sammlung an jeden verbundenen Sammler, bei jeder Änderung neu; vom Sammler an die Zentrale die dort aufgenommenen Bögen | Keine Übermittlung an Dritte, solange alle Geräte derselben Stelle gehören; verschlüsselte Direktverbindung ohne Server; keine Anmeldung der Gegenstelle (R16) |
 | Datensicherungsdatei | Vom Nutzer gewählt (zweites Gerät, Speichermedium) | **Ja — Vollkopie des Geräts** einschließlich privatem Schlüssel und ggf. Fremdbestand | Kein Empfänger im Meldeweg; Ablage regeln (M3) |
 | QR-Codes in den PDFs | Wer die PDF bzw. den Ausdruck erhält | Ja — der Bogen der Einheit, Signaturkette, ggf. Absenderkarte (R13) | wie Sammel-PDF |
 | Lagemonitor | Personen im Raum bzw. am Fahrzeug | Nein (keine Personennamen; Einheiten, Orte, Funkrufnamen, Stärke; in der Ansicht „Tafel" je Einheit auch Auftrag, Sofortbedarf, Stand und das Etikett eines abgeteilten Teils; seit 2026-11-11 dort auch Übungsmeldungen einer echten Lage, mit denselben Angaben ohne Bedarf) | Keine Übermittlung, aber Offenlegung durch Anzeige (R12) |
@@ -646,7 +665,7 @@ Intervenierbarkeit (Iv), Nichtverkettung (N).
 | R13 | **Neu:** Unsichtbarer Fremdbestand aus einer eingespielten Erfassungsbogen-Sicherung: Vorlagen ganzer Mannschaften ohne Frist, Entwurf, eigene Absenderkarte — ohne Anzeige; die Absenderkarte reiste bis 2026-10-25 ungefragt in jedem QR-Code der Sammel-PDF mit (behoben) | V/T/Iv | Mittel (ADR-007 nennt die Sicherung als Übernahmeweg; seit Phase 3 gibt es die Einsatz-Datei als Alternative) | Mittel | **Mittel** |
 | R14 | **Neu:** Anwesenheitsprotokoll — Eintreff-/Abrückzeiten, Status und Vermerke je Einheit mit Personalliste lassen nachträglich erkennen, wer wann im Einsatz war; Zweckänderung (z. B. Leistungs- oder Verhaltenskontrolle) | N/Iv | Niedrig | Mittel | Niedrig-Mittel |
 | R15 | **Neu:** Doppelbestand während der Übernahme — Sammlung bleibt im Erfassungsbogen (andere Herkunft) und in Sicherungsdateien liegen, nachdem sie im Meldekopf läuft | V/Iv | Mittel (Übergangszeit) | Niedrig-Mittel | Niedrig-Mittel |
-| R16 | **Neu (2026-11-24):** Zweites Gerät am Eingang — das gekoppelte Telefon hält die Bögen, die es selbst gescannt hat (nicht die Lage der Zentrale), wird draußen getragen und ist oft ein privates Gerät; Verlust, fehlende Sperre oder ein nach dem Einsatz nicht gelöschter Bestand. Dazu: Wer beide Codes tauschen kann, kann als falscher Sammler Meldungen in die Lage einspielen; die Lage auslesen kann er auf diesem Weg nicht | V/I | Mittel | Mittel (Personendaten der vom Telefon erfassten Einheiten) | **Mittel** |
+| R16 | **Neu (2026-11-24), neu bewertet 2026-11-25:** Bis zu fünf weitere Geräte mit Vollkopie — jedes gekoppelte Telefon hält dieselben Personendaten wie die Zentrale, wird draußen getragen und ist oft ein privates Gerät; Verlust, fehlende Sperre oder ein nach dem Einsatz nicht gelöschter Bestand, je Telefon. Dazu: Wer den Code der Zentrale vom Bildschirm scannt, solange er dort steht, erhält als falscher Sammler die ganze Sammlung und kann Meldungen einspielen | V/I | Mittel | Mittel-Hoch (Personendaten aller Einheiten der Sammlung, auf mehreren Geräten) | **Mittel-Hoch** |
 
 **Höchste Einzelrisiken:** R2 (Vollkopien außer Haus), R1 (Geräteverlust),
 R8 und R13 (Transparenz und unsichtbarer Bestand) — R1, R2 und R8 primär
@@ -672,7 +691,7 @@ organisatorisch, R13 technisch zu mindern.
 | M13 | R12 | Lagemonitor nicht zum Publikum aufstellen, bei Publikumsverkehr dimmen oder abschalten; Einheitsnamen ohne Personennamen erfassen | Organisatorisch | `[Organisation/Einsatzleitung]` | Niedrig |
 | M14 | R14 | Zweckbindung festschreiben: Anwesenheitsdaten der Sammlung nur für Lageführung, Versorgung und Einsatzdokumentation, nicht zur Leistungs- oder Verhaltenskontrolle; Personalvertretung einbinden (9) | Organisatorisch | `[Organisation/Personalvertretung]` | Niedrig |
 | M15 | R15 | Nach der Übernahme in den Meldekopf die Sammlung im Erfassungsbogen und die Sicherungsdatei löschen; Übergangszeit kurz halten (ADR-007) | Organisatorisch | `[Organisation]` | Niedrig |
-| M16 | R16 | Kopplung nur mit Geräten der eigenen Stelle; für das zweite Gerät gelten dieselben Regeln wie für das erste (Bildschirmsperre, Geräteverschlüsselung, M1). Private Telefone nur, wenn die Organisation das zulässt. Nach dem Einsatz auf dem zweiten Gerät die Sammlung löschen und den Papierkorb leeren („Alle Daten löschen“ oder Einsatz löschen); den Code nicht fotografieren lassen | Organisatorisch | `[Organisation/Meldekopf-Verantwortliche/r]` | Niedrig-Mittel |
+| M16 | R16 | Kopplung nur mit Geräten der eigenen Stelle; für jedes Telefon gelten dieselben Regeln wie für die Zentrale (Bildschirmsperre, Geräteverschlüsselung, M1). Private Telefone nur, wenn die Organisation das zulässt. Den Code der Zentrale nur zeigen, solange gekoppelt wird, und nicht fotografieren lassen; an der Leiste prüfen, dass nur die eigenen Geräte als Sammler stehen. Nach dem Einsatz an jedem Telefon „Kopplung trennen“, die Sammlung löschen und den Papierkorb leeren („Alle Daten löschen“ oder Einsatz löschen) | Organisatorisch | `[Organisation/Meldekopf-Verantwortliche/r]` | Mittel |
 
 ## 9. Konsultation
 

@@ -267,8 +267,8 @@ export interface Angebot {
 }
 
 /** Erstes Gerät: Angebot erzeugen. */
-export async function angebotErzeugen(h: VerbindungsHorcher): Promise<Angebot> {
-  const pc = neuePc();
+export async function angebotErzeugen(h: VerbindungsHorcher, zertifikat?: RTCCertificate): Promise<Angebot> {
+  const pc = neuePc(zertifikat);
   const { kanalSetzen, verbindung } = verdrahten(pc, h);
   kanalSetzen(pc.createDataChannel("meldekopf", { ordered: true }));
   await pc.setLocalDescription(await pc.createOffer());
@@ -285,33 +285,6 @@ export async function angebotErzeugen(h: VerbindungsHorcher): Promise<Angebot> {
   };
 }
 
-/** Zweites Gerät: aus dem gescannten Angebot die Antwort erzeugen. */
-export async function antwortErzeugen(
-  angebotSdp: string,
-  h: VerbindungsHorcher,
-  /** Die Verbindung, sobald es sie gibt: Sie kann offen sein, bevor diese Funktion zurückkehrt. */
-  bekannt?: (v: Verbindung) => void,
-): Promise<{ sdp: string; verbindung: Verbindung }> {
-  const pc = neuePc();
-  const { kanalSetzen, verbindung } = verdrahten(pc, h);
-  bekannt?.(verbindung);
-  pc.addEventListener("datachannel", (e) => kanalSetzen(e.channel));
-  try {
-    await pc.setRemoteDescription({ type: "offer", sdp: angebotSdp });
-    await pc.setLocalDescription(await pc.createAnswer());
-    await fertigGesammelt(pc);
-  } catch (e) {
-    verbindung.schliessen();
-    throw e;
-  }
-  const sdp = pc.localDescription?.sdp;
-  if (!sdp) {
-    verbindung.schliessen();
-    throw new Error("Dieses Gerät konnte keine Verbindung vorbereiten.");
-  }
-  return { sdp, verbindung };
-}
-
 /** Ein Platz, den der Rufer anrufen kann, wenn die Verbindung gerissen ist. */
 export interface RufPlatz {
   /** Die Antwort ohne Adressen, für den Hörer. */
@@ -321,12 +294,15 @@ export interface RufPlatz {
   /** Ist noch ein Versuch möglich? */
   nutzbar: () => boolean;
   verwerfen: () => void;
+  /** Womit sich der Platz nach einem Neuladen wieder anrufen lässt (merker.ts); `null`, wenn er am ursprünglichen Objekt hängt. */
+  daten: () => { angebotSdp: string; ufrag: string; pwd: string } | null;
 }
 
 /** Ein festes Zertifikat für alle Rückrufe einer Kopplung; `undefined`, wenn der Browser keines erzeugt. */
 export async function rufZertifikat(): Promise<RTCCertificate | undefined> {
   try {
-    return await RTCPeerConnection.generateCertificate({ name: "ECDSA", namedCurve: "P-256" } as AlgorithmIdentifier);
+    // 30 Tage, ausdrücklich: So lange gilt auch eine gemerkte Kopplung (merker.ts).
+    return await RTCPeerConnection.generateCertificate({ name: "ECDSA", namedCurve: "P-256", expires: 30 * 24 * 60 * 60 * 1000 } as AlgorithmIdentifier);
   } catch {
     return undefined;
   }
@@ -336,8 +312,19 @@ function sdpFeld(sdp: string, name: string): string {
   return new RegExp(`^a=${name}:(.*)$`, "m").exec(sdp)?.[1]?.trim() ?? "";
 }
 
-/** Rufer: zu einem wartenden Angebot des Hörers die Antwort erzeugen, ohne sie zu setzen. */
-export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCertificate | undefined): Promise<RufPlatz> {
+/**
+ * Rufer: zu einem wartenden Angebot des Hörers die Antwort erzeugen, ohne sie zu setzen.
+ *
+ * `vorgabe`: Kennwörter, die beide Seiten schon kennen (aus dem ersten Code abgeleitet). Die Antwort trägt dann sie
+ * statt der zufälligen des Browsers; der Hörer kann sie sich selbst zusammensetzen und braucht vom Rufer nur noch
+ * den Fingerabdruck. Das geht nur mit einem festen Zertifikat und einem Browser, der eingesetzte Kennwörter annimmt;
+ * sonst bleibt es bei den eigenen (`vorgabeGilt` sagt, was gilt).
+ */
+export async function rufPlatzVorbereiten(
+  angebotSdp: string,
+  zertifikat: RTCCertificate | undefined,
+  vorgabe?: { ufrag: string; pwd: string },
+): Promise<RufPlatz & { vorgabeGilt: boolean }> {
   // Die Ereignisse des ursprünglichen Objekts gehen erst mit dem Anruf an einen Horcher.
   let ziel: VerbindungsHorcher | null = null;
   const weiche: VerbindungsHorcher = { onLage: (l) => ziel?.onLage(l), onNachricht: (n) => ziel?.onNachricht(n) };
@@ -353,9 +340,9 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
     verbindung.schliessen();
     throw e;
   }
-  const antwortSdp = antwort.sdp ?? "";
-  const ufrag = sdpFeld(antwortSdp, "ice-ufrag");
-  const pwd = sdpFeld(antwortSdp, "ice-pwd");
+  let antwortSdp = antwort.sdp ?? "";
+  let ufrag = sdpFeld(antwortSdp, "ice-ufrag");
+  let pwd = sdpFeld(antwortSdp, "ice-pwd");
   if (!ufrag || !pwd) {
     verbindung.schliessen();
     throw new Error("Antwort ohne Kennwörter.");
@@ -363,8 +350,10 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
   erstes = { pc, verbindung, antwort };
   // Ein frisches Objekt kann den Platz nur treffen, wenn es denselben Schlüssel trägt.
   let frischMoeglich = !!zertifikat;
+  const eingesetzt = (sdp: string, u: string, p: string) =>
+    sdp.replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${u}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${p}`).replace(/^a=setup:.*$/m, "a=setup:active");
 
-  async function frisch(h: VerbindungsHorcher): Promise<Verbindung> {
+  async function frisch(h: VerbindungsHorcher, u = ufrag, p = pwd): Promise<Verbindung> {
     let hin: VerbindungsHorcher | null = null;
     const neu = neuePc(zertifikat);
     const draht = verdrahten(neu, { onLage: (l) => hin?.onLage(l), onNachricht: (n) => hin?.onNachricht(n) });
@@ -372,11 +361,11 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
     try {
       await neu.setRemoteDescription({ type: "offer", sdp: angebotSdp });
       const a = await neu.createAnswer();
-      const sdp = (a.sdp ?? "").replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${pwd}`);
+      const sdp = eingesetzt(a.sdp ?? "", u, p);
       if (sdpFeld(sdp, "fingerprint") !== sdpFeld(antwortSdp, "fingerprint")) throw new Error("anderer Schlüssel");
       hin = h;
       await neu.setLocalDescription({ type: "answer", sdp });
-      if (sdpFeld(neu.localDescription?.sdp ?? "", "ice-ufrag") !== ufrag) throw new Error("Kennwörter nicht übernommen");
+      if (sdpFeld(neu.localDescription?.sdp ?? "", "ice-ufrag") !== u) throw new Error("Kennwörter nicht übernommen");
       return draht.verbindung;
     } catch (e) {
       hin = null;
@@ -385,15 +374,43 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
     }
   }
 
+  // Vorgegebene Kennwörter gelten nur, wenn der Browser sie annimmt: an einem Wegwerf-Objekt ausprobiert, das nie anklopft
+  // (es kennt keine Adresse des Hörers, also ein Angebot ohne dessen Adressen).
+  let vorgabeGilt = false;
+  if (vorgabe && frischMoeglich) {
+    const probe = neuePc(zertifikat);
+    try {
+      await probe.setRemoteDescription({ type: "offer", sdp: angebotSdp.replace(/^a=(candidate:|end-of-candidates).*\r?\n/gm, "") });
+      const a = await probe.createAnswer();
+      await probe.setLocalDescription({ type: "answer", sdp: eingesetzt(a.sdp ?? "", vorgabe.ufrag, vorgabe.pwd) });
+      vorgabeGilt = sdpFeld(probe.localDescription?.sdp ?? "", "ice-ufrag") === vorgabe.ufrag;
+    } catch {
+      vorgabeGilt = false;
+    } finally {
+      probe.close();
+    }
+    if (vorgabeGilt) {
+      ufrag = vorgabe.ufrag;
+      pwd = vorgabe.pwd;
+      antwortSdp = eingesetzt(antwortSdp, ufrag, pwd);
+      // Das ursprüngliche Objekt trägt andere Kennwörter als die Antwort: Es wird nicht gebraucht.
+      erstes.verbindung.schliessen();
+      erstes = null;
+    }
+  }
+
   return {
     antwortSdp,
+    vorgabeGilt,
     nutzbar: () => frischMoeglich || erstes != null,
+    daten: () => (frischMoeglich ? { angebotSdp, ufrag, pwd } : null),
     async anrufen(h) {
       if (frischMoeglich) {
         try {
           return await frisch(h);
-        } catch {
+        } catch (e) {
           frischMoeglich = false; // dieser Browser nimmt die eingesetzten Kennwörter nicht: Es bleibt der eine Versuch unten
+          if (!erstes) throw e;
         }
       }
       const e = erstes;
@@ -416,4 +433,160 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
       erstes = null;
     },
   };
+}
+
+/**
+ * Rufer, nach einem Neuladen: einen gemerkten Platz wieder anrufbar machen. Es gibt kein ursprüngliches Objekt mehr,
+ * nur das gemerkte Zertifikat und die Kennwörter; jeder Anruf ist ein frisches Objekt damit.
+ */
+export function rufPlatzWiederherstellen(angebotSdp: string, zertifikat: RTCCertificate, ufrag: string, pwd: string): RufPlatz {
+  let moeglich = true;
+  return {
+    antwortSdp: "",
+    nutzbar: () => moeglich,
+    daten: () => (moeglich ? { angebotSdp, ufrag, pwd } : null),
+    verwerfen() {
+      moeglich = false;
+    },
+    async anrufen(h) {
+      let hin: VerbindungsHorcher | null = null;
+      const neu = neuePc(zertifikat);
+      const draht = verdrahten(neu, { onLage: (l) => hin?.onLage(l), onNachricht: (n) => hin?.onNachricht(n) });
+      neu.addEventListener("datachannel", (e) => draht.kanalSetzen(e.channel));
+      try {
+        await neu.setRemoteDescription({ type: "offer", sdp: angebotSdp });
+        const a = await neu.createAnswer();
+        const sdp = (a.sdp ?? "").replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${pwd}`).replace(/^a=setup:.*$/m, "a=setup:active");
+        hin = h;
+        await neu.setLocalDescription({ type: "answer", sdp });
+        if (sdpFeld(neu.localDescription?.sdp ?? "", "ice-ufrag") !== ufrag) throw new Error("Kennwörter nicht übernommen");
+        return draht.verbindung;
+      } catch (e) {
+        hin = null;
+        moeglich = false;
+        draht.verbindung.schliessen();
+        throw e;
+      }
+    },
+  };
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+// Türen und Anklopfen (signal.ts, „Anklopfen"): Das zweite Gerät teilt dem ersten seinen Fingerabdruck über das Netz mit.
+
+/** Ein Klopfer, wie ihn das erste Gerät in seinen Statistiken sieht. */
+export interface Klopfer {
+  tuer: number;
+  /** Zeitpunkt des letzten Pakets dieses Klopfers (Uhr der Statistik, Millisekunden). */
+  zeit: number;
+}
+
+export interface Tueren {
+  /** Je Tür der Port zu jeder Adresse des Angebots; für den Code. */
+  ports: number[][];
+  /** Alle bisherigen Klopfer, in der Reihenfolge, in der geklopft wurde. */
+  lesen: () => Promise<Klopfer[]>;
+  schliessen: () => void;
+}
+
+/**
+ * Erstes Gerät: Türen öffnen. Jede ist eine wartende Verbindung mit dem Zertifikat des Angebots und abgeleiteten
+ * Kennwörtern, ohne Gegenstelle; sie beantwortet das Anklopfen und sonst nichts. `null`, wenn der Browser die
+ * abgeleiteten Kennwörter nicht annimmt oder eine Tür keine Adresse des Angebots hat: Dann bleibt der Antwort-Code.
+ */
+export async function tuerenOeffnen(
+  zertifikat: RTCCertificate,
+  adressen: readonly string[],
+  kennwoerter: (nr: number) => Promise<{ ufrag: string; pwd: string }>,
+  portsLesen: (tuerSdp: string, adressen: readonly string[]) => number[],
+  anzahl: number,
+): Promise<Tueren | null> {
+  const pcs: RTCPeerConnection[] = [];
+  const schliessen = () => {
+    for (const pc of pcs.splice(0)) {
+      try {
+        pc.close();
+      } catch {
+        /* schon zu */
+      }
+    }
+  };
+  try {
+    const ports = await Promise.all(
+      Array.from({ length: anzahl }, async (_, nr) => {
+        const pc = neuePc(zertifikat);
+        pcs.push(pc);
+        pc.createDataChannel("tuer");
+        const k = await kennwoerter(nr);
+        const o = await pc.createOffer();
+        await pc.setLocalDescription({ type: "offer", sdp: (o.sdp ?? "").replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${k.ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${k.pwd}`) });
+        if (sdpFeld(pc.localDescription?.sdp ?? "", "ice-ufrag") !== k.ufrag) throw new Error("Kennwörter nicht übernommen");
+        await fertigGesammelt(pc);
+        const p = portsLesen(pc.localDescription?.sdp ?? "", adressen);
+        if (p.every((x) => x === 0)) throw new Error("Tür ohne Adresse");
+        return p;
+      }),
+    );
+    // Die Reihenfolge der Türen ist die ihrer Nummern, nicht die ihres Fertigwerdens.
+    const geordnet = [...pcs];
+    return {
+      ports,
+      schliessen,
+      async lesen() {
+        const klopfer: Klopfer[] = [];
+        await Promise.all(
+          geordnet.map(async (pc, tuer) => {
+            if (pc.connectionState === "closed") return;
+            (await pc.getStats()).forEach((x: { type?: string; requestsReceived?: number; lastPacketReceivedTimestamp?: number }) => {
+              // Ein Klopfer ohne Zeitstempel ist noch unterwegs: Er zählt beim nächsten Lesen.
+              if (x.type === "candidate-pair" && (x.requestsReceived ?? 0) > 0 && x.lastPacketReceivedTimestamp) klopfer.push({ tuer, zeit: x.lastPacketReceivedTimestamp });
+            });
+          }),
+        );
+        return klopfer.sort((a, b) => a.zeit - b.zeit);
+      },
+    };
+  } catch {
+    schliessen();
+    return null;
+  }
+}
+
+/** So lange hat eine Tür Zeit zu antworten. */
+const KLOPF_FRIST_MS = 4000;
+/** Nach der Antwort der Tür bleibt der Klopfer noch so lange stehen: Sein erstes Paket danach trägt den Zeitstempel. */
+const KLOPF_NACHLAUF_MS = 35;
+/** Pause vor dem nächsten Klopfer: Die Zeitstempel zweier Klopfer müssen sich unterscheiden. */
+const KLOPF_PAUSE_MS = 15;
+
+/**
+ * Zweites Gerät: einmal an eine Tür klopfen. Eine Wegwerf-Verbindung prüft die Adresse der Tür (die antwortet, weil
+ * das Kennwort stimmt), schickt den ersten Gruß des Schlüsseltauschs (den die Tür nicht beantwortet, aber mit Uhrzeit
+ * zählt) und schließt wieder. Rückgabe: ob die Tür geantwortet hat.
+ */
+export async function klopfen(tuerSdp: string): Promise<boolean> {
+  const pc = neuePc();
+  try {
+    await pc.setRemoteDescription({ type: "offer", sdp: tuerSdp });
+    const a = await pc.createAnswer();
+    await pc.setLocalDescription({ type: "answer", sdp: (a.sdp ?? "").replace(/^a=setup:.*$/m, "a=setup:active") });
+    const offen = await new Promise<boolean>((fertig) => {
+      const uhr = setTimeout(() => fertig(false), KLOPF_FRIST_MS);
+      const pruefen = () => {
+        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          clearTimeout(uhr);
+          fertig(true);
+        }
+      };
+      pc.addEventListener("iceconnectionstatechange", pruefen);
+      pruefen();
+    });
+    if (offen) await new Promise((r) => setTimeout(r, KLOPF_NACHLAUF_MS));
+    return offen;
+  } catch {
+    return false;
+  } finally {
+    pc.close();
+    await new Promise((r) => setTimeout(r, KLOPF_PAUSE_MS));
+  }
 }

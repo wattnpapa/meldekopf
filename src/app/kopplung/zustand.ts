@@ -9,6 +9,21 @@
 /** Jeder Kopplungs-Code beginnt so; Großbuchstaben, damit der QR-Code im dichten alphanumerischen Modus bleibt. */
 export const KOPPLUNG_MARKE = "MKK1.";
 
+/**
+ * Merker im `localStorage`, dass dieses Gerät eine Kopplung hat, die sich nach dem Neuladen fortsetzen lässt
+ * (merker.ts): Rolle, Sammlung, Zeit. Keine Verbindungsangaben, keine Einsatzdaten.
+ */
+export const KOPPLUNG_MERKER = "eeb.kopplung.v1";
+
+/** Beim Start: Gibt es eine gemerkte Kopplung, lädt die Steuerung nach und setzt sie fort. */
+export function kopplungFortsetzenWennGemerkt(): void {
+  try {
+    if (localStorage.getItem(KOPPLUNG_MERKER)) void import("./kopplung").then((m) => m.kopplungFortsetzen());
+  } catch {
+    /* Speicher gesperrt: nichts gemerkt */
+  }
+}
+
 /** Ist der gescannte Text ein Kopplungs-Code (Angebot oder Antwort)? */
 export function istKopplungsCode(text: string): boolean {
   return text.trim().toUpperCase().startsWith(KOPPLUNG_MARKE);
@@ -31,8 +46,30 @@ export interface KopplungsDialog {
   art: "angebot" | "antwort";
   /** Der Code als Text; leer, solange er entsteht. */
   code: string;
+  /**
+   * Die Geräte verbinden sich nach dem einen Scan von selbst (das zweite klopft seinen Fingerabdruck beim ersten an);
+   * der Antwort-Code ist dann nur der Ausweichweg. `false`: Es geht nicht oder ist misslungen, der Antwort-Code ist der Weg.
+   */
+  selbst?: boolean;
   fehler?: string;
 }
+
+/** Ein Sammler, wie ihn die Leiste der Zentrale zeigt. */
+export interface KopplungsGeraet {
+  kennung: string;
+  name: string;
+  /** Dauerhafte Kennung des Geräts (geraetename.ts); leer, solange es sich nicht vorgestellt hat. */
+  geraet?: string;
+  phase: KopplungsPhase;
+  wartet: boolean;
+  seit: number | null;
+  /** Wann zuletzt ein Stand dieses Sammlers eingespielt wurde. */
+  abgleichAm: number | null;
+  hinweis: string;
+}
+
+/** So viele Sammler führt eine Zentrale höchstens. */
+export const MAX_SAMMLER = 5;
 
 export interface KopplungsZustand {
   phase: KopplungsPhase;
@@ -49,6 +86,8 @@ export interface KopplungsZustand {
   offen?: number;
   /** Gerissen, aber dieses Gerät verbindet sich ohne neuen Code wieder, sobald das andere erreichbar ist. */
   wartet?: boolean;
+  /** Zentrale: ihre Sammler, in der Reihenfolge des Koppelns. */
+  geraete?: KopplungsGeraet[];
   /** Seit wann getrennt oder unterbrochen. */
   seit: number | null;
   /** Warum getrennt, oder was beim letzten Abgleich auffiel. */
@@ -63,6 +102,12 @@ const horcher = new Set<() => void>();
 
 export function kopplungsZustand(): KopplungsZustand {
   return zustand;
+}
+
+/** Den ganzen Zustand ersetzen (kopplung.ts fasst ihn aus seinen Gegenstellen zusammen). */
+export function kopplungsZustandErsetzen(neu: KopplungsZustand): void {
+  zustand = neu;
+  for (const h of [...horcher]) h();
 }
 
 export function kopplungsZustandSetzen(teil: Partial<KopplungsZustand>): void {

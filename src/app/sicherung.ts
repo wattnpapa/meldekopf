@@ -615,5 +615,12 @@ export function alleDatenLoeschen(): number {
   } catch {
     /* Sitzungsspeicher gesperrt — dort liegt dann auch nichts */
   }
+  // Neu im Meldekopf (ADR-009): das Gedächtnis einer Kopplung (Zertifikat, Angaben zu den wartenden Plätzen des ersten
+  // Geräts, Kennung der Sammlung) liegt in IndexedDB, weil sich ein Zertifikat nur dort ablegen lässt (kopplung/merker.ts).
+  try {
+    globalThis.indexedDB?.deleteDatabase("eeb-kopplung");
+  } catch {
+    /* keine Datenbank: nichts abgelegt */
+  }
   return schluessel.length;
 }

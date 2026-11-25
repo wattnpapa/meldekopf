@@ -295,7 +295,7 @@ Kennfarbe), liegen unter `src/test/`.
 | Lagemonitor | `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lage-angaben.ts`; Tafel-Ansicht `lagetafel-ui.tsx`, `lagetafel.ts`, Wahl der Ansicht `lagemonitor-ansicht.ts` |
 | Weitergabe | `weitergabe/*`, `@bos/eeb-satz`, `export-stand.ts`, `einsatz-transport.ts` |
 | Ablösung und Rückimport | `einsatz-abgleich.ts`, `entfernte-meldungen.ts` |
-| Zwei Geräte am selben Meldekopf | `kopplung/*`: `signal.ts` (Kopplungs-Code), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx` (Lampe, Leiste), `sammler-ansicht.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
+| Mehrere Geräte am selben Meldekopf | `kopplung/*`: `kopplung.ts` (führt die Gegenstellen, fasst ihren Zustand zusammen), `gegenstelle.ts` (alles, was dieses Gerät mit genau einem anderen verbindet), `geraetename.ts`, `merker.ts`, `signal.ts` (Kopplungs-Code, Türen und Klopf-Zeichen), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx` (Lampe, Leiste), `sammler-ansicht.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
 | Papier-Rückfallebene | `papier-abgleich-ui.tsx`, `papier-abgleich-entwurf.ts` |
 | Fristen | `@bos/eeb-format/datenschutzfrist`, `datenschutz-uhr.ts`, `@bos/meldekopf` (Papierkorb, Aufräumfrist) |
 
@@ -547,44 +547,83 @@ Beide hängen im selben Netz, Internet gibt es nicht.
 sequenceDiagram
   participant R as Rechner (erstes Gerät)
   participant T as Telefon (zweites Gerät)
-  R->>R: „Zweites Gerät koppeln…": Angebot erzeugen, als QR-Code zeigen
+  R->>R: „Zweites Gerät koppeln…": Angebot und 16 Türen, als QR-Code zeigen
   T->>R: „Bogen scannen…" liest den Code vom Bildschirm
-  T->>T: Antwort erzeugen, als QR-Code zeigen
-  R->>T: „Antwort scannen…" liest den Code (Kamera oder Handscanner)
+  T->>R: Fingerabdruck anklopfen (66 Klopfer an 16 Türen)
+  R->>R: Antwort des Telefons selbst zusammensetzen und setzen
   R-->T: Datenkanal steht (direkt, verschlüsselt, lokales Netz)
   R->>T: Stand der Sammlung (Umschlag der Einsatz-Datei)
-  R->>T: Kopf der Sammlung (Name, Art, Ort; keine Meldungen)
-  T->>T: leere Sammlung anlegen, Sammler-Ansicht zeigen
-  T->>R: eigener Stand, sobald er sich ändert (jeder Scan)
+  R->>T: ganzer Stand der Zentrale
+  T->>T: Sammlung damit ersetzen, Sammler-Ansicht zeigen
+  T->>R: was die Zentrale noch nicht kennt (jeder Scan)
   R->>R: abgleichen (einsatzAbgleichen), Ansicht und Lagemonitor lesen neu
-  R->>T: Quittung
-  T->>T: Meldung als „übertragen" zeigen
+  R->>T: Quittung, danach der neue Stand
+  T->>T: Meldung als „in der Lage" zeigen
 ```
 
-- **Rollen (seit 2026-11-24).** Das erste Gerät ist die Zentrale und führt
-  die Lage. Das zweite ist ein reiner Sammler: Es nimmt auf und schickt seinen
-  ganzen Stand, also alles, was es selbst aufgenommen hat (Umschlag der
-  Einsatz-Datei, dazu die Kennungen der dort entfernten und zurückgeholten
-  Einträge). Die Zentrale gleicht ihn ab wie eine importierte Datei (je Feld,
-  Widersprüche bleiben an der Einsatzansicht stehen; Rückfragen gibt es nicht)
-  und quittiert ihn. Dem Sammler schickt sie nur den Kopf der Sammlung
-  (Kennung, Name, Art, Ort), keine Meldungen: Das Telefon draußen trägt nie
-  die Lage, nur seine eigenen Scans. Der Sammler verwirft Meldungen der
-  Gegenstelle auch dann, wenn eine sie schickte (`standUebernehmen`,
-  `nurKopf`).
-- Was die Zentrale an einer Einheit des Sammlers ändert (Auftrag, Abrücken,
-  Entfernen), bleibt an der Zentrale gültig, auch wenn der Sammler seinen
-  älteren Stand der Einheit weiter mitschickt. Entfernt oder ändert der
-  Sammler eine seiner Einheiten, übernimmt die Zentrale es.
+- **Ein Scan genügt (seit 2026-11-25, „Anklopfen“).** Am Rechner im Fahrzeug
+  gibt es oft weder Kamera noch Handscanner; den Antwort-Code des Telefons
+  konnte er dort nicht lesen, und ein Code zum Abtippen wäre 53 Zeichen lang
+  (gebaut und verworfen). Der Browser nimmt eine Verbindung erst an, wenn er
+  den Schlüssel-Fingerabdruck der Gegenseite kennt, und gibt vorher nichts von
+  ihr heraus (geprüft, Chromium 158: weder die Kennwort-Namen des anklopfenden
+  Geräts noch sein Zertifikat). Eines verrät er: an welcher seiner wartenden
+  Verbindungen wann jemand mit dem richtigen Kennwort angeklopft hat. Das
+  erste Gerät öffnet darum neben dem Angebot 16 Türen, wartende Verbindungen
+  ohne Gegenstelle mit demselben Zertifikat und Kennwörtern, die sich aus dem
+  Angebot ableiten; ihre Ports stehen im Code (er wächst auf rund 190
+  Zeichen). Das zweite Gerät schreibt seinen Fingerabdruck als 64 Zeichen zur
+  Basis 16 und ein Prüfbyte und klopft für jedes Zeichen an die Tür mit dieser
+  Nummer: eine Wegwerf-Verbindung, die die Tür erreicht, den ersten Gruß des
+  Schlüsseltauschs schickt und wieder schließt. Das erste liest Tür und
+  Zeitstempel aus `getStats`, setzt die Folge zusammen und sich selbst die
+  Antwort des zweiten (`antwortAusFingerabdruck`): Fingerabdruck angeklopft,
+  Kennwörter abgeleitet (`kennwoerterAbleiten`), Adresse aus dem ersten Paket.
+  66 Klopfer, im Prüfstand rund 3 Sekunden, Verbindung rund 4 Sekunden nach
+  dem Scan. Stimmt das Prüfbyte nicht, klopft das zweite Gerät nach 6 Sekunden
+  noch einmal (bis zu drei Durchgänge); das erste wertet die jüngsten 66 aus.
+- Anklopfen kann nur, wer das Angebot kennt: Die Kennwörter der Türen stehen
+  in keinem Paket. Der angeklopfte Fingerabdruck ist darum so viel wert wie
+  ein gescannter Antwort-Code.
+- Ausweichweg: Öffnet das erste Gerät keine Türen (der Browser nimmt die
+  abgeleiteten Kennwörter nicht an) oder antwortet eine Tür nicht, zeigt das
+  zweite Gerät seinen Antwort-Code zum Scannen wie bisher.
+- Das zweite Gerät ruft nach dem Scan so lange beim ersten an, bis dort die
+  Antwort gesetzt ist: derselbe Weg wie beim Wiederverbinden (Anruf, Frist
+  15 Sekunden, Pausen).
+- **Rollen: Zentrale und Sammler, wie Server und Client (seit 2026-11-25).**
+  Das erste Gerät ist die Zentrale, ihr Stand ist maßgeblich. Sie schickt
+  jedem verbundenen Sammler ihren ganzen Stand (Umschlag der Einsatz-Datei),
+  sooft er sich ändert. Der Sammler ersetzt damit seine Sammlung
+  (`zentraleStandUebernehmen`): Er zeigt, was die Zentrale führt, auch was
+  sie geändert oder entfernt hat und was andere Sammler aufgenommen haben; es
+  wird dort nichts je Feld abgeglichen. Darüber hinaus behält er nur, was er
+  selbst aufgenommen hat und die Zentrale noch nicht kennt.
+- Der Sammler schickt der Zentrale genau das: seine Meldungen, die sie noch
+  nicht bestätigt hat. Die Zentrale gleicht sie ab wie eine importierte Datei
+  (`einsatzAbgleichen`), quittiert und schickt danach wieder ihren Stand.
+- **Nachsenden.** War beim Aufnehmen keine Verbindung da oder blieb die
+  Quittung aus, bleibt die Meldung am Sammler als „… wartet“ stehen und geht
+  mit der nächsten Verbindung, auch nach einem Neuladen seiner Seite (was die
+  Zentrale kennt, steht im Gedächtnis, `merker.ts`).
+- Was jemand am Sammler an einer schon übertragenen Meldung ändert, hält
+  nicht: Mit dem nächsten Stand der Zentrale gilt wieder ihrer. Die
+  Sammler-Ansicht bietet solche Änderungen darum nicht an.
+- Am 2026-11-24 war der Sammler ein reiner Datensammler, der nur den Kopf der
+  Sammlung bekam; der Anwender will den Stand der Zentrale auf jedem
+  verbundenen Telefon. Die Bremse gegen ein endloses Hin und Her aus der
+  ersten Fassung ist entfallen: Der Stand der Zentrale erzeugt am Sammler
+  nichts, was die Zentrale nicht kennt.
 - **Anzeige.** Auf beiden Geräten dieselbe Lampe mit einem Wort: Punkt
   „Verbindung aktiv“, Ring „Verbindung unterbrochen“, Quadrat „Verbindung
   getrennt“. An der Zentrale als Leiste, die oben im Bild klebt, mit der
   Uhrzeit des letzten Eingangs. Am Sammler als Kopf einer eigenen Ansicht
   (`sammler-ansicht.tsx`), die die Einsatzansicht ersetzt, solange gekoppelt
   ist: Lampe, „Bogen scannen…“, „Einheit von Hand erfassen…“ und die Liste
-  des selbst Aufgenommenen, je Meldung „✓ übertragen“ oder „… wartet“.
-  „Übertragen“ heißt: Die Zentrale hat den Stand eingespielt und quittiert,
-  nicht bloß, dass er gesendet wurde.
+  aller Einheiten der Zentrale, je Meldung „✓ in der Lage“ oder „… wartet“.
+  „Wartet“ heißt: hier aufgenommen, an der Zentrale noch nicht angekommen; die
+  Marke fällt erst, wenn die Zentrale quittiert oder die Meldung in ihrem
+  Stand zurückschickt, nicht schon beim Senden.
 - Jedes Gerät schaut im Sekundentakt, ob sich sein Speicher geändert hat, und
   schickt dann seinen Stand. Verglichen wird ein Abdruck ohne
   Änderungszeitpunkt und ohne Reihenfolge der Einträge, damit zwei Geräte sich
@@ -621,17 +660,60 @@ sequenceDiagram
   45 Sekunden „Kopplung getrennt“; das Wiederverbinden läuft dabei weiter.
   „Trennen“ und das Schließen der Seite sagen dem anderen Gerät Bescheid, es
   zeigt dann sofort „getrennt“ und wartet nicht.
-- Nicht überbrückt wird ein Neuladen der Seite (auch nach einer neuen Fassung
-  der App) und ein vom Browser verworfener Tab: Die Verbindungsobjekte sind
-  dann weg, es braucht den Code-Tausch. Das gilt für beide Geräte.
+- **Neuladen (seit 2026-11-25).** Das zweite Gerät merkt sich sein Zertifikat
+  und die wartenden Plätze des ersten (`merker.ts`, Kap. 8.2). Lädt es seine
+  Seite neu, räumt der Browser den Tab weg oder wird die App erst Tage später
+  wieder geöffnet, ruft es das erste Gerät damit wieder an, ohne Scan; die
+  Marken „✓ übertragen“ bleiben. Das trägt, solange die Seite des ersten
+  Geräts offen geblieben ist, denn dessen wartende Verbindungen leben in
+  seinem Arbeitsspeicher. Beim Neuladen verabschiedet sich das zweite Gerät
+  darum nicht mehr; das erste hält seine Plätze offen.
+- **Auch die Zentrale darf neu laden (seit 2026-11-25).** Ihre wartenden
+  Verbindungen sind danach weg, und ihre neuen Ports findet der Sammler ohne
+  Vermittler nicht. Darum hält auch der Sammler wartende Plätze bereit, und
+  die Zentrale merkt sich, womit sie dort anruft (Zertifikat, Plätze). Nach
+  dem Neuladen ihrer Seite ruft sie den Sammler an, mit denselben Pausen. Wer
+  neu geladen hat, ruft: der Sammler immer, die Zentrale nur in diesem Fall,
+  so entstehen nie zwei Verbindungen. Jede Seite trägt eine Kennung, die bei
+  jedem Laden neu ist; nach dem Verbinden nennt sie jedes Gerät („hallo“), und
+  das andere verwirft Plätze einer früheren Seite.
+- Den Scan braucht es danach nur noch, wenn beide Seiten neu geladen wurden,
+  bevor sie sich wiedergefunden haben, wenn der Browser des Sammlers dessen
+  Seite verworfen hat, während die Zentrale neu lädt, oder nach 30 Tagen. Die
+  Zentrale sagt es nach 45 Sekunden vergeblichen Rufens in der Leiste und
+  bietet „Neu koppeln…“ an; sie ruft dabei weiter.
+- Beim Verlassen der Seite verabschiedet sich keines der Geräte mehr; Abschied
+  nimmt nur „Trennen“.
 - Solange gekoppelt ist, hält die App den Bildschirm wach (Screen Wake Lock,
   wo der Browser es anbietet); wer ihn von Hand ausschaltet, löst das
   Wiederverbinden beim Einschalten aus.
 - „Kopplung trennen“ am Sammler führt in die gewöhnliche App zurück; die
   Sammlung dort enthält, was das Gerät selbst aufgenommen hat.
-- Gekoppelt ist genau eine Sammlung und genau ein zweites Gerät. Wird die
-  Sammlung auf einem Gerät gelöscht, endet die Kopplung; das andere Gerät
-  holt sie nicht zurück.
+- **Mehrere Sammler (seit 2026-11-25).** Eine Zentrale führt bis zu fünf
+  Sammler für eine Sammlung. Je Sammler hält sie eine Gegenstelle
+  (`gegenstelle.ts`): eigene Verbindung, eigene wartende Plätze in beide
+  Richtungen, eigenes Wiederverbinden, eigene Abgleich-Sitzung. Geteilt werden
+  das Zertifikat, die Kennung der Seite und das Gedächtnis. Gekoppelt wird
+  nacheinander („Weiteres Gerät koppeln…“, je ein Scan); die schon gekoppelten
+  bleiben dabei verbunden, Türen stehen immer nur für das eine Gerät offen,
+  das gerade koppelt. Jeder Sammler schickt, was er selbst aufgenommen hat,
+  und erhält den Stand der Zentrale: Über sie sieht jedes Telefon, was die
+  anderen aufgenommen haben. Nehmen zwei Sammler dieselbe Einheit auf, führt
+  die Zentrale sie als zwei Fassungen einer Einheit, nicht als zwei Einheiten.
+- **Namen.** Jeder Sammler nennt beim Verbinden seinen Namen und eine
+  dauerhafte, zufällige Kennung (`geraetename.ts`, `eeb.geraet.v1`). Der Name
+  wird am Telefon eingegeben („Name ändern…“); die Vorgabe ist das Modell, wo
+  der Browser es nennt, sonst die Geräteart, denn den Namen des Geräts im Netz
+  gibt ein Browser nicht heraus. Koppelt dasselbe Telefon neu, löst es an der
+  Zentrale seinen alten Eintrag ab.
+- **Anzeige an der Zentrale.** Die Lampe heißt „aktiv“, wenn jeder Sammler,
+  der noch dazugehört, verbunden ist; fehlt einer, „unterbrochen“ mit „1 von 2
+  Sammlern verbunden“. Ab zwei Sammlern steht darunter jeder mit eigener
+  Lampe, Namen, Zustand und letztem Eingang, und lässt sich einzeln trennen.
+  Ein Sammler, der getrennt hat oder nicht mehr zu erreichen ist, bleibt als
+  „getrennt“ stehen, bis ihn jemand aus der Liste nimmt.
+- Gekoppelt ist je Zentrale genau eine Sammlung. Wird sie dort gelöscht,
+  endet die Kopplung für alle Sammler; keiner holt sie zurück.
 
 ## 7. Verteilungssicht
 
@@ -721,12 +803,23 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `sessionStorage`: `eeb.import-laeuft.v1`, `eeb.karte-offen.v1`, `eeb.ansicht-stelle.v1`, `eeb.einsatz.rueckweg`, `eeb.funkruf.merker.<Index>`, `eeb.abgleich.fortsetzen` | Unterbrochener Import; offene Einheitenkarten (Kennungen); Bildlaufstelle; Rückweg nach „Einsatz bearbeiten“; ausgeschaltete Funkrufnamen je Fahrzeug, 15 Minuten; Merker nach dem Fensterabgleich | `eingang/import-unterbrochen.ts`, `einsaetze-ui.tsx`, `ansicht-stelle.ts`, `einsatz-notweg.ts`, `schnellerfassung/fahrzeuge.tsx`, `fenster-abgleich.tsx` |
 | `sessionStorage`: `eeb.fassung.veraltet`, `eeb.fassung.neu-gestartet`, `eeb.lagemonitor.nach-neuladen` | Fassung, für die das Fenster schon einmal wegen „veraltet“ neu geladen hat (Schutz gegen eine Schleife); Merker, dass das Hauptfenster von selbst neu gestartet ist (für die Erklärung danach, seit 2026-11-17); Stufe und Vollbild des Lagemonitors über das selbsttätige Neuladen nach einer neuen Fassung, einmal. Neu im Meldekopf (2026-11-13) | `aktualisierung.tsx`, `lagemonitor-ui.tsx` |
 
-Die Kopplung zweier Geräte (ADR-009) legt keinen eigenen Schlüssel an: Was
-sie überträgt, landet in den Schlüsseln, in die auch „Einsatz importieren…“
-schreibt (`eeb.einsaetze.v1`, `eeb.entfernt.v1`,
+Die Kopplung zweier Geräte (ADR-009) überträgt in die Schlüssel, in die auch
+„Einsatz importieren…“ schreibt (`eeb.einsaetze.v1`, `eeb.entfernt.v1`,
 `eeb.meldungen-papierkorb.v1`, `eeb.widersprueche.v1`,
-`eeb.nummernhinweis.v1`, Export-Stände, Lage-Angaben). Der Zustand der
-Verbindung steht nur im Arbeitsspeicher des Fensters und endet mit ihm.
+`eeb.nummernhinweis.v1`, Export-Stände, Lage-Angaben). Seit 2026-11-25 merkt
+sie sich außerdem selbst etwas, damit das zweite Gerät nach einem Neuladen
+seiner Seite ohne neuen Scan wieder anruft (`kopplung/merker.ts`):
+
+| Ort | Inhalt | Frist, Löschweg |
+| --- | --- | --- |
+| `localStorage` `eeb.kopplung.v1` | Rolle (Zentrale oder Sammler), Kennung der Sammlung, Beginn der Kopplung. Keine Verbindungsangaben, keine Einsatzdaten. Klein, damit der Start ihn ohne Nachladen prüft | „Kopplung trennen“, Trennen durch das andere Gerät, neue Kopplung, 30 Tage, „Alle Daten löschen“. |
+| `localStorage` `eeb.geraet.v1` | Zufällige, dauerhafte Kennung dieses Geräts und der am Gerät eingegebene Name für die Kopplung („Eingang Nord“). Personenbezogen nur, wenn jemand einen Personennamen eintippt | „Alle Daten löschen“; der Name mit leerer Eingabe unter „Name ändern…“ |
+| IndexedDB `eeb-kopplung`, auf beiden Geräten | Das Zertifikat der Kopplung (vom Browser abgelegt, der private Schlüssel ist nicht auslesbar); je Gegenstelle (die Zentrale merkt sich jeden Sammler mit Namen und Kennung, der Sammler die Zentrale) und je wartendem Platz dort dessen Angebot (Fingerabdruck, Verbindungskennwörter, lokale Adressen), die Kennung seiner Seite und die eigenen Kennwörter; am Sammler dazu die Kennungen der Meldungen, die die Zentrale bestätigt hat | wie oben; ohne den Merker im `localStorage` gilt der Inhalt nicht und wird beim nächsten Lesen entfernt; `alleDatenLoeschen` löscht die Datenbank |
+
+Die erste Nutzung von IndexedDB in dieser App; in der Datensicherung steht
+davon nur der Merker aus dem `localStorage`, und eine eingespielte Sicherung
+setzt keine Kopplung fort (ohne Datenbank verfällt er). Der Zustand der
+Verbindung selbst steht weiter nur im Arbeitsspeicher des Fensters.
 
 **Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen; eine
 eingespielte Sicherung aus dem Erfassungsbogen bringt sie mit, die
@@ -799,7 +892,10 @@ verschlüsselt; die Fingerabdrücke der Schlüssel beider Seiten stehen in den
 beiden QR-Codes, die von Hand getauscht werden, ein Dritter im selben Netz
 kann sich also nicht dazwischensetzen, ohne einen der Codes zu ersetzen. Der
 Kopplungs-Code (`MKK1.`, `kopplung/signal.ts`) trägt keine Einsatzdaten, nur
-Fingerabdruck, Verbindungskennwörter und bis zu vier lokale Adressen. Was über
+Fingerabdruck, Verbindungskennwörter, bis zu vier lokale Adressen und die
+Ports der 16 Türen. Über die Türen erfährt das erste Gerät den Fingerabdruck
+des zweiten; anklopfen kann nur, wer den ersten Code gesehen hat, denn die
+Kennwörter der Türen leiten sich aus ihm ab und stehen in keinem Paket. Was über
 den Kanal kommt, wird behandelt wie eine importierte Einsatz-Datei
 (`einsatzAusDatei`, Bogenprüfung je Eintrag) und ist gedeckelt (24 MiB gepackt,
 64 MiB entpackt je Nachricht). Daneben gehen nur kurze Steuernachrichten über
@@ -835,7 +931,8 @@ ersten Build, dann festschreiben).
 Die Kopplung (ADR-009) prüft `kopplung/sitzung.test.ts` mit zwei getrennten
 Speichern und einer Warteschlange statt eines Netzes (Abgleich, Widerspruch,
 Entfernen, Zurückholen, Trennung), `kopplung/signal.test.ts` den Code, und
-`features/geraete-koppeln.feature` den ganzen Weg mit zwei Browser-Profilen
+`features/geraete-koppeln.feature` den ganzen Weg (Koppeln mit einem Scan,
+der Antwort-Code als Ausweichweg über den Haken `__eebKopplungOhneTueren`) mit zwei Browser-Profilen
 und einer echten Verbindung über die lokale Schleife; die Codes gehen dort
 über den Handscanner-Weg, und ein Haken (`__eebKopplungAbriss`) kappt die
 Verbindung ohne Abschied, um das Wiederverbinden zu prüfen. Zwei echte Geräte in einem WLAN ersetzt das nicht
@@ -1096,7 +1193,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   Übersicht, im selben Netz, ohne Internet, alles im Browser. Bisher ging das
   nur über Dateien (Sammel-PDF, Einsatz-Datei) und stand gegen ADR-008
   („ein Gerät").
-- **Entscheidung:** Zwei Geräte am selben Meldekopf koppeln sich direkt über
+- **Entscheidung:** Geräte am selben Meldekopf (zunächst zwei, seit 2026-11-25 eine Zentrale und bis zu fünf Sammler) koppeln sich direkt über
   einen WebRTC-Datenkanal. Kein Server, auch kein fremder: `iceServers` bleibt
   leer, Angebot und Antwort wandern als QR-Code über Bildschirm und Kamera.
   Übertragen wird der Umschlag der Einsatz-Datei, abgeglichen mit
@@ -1110,12 +1207,14 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   Internet für den Verbindungsaufbau: braucht Netz und wäre ein zweiter
   Fremd-Host. (c) Nur Dateien wie bisher: kein laufendes Bild am Rechner.
 - **Nachtrag 2026-11-24, Rollen:** Zunächst glichen beide Geräte die ganze
-  Sammlung in beide Richtungen ab. Entschieden: Im gekoppelten Betrieb ist das
-  zweite Gerät ein reiner Datensammler. Die Lage liegt nur auf der Zentrale;
-  der Sammler bekommt den Kopf der Sammlung und eine Quittung je Stand. Das
-  nimmt dem Telefon die Vollkopie (DSFA R16) und der Bedienung am Eingang
-  alles, was dort nicht gebraucht wird.
-- **Grenzen, die bleiben:** genau zwei Geräte und eine Sammlung je Kopplung;
+  Sammlung in beide Richtungen je Feld ab. Dann: Das zweite Gerät ist ein
+  reiner Datensammler und bekommt nur den Kopf der Sammlung.
+- **Nachtrag 2026-11-25, Zentrale und Sammler:** Entschieden vom Anwender:
+  Die Kopplung ist der Sache nach Server und Client. Die Zentrale ist
+  maßgeblich; jeder verbundene Sammler bekommt laufend ihren Stand und
+  schickt, was sie noch nicht kennt, auch nachträglich. Preis: Jedes
+  gekoppelte Telefon trägt wieder die ganze Sammlung (DSFA R16, ISK R13).
+- **Grenzen, die bleiben:** eine Zentrale, höchstens fünf Sammler und eine Sammlung je Kopplung (bis 2026-11-25: genau zwei Geräte; fünf Telefone an einem Eingang sind nach Auskunft des Anwenders schon viel);
   keine Anmeldung, keine Rollen, kein Mehrbenutzerbetrieb über das hinaus;
   keine Kräfteübersicht über mehrere Meldeköpfe; keine Verbindung über das
   Internet. Schläft ein Gerät ein oder verliert es das Netz, verbinden sich
@@ -1141,10 +1240,13 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Sammlung mit 5 Mio. Zeichen im Speicher | Startseite und Einsatzansicht ohne spürbare Verzögerung (Lese-Ergebnis gemerkt, solange der Text gleich ist). |
 | Ablösung mit zweitem Gerät, beide ändern Status und Auftrag | Rückimport ergänzt Neues, gleicht je Feld ab, nennt Widersprüche; nichts still überschrieben. |
 | Telefon gekoppelt, scannt draußen eine Einheit | Die Einheit steht innerhalb weniger Sekunden auf dem Rechner und dem Lagemonitor; dessen Leiste nennt die Uhrzeit des Eingangs, das Telefon zeigt an der Meldung „✓ übertragen“. |
-| Blick auf eines der beiden Geräte: Steht die Verbindung? | Ohne Rollen und ohne Lesen eines Satzes erkennbar: Lampe und Wort oben im Bild, an der Zentrale wie am Sammler. |
+| Drei Telefone an drei Eingängen, eines fällt aus | Die Zentrale meldet „unterbrochen · 2 von 3 Sammlern verbunden“ und nennt das fehlende beim Namen; die beiden anderen übertragen weiter. |
+| Blick auf eines der Geräte: Steht die Verbindung? | Ohne Rollen und ohne Lesen eines Satzes erkennbar: Lampe und Wort oben im Bild, an der Zentrale wie am Sammler. |
 | Telefon gekoppelt, Bildschirm aus, nach Minuten wieder an | Beim Einschalten verbindet sich das Telefon ohne neuen Code (im Prüfstand in unter einer Sekunde) und gleicht ab; bis dahin meldet der Rechner „unterbrochen“, nach 45 Sekunden „getrennt“. |
 | Telefon gekoppelt, draußen außer Reichweite des WLAN | Beide nehmen weiter auf und speichern bei sich; das Telefon ruft alle 30 Sekunden an und verbindet sich, sobald es wieder im Netz ist. |
-| Seite auf einem der Geräte neu geladen | „Kopplung getrennt“; neu koppeln über beide Codes, danach stehen alle Einheiten auf beiden. |
+| Seite des Telefons neu geladen oder App am nächsten Tag wieder geöffnet, Rechner unverändert offen | Das Telefon zeigt seine Sammler-Ansicht und verbindet sich ohne Scan; was es inzwischen aufgenommen hat, geht hinüber. |
+| Seite des Rechners neu geladen (auch selbsttätig nach einer neuen Fassung), Telefon unverändert offen | Der Rechner ruft das Telefon an und ist ohne Scan wieder verbunden; ist das Telefon gerade eingeschlafen, sobald es aufwacht. |
+| Beide Seiten neu geladen, bevor sie sich wiedergefunden haben | Beide melden „unterbrochen“, nach 45 Sekunden „getrennt“; der Rechner bietet „Neu koppeln…“ an (ein Scan). Nichts geht verloren, das Telefon überträgt danach. |
 | Geräteausfall, nur das Lageblatt auf Papier | Bögen scannen, Zeiten, Status und Nummer in einer Liste nachtragen, Abgleich in einem Schritt. |
 | Uhr springt um ein Jahr | Keine Löschung, keine Anonymisierung, bis „Geräteuhr stimmt" bestätigt ist. |
 | Erste Nutzung ohne Netz nach Installation | Alles aus dem Vorrat; Sammel-PDF und QR entstehen offline. |
@@ -1165,11 +1267,14 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Kopplung nur im Prüfstand erprobt (zwei Profile eines Chromium, lokale Schleife) | Gerätetest offen: Chrome auf Android gegen Chrome und Edge am Rechner, Safari auf iOS, Firefox; installierte PWA gegen Browser-Tab. Offen ist vor allem, ob die Browser einander im jeweiligen Netz finden: Ohne erteilte Kamerafreigabe nennen sie statt der IP-Adresse einen Namen im lokalen Netz (mDNS), den das andere Gerät auflösen muss. Rückfallebene bleibt die Einsatz-Datei. |
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
 | Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
-| Seite neu geladen (auch selbsttätig nach einer neuen Fassung der App) | Trennt die Kopplung endgültig; neu koppeln kostet zwei Scans. Abhilfe wäre, Zertifikat und Plätze des Rufers über das Neuladen zu retten (IndexedDB); nicht gebaut. |
+| Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Safari, Firefox und echte Geräte im WLAN ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand. |
+| Gemerkte Kopplung trägt, solange eine der beiden Seiten offen geblieben ist | Über Tage ungeprüft: ob wartende Verbindungen so lange leben (gemessen 20 Minuten), ob die des Telefons den Schlaf überstehen, in dem der Rechner neu lädt. Laden beide neu, bevor sie sich wiedergefunden haben, zeigt der Rechner „Neu koppeln…“, und es kostet einen Scan. Safari legt ein Zertifikat womöglich nicht in IndexedDB ab; dann bleibt die Kopplung eine des Arbeitsspeichers. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
 | Bundle-Budget mit der Kopplung zweimal angehoben | JavaScript gesamt 4.413.510 Byte (rund 52 KB für `kopplung/*`, nachgeladen); Startbündel 643.035 Byte (rund 2,4 KB: Zustand, Scanner-Weiche, Knopf, die Wege der Aufnahme für die Sammler-Ansicht). |
-| Der Sammler sieht nicht, was die Zentrale schon führt | Scannt er eine Einheit, die an der Zentrale schon steht, entsteht dort eine weitere Fassung derselben Einheit (Historie), keine doppelte Einheit; eine Warnung am Telefon gibt es nicht. |
+| Mehrere Sammler nur im Prüfstand erprobt (drei Profile eines Browsers auf einem Rechner) | Gerätetest offen: fünf echte Telefone in einem WLAN, davon einige schlafend. Je Sammler hält die Zentrale zwei wartende Verbindungen, dazu 16 Türen während des Koppelns; das ist für einen Rechner wenig, für ein altes Tablet als Zentrale ungeprüft. |
+| Jeder Stand der Zentrale geht ganz an jeden Sammler | Bei großen Sammlungen und fünf Telefonen sind das je Änderung einige hundert Kilobyte je Telefon (gepackt); im lokalen Netz unkritisch, auf alten Telefonen ungemessen. Eine Übertragung nur der Änderungen ist nicht gebaut. |
+| Wer den Code der Zentrale vom Bildschirm scannt, bekommt die ganze Lage | Seit ein Scan genügt und die Zentrale ihren Stand schickt, reicht dafür Sicht auf den Bildschirm im selben Netz, solange der Code dort steht (ISK R13). Den Code nur zeigen, solange gekoppelt wird; die Leiste nennt jeden Sammler beim Namen. |
 | Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 
 ## 12. Glossar

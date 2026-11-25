@@ -51,6 +51,8 @@ interface Teile {
   sctpPort: number;
   maxNachricht: number;
   adressen: Adresse[];
+  /** Nur im Angebot: je Tür ({@link TUEREN}) der Port zu jeder Adresse, in deren Reihenfolge; 0 = diese Tür hat die Adresse nicht. */
+  tueren?: number[][];
 }
 
 const SETUP = ["actpass", "active", "passive"] as const;
@@ -108,7 +110,8 @@ function zerlegen(s: KopplungsSignal): Teile {
     .filter((a): a is Adresse => a != null);
   // IPv4 und Namen im lokalen Netz zuerst: Sie tragen im WLAN des Fahrzeugs und im Hotspot.
   const adressen = [...alle.filter((a) => a.typ !== 6), ...alle.filter((a) => a.typ === 6)].slice(0, MAX_ADRESSEN);
-  if (adressen.length === 0) throw new Error("Dieses Gerät hat keine Adresse in einem Netz. Ist WLAN oder ein Hotspot verbunden?");
+  // Eine Antwort darf ohne Adressen kommen: Das erste Gerät lernt die des zweiten aus dessen erstem Paket.
+  if (adressen.length === 0 && s.art === "angebot") throw new Error("Dieses Gerät hat keine Adresse in einem Netz. Ist WLAN oder ein Hotspot verbunden?");
   return {
     art: s.art,
     setup,
@@ -144,6 +147,11 @@ function packen(t: Teile): Uint8Array {
     else if (a.typ === 1) b.push(...(a.wert.replace(/\.local$/, "").replace(/-/g, "").match(/../g) ?? []).map((x) => parseInt(x, 16)));
     else text(a.wert);
     b.push(a.port >> 8, a.port & 0xff);
+  }
+  if (t.art === "angebot") {
+    const tueren = t.tueren ?? [];
+    b.push(tueren.length);
+    for (const ports of tueren) for (let k = 0; k < t.adressen.length; k++) b.push(((ports[k] ?? 0) >> 8) & 0xff, (ports[k] ?? 0) & 0xff);
   }
   return Uint8Array.from(b);
 }
@@ -182,10 +190,15 @@ function entpacken(bytes: Uint8Array): Teile {
     else throw new Error(UNLESBAR);
     adressen.push({ typ: typ as Adresse["typ"], wert, port: zahl(2) });
   }
+  let tueren: number[][] | undefined;
+  if (art === "angebot" && i < bytes.length) {
+    const zahl_ = zahl(1);
+    tueren = Array.from({ length: zahl_ }, () => adressen.map(() => zahl(2)));
+  }
   // Nur Zeichen, die in einer Beschreibung stehen dürfen: Der Text wird Zeile für Zeile eingesetzt.
   const sauber = (s: string) => /^[\x21-\x7e]{1,255}$/.test(s);
-  if (i !== bytes.length || anzahl === 0 || ![ufrag, pwd, mid].every(sauber) || adressen.some((a) => !sauber(a.wert) || a.port === 0)) throw new Error(UNLESBAR);
-  return { art, setup, fingerabdruck, ufrag, pwd, mid, sctpPort, maxNachricht, adressen };
+  if (i !== bytes.length || (anzahl === 0 && art === "angebot") || ![ufrag, pwd, mid].every(sauber) || adressen.some((a) => !sauber(a.wert) || a.port === 0)) throw new Error(UNLESBAR);
+  return { art, setup, fingerabdruck, ufrag, pwd, mid, sctpPort, maxNachricht, adressen, ...(tueren && tueren.length > 0 ? { tueren } : {}) };
 }
 
 /** Aus den Teilen wieder eine vollständige Beschreibung nach dem Muster, das Chrome, Firefox und Safari für einen reinen Datenkanal erzeugen. */
@@ -202,7 +215,8 @@ function zusammensetzen(t: Teile): string {
       "m=application 9 UDP/DTLS/SCTP webrtc-datachannel",
       "c=IN IP4 0.0.0.0",
       ...t.adressen.map((a, n) => `a=candidate:${n + 1} 1 udp ${2113937151 - n} ${a.wert} ${a.port} typ host generation 0`),
-      "a=end-of-candidates",
+      // Ohne Adressen kein „Ende der Adressen": Die Gegenseite wartet dann auf das erste Paket.
+      ...(t.adressen.length > 0 ? ["a=end-of-candidates"] : []),
       `a=ice-ufrag:${t.ufrag}`,
       `a=ice-pwd:${t.pwd}`,
       `a=fingerprint:sha-256 ${fp}`,
@@ -214,13 +228,16 @@ function zusammensetzen(t: Teile): string {
   );
 }
 
-/** Wirft mit einem Satz für den Nutzer, wenn sich die Beschreibung des Browsers nicht packen lässt. */
-export function signalKodieren(s: KopplungsSignal): string {
-  return KOPPLUNG_MARKE + base41Kodieren(packen(zerlegen(s)));
+/**
+ * Wirft mit einem Satz für den Nutzer, wenn sich die Beschreibung des Browsers nicht packen lässt. `tueren`: die Ports
+ * der Türen des ersten Geräts ({@link tuerPortsLesen}); nur im Angebot.
+ */
+export function signalKodieren(s: KopplungsSignal, tueren?: number[][]): string {
+  return KOPPLUNG_MARKE + base41Kodieren(packen({ ...zerlegen(s), ...(tueren && tueren.length > 0 && s.art === "angebot" ? { tueren } : {}) }));
 }
 
 /** Wirft mit einem Satz für den Nutzer, wenn der Text kein lesbarer Kopplungs-Code ist. */
-export function signalDekodieren(code: string): KopplungsSignal {
+export function signalDekodieren(code: string): KopplungsSignal & { tueren?: number[][] } {
   const text = code.trim();
   if (!text.toUpperCase().startsWith(KOPPLUNG_MARKE)) throw new Error("Das ist kein Kopplungs-Code.");
   let bytes: Uint8Array;
@@ -230,5 +247,124 @@ export function signalDekodieren(code: string): KopplungsSignal {
     throw new Error(UNLESBAR);
   }
   const t = entpacken(bytes);
-  return { art: t.art, sdp: zusammensetzen(t) };
+  return { art: t.art, sdp: zusammensetzen(t), ...(t.tueren ? { tueren: t.tueren } : {}) };
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+// Anklopfen: Das zweite Gerät teilt dem ersten seinen Schlüssel-Fingerabdruck über das Netz mit, ohne dass am ersten
+// etwas gescannt oder getippt wird.
+//
+// Am Rechner im Fahrzeug gibt es oft weder Kamera noch Handscanner, und 53 Zeichen tippt draußen niemand ab. Der
+// Browser nimmt eine Verbindung aber erst an, wenn er den Fingerabdruck der Gegenseite kennt, und gibt vorher nichts
+// von ihr heraus (geprüft, Chromium 158: weder die Kennwort-Namen des anklopfenden Geräts noch sein Zertifikat).
+// Eines verrät er doch: An welcher seiner wartenden Verbindungen wann jemand mit dem richtigen Kennwort angeklopft
+// hat. Das erste Gerät öffnet darum {@link TUEREN} Türen, wartende Verbindungen ohne Gegenstelle, deren Kennwörter
+// sich aus dem Angebot ableiten ({@link tuerKennwoerter}). Das zweite schreibt seinen Fingerabdruck als Folge von
+// Zeichen zur Basis 16 und klopft für jedes Zeichen an die Tür mit dieser Nummer. Das erste liest Tür und Zeitpunkt
+// aus seinen Verbindungsstatistiken, setzt die Folge zusammen und kennt den Fingerabdruck. 66 Klopfer (64 Zeichen
+// und ein Prüfbyte), im Versuch rund 3 Sekunden.
+//
+// Anklopfen kann nur, wer das Angebot kennt (die Kennwörter der Türen stehen in keinem Paket). Was so ankommt, ist
+// darum so viel wert wie ein gescannter Antwort-Code.
+
+/** So viele Türen öffnet das erste Gerät: eine je Zeichen zur Basis 16. */
+export const TUEREN = 16;
+/** So viele Klopfer trägt ein Fingerabdruck: 64 Halbbytes und zwei für das Prüfbyte. */
+export const KLOPFER = 66;
+
+const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+function pruefbyte(bytes: Uint8Array): number {
+  let c = 0;
+  for (const b of bytes) {
+    c ^= b;
+    for (let i = 0; i < 8; i++) c = c & 0x80 ? ((c << 1) ^ 0x07) & 0xff : (c << 1) & 0xff;
+  }
+  return c;
+}
+
+/** Der Fingerabdruck (SHA-256) einer Beschreibung als 32 Byte. */
+export function fingerabdruckVon(sdp: string): Uint8Array {
+  const [alg, hex] = (zeile(sdp, "a=fingerprint:") ?? "").split(/\s+/);
+  const bytes = (hex ?? "").split(":").map((x) => parseInt(x, 16));
+  if (alg?.toLowerCase() !== "sha-256" || bytes.length !== 32 || bytes.some((b) => !(b >= 0 && b <= 255))) throw new Error("Dieses Gerät konnte keine Verbindung vorbereiten.");
+  return Uint8Array.from(bytes);
+}
+
+/** Der Fingerabdruck als Folge von Türnummern, mit Prüfbyte am Ende. */
+export function klopfZeichen(fingerabdruck: Uint8Array): number[] {
+  return [...fingerabdruck, pruefbyte(fingerabdruck)].flatMap((b) => [b >> 4, b & 15]);
+}
+
+/** Aus einer Folge von Türnummern der Fingerabdruck; `null`, wenn Länge oder Prüfbyte nicht stimmen. */
+export function klopfLesen(zeichen: readonly number[]): Uint8Array | null {
+  if (zeichen.length !== KLOPFER || zeichen.some((z) => !(z >= 0 && z < TUEREN))) return null;
+  const bytes = Uint8Array.from({ length: KLOPFER / 2 }, (_, i) => (zeichen[i * 2]! << 4) | zeichen[i * 2 + 1]!);
+  const fp = bytes.subarray(0, 32);
+  return pruefbyte(fp) === bytes[32] ? Uint8Array.from(fp) : null;
+}
+
+/** Die Adressen eines Angebots, wie sie im Code stehen: Auswahl und Reihenfolge wie beim Packen. */
+export function angebotAdressen(angebotSdp: string): string[] {
+  return zerlegen({ art: "angebot", sdp: angebotSdp }).adressen.map((a) => a.wert.toLowerCase());
+}
+
+/** Die Ports einer Tür zu den Adressen des Angebots, aus ihrer eigenen Beschreibung gelesen; 0, wo ihr die Adresse fehlt. */
+export function tuerPortsLesen(tuerSdp: string, adressen: readonly string[]): number[] {
+  const eigene = tuerSdp
+    .split(/\r?\n/)
+    .filter((z) => z.startsWith("a=candidate:"))
+    .map((z) => adresseLesen(z.slice("a=candidate:".length)))
+    .filter((a): a is Adresse => a != null);
+  return adressen.map((wert) => eigene.find((a) => a.wert.toLowerCase() === wert)?.port ?? 0);
+}
+
+async function abgeleitet(quelle: string): Promise<{ ufrag: string; pwd: string }> {
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(quelle)));
+  // Nur Buchstaben und Ziffern: Mehr braucht ein Kennwort der Verbindung nicht, und jedes Zeichen darf dort stehen.
+  const text = [...hash].map((b) => B32[b & 31]! + B32[(b >> 3) & 31]!).join("");
+  return { ufrag: text.slice(0, 8), pwd: text.slice(8, 40) };
+}
+
+function geheimnis(angebotSdp: string): string {
+  return `${zeile(angebotSdp, "a=ice-pwd:") ?? ""}|${zeile(angebotSdp, "a=ice-ufrag:") ?? ""}|${(zeile(angebotSdp, "a=fingerprint:") ?? "").toUpperCase()}`;
+}
+
+/**
+ * Die Kennwörter, mit denen das zweite Gerät anruft, aus dem Angebot des ersten abgeleitet: Beide Geräte kennen das
+ * Angebot (es stand im ersten Code), sonst niemand. So muss das zweite Gerät dem ersten nur noch seinen Fingerabdruck
+ * mitteilen.
+ */
+export function kennwoerterAbleiten(angebotSdp: string): Promise<{ ufrag: string; pwd: string }> {
+  return abgeleitet(`meldekopf-kopplung|${geheimnis(angebotSdp)}`);
+}
+
+/** Die Kennwörter der Tür `nr` des ersten Geräts, ebenso abgeleitet. */
+export function tuerKennwoerter(angebotSdp: string, nr: number): Promise<{ ufrag: string; pwd: string }> {
+  return abgeleitet(`meldekopf-tuer|${nr}|${geheimnis(angebotSdp)}`);
+}
+
+/** Zweites Gerät: die Beschreibungen der Türen, aus dem Angebot und ihren Ports zusammengesetzt. */
+export async function tuerAngebote(angebotSdp: string, tueren: readonly number[][]): Promise<string[]> {
+  const t = zerlegen({ art: "angebot", sdp: angebotSdp });
+  return Promise.all(
+    tueren.map(async (ports, nr) =>
+      zusammensetzen({ ...t, ...(await tuerKennwoerter(angebotSdp, nr)), adressen: t.adressen.map((a, k) => ({ ...a, port: ports[k] ?? 0 })).filter((a) => a.port > 0) }),
+    ),
+  );
+}
+
+/** Erstes Gerät: aus dem angeklopften Fingerabdruck und dem eigenen Angebot die Antwort des zweiten Geräts zusammensetzen. */
+export function antwortAusFingerabdruck(fingerabdruck: Uint8Array, angebotSdp: string, kennwoerter: { ufrag: string; pwd: string }): string {
+  return zusammensetzen({
+    art: "antwort",
+    setup: "active",
+    fingerabdruck,
+    ufrag: kennwoerter.ufrag,
+    pwd: kennwoerter.pwd,
+    mid: zeile(angebotSdp, "a=mid:") ?? "0",
+    sctpPort: 5000,
+    maxNachricht: 262144,
+    adressen: [],
+  });
 }
