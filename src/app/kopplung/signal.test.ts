@@ -12,10 +12,12 @@ import {
   antwortAusFingerabdruck,
   fingerabdruckVon,
   kennwoerterAbleiten,
+  klopfKennwoerter,
   klopfLesen,
   klopfZeichen,
   signalDekodieren,
   signalKodieren,
+  tuerAdressenLesen,
   tuerAngebote,
   tuerKennwoerter,
   tuerPortsLesen,
@@ -161,6 +163,35 @@ describe("Anklopfen: Fingerabdruck ohne Scan und ohne Eingabe", () => {
     expect(adressen).toEqual(["192.168.178.20", "3d5c7a10-2b4e-4f6a-8c9d-0e1f2a3b4c5d.local", "fd00::1a2b:3c4d"]);
     const tuer = CHROME_ANGEBOT.replace(" 54321 typ host", " 50111 typ host").replace(" 49152 typ host", " 50222 typ host").replace(/a=candidate:2222222222.*\r\n/, "");
     expect(tuerPortsLesen(tuer, adressen)).toEqual([50111, 50222, 0]);
+  });
+
+  it("Sammeltür (Firefox): Die Türen stehen unter eigenen Adressen und teilen sich die Kennwörter der Tür 0", async () => {
+    const NAME = "986d771c-0de9-4826-9d4d-071428227d96.local";
+    const ports = Array.from({ length: TUEREN }, (_, i) => [52000 + i]);
+    const code = signalKodieren({ art: "angebot", sdp: CHROME_ANGEBOT }, ports, [NAME]);
+    // Ein Name mehr im Code: Er bleibt so grob wie mit einzelnen Türen.
+    expect(QRCode.create(code, { errorCorrectionLevel: "L" }).version).toBeLessThanOrEqual(16);
+    const s = signalDekodieren(code);
+    expect(s.tueren).toEqual(ports);
+    expect(s.tuerAdressen).toEqual([NAME]);
+    const tueren = await tuerAngebote(s.sdp, s.tueren!, s.tuerAdressen);
+    const k0 = await tuerKennwoerter(s.sdp, 0);
+    expect(tueren).toHaveLength(TUEREN);
+    expect(tueren.every((t) => t.includes(`a=ice-ufrag:${k0.ufrag}\r\n`) && t.includes(`a=ice-pwd:${k0.pwd}\r\n`))).toBe(true);
+    expect(tueren[5]).toContain(` ${NAME} 52005 typ host`);
+    expect(tueren[5]!.match(/a=candidate:/g)).toHaveLength(1);
+    // Die Adressen des Angebots selbst bleiben, wie sie waren.
+    expect(angebotAdressen(s.sdp).slice(0, 2)).toEqual(angebotAdressen(CHROME_ANGEBOT).slice(0, 2));
+    expect(angebotAdressen(s.sdp)).toHaveLength(3);
+  });
+
+  it("liest die Adressen einer Sammeltür ohne Doppelte und leitet die Kennwörter der Klopfer aus dem Angebot ab", async () => {
+    const zeile = (n: number, port: number) => `a=candidate:${n} 1 UDP 2122252543 986D771C-0de9-4826-9d4d-071428227d96.local ${port} typ host\r\n`;
+    expect(tuerAdressenLesen(`m=audio 9 x\r\n${zeile(0, 52000)}m=audio 9 x\r\n${zeile(0, 52001)}`)).toEqual(["986d771c-0de9-4826-9d4d-071428227d96.local"]);
+    const k = await klopfKennwoerter(CHROME_ANGEBOT);
+    expect(k).toEqual(await klopfKennwoerter(CHROME_ANGEBOT));
+    expect(k.ufrag).not.toBe((await kennwoerterAbleiten(CHROME_ANGEBOT)).ufrag);
+    expect(k.ufrag).not.toBe((await tuerKennwoerter(CHROME_ANGEBOT, 0)).ufrag);
   });
 
   it("ein Angebot ohne Türen bleibt lesbar und nennt keine", () => {

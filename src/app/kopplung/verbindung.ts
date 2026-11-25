@@ -505,8 +505,10 @@ export interface Klopfer {
 }
 
 export interface Tueren {
-  /** Je Tür der Port zu jeder Adresse des Angebots; für den Code. */
+  /** Je Tür der Port zu jeder Adresse des Angebots (oder zu `adressen`); für den Code. */
   ports: number[][];
+  /** Stehen die Türen unter eigenen Adressen (Sammeltür in Firefox), dann diese; sie gehen mit in den Code. */
+  adressen?: string[];
   /** Alle bisherigen Klopfer, in der Reihenfolge, in der geklopft wurde. */
   lesen: () => Promise<Klopfer[]>;
   schliessen: () => void;
@@ -523,7 +525,10 @@ export async function tuerenOeffnen(
   kennwoerter: (nr: number) => Promise<{ ufrag: string; pwd: string }>,
   portsLesen: (tuerSdp: string, adressen: readonly string[]) => number[],
   anzahl: number,
+  /** Für die Sammeltür: die Kennwörter, mit denen angeklopft wird, und wie sich die Adressen einer Beschreibung lesen. */
+  sammel?: { klopfer: { ufrag: string; pwd: string }; adressenLesen: (sdp: string) => string[] },
 ): Promise<Tueren | null> {
+  if (sammel && istFirefox()) return sammeltuerOeffnen(zertifikat, await kennwoerter(0), sammel.klopfer, sammel.adressenLesen, portsLesen, anzahl);
   const pcs: RTCPeerConnection[] = [];
   const schliessen = () => {
     for (const pc of pcs.splice(0)) {
@@ -575,6 +580,114 @@ export async function tuerenOeffnen(
   }
 }
 
+/**
+ * Kann dieses Gerät anklopfen? Firefox meldet eine Tür erst als erreicht, wenn die Gegenseite die Verbindung
+ * bestätigt; das tut nur die Sammeltür (mit ihrem Halter), keine Tür ohne Gegenstelle. Firefox als zweites Gerät klopft
+ * darum nur bei einem ersten Gerät mit Firefox an; sonst bleibt ihm der Antwort-Code.
+ */
+export function anklopfenMoeglich(sammeltuer: boolean): boolean {
+  return sammeltuer || !istFirefox();
+}
+
+function istFirefox(): boolean {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  // Firefox auf dem iPhone ist Safari im anderen Kleid („FxiOS") und zählt hier nicht.
+  return /\bGecko\/\d/.test(ua) && /\bFirefox\//.test(ua);
+}
+
+/** So oft liest die Sammeltür ihre Statistik: Zwei Klopfer liegen mindestens 50 ms auseinander. */
+const SAMMELTUER_TAKT_MS = 10;
+
+/**
+ * Die Türen in Firefox (Gerätetest 2026-11-25: Firefox am Rechner öffnete keine Türen). Drei Eigenheiten dort:
+ *
+ * - Jede Verbindung bekommt einen eigenen Namen im lokalen Netz; 16 Türen wären 16 Namen im Code. Darum eine
+ *   Verbindung mit einem Übertragungsweg je Tür: 16 Tonspuren, die nie etwas tragen, ungebündelt. Ein Name, 16 Ports.
+ * - Eine Verbindung ohne Gegenstelle führt keine Statistik über Klopfer, und eine mit einer Schein-Gegenstelle gibt
+ *   nach wenigen Sekunden auf. Darum eine echte Gegenstelle im selben Browser (`halter`), die jede Tür offen hält,
+ *   solange der Code auf dem Bildschirm steht. Sie trägt die Kennwörter der Klopfer.
+ * - Jeder Klopfer mit diesen Kennwörtern erscheint als neues Adresspaar an seinem Port, mit einer Adresse, die die Tür
+ *   aus dem Paket gelernt hat (`prflx`; die des Halters kennt sie aus dessen Antwort). Einen Zeitstempel trägt das
+ *   Paar nicht; die Reihenfolge ergibt sich aus dem Mitlesen im engen Takt.
+ *
+ * Geprüft in Firefox (Prüfstand, auch mit verborgenen Adressnamen): 66 von 66 Klopfern in der richtigen Reihenfolge,
+ * rund 4 Sekunden, auch nach einer Minute Warten.
+ */
+async function sammeltuerOeffnen(
+  zertifikat: RTCCertificate,
+  kennwoerter: { ufrag: string; pwd: string },
+  klopfer: { ufrag: string; pwd: string },
+  adressenLesen: (sdp: string) => string[],
+  portsLesen: (tuerSdp: string, adressen: readonly string[]) => number[],
+  anzahl: number,
+): Promise<Tueren | null> {
+  const ein = (sdp: string, k: { ufrag: string; pwd: string }) => sdp.replace(/^a=ice-ufrag:.*$/gm, `a=ice-ufrag:${k.ufrag}`).replace(/^a=ice-pwd:.*$/gm, `a=ice-pwd:${k.pwd}`);
+  const ungebuendelt = (sdp: string) => sdp.replace(/^a=group:BUNDLE.*\r?\n/m, "");
+  const pc = new RTCPeerConnection({ iceServers: [], bundlePolicy: "max-compat", certificates: [zertifikat] });
+  const halter = new RTCPeerConnection({ iceServers: [], bundlePolicy: "max-compat" });
+  let liest = true;
+  const schliessen = () => {
+    liest = false;
+    for (const x of [pc, halter]) {
+      try {
+        x.close();
+      } catch {
+        /* schon zu */
+      }
+    }
+  };
+  try {
+    for (let i = 0; i < anzahl; i++) pc.addTransceiver("audio", { direction: "recvonly" });
+    await pc.setLocalDescription({ type: "offer", sdp: ein((await pc.createOffer()).sdp ?? "", kennwoerter) });
+    if (sdpFeld(pc.localDescription?.sdp ?? "", "ice-ufrag") !== kennwoerter.ufrag) throw new Error("Kennwörter nicht übernommen");
+    await fertigGesammelt(pc);
+    const sdp = pc.localDescription?.sdp ?? "";
+    const adressen = adressenLesen(sdp);
+    const abschnitte = sdp.split(/^(?=m=)/m).slice(1);
+    const ports = abschnitte.map((a) => portsLesen(a, adressen));
+    if (adressen.length === 0 || ports.length !== anzahl || ports.some((p) => p.every((x) => x === 0))) throw new Error("Tür ohne Adresse");
+    // Der Halter sieht ein Angebot ohne Bündelung: Sonst legt er alle Türen auf einen Weg.
+    await halter.setRemoteDescription({ type: "offer", sdp: ungebuendelt(sdp) });
+    await halter.setLocalDescription({ type: "answer", sdp: ungebuendelt(ein((await halter.createAnswer()).sdp ?? "", klopfer)) });
+    if (sdpFeld(halter.localDescription?.sdp ?? "", "ice-ufrag") !== klopfer.ufrag) throw new Error("Kennwörter nicht übernommen");
+    await fertigGesammelt(halter);
+    await pc.setRemoteDescription({ type: "answer", sdp: ungebuendelt(halter.localDescription?.sdp ?? "") });
+    const portZuTuer = new Map<number, number>();
+    ports.forEach((p, tuer) => p.forEach((x) => x > 0 && portZuTuer.set(x, tuer)));
+    const gesehen = new Set<string>();
+    const klopferListe: Klopfer[] = [];
+    void (async () => {
+      while (liest) {
+        try {
+          const eigene = new Map<string, number>();
+          const gelernt = new Set<string>();
+          const paare: { id: string; localCandidateId?: string; remoteCandidateId?: string }[] = [];
+          (await pc.getStats()).forEach((x: { type?: string; id: string; port?: number; candidateType?: string; localCandidateId?: string; remoteCandidateId?: string }) => {
+            if (x.type === "local-candidate" && x.port) eigene.set(x.id, x.port);
+            else if (x.type === "remote-candidate" && x.candidateType === "prflx") gelernt.add(x.id);
+            else if (x.type === "candidate-pair") paare.push(x);
+          });
+          for (const x of paare) {
+            // Die Paare zum Halter zählen nicht: Dessen Adressen standen in seiner Antwort.
+            if (gesehen.has(x.id) || !gelernt.has(x.remoteCandidateId ?? "")) continue;
+            gesehen.add(x.id);
+            const tuer = portZuTuer.get(eigene.get(x.localCandidateId ?? "") ?? 0);
+            // Die Zeit ist die des Lesens; eine laufende Nummer hält die Reihenfolge innerhalb eines Takts.
+            if (tuer != null) klopferListe.push({ tuer, zeit: Date.now() + klopferListe.length / 1000 });
+          }
+        } catch {
+          /* Verbindung zu: Die Schleife endet mit `liest` */
+        }
+        await new Promise((r) => setTimeout(r, SAMMELTUER_TAKT_MS));
+      }
+    })();
+    return { ports, adressen, schliessen, lesen: async () => [...klopferListe] };
+  } catch {
+    schliessen();
+    return null;
+  }
+}
+
 /** So lange hat eine Tür Zeit zu antworten. */
 const KLOPF_FRIST_MS = 4000;
 /** Nach der Antwort der Tür bleibt der Klopfer noch so lange stehen: Sein erstes Paket danach trägt den Zeitstempel. */
@@ -587,12 +700,20 @@ const KLOPF_PAUSE_MS = 15;
  * das Kennwort stimmt), schickt den ersten Gruß des Schlüsseltauschs (den die Tür nicht beantwortet, aber mit Uhrzeit
  * zählt) und schließt wieder. Rückgabe: ob die Tür geantwortet hat.
  */
-export async function klopfen(tuerSdp: string): Promise<boolean> {
+export async function klopfen(tuerSdp: string, kennwoerter?: { ufrag: string; pwd: string }): Promise<boolean> {
   const pc = neuePc();
   try {
     await pc.setRemoteDescription({ type: "offer", sdp: tuerSdp });
     const a = await pc.createAnswer();
-    await pc.setLocalDescription({ type: "answer", sdp: (a.sdp ?? "").replace(/^a=setup:.*$/m, "a=setup:active") });
+    const sdp = (a.sdp ?? "").replace(/^a=setup:.*$/m, "a=setup:active");
+    // Mit den abgeleiteten Kennwörtern der Klopfer: Die Sammeltür in Firefox zählt nur, wer sich so meldet.
+    // Nimmt der Browser sie nicht an, klopft er mit seinen eigenen: Türen ohne Gegenstelle (Chrome) fragen nicht danach.
+    try {
+      if (!kennwoerter) throw new Error("ohne Vorgabe");
+      await pc.setLocalDescription({ type: "answer", sdp: sdp.replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${kennwoerter.ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${kennwoerter.pwd}`) });
+    } catch {
+      await pc.setLocalDescription({ type: "answer", sdp });
+    }
     const offen = await new Promise<boolean>((fertig) => {
       const uhr = setTimeout(() => fertig(false), KLOPF_FRIST_MS);
       const pruefen = () => {

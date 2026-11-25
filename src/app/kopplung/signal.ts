@@ -53,7 +53,15 @@ interface Teile {
   adressen: Adresse[];
   /** Nur im Angebot: je Tür ({@link TUEREN}) der Port zu jeder Adresse, in deren Reihenfolge; 0 = diese Tür hat die Adresse nicht. */
   tueren?: number[][];
+  /**
+   * Nur mit `tueren`: die Adressen, unter denen die Türen stehen, wenn es nicht die des Angebots sind (Firefox gibt
+   * jeder Verbindung einen eigenen Namen im lokalen Netz). Die Ports der Türen zählen dann zu diesen Adressen.
+   */
+  tuerAdressen?: Adresse[];
 }
+
+/** Im Zähler der Türen: Es folgen eigene Adressen der Türen ({@link Teile.tuerAdressen}). */
+const TUER_ADRESSEN_MARKE = 0x80;
 
 const SETUP = ["actpass", "active", "passive"] as const;
 const UUID_LOCAL = /^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})\.local$/i;
@@ -139,19 +147,28 @@ function packen(t: Teile): Uint8Array {
   b.push(t.sctpPort >> 8, t.sctpPort & 0xff);
   const m = Math.min(t.maxNachricht, 0xffffffff);
   b.push((m >>> 24) & 0xff, (m >>> 16) & 0xff, (m >>> 8) & 0xff, m & 0xff);
-  b.push(t.adressen.length);
-  for (const a of t.adressen) {
+  const adresse = (a: Adresse) => {
     b.push(a.typ);
     if (a.typ === 4) b.push(...a.wert.split(".").map(Number));
     else if (a.typ === 6) b.push(...ipv6Bytes(a.wert)!);
     else if (a.typ === 1) b.push(...(a.wert.replace(/\.local$/, "").replace(/-/g, "").match(/../g) ?? []).map((x) => parseInt(x, 16)));
     else text(a.wert);
+  };
+  b.push(t.adressen.length);
+  for (const a of t.adressen) {
+    adresse(a);
     b.push(a.port >> 8, a.port & 0xff);
   }
   if (t.art === "angebot") {
     const tueren = t.tueren ?? [];
-    b.push(tueren.length);
-    for (const ports of tueren) for (let k = 0; k < t.adressen.length; k++) b.push(((ports[k] ?? 0) >> 8) & 0xff, (ports[k] ?? 0) & 0xff);
+    const eigene = tueren.length > 0 && t.tuerAdressen && t.tuerAdressen.length > 0 ? t.tuerAdressen : null;
+    b.push(tueren.length | (eigene ? TUER_ADRESSEN_MARKE : 0));
+    if (eigene) {
+      b.push(eigene.length);
+      for (const a of eigene) adresse(a);
+    }
+    const spalten = (eigene ?? t.adressen).length;
+    for (const ports of tueren) for (let k = 0; k < spalten; k++) b.push(((ports[k] ?? 0) >> 8) & 0xff, (ports[k] ?? 0) & 0xff);
   }
   return Uint8Array.from(b);
 }
@@ -177,8 +194,7 @@ function entpacken(bytes: Uint8Array): Teile {
   const sctpPort = zahl(2);
   const maxNachricht = zahl(4);
   const anzahl = zahl(1);
-  const adressen: Adresse[] = [];
-  for (let n = 0; n < anzahl; n++) {
+  const adresse = (): { typ: Adresse["typ"]; wert: string } => {
     const typ = zahl(1);
     let wert: string;
     if (typ === 4) wert = [...nimm(4)].join(".");
@@ -188,17 +204,22 @@ function entpacken(bytes: Uint8Array): Teile {
       wert = `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}.local`;
     } else if (typ === 2) wert = text();
     else throw new Error(UNLESBAR);
-    adressen.push({ typ: typ as Adresse["typ"], wert, port: zahl(2) });
-  }
+    return { typ: typ as Adresse["typ"], wert };
+  };
+  const adressen: Adresse[] = [];
+  for (let n = 0; n < anzahl; n++) adressen.push({ ...adresse(), port: zahl(2) });
   let tueren: number[][] | undefined;
+  let tuerAdressen: Adresse[] | undefined;
   if (art === "angebot" && i < bytes.length) {
-    const zahl_ = zahl(1);
-    tueren = Array.from({ length: zahl_ }, () => adressen.map(() => zahl(2)));
+    const zaehler = zahl(1);
+    if (zaehler & TUER_ADRESSEN_MARKE) tuerAdressen = Array.from({ length: zahl(1) }, () => ({ ...adresse(), port: 1 }));
+    const spalten = tuerAdressen ?? adressen;
+    tueren = Array.from({ length: zaehler & ~TUER_ADRESSEN_MARKE }, () => spalten.map(() => zahl(2)));
   }
   // Nur Zeichen, die in einer Beschreibung stehen dürfen: Der Text wird Zeile für Zeile eingesetzt.
   const sauber = (s: string) => /^[\x21-\x7e]{1,255}$/.test(s);
-  if (i !== bytes.length || (anzahl === 0 && art === "angebot") || ![ufrag, pwd, mid].every(sauber) || adressen.some((a) => !sauber(a.wert) || a.port === 0)) throw new Error(UNLESBAR);
-  return { art, setup, fingerabdruck, ufrag, pwd, mid, sctpPort, maxNachricht, adressen, ...(tueren && tueren.length > 0 ? { tueren } : {}) };
+  if (i !== bytes.length || (anzahl === 0 && art === "angebot") || ![ufrag, pwd, mid].every(sauber) || adressen.some((a) => !sauber(a.wert) || a.port === 0) || (tuerAdressen ?? []).some((a) => !sauber(a.wert))) throw new Error(UNLESBAR);
+  return { art, setup, fingerabdruck, ufrag, pwd, mid, sctpPort, maxNachricht, adressen, ...(tueren && tueren.length > 0 ? { tueren, ...(tuerAdressen && tuerAdressen.length > 0 ? { tuerAdressen } : {}) } : {}) };
 }
 
 /** Aus den Teilen wieder eine vollständige Beschreibung nach dem Muster, das Chrome, Firefox und Safari für einen reinen Datenkanal erzeugen. */
@@ -232,12 +253,13 @@ function zusammensetzen(t: Teile): string {
  * Wirft mit einem Satz für den Nutzer, wenn sich die Beschreibung des Browsers nicht packen lässt. `tueren`: die Ports
  * der Türen des ersten Geräts ({@link tuerPortsLesen}); nur im Angebot.
  */
-export function signalKodieren(s: KopplungsSignal, tueren?: number[][]): string {
-  return KOPPLUNG_MARKE + base41Kodieren(packen({ ...zerlegen(s), ...(tueren && tueren.length > 0 && s.art === "angebot" ? { tueren } : {}) }));
+export function signalKodieren(s: KopplungsSignal, tueren?: number[][], tuerAdressen?: readonly string[]): string {
+  const eigene = (tuerAdressen ?? []).map((wert) => adresseLesen(`0 1 udp 1 ${wert} 1 typ host`)).filter((a): a is Adresse => a != null);
+  return KOPPLUNG_MARKE + base41Kodieren(packen({ ...zerlegen(s), ...(tueren && tueren.length > 0 && s.art === "angebot" ? { tueren, ...(eigene.length > 0 ? { tuerAdressen: eigene } : {}) } : {}) }));
 }
 
 /** Wirft mit einem Satz für den Nutzer, wenn der Text kein lesbarer Kopplungs-Code ist. */
-export function signalDekodieren(code: string): KopplungsSignal & { tueren?: number[][] } {
+export function signalDekodieren(code: string): KopplungsSignal & { tueren?: number[][]; tuerAdressen?: string[] } {
   const text = code.trim();
   if (!text.toUpperCase().startsWith(KOPPLUNG_MARKE)) throw new Error("Das ist kein Kopplungs-Code.");
   let bytes: Uint8Array;
@@ -247,7 +269,7 @@ export function signalDekodieren(code: string): KopplungsSignal & { tueren?: num
     throw new Error(UNLESBAR);
   }
   const t = entpacken(bytes);
-  return { art: t.art, sdp: zusammensetzen(t), ...(t.tueren ? { tueren: t.tueren } : {}) };
+  return { art: t.art, sdp: zusammensetzen(t), ...(t.tueren ? { tueren: t.tueren } : {}), ...(t.tuerAdressen ? { tuerAdressen: t.tuerAdressen.map((a) => a.wert) } : {}) };
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -344,12 +366,36 @@ export function tuerKennwoerter(angebotSdp: string, nr: number): Promise<{ ufrag
   return abgeleitet(`meldekopf-tuer|${nr}|${geheimnis(angebotSdp)}`);
 }
 
-/** Zweites Gerät: die Beschreibungen der Türen, aus dem Angebot und ihren Ports zusammengesetzt. */
-export async function tuerAngebote(angebotSdp: string, tueren: readonly number[][]): Promise<string[]> {
+/**
+ * Die Kennwörter, mit denen das zweite Gerät anklopft. Chrome und Safari fragen an einer Tür nicht danach; Firefox
+ * zählt einen Klopfer nur, wenn er sich mit dem erwarteten Namen meldet.
+ */
+export function klopfKennwoerter(angebotSdp: string): Promise<{ ufrag: string; pwd: string }> {
+  return abgeleitet(`meldekopf-klopfer|${geheimnis(angebotSdp)}`);
+}
+
+/** Die Adressen einer Beschreibung ohne Ports, wie sie als Adressen der Türen in den Code gehen. */
+export function tuerAdressenLesen(tuerSdp: string): string[] {
+  const alle = tuerSdp
+    .split(/\r?\n/)
+    .filter((z) => z.startsWith("a=candidate:"))
+    .map((z) => adresseLesen(z.slice("a=candidate:".length))?.wert.toLowerCase())
+    .filter((a): a is string => a != null);
+  return [...new Set(alle)].slice(0, MAX_ADRESSEN);
+}
+
+/**
+ * Zweites Gerät: die Beschreibungen der Türen, aus dem Angebot und ihren Ports zusammengesetzt. Mit `tuerAdressen`
+ * stehen alle Türen unter diesen Adressen und tragen dieselben Kennwörter (die der Tür 0): eine Verbindung des ersten
+ * Geräts mit einem Port je Tür.
+ */
+export async function tuerAngebote(angebotSdp: string, tueren: readonly number[][], tuerAdressen?: readonly string[]): Promise<string[]> {
   const t = zerlegen({ art: "angebot", sdp: angebotSdp });
+  const eigene = (tuerAdressen ?? []).map((wert) => adresseLesen(`0 1 udp 1 ${wert} 1 typ host`)).filter((a): a is Adresse => a != null);
+  const basis = eigene.length > 0 ? eigene : t.adressen;
   return Promise.all(
     tueren.map(async (ports, nr) =>
-      zusammensetzen({ ...t, ...(await tuerKennwoerter(angebotSdp, nr)), adressen: t.adressen.map((a, k) => ({ ...a, port: ports[k] ?? 0 })).filter((a) => a.port > 0) }),
+      zusammensetzen({ ...t, ...(await tuerKennwoerter(angebotSdp, eigene.length > 0 ? 0 : nr)), adressen: basis.map((a, k) => ({ ...a, port: ports[k] ?? 0 })).filter((a) => a.port > 0) }),
     ),
   );
 }

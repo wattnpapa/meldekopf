@@ -19,6 +19,8 @@ import {
   fingerabdruckVon,
   kennwoerterAbleiten,
   klopfLesen,
+  klopfKennwoerter,
+  tuerAdressenLesen,
   klopfZeichen,
   signalDekodieren,
   signalKodieren,
@@ -33,6 +35,7 @@ import {
   eigeneAdressen,
   klopfen,
   tuerenOeffnen,
+  anklopfenMoeglich,
   rufPlatzVorbereiten,
   rufPlatzWiederherstellen,
   type Angebot,
@@ -250,7 +253,7 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
    * Sammler: den eigenen Fingerabdruck an die Türen der Zentrale klopfen. Antwortet eine Tür nicht, sind die Türen von
    * hier nicht erreichbar: Dann bleibt der Antwort-Code im Dialog der Weg.
    */
-  async function anklopfen(fingerabdruck: Uint8Array, tuerSdps: readonly string[]): Promise<void> {
+  async function anklopfen(fingerabdruck: Uint8Array, tuerSdps: readonly string[], kennwoerter: { ufrag: string; pwd: string }): Promise<void> {
     const zeichen = klopfZeichen(fingerabdruck);
     const laeuft = () => !tot && zu.phase === "verbindet";
     const netz = (teil: { erreichbar?: boolean; klopfer?: number }) => {
@@ -266,7 +269,7 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
       for (const z of zeichen) {
         if (!laeuft()) return;
         const sdp = tuerSdps[z];
-        if (!sdp || !(await klopfen(sdp))) {
+        if (!sdp || !(await klopfen(sdp, kennwoerter))) {
           netz({ erreichbar: false });
           ohne();
           return;
@@ -717,14 +720,14 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
         erste = a.verbindung;
         // Türen, an denen der Sammler seinen Fingerabdruck anklopft: Dann braucht die Zentrale weder Kamera noch Eingabe.
         const ohneTueren = !!(globalThis as { __eebKopplungOhneTueren?: boolean }).__eebKopplungOhneTueren;
-        const t = zert && !ohneTueren ? await tuerenOeffnen(zert, angebotAdressen(a.sdp), (i) => tuerKennwoerter(a.sdp, i), tuerPortsLesen, TUEREN) : null;
+        const t = zert && !ohneTueren ? await tuerenOeffnen(zert, angebotAdressen(a.sdp), (i) => tuerKennwoerter(a.sdp, i), tuerPortsLesen, TUEREN, { klopfer: await klopfKennwoerter(a.sdp), adressenLesen: tuerAdressenLesen }) : null;
         if (tot) {
           t?.schliessen();
           return;
         }
         tueren = t;
         if (t) tuerTakt = setInterval(() => void tuerenLesen(), TUER_TAKT_MS);
-        setze({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }, t?.ports), selbst: !!t, netz: { eigene: angebotAdressen(a.sdp), klopfer: 0 } } });
+        setze({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }, t?.ports, t?.adressen), selbst: !!t, netz: { eigene: angebotAdressen(a.sdp), klopfer: 0 } } });
       } catch {
         if (!tot) setze({ phase: "aus", dialog: { art: "angebot", code: "", fehler: "Dieses Gerät konnte keine Verbindung vorbereiten." } });
       }
@@ -756,13 +759,13 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
       }
       rufPlaetze = [{ nr: 0, seite: "", platz }];
       // Anklopfen geht nur, wenn die Zentrale Türen offen hat und sich die Kennwörter dieses Geräts selbst ableiten kann.
-      const selbsttaetig = !!s.tueren && s.tueren.length === TUEREN && platz.vorgabeGilt;
+      const selbsttaetig = !!s.tueren && s.tueren.length === TUEREN && platz.vorgabeGilt && anklopfenMoeglich(!!s.tuerAdressen);
       setze({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }), selbst: selbsttaetig, netz: { eigene: [], andere: angebotAdressen(s.sdp) } } });
       void eigeneAdressen().then((eigene) => {
         if (!tot && zu.phase === "verbindet" && zu.dialog) setze({ dialog: { ...zu.dialog, netz: { ...zu.dialog.netz, eigene } } });
       });
       // Mit Türen erst anklopfen und danach anrufen; ohne Türen gleich anrufen, bis der Antwort-Code gescannt ist.
-      if (selbsttaetig) void tuerAngebote(s.sdp, s.tueren!).then((sdps) => anklopfen(fingerabdruckVon(platz.antwortSdp), sdps));
+      if (selbsttaetig) void Promise.all([tuerAngebote(s.sdp, s.tueren!, s.tuerAdressen), klopfKennwoerter(s.sdp)]).then(([sdps, k]) => anklopfen(fingerabdruckVon(platz.antwortSdp), sdps, k));
       else rufen();
     },
 

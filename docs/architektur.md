@@ -602,6 +602,31 @@ sequenceDiagram
   Gerät den Fingerabdruck gelesen hatte (Fehlversuch im ersten Gerätetest).
   Kommen Klopfer an und die Verbindung scheitert trotzdem, sagt die
   Fehlermeldung das eigens.
+- **Firefox als erstes Gerät: die Sammeltür (seit 2026-11-25, zweiter
+  Gerätetest).** Firefox am Rechner öffnete keine Türen und verlangte den
+  Antwort-Scan. Drei Eigenheiten dort, im Prüfstand nachgestellt: Jede
+  Verbindung bekommt einen eigenen verborgenen Namen im lokalen Netz, 16 Türen
+  fänden die Adressen des Angebots nicht wieder und wären 16 Namen im Code.
+  Eine Verbindung ohne Gegenstelle führt keine Statistik über Klopfer. Eine
+  mit einer Schein-Gegenstelle gibt nach wenigen Sekunden auf. Firefox öffnet
+  darum eine einzige Verbindung mit einem Übertragungsweg je Tür (16
+  Tonspuren, die nie etwas tragen, ungebündelt: ein Name, 16 Ports) und hält
+  sie mit einer zweiten Verbindung im selben Browser offen (`halter`), solange
+  der Code auf dem Bildschirm steht. Der Halter trägt abgeleitete Kennwörter
+  (`klopfKennwoerter`), mit denen auch das zweite Gerät anklopft; jeder
+  Klopfer erscheint dann als neues Adresspaar an seinem Port. Einen
+  Zeitstempel trägt es nicht, die Reihenfolge ergibt sich aus dem Mitlesen im
+  Takt von 10 ms. Der Code trägt zusätzlich den Namen der Sammeltür (rund 200
+  statt 190 Zeichen; `tuerAdressen`, Marke `0x80` im Zähler der Türen); ältere
+  Codes bleiben lesbar. Geprüft im Prüfstand mit Firefox als erstem Gerät
+  gegen Chromium und gegen Firefox: verbunden rund 5 Sekunden nach dem Scan,
+  auch wenn erst zwei Minuten nach dem Öffnen gescannt wird; Wiederverbinden
+  nach dem Neuladen jeder Seite. Der Ton dient nur als Träger der Wege:
+  Es wird kein Mikrofon geöffnet und keine Berechtigung erfragt.
+- Firefox als zweites Gerät klopft nur bei einem ersten Gerät mit Firefox an.
+  Er meldet eine Tür erst als erreicht, wenn die Gegenseite die Verbindung
+  bestätigt, und das tut nur die Sammeltür. Gegen Chrome oder Safari als
+  erstes Gerät zeigt er gleich seinen Antwort-Code (`anklopfenMoeglich`).
 - Ausweichweg: Öffnet das erste Gerät keine Türen (der Browser nimmt die
   abgeleiteten Kennwörter nicht an) oder antwortet eine Tür nicht, zeigt das
   zweite Gerät seinen Antwort-Code zum Scannen wie bisher.
@@ -1284,7 +1309,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Kopplung nur im Prüfstand erprobt (zwei Profile eines Chromium, lokale Schleife) | Gerätetest offen: Chrome auf Android gegen Chrome und Edge am Rechner, Safari auf iOS, Firefox; installierte PWA gegen Browser-Tab. Offen ist vor allem, ob die Browser einander im jeweiligen Netz finden: Ohne erteilte Kamerafreigabe nennen sie statt der IP-Adresse einen Namen im lokalen Netz (mDNS), den das andere Gerät auflösen muss. Rückfallebene bleibt die Einsatz-Datei. |
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
 | Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
-| Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Safari, Firefox und echte Geräte im WLAN ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand. |
+| Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Firefox als erstes Gerät geht einen eigenen Weg (Sammeltür, Kap. 6.6), im Prüfstand geprüft; Firefox als zweites Gerät gegen Chrome oder Safari braucht den Antwort-Code. Safari (iPhone als zweites Gerät) und echte Geräte im WLAN ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand, und das zweite Gerät muss den verborgenen Namen des ersten im Netz auflösen können (mDNS). Firefox ist in den Verhaltenstests der CI nicht dabei. |
 | Gemerkte Kopplung trägt, solange eine der beiden Seiten offen geblieben ist | Über Tage ungeprüft: ob wartende Verbindungen so lange leben (gemessen 20 Minuten), ob die des Telefons den Schlaf überstehen, in dem der Rechner neu lädt. Laden beide neu, bevor sie sich wiedergefunden haben, zeigt der Rechner „Neu koppeln…“, und es kostet einen Scan. Safari legt ein Zertifikat womöglich nicht in IndexedDB ab; dann bleibt die Kopplung eine des Arbeitsspeichers. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
