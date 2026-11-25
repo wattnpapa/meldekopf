@@ -21,6 +21,7 @@ import {
   tuerPortsLesen,
 } from "./signal";
 import { KOPPLUNG_MARKE, istKopplungsCode } from "./zustand";
+import { verschiedeneNetze } from "./kopplung-dialog";
 
 const FP = "7B:1A:0F:9C:D4:E2:33:58:A1:00:FF:6E:21:9B:C7:45:10:8D:F3:2A:64:B9:5E:77:C0:1D:E8:92:3F:AB:06:D5";
 
@@ -193,5 +194,16 @@ describe("Anklopfen: Fingerabdruck ohne Scan und ohne Eingabe", () => {
     expect(s.sdp).not.toContain("a=candidate:");
     expect(s.sdp).not.toContain("a=end-of-candidates");
     expect(s.sdp).toContain(FP);
+  });
+});
+
+describe("Netzanzeige beim Koppeln", () => {
+  it("warnt nur, wenn beide Adressen bekannt sind und in verschiedenen Netzen liegen", () => {
+    expect(verschiedeneNetze(["192.168.178.20"], ["192.168.178.31"])).toBe(false);
+    expect(verschiedeneNetze(["192.168.178.20"], ["10.0.0.5"])).toBe(true);
+    expect(verschiedeneNetze(["192.168.178.20", "10.0.0.7"], ["10.0.0.5"])).toBe(false);
+    // Verbirgt ein Browser seine Adresse, lässt sich nichts vergleichen: keine Warnung.
+    expect(verschiedeneNetze(["3d5c7a10-2b4e-4f6a-8c9d-0e1f2a3b4c5d.local"], ["10.0.0.5"])).toBe(false);
+    expect(verschiedeneNetze([], ["10.0.0.5"])).toBe(false);
   });
 });

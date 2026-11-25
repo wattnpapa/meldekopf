@@ -285,6 +285,29 @@ export async function angebotErzeugen(h: VerbindungsHorcher, zertifikat?: RTCCer
   };
 }
 
+/**
+ * Die Adressen dieses Geräts im lokalen Netz, wie der Browser sie nennt: die IP-Adresse, wenn die Seite eine
+ * Kamerafreigabe hat, sonst nur ein zufälliger Name auf `.local`. Für die Anzeige beim Koppeln („im selben Netz?").
+ */
+export async function eigeneAdressen(): Promise<string[]> {
+  const pc = neuePc();
+  try {
+    pc.createDataChannel("netz");
+    await pc.setLocalDescription(await pc.createOffer());
+    await fertigGesammelt(pc);
+    const adressen = (pc.localDescription?.sdp ?? "")
+      .split(/\r?\n/)
+      .filter((z) => z.startsWith("a=candidate:") && / udp /i.test(z) && / typ host/.test(z))
+      .map((z) => z.split(/\s+/)[4] ?? "")
+      .filter(Boolean);
+    return [...new Set(adressen)];
+  } catch {
+    return [];
+  } finally {
+    pc.close();
+  }
+}
+
 /** Ein Platz, den der Rufer anrufen kann, wenn die Verbindung gerissen ist. */
 export interface RufPlatz {
   /** Die Antwort ohne Adressen, für den Hörer. */
@@ -587,6 +610,8 @@ export async function klopfen(tuerSdp: string): Promise<boolean> {
     return false;
   } finally {
     pc.close();
-    await new Promise((r) => setTimeout(r, KLOPF_PAUSE_MS));
+    // Für die Verhaltenstests: ein langsames Netz nachstellen, in dem jeder Klopfer länger braucht.
+    const langsam = Number((globalThis as { __eebKopplungKlopfPause?: number }).__eebKopplungKlopfPause) || 0;
+    await new Promise((r) => setTimeout(r, KLOPF_PAUSE_MS + langsam));
   }
 }

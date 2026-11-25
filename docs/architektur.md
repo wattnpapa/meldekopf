@@ -585,6 +585,23 @@ sequenceDiagram
 - Anklopfen kann nur, wer das Angebot kennt: Die Kennwörter der Türen stehen
   in keinem Paket. Der angeklopfte Fingerabdruck ist darum so viel wert wie
   ein gescannter Antwort-Code.
+- **Netzanzeige im Kopplungsdialog (seit 2026-11-25, nach dem ersten
+  Gerätetest).** Beide Dialoge zeigen, was sich über das Netz sagen lässt. Die
+  Adressen: am zweiten Gerät die eigene und die des ersten aus dessen Code, am
+  ersten die eigene. Browser verbergen die lokale Adresse hinter einem
+  Zufallsnamen auf `.local`, solange die Seite keine Kamerafreigabe hat; am
+  Rechner ohne Kamera steht dann „vom Browser verborgen“. Mehr als jede
+  Adresse sagt darum die zweite Zeile: Das zweite Gerät meldet, ob das erste
+  auf das Anklopfen antwortet, das erste zählt die angekommenen Klopfer.
+  Liegen zwei sichtbare IPv4-Adressen in verschiedenen Netzen (die ersten drei
+  Stellen), warnt das zweite Gerät. Die Adressen werden nur angezeigt, nicht
+  gespeichert; sie standen schon bisher im Code.
+- Beim ersten Koppeln ruft das zweite Gerät erst nach dem Klopf-Durchgang an,
+  dann 30 Sekunden lang alle halbe Sekunde. Vorher liefen die Anrufe neben dem
+  Anklopfen her und waren in einem langsamen Netz verbraucht, bevor das erste
+  Gerät den Fingerabdruck gelesen hatte (Fehlversuch im ersten Gerätetest).
+  Kommen Klopfer an und die Verbindung scheitert trotzdem, sagt die
+  Fehlermeldung das eigens.
 - Ausweichweg: Öffnet das erste Gerät keine Türen (der Browser nimmt die
   abgeleiteten Kennwörter nicht an) oder antwortet eine Tür nicht, zeigt das
   zweite Gerät seinen Antwort-Code zum Scannen wie bisher.
