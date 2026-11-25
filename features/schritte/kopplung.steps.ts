@@ -209,3 +209,14 @@ Then("zeigt das zweite Gerät keine Kopplung", async function (this: EebWelt) {
   await b.waitForTimeout(1500);
   if ((await b.locator(".kopplung-leiste, dialog.sammler").count()) > 0) throw new Error("Das zweite Gerät zeigt weiter eine Kopplung.");
 });
+
+/** Vorher kurz warten, bis das zweite Gerät seine wartenden Plätze angeboten hat und das erste sie gemerkt hat. */
+When("das erste Gerät seine Seite neu lädt", async function (this: EebWelt) {
+  await this.page.waitForTimeout(1500);
+  await this.page.reload({ waitUntil: "domcontentloaded" });
+});
+
+When("beide Geräte ihre Seite zugleich neu laden", async function (this: EebWelt) {
+  await this.page.waitForTimeout(1500);
+  await Promise.all([this.page.reload({ waitUntil: "domcontentloaded" }), zweitesGeraet(this).reload({ waitUntil: "domcontentloaded" })]);
+});

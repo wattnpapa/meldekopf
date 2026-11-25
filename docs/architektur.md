@@ -659,12 +659,22 @@ sequenceDiagram
   Geräts offen geblieben ist, denn dessen wartende Verbindungen leben in
   seinem Arbeitsspeicher. Beim Neuladen verabschiedet sich das zweite Gerät
   darum nicht mehr; das erste hält seine Plätze offen.
-- Lädt das erste Gerät seine Seite neu (auch selbsttätig nach einer neuen
-  Fassung der App), sind seine Plätze weg. Es bekommt neue Ports, die das
-  zweite ohne Vermittler nicht finden kann: Dann braucht es den einen Scan.
-  Das erste Gerät sagt das nach dem Neuladen in der Leiste („Die Seite wurde
-  neu geladen …“, „Neu koppeln…“) und sagt es dem zweiten beim Verlassen der
-  Seite, soweit das noch hinausgeht.
+- **Auch die Zentrale darf neu laden (seit 2026-11-25).** Ihre wartenden
+  Verbindungen sind danach weg, und ihre neuen Ports findet der Sammler ohne
+  Vermittler nicht. Darum hält auch der Sammler wartende Plätze bereit, und
+  die Zentrale merkt sich, womit sie dort anruft (Zertifikat, Plätze). Nach
+  dem Neuladen ihrer Seite ruft sie den Sammler an, mit denselben Pausen. Wer
+  neu geladen hat, ruft: der Sammler immer, die Zentrale nur in diesem Fall,
+  so entstehen nie zwei Verbindungen. Jede Seite trägt eine Kennung, die bei
+  jedem Laden neu ist; nach dem Verbinden nennt sie jedes Gerät („hallo“), und
+  das andere verwirft Plätze einer früheren Seite.
+- Den Scan braucht es danach nur noch, wenn beide Seiten neu geladen wurden,
+  bevor sie sich wiedergefunden haben, wenn der Browser des Sammlers dessen
+  Seite verworfen hat, während die Zentrale neu lädt, oder nach 30 Tagen. Die
+  Zentrale sagt es nach 45 Sekunden vergeblichen Rufens in der Leiste und
+  bietet „Neu koppeln…“ an; sie ruft dabei weiter.
+- Beim Verlassen der Seite verabschiedet sich keines der Geräte mehr; Abschied
+  nimmt nur „Trennen“.
 - Solange gekoppelt ist, hält die App den Bildschirm wach (Screen Wake Lock,
   wo der Browser es anbietet); wer ihn von Hand ausschaltet, löst das
   Wiederverbinden beim Einschalten aus.
@@ -771,8 +781,8 @@ seiner Seite ohne neuen Scan wieder anruft (`kopplung/merker.ts`):
 
 | Ort | Inhalt | Frist, Löschweg |
 | --- | --- | --- |
-| `localStorage` `eeb.kopplung.v1` | Rolle (Zentrale oder Sammler), Kennung der Sammlung, Beginn der Kopplung. Keine Verbindungsangaben, keine Einsatzdaten. Klein, damit der Start ihn ohne Nachladen prüft | „Kopplung trennen“, Trennen durch das andere Gerät, neue Kopplung, 30 Tage, „Alle Daten löschen“. An der Zentrale beim ersten Start nach dem Neuladen (sie sagt dann, dass neu gekoppelt werden muss) |
-| IndexedDB `eeb-kopplung`, nur am Sammler | Das Zertifikat der Kopplung (vom Browser abgelegt, der private Schlüssel ist nicht auslesbar); je wartendem Platz der Zentrale deren Angebot (Fingerabdruck, Verbindungskennwörter, lokale Adressen) und die eigenen Kennwörter; die Kennungen der Meldungen, die die Zentrale bestätigt hat | wie oben; ohne den Merker im `localStorage` gilt der Inhalt nicht und wird beim nächsten Lesen entfernt; `alleDatenLoeschen` löscht die Datenbank |
+| `localStorage` `eeb.kopplung.v1` | Rolle (Zentrale oder Sammler), Kennung der Sammlung, Beginn der Kopplung. Keine Verbindungsangaben, keine Einsatzdaten. Klein, damit der Start ihn ohne Nachladen prüft | „Kopplung trennen“, Trennen durch das andere Gerät, neue Kopplung, 30 Tage, „Alle Daten löschen“. |
+| IndexedDB `eeb-kopplung`, auf beiden Geräten | Das Zertifikat der Kopplung (vom Browser abgelegt, der private Schlüssel ist nicht auslesbar); je wartendem Platz des anderen Geräts dessen Angebot (Fingerabdruck, Verbindungskennwörter, lokale Adressen), die Kennung seiner Seite und die eigenen Kennwörter; am Sammler dazu die Kennungen der Meldungen, die die Zentrale bestätigt hat | wie oben; ohne den Merker im `localStorage` gilt der Inhalt nicht und wird beim nächsten Lesen entfernt; `alleDatenLoeschen` löscht die Datenbank |
 
 Die erste Nutzung von IndexedDB in dieser App; in der Datensicherung steht
 davon nur der Merker aus dem `localStorage`, und eine eingespielte Sicherung
@@ -1200,7 +1210,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Telefon gekoppelt, Bildschirm aus, nach Minuten wieder an | Beim Einschalten verbindet sich das Telefon ohne neuen Code (im Prüfstand in unter einer Sekunde) und gleicht ab; bis dahin meldet der Rechner „unterbrochen“, nach 45 Sekunden „getrennt“. |
 | Telefon gekoppelt, draußen außer Reichweite des WLAN | Beide nehmen weiter auf und speichern bei sich; das Telefon ruft alle 30 Sekunden an und verbindet sich, sobald es wieder im Netz ist. |
 | Seite des Telefons neu geladen oder App am nächsten Tag wieder geöffnet, Rechner unverändert offen | Das Telefon zeigt seine Sammler-Ansicht und verbindet sich ohne Scan; was es inzwischen aufgenommen hat, geht hinüber. |
-| Seite des Rechners neu geladen | Der Rechner zeigt „Verbindung getrennt … Die Seite wurde neu geladen“ und „Neu koppeln…“; ein Scan am Telefon, danach stehen alle Einheiten des Telefons in der Lage. |
+| Seite des Rechners neu geladen (auch selbsttätig nach einer neuen Fassung), Telefon unverändert offen | Der Rechner ruft das Telefon an und ist ohne Scan wieder verbunden; ist das Telefon gerade eingeschlafen, sobald es aufwacht. |
+| Beide Seiten neu geladen, bevor sie sich wiedergefunden haben | Beide melden „unterbrochen“, nach 45 Sekunden „getrennt“; der Rechner bietet „Neu koppeln…“ an (ein Scan). Nichts geht verloren, das Telefon überträgt danach. |
 | Geräteausfall, nur das Lageblatt auf Papier | Bögen scannen, Zeiten, Status und Nummer in einer Liste nachtragen, Abgleich in einem Schritt. |
 | Uhr springt um ein Jahr | Keine Löschung, keine Anonymisierung, bis „Geräteuhr stimmt" bestätigt ist. |
 | Erste Nutzung ohne Netz nach Installation | Alles aus dem Vorrat; Sammel-PDF und QR entstehen offline. |
@@ -1222,7 +1233,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
 | Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
 | Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Safari, Firefox und echte Geräte im WLAN ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand. |
-| Gemerkte Kopplung trägt nur, solange die Seite des ersten Geräts offen bleibt | Über Tage ungeprüft: ob wartende Verbindungen so lange leben (gemessen 20 Minuten), ob der Rechner dazwischen schläft, ob eine neue Fassung der App seine Seite neu lädt (mit Netz geschieht das von selbst). Dann zeigt der Rechner „neu koppeln“, und es kostet einen Scan. Safari legt ein Zertifikat womöglich nicht in IndexedDB ab; dann bleibt die Kopplung eine des Arbeitsspeichers. |
+| Gemerkte Kopplung trägt, solange eine der beiden Seiten offen geblieben ist | Über Tage ungeprüft: ob wartende Verbindungen so lange leben (gemessen 20 Minuten), ob die des Telefons den Schlaf überstehen, in dem der Rechner neu lädt. Laden beide neu, bevor sie sich wiedergefunden haben, zeigt der Rechner „Neu koppeln…“, und es kostet einen Scan. Safari legt ein Zertifikat womöglich nicht in IndexedDB ab; dann bleibt die Kopplung eine des Arbeitsspeichers. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
 | Bundle-Budget mit der Kopplung zweimal angehoben | JavaScript gesamt 4.413.510 Byte (rund 52 KB für `kopplung/*`, nachgeladen); Startbündel 643.035 Byte (rund 2,4 KB: Zustand, Scanner-Weiche, Knopf, die Wege der Aufnahme für die Sammler-Ansicht). |

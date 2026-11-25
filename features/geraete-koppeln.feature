@@ -85,12 +85,30 @@ Funktionalität: Zweites Gerät koppeln
     Und das zweite Gerät den Bogen der DLRG Wardenburg scannt
     Dann zählt die Übersicht 2 Einheiten
 
-  Szenario: Lädt das erste Gerät seine Seite neu, sagt es, dass neu gekoppelt werden muss
+  Szenario: Lädt das erste Gerät seine Seite neu, findet es das zweite ohne neuen Scan wieder
     Angenommen beide Geräte sind gekoppelt
-    Wenn ich die Seite neu lade
-    Dann meldet die Kopplungsleiste "Verbindung getrennt"
-    Und meldet die Kopplungsleiste "Die Seite wurde neu geladen"
-    Und sehe ich die Schaltfläche "Neu koppeln…"
+    Wenn das erste Gerät seine Seite neu lädt
+    Dann meldet die Kopplungsleiste "Verbindung aktiv"
+    Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+
+  Szenario: Erst lädt das erste Gerät neu, dann das zweite: Beide finden sich jedes Mal wieder
+    Angenommen beide Geräte sind gekoppelt
+    Wenn das erste Gerät seine Seite neu lädt
+    Dann meldet die Kopplungsleiste "Verbindung aktiv"
+    Wenn das zweite Gerät seine Seite neu lädt
+    Dann meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+    Wenn das erste Gerät seine Seite neu lädt
+    Dann meldet die Kopplungsleiste "Verbindung aktiv"
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+
+  Szenario: Laden beide Geräte zugleich neu, sagt das erste, dass es das zweite sucht
+    Angenommen beide Geräte sind gekoppelt
+    Wenn beide Geräte ihre Seite zugleich neu laden
+    Dann meldet die Kopplungsleiste "Verbindung unterbrochen"
+    Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung unterbrochen"
 
   Szenario: Nach „Kopplung trennen“ setzt das zweite Gerät nichts fort
     Angenommen beide Geräte sind gekoppelt

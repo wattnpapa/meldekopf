@@ -37,9 +37,9 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > sondern die Bögen, die es selbst gescannt hat; R16 ist entsprechend
 > herabgestuft.
 > **Nachgezogen 2026-11-25:** Zum Koppeln genügt ein Scan am zweiten Gerät.
-> Das zweite Gerät merkt sich die Kopplung bis zu 30 Tage (`localStorage`
+> Beide Geräte merken sich die Kopplung bis zu 30 Tage (`localStorage`
 > `eeb.kopplung.v1`, IndexedDB `eeb-kopplung`): Rolle, Kennung der Sammlung,
-> Verbindungsangaben und die Kennungen bestätigter Meldungen, keine Inhalte
+> Verbindungsangaben und am zweiten Gerät die Kennungen bestätigter Meldungen, keine Inhalte
 > von Bögen. Gelöscht mit „Kopplung trennen“, einer neuen Kopplung, nach
 > Fristablauf und mit „Alle Daten löschen“. Kein neuer
 > Empfänger außerhalb des Meldekopfs, kein Server, kein neuer Speicherort der

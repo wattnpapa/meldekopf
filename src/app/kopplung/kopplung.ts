@@ -79,9 +79,22 @@ let wachsperre: { release: () => Promise<void> } | null = null;
 let rolle: "hoerer" | "rufer" | null = null;
 /** Hörer: wartende Verbindungen, die das zweite Gerät anrufen kann. */
 const plaetze = new Map<number, { angebot: Angebot; marke: object; beantwortet: boolean }>();
-let platzNr = 0;
+// Nummern aus der Uhr: Nach einem Neuladen beginnen sie nicht wieder bei eins und treffen keine gemerkte.
+let platzNr = Date.now();
+/**
+ * Kennung dieser Seite, bei jedem Laden neu. Wartende Plätze gehören der Seite, die sie angelegt hat: Meldet sich das
+ * andere Gerät mit einer neuen Kennung, hat es neu geladen, und seine alten Plätze gibt es nicht mehr.
+ */
+const SEITE = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+/** Zentrale, nach dem Neuladen ihrer Seite: Sie ruft das zweite Gerät an, bis die Verbindung wieder steht. */
+let fortgesetzt = false;
+
+/** Wer ruft an, wenn die Verbindung weg ist? Der Sammler immer; die Zentrale nur nach dem Neuladen ihrer Seite. */
+function darfRufen(): boolean {
+  return rolle === "rufer" || (rolle === "hoerer" && fortgesetzt);
+}
 /** Rufer: Plätze des Hörers, zu denen dieses Gerät eine Antwort bereithält. */
-let rufPlaetze: { nr: number; platz: RufPlatz }[] = [];
+let rufPlaetze: { nr: number; seite: string; platz: RufPlatz }[] = [];
 let zertifikat: Promise<RTCCertificate | undefined> | null = null;
 let rufVersuch: { marke: object; platz: number; verbindung: Verbindung | null; uhr: ReturnType<typeof setTimeout> } | null = null;
 let rufUhr: ReturnType<typeof setTimeout> | undefined;
@@ -110,17 +123,19 @@ function merken(): void {
   if (!s || !rolle || !s.einsatzId) return;
   merkKette = merkKette.then(async () => {
     if (nr !== lauf || sitzung !== s) return;
-    if (rolle === "hoerer") {
-      await merkerSchreiben({ rolle: "zentrale", einsatzId: s.einsatzId, seit: kopplungSeit });
-      return;
-    }
     const zert = await zertifikat;
     const plaetze = rufPlaetze.flatMap((p) => {
       const d = p.platz.daten();
-      return d ? [{ nr: p.nr, ...d }] : [];
+      return d ? [{ nr: p.nr, seite: p.seite, ...d }] : [];
     });
-    if (!zert || nr !== lauf) return;
-    await merkerSchreiben({ rolle: "sammler", einsatzId: s.einsatzId, seit: kopplungSeit, zertifikat: zert, plaetze, bestaetigt: s.bestaetigte() });
+    if (nr !== lauf) return;
+    await merkerSchreiben({
+      rolle: rolle === "hoerer" ? "zentrale" : "sammler",
+      einsatzId: s.einsatzId,
+      seit: kopplungSeit,
+      ...(zert ? { zertifikat: zert, plaetze } : {}),
+      ...(rolle === "rufer" ? { bestaetigt: s.bestaetigte() } : {}),
+    });
   });
 }
 
@@ -203,10 +218,8 @@ function beiSichtwechsel(): void {
 }
 
 function beiSeitenende(): void {
-  // Die Zentrale verliert mit der Seite ihre wartenden Verbindungen: Der Sammler soll wissen, dass dort niemand mehr
-  // wartet. Der Sammler dagegen verabschiedet sich nicht: Er hat sich gemerkt, womit er nach dem Neuladen wieder
-  // anruft (merker.ts), und die Zentrale soll ihre Plätze dafür offen halten.
-  if (rolle === "hoerer") aktiv?.sofortSenden({ art: "ende" });
+  // Kein Abschied: Jedes der beiden Geräte hat sich gemerkt, womit es das andere nach dem Neuladen wieder anruft
+  // (merker.ts), und das andere soll seine wartenden Plätze dafür offen halten. Abschied nimmt nur „Trennen".
 }
 
 function taktStoppen(): void {
@@ -302,6 +315,7 @@ function aufraeumen(): void {
   ersteMarke = null;
   sitzung = null;
   rolle = null;
+  fortgesetzt = false;
   zertifikat = null;
   v?.schliessen();
   e?.schliessen();
@@ -314,34 +328,37 @@ function aufraeumen(): void {
 
 /** Kann sich dieses Gerät ohne neuen Code wieder verbinden? */
 function wiederverbindbar(): boolean {
-  if (rolle === "hoerer") return [...plaetze.values()].some((p) => p.beantwortet);
-  return rolle === "rufer" && rufPlaetze.some((p) => p.platz.nutzbar());
+  // Entweder das andere Gerät kann hier anrufen, oder dieses dort.
+  return [...plaetze.values()].some((p) => p.beantwortet) || (darfRufen() && rufPlaetze.some((p) => p.platz.nutzbar()));
 }
 
-/** Hörer: genug wartende Plätze bereithalten und dem zweiten Gerät anbieten. */
+/**
+ * Genug wartende Plätze bereithalten und dem anderen Gerät anbieten. Beide Geräte tun das: Die Zentrale wartet auf den
+ * Sammler, der nach dem Aufwachen anruft; der Sammler wartet auf die Zentrale, die nach dem Neuladen ihrer Seite anruft.
+ */
 function plaetzeAuffuellen(nr: number): void {
-  if (rolle !== "hoerer" || nr !== lauf) return;
+  if (!rolle || nr !== lauf) return;
   // Angebote, auf die noch keine Antwort kam (die Verbindung riss dazwischen), gehen noch einmal hinaus.
-  for (const [platz, p] of plaetze) if (!p.beantwortet) void aktiv?.senden({ art: "platz", nr: platz, sdp: p.angebot.sdp }).catch(() => undefined);
+  for (const [platz, p] of plaetze) if (!p.beantwortet) void aktiv?.senden({ art: "platz", nr: platz, seite: SEITE, sdp: p.angebot.sdp }).catch(() => undefined);
   for (let i = plaetze.size; i < PLAETZE; i++) {
     const platz = ++platzNr;
     const marke = {};
     void angebotErzeugen(horcher(nr, marke)).then(
       (a) => {
-        if (nr !== lauf || rolle !== "hoerer") {
+        if (nr !== lauf || !rolle) {
           a.verbindung.schliessen();
           return;
         }
         plaetze.set(platz, { angebot: a, marke, beantwortet: false });
-        void aktiv?.senden({ art: "platz", nr: platz, sdp: a.sdp }).catch(() => undefined);
+        void aktiv?.senden({ art: "platz", nr: platz, seite: SEITE, sdp: a.sdp }).catch(() => undefined);
       },
       () => undefined,
     );
   }
 }
 
-/** Rufer: Das erste Gerät bietet einen wartenden Platz an. */
-async function platzAnnehmen(nr: number, platz: number, sdp: string): Promise<void> {
+/** Das andere Gerät bietet einen wartenden Platz an. */
+async function platzAnnehmen(nr: number, platz: number, seite: string, sdp: string): Promise<void> {
   const da = rufPlaetze.find((p) => p.nr === platz);
   if (da) {
     void aktiv?.senden({ art: "platz-antwort", nr: platz, sdp: da.platz.antwortSdp }).catch(() => undefined);
@@ -350,12 +367,12 @@ async function platzAnnehmen(nr: number, platz: number, sdp: string): Promise<vo
   zertifikat ??= rufZertifikat();
   const z = await zertifikat;
   const neu = await rufPlatzVorbereiten(sdp, z);
-  if (nr !== lauf || rolle !== "rufer") {
+  if (nr !== lauf || !rolle) {
     neu.verwerfen();
     return;
   }
-  rufPlaetze.push({ nr: platz, platz: neu });
-  // Ältere Plätze sind beim Hörer verbraucht oder ersetzt.
+  rufPlaetze.push({ nr: platz, seite, platz: neu });
+  // Ältere Plätze sind beim anderen Gerät verbraucht oder ersetzt.
   while (rufPlaetze.length > PLAETZE + 1) rufPlaetze.shift()?.platz.verwerfen();
   merken();
   void aktiv?.senden({ art: "platz-antwort", nr: platz, sdp: neu.antwortSdp }).catch(() => undefined);
@@ -365,7 +382,7 @@ async function platzAnnehmen(nr: number, platz: number, sdp: string): Promise<vo
 function rufen(nr: number): void {
   clearTimeout(rufUhr);
   rufUhr = undefined;
-  if (nr !== lauf || rolle !== "rufer" || aktiv || rufVersuch) return;
+  if (nr !== lauf || !darfRufen() || aktiv || rufVersuch) return;
   // Die jüngsten Plätze zuerst: Ein älterer kann beim ersten Gerät schon verbraucht sein, ohne dass es hier ankam.
   const nutzbar = rufPlaetze.filter((p) => p.platz.nutzbar()).sort((a, b) => b.nr - a.nr);
   if (nutzbar.length === 0) {
@@ -451,7 +468,7 @@ function nachfragen(nr: number): void {
 function aufgewacht(): void {
   const nr = lauf;
   if (aktiv) nachfragen(nr);
-  else if (rolle === "rufer" && !rufVersuch && (kopplungsZustand().wartet || kopplungsZustand().phase === "verbindet")) {
+  else if (darfRufen() && !rufVersuch && (kopplungsZustand().wartet || kopplungsZustand().phase === "verbindet")) {
     rufZahl = 0;
     rufen(nr);
   }
@@ -501,12 +518,26 @@ function steuerNachricht(nr: number, n: { art?: unknown; nr?: unknown; sdp?: unk
     kopplungBeenden(`Das andere Gerät hat die Kopplung getrennt. ${GETRENNT_HIER_SATZ}`, false);
     return true;
   }
+  if (n.art === "hallo") {
+    // Das andere Gerät nennt die Kennung seiner Seite: Plätze einer früheren Seite gibt es dort nicht mehr.
+    const seite = (n as { seite?: unknown }).seite;
+    if (typeof seite === "string") {
+      rufPlaetze = rufPlaetze.filter((p) => {
+        if (p.seite === seite) return true;
+        p.platz.verwerfen();
+        return false;
+      });
+      merken();
+    }
+    return true;
+  }
   if (n.art === "platz" && typeof n.nr === "number" && typeof n.sdp === "string") {
-    if (rolle === "rufer") void platzAnnehmen(nr, n.nr, n.sdp).catch(() => undefined);
+    const seite = (n as { seite?: unknown }).seite;
+    void platzAnnehmen(nr, n.nr, typeof seite === "string" ? seite : "", n.sdp).catch(() => undefined);
     return true;
   }
   if (n.art === "platz-antwort" && typeof n.nr === "number" && typeof n.sdp === "string") {
-    const p = rolle === "hoerer" ? plaetze.get(n.nr) : undefined;
+    const p = plaetze.get(n.nr);
     if (p && !p.beantwortet) {
       p.beantwortet = true;
       p.angebot.antwortAnnehmen(n.sdp).catch(() => {
@@ -558,7 +589,9 @@ function horcher(nr: number, marke: object): VerbindungsHorcher {
           clearTimeout(pongOffen);
           pongOffen = undefined;
           rufZahl = 0;
+          fortgesetzt = false;
           sitzung?.neuVerbunden();
+          neu.sofortSenden({ art: "hallo", seite: SEITE });
         }
         kopplungsZustandSetzen({ phase: "verbunden", wartet: false, seit: null, hinweis: "", dialog: null });
         tuerenSchliessen();
@@ -684,7 +717,8 @@ export async function kopplungStarten(einsatzId: string): Promise<void> {
     const marke = {};
     ersteMarke = marke;
     // Ein Zertifikat für das Angebot und die Türen: Das zweite Gerät kennt aus dem Code nur einen Fingerabdruck.
-    const zert = await rufZertifikat();
+    zertifikat = rufZertifikat();
+    const zert = await zertifikat;
     const a = await angebotErzeugen(horcher(nr, marke), zert);
     if (nr !== lauf) {
       a.verbindung.schliessen();
@@ -760,7 +794,7 @@ export async function kopplungAngebotGescannt(text: string): Promise<void> {
       platz.verwerfen();
       return;
     }
-    rufPlaetze = [{ nr: 0, platz }];
+    rufPlaetze = [{ nr: 0, seite: "", platz }];
     // Anklopfen geht nur, wenn das erste Gerät Türen offen hat und sich die Kennwörter dieses Geräts selbst ableiten kann.
     const selbst = !!s.tueren && s.tueren.length === TUEREN && platz.vorgabeGilt;
     kopplungsZustandSetzen({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }), selbst } });
@@ -776,7 +810,7 @@ export async function kopplungAngebotGescannt(text: string): Promise<void> {
 }
 
 export const NEU_GELADEN_SATZ =
-  "Die Seite wurde neu geladen; die Verbindung zum zweiten Gerät ist dabei verloren gegangen. Was dort aufgenommen wird, bleibt dort gespeichert, bis neu gekoppelt ist: „Neu koppeln…“ und am zweiten Gerät den Code scannen.";
+  "Die Seite wurde neu geladen, und das zweite Gerät ist nicht zu erreichen. Dieses Gerät versucht es weiter. Wurde dort ebenfalls neu geladen, hilft nur: „Neu koppeln…“ und am zweiten Gerät den Code scannen. Was dort aufgenommen wurde, bleibt dort gespeichert.";
 
 /**
  * Nach dem Neuladen der Seite: eine gemerkte Kopplung fortsetzen (merker.ts). Der Sammler ruft die Zentrale über die
@@ -787,27 +821,37 @@ export async function kopplungFortsetzen(): Promise<void> {
   if (sitzung || kopplungsZustand().phase !== "aus") return;
   const m = await merkerLaden();
   if (!m || sitzung || kopplungsZustand().phase !== "aus") return;
-  if (m.rolle === "zentrale") {
-    await merkerLoeschen();
-    kopplungsZustandSetzen({ phase: "getrennt", rolle: "zentrale", einsatzId: m.einsatzId, wartet: false, abgleichAm: null, seit: Date.now(), hinweis: NEU_GELADEN_SATZ, dialog: null });
-    return;
-  }
+  const zentrale = m.rolle === "zentrale";
   if (!kopplungMoeglich() || !m.zertifikat || !m.plaetze?.length) {
+    // Nichts, womit sich anrufen ließe: Die Zentrale sagt es, der Sammler vergisst die Kopplung.
     await merkerLoeschen();
+    if (zentrale) kopplungsZustandSetzen({ phase: "getrennt", rolle: "zentrale", einsatzId: m.einsatzId, wartet: false, abgleichAm: null, seit: Date.now(), hinweis: NEU_GELADEN_SATZ, dialog: null });
     return;
   }
   const nr = beginnen();
   kopplungSeit = m.seit;
-  rolle = "rufer";
+  rolle = zentrale ? "hoerer" : "rufer";
+  fortgesetzt = zentrale;
   zertifikat = Promise.resolve(m.zertifikat);
-  rufPlaetze = m.plaetze.map((p) => ({ nr: p.nr, platz: rufPlatzWiederherstellen(p.angebotSdp, m.zertifikat!, p.ufrag, p.pwd) }));
-  sitzung = neueSitzung(m.einsatzId, nr, "sammler", m.bestaetigt ?? []);
-  kopplungsZustandSetzen({ phase: "unterbrochen", rolle: "sammler", wartet: true, einsatzId: m.einsatzId, abgleichAm: null, seit: Date.now(), hinweis: "", dialog: null, offen: sitzung.offen() });
+  rufPlaetze = m.plaetze.map((p) => ({ nr: p.nr, seite: p.seite, platz: rufPlatzWiederherstellen(p.angebotSdp, m.zertifikat!, p.ufrag, p.pwd) }));
+  sitzung = neueSitzung(m.einsatzId, nr, m.rolle, m.bestaetigt ?? []);
+  kopplungsZustandSetzen({
+    phase: "unterbrochen",
+    rolle: m.rolle,
+    wartet: true,
+    einsatzId: m.einsatzId,
+    abgleichAm: null,
+    seit: Date.now(),
+    hinweis: "",
+    dialog: null,
+    offen: sitzung.offen(),
+  });
   clearTimeout(aufgebenUhr);
   aufgebenUhr = setTimeout(() => {
     if (nr !== lauf || aktiv) return;
     wachLassen();
-    kopplungsZustandSetzen({ phase: "getrennt", wartet: true });
+    // Findet die Zentrale das zweite Gerät nicht, wurde dort wohl auch neu geladen: Dann hilft nur der Scan.
+    kopplungsZustandSetzen({ phase: "getrennt", wartet: true, ...(zentrale ? { hinweis: NEU_GELADEN_SATZ } : {}) });
   }, AUFGEBEN_MS);
   // Die App öffnet die Sammlung, falls sie nach dem Neuladen auf der Startseite steht.
   if (m.einsatzId) kopplungsStandMelden(m.einsatzId);

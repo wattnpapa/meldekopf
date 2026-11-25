@@ -26,6 +26,8 @@ export const MERKER_TAGE = 30;
 
 export interface GemerkterPlatz {
   nr: number;
+  /** Kennung der Seite des anderen Geräts, die den Platz angelegt hat. */
+  seite: string;
   angebotSdp: string;
   ufrag: string;
   pwd: string;
@@ -36,9 +38,9 @@ export interface KopplungsMerker {
   einsatzId: string | null;
   /** Wann die Kopplung begann (Date.now()). */
   seit: number;
-  /** Nur Sammler. */
   zertifikat?: RTCCertificate;
   plaetze?: GemerkterPlatz[];
+  /** Nur Sammler. */
   bestaetigt?: string[];
 }
 
@@ -83,7 +85,7 @@ function kurz(): { rolle?: unknown; einsatzId?: unknown; seit?: unknown } | null
 /** Merken. Scheitert es (Privatmodus, voller Speicher, ein Browser, der kein Zertifikat ablegt), bleibt die Kopplung eine des Arbeitsspeichers. */
 export async function merkerSchreiben(m: KopplungsMerker): Promise<boolean> {
   try {
-    if (m.rolle === "sammler") await ablage("readwrite", (s) => s.put(m, SCHLUESSEL));
+    await ablage("readwrite", (s) => s.put(m, SCHLUESSEL));
     localStorage.setItem(KOPPLUNG_MERKER, JSON.stringify({ rolle: m.rolle, einsatzId: m.einsatzId, seit: m.seit }));
     return true;
   } catch {
@@ -119,16 +121,15 @@ export async function merkerLaden(jetzt = Date.now()): Promise<KopplungsMerker |
     return null;
   }
   const einsatzId = typeof k.einsatzId === "string" ? k.einsatzId : null;
-  if (k.rolle === "zentrale") return { rolle: "zentrale", einsatzId, seit };
+  const ohne: KopplungsMerker = { rolle: k.rolle, einsatzId, seit };
   try {
     const m = await ablage<KopplungsMerker | undefined>("readonly", (s) => s.get(SCHLUESSEL));
-    if (!m || m.rolle !== "sammler" || m.seit !== seit || !m.zertifikat || !Array.isArray(m.plaetze)) {
-      await merkerLoeschen();
-      return null;
-    }
-    return m;
+    if (m && m.rolle === k.rolle && m.seit === seit && m.zertifikat && Array.isArray(m.plaetze)) return m;
   } catch {
-    await merkerLoeschen();
-    return null;
+    /* keine Datenbank oder nicht lesbar */
   }
+  // Ohne Zertifikat und Plätze lässt sich nicht anrufen. Die Zentrale will trotzdem wissen, dass sie eine war.
+  if (k.rolle === "zentrale") return ohne;
+  await merkerLoeschen();
+  return null;
 }
