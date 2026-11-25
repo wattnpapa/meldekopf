@@ -267,8 +267,8 @@ export interface Angebot {
 }
 
 /** Erstes Gerät: Angebot erzeugen. */
-export async function angebotErzeugen(h: VerbindungsHorcher): Promise<Angebot> {
-  const pc = neuePc();
+export async function angebotErzeugen(h: VerbindungsHorcher, zertifikat?: RTCCertificate): Promise<Angebot> {
+  const pc = neuePc(zertifikat);
   const { kanalSetzen, verbindung } = verdrahten(pc, h);
   kanalSetzen(pc.createDataChannel("meldekopf", { ordered: true }));
   await pc.setLocalDescription(await pc.createOffer());
@@ -429,4 +429,124 @@ export async function rufPlatzVorbereiten(
       erstes = null;
     },
   };
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+// Türen und Anklopfen (signal.ts, „Anklopfen"): Das zweite Gerät teilt dem ersten seinen Fingerabdruck über das Netz mit.
+
+/** Ein Klopfer, wie ihn das erste Gerät in seinen Statistiken sieht. */
+export interface Klopfer {
+  tuer: number;
+  /** Zeitpunkt des letzten Pakets dieses Klopfers (Uhr der Statistik, Millisekunden). */
+  zeit: number;
+}
+
+export interface Tueren {
+  /** Je Tür der Port zu jeder Adresse des Angebots; für den Code. */
+  ports: number[][];
+  /** Alle bisherigen Klopfer, in der Reihenfolge, in der geklopft wurde. */
+  lesen: () => Promise<Klopfer[]>;
+  schliessen: () => void;
+}
+
+/**
+ * Erstes Gerät: Türen öffnen. Jede ist eine wartende Verbindung mit dem Zertifikat des Angebots und abgeleiteten
+ * Kennwörtern, ohne Gegenstelle; sie beantwortet das Anklopfen und sonst nichts. `null`, wenn der Browser die
+ * abgeleiteten Kennwörter nicht annimmt oder eine Tür keine Adresse des Angebots hat: Dann bleibt der Antwort-Code.
+ */
+export async function tuerenOeffnen(
+  zertifikat: RTCCertificate,
+  adressen: readonly string[],
+  kennwoerter: (nr: number) => Promise<{ ufrag: string; pwd: string }>,
+  portsLesen: (tuerSdp: string, adressen: readonly string[]) => number[],
+  anzahl: number,
+): Promise<Tueren | null> {
+  const pcs: RTCPeerConnection[] = [];
+  const schliessen = () => {
+    for (const pc of pcs.splice(0)) {
+      try {
+        pc.close();
+      } catch {
+        /* schon zu */
+      }
+    }
+  };
+  try {
+    const ports = await Promise.all(
+      Array.from({ length: anzahl }, async (_, nr) => {
+        const pc = neuePc(zertifikat);
+        pcs.push(pc);
+        pc.createDataChannel("tuer");
+        const k = await kennwoerter(nr);
+        const o = await pc.createOffer();
+        await pc.setLocalDescription({ type: "offer", sdp: (o.sdp ?? "").replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${k.ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${k.pwd}`) });
+        if (sdpFeld(pc.localDescription?.sdp ?? "", "ice-ufrag") !== k.ufrag) throw new Error("Kennwörter nicht übernommen");
+        await fertigGesammelt(pc);
+        const p = portsLesen(pc.localDescription?.sdp ?? "", adressen);
+        if (p.every((x) => x === 0)) throw new Error("Tür ohne Adresse");
+        return p;
+      }),
+    );
+    // Die Reihenfolge der Türen ist die ihrer Nummern, nicht die ihres Fertigwerdens.
+    const geordnet = [...pcs];
+    return {
+      ports,
+      schliessen,
+      async lesen() {
+        const klopfer: Klopfer[] = [];
+        await Promise.all(
+          geordnet.map(async (pc, tuer) => {
+            if (pc.connectionState === "closed") return;
+            (await pc.getStats()).forEach((x: { type?: string; requestsReceived?: number; lastPacketReceivedTimestamp?: number }) => {
+              // Ein Klopfer ohne Zeitstempel ist noch unterwegs: Er zählt beim nächsten Lesen.
+              if (x.type === "candidate-pair" && (x.requestsReceived ?? 0) > 0 && x.lastPacketReceivedTimestamp) klopfer.push({ tuer, zeit: x.lastPacketReceivedTimestamp });
+            });
+          }),
+        );
+        return klopfer.sort((a, b) => a.zeit - b.zeit);
+      },
+    };
+  } catch {
+    schliessen();
+    return null;
+  }
+}
+
+/** So lange hat eine Tür Zeit zu antworten. */
+const KLOPF_FRIST_MS = 4000;
+/** Nach der Antwort der Tür bleibt der Klopfer noch so lange stehen: Sein erstes Paket danach trägt den Zeitstempel. */
+const KLOPF_NACHLAUF_MS = 35;
+/** Pause vor dem nächsten Klopfer: Die Zeitstempel zweier Klopfer müssen sich unterscheiden. */
+const KLOPF_PAUSE_MS = 15;
+
+/**
+ * Zweites Gerät: einmal an eine Tür klopfen. Eine Wegwerf-Verbindung prüft die Adresse der Tür (die antwortet, weil
+ * das Kennwort stimmt), schickt den ersten Gruß des Schlüsseltauschs (den die Tür nicht beantwortet, aber mit Uhrzeit
+ * zählt) und schließt wieder. Rückgabe: ob die Tür geantwortet hat.
+ */
+export async function klopfen(tuerSdp: string): Promise<boolean> {
+  const pc = neuePc();
+  try {
+    await pc.setRemoteDescription({ type: "offer", sdp: tuerSdp });
+    const a = await pc.createAnswer();
+    await pc.setLocalDescription({ type: "answer", sdp: (a.sdp ?? "").replace(/^a=setup:.*$/m, "a=setup:active") });
+    const offen = await new Promise<boolean>((fertig) => {
+      const uhr = setTimeout(() => fertig(false), KLOPF_FRIST_MS);
+      const pruefen = () => {
+        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          clearTimeout(uhr);
+          fertig(true);
+        }
+      };
+      pc.addEventListener("iceconnectionstatechange", pruefen);
+      pruefen();
+    });
+    if (offen) await new Promise((r) => setTimeout(r, KLOPF_NACHLAUF_MS));
+    return offen;
+  } catch {
+    return false;
+  } finally {
+    pc.close();
+    await new Promise((r) => setTimeout(r, KLOPF_PAUSE_MS));
+  }
 }

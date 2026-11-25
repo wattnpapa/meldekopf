@@ -4,8 +4,11 @@ Funktionalität: Zweites Gerät koppeln
   Am Meldekopf im Fahrzeug scannt das Telefon draußen, der Rechner zeigt die
   Übersicht. Das Telefon ist dabei ein reiner Sammler: Es schickt, was es
   aufnimmt, und bekommt die Lage nicht. Die Geräte verbinden sich direkt im
-  selben Netz, ohne Server und ohne Internet. Zwei Codes stellen die Verbindung her:
-  Das erste Gerät zeigt einen, das zweite scannt ihn und zeigt die Antwort.
+  selben Netz, ohne Server und ohne Internet. Ein Scan genügt: Das erste Gerät
+  zeigt einen Code, das zweite scannt ihn, danach verbinden sich beide von
+  selbst. Am ersten Gerät ist nichts zu scannen und nichts einzugeben, denn im
+  Fahrzeug hat der Rechner oft weder Kamera noch Handscanner. Der Antwort-Code
+  des zweiten Geräts bleibt der Ausweichweg.
 
   Im Prüfstand ersetzt der Handscanner-Weg die Kamera: Der Code wird getippt,
   wie ein USB-Scanner ihn tippt. Beide Geräte sind zwei getrennte Browser-
@@ -15,39 +18,28 @@ Funktionalität: Zweites Gerät koppeln
     Angenommen auf dem Gerät liegt die Sammlung "Hochwasser Weser" mit dem alten Bogen
     Und ein zweites Gerät hat die App geöffnet
 
-  Szenario: Zwei Codes koppeln die Geräte, die Sammlung erscheint auf dem zweiten
+  Szenario: Ein Scan genügt: Das erste Gerät muss nichts scannen und nichts eingeben
     Wenn ich auf "Zweites Gerät koppeln…" klicke
     Dann sehe ich den Dialog "Zweites Gerät koppeln"
+    Und meldet der Dialog "Die Geräte verbinden sich danach von selbst"
     Wenn das zweite Gerät meinen Kopplungs-Code scannt
-    Dann zeigt das zweite Gerät den Dialog "Antwort-Code für das erste Gerät"
-    Wenn ich den Antwort-Code des zweiten Geräts scanne
     Dann meldet die Kopplungsleiste "Verbindung aktiv"
     Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+    Und ist kein Dialog offen
     Und zeigt das zweite Gerät die Überschrift "Hochwasser Weser"
     Und zeigt das zweite Gerät den Text "Dieses Gerät sammelt"
     Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (0)"
     Und zeigt das zweite Gerät "THW Oldenburg" nicht
 
-  Szenario: Ohne Kamera am ersten Gerät: den Antwort-Code eintippen
+  Szenario: Ausweichweg: Klappt es nicht von selbst, koppelt der Antwort-Code
+    Angenommen das erste Gerät öffnet keine Türen zum Anklopfen
     Wenn ich auf "Zweites Gerät koppeln…" klicke
-    Und das zweite Gerät meinen Kopplungs-Code scannt
-    Dann zeigt das zweite Gerät einen Code zum Eintippen mit 53 Zeichen
-    Wenn ich auf "Code eintippen…" klicke
-    Dann sehe ich den Dialog "Antwort-Code eintippen"
-    Und ist im Dialog "Verbinden" gesperrt
-    Wenn ich den Code des zweiten Geräts abtippe
-    Und ich im Dialog auf "Verbinden" klicke
+    Dann meldet der Dialog "hier „Antwort scannen…“ tippen"
+    Wenn das zweite Gerät meinen Kopplungs-Code scannt
+    Dann zeigt das zweite Gerät den Dialog "Antwort-Code für das erste Gerät"
+    Wenn ich den Antwort-Code des zweiten Geräts scanne
     Dann meldet die Kopplungsleiste "Verbindung aktiv"
     Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
-
-  Szenario: Ein vertippter Antwort-Code wird bemerkt, die Kopplung bleibt offen
-    Wenn ich auf "Zweites Gerät koppeln…" klicke
-    Und das zweite Gerät meinen Kopplungs-Code scannt
-    Und ich auf "Code eintippen…" klicke
-    Und ich den Code des zweiten Geräts mit einem Tippfehler abtippe
-    Und ich im Dialog auf "Verbinden" klicke
-    Dann sehe ich den Dialog "Antwort-Code eintippen"
-    Und meldet der Dialog "Der Code stimmt nicht."
 
   Szenario: Was das zweite Gerät scannt, steht auf der Übersicht des ersten
     Angenommen beide Geräte sind gekoppelt

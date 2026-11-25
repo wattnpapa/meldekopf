@@ -16,15 +16,32 @@ import { frageJaNein } from "@bos/oberflaeche/dialoge";
 import { entwirreScanText } from "../eingang/tastaturbelegung";
 import { SpeicherVollFehler } from "../eintrag-zeiten";
 import { AbgleichSitzung } from "./sitzung";
-import { istKurzcode, kennwoerterAbleiten, kurzcodeDekodieren, kurzcodeKodieren, signalDekodieren, signalKodieren, type KopplungsSignal } from "./signal";
+import {
+  KLOPFER,
+  TUEREN,
+  angebotAdressen,
+  antwortAusFingerabdruck,
+  fingerabdruckVon,
+  kennwoerterAbleiten,
+  klopfLesen,
+  klopfZeichen,
+  signalDekodieren,
+  signalKodieren,
+  tuerAngebote,
+  tuerKennwoerter,
+  tuerPortsLesen,
+} from "./signal";
 import { GETRENNT_SATZ as GETRENNT_HIER_SATZ } from "./texte";
 import {
   angebotErzeugen,
+  klopfen,
   kopplungMoeglich,
+  tuerenOeffnen,
   rufPlatzVorbereiten,
   rufZertifikat,
   type Angebot,
   type RufPlatz,
+  type Tueren,
   type Verbindung,
   type VerbindungsHorcher,
   type VerbindungsLage,
@@ -71,6 +88,18 @@ let aufgebenUhr: ReturnType<typeof setTimeout> | undefined;
 let puls: ReturnType<typeof setInterval> | undefined;
 let pulsZuletzt = 0;
 let pongOffen: ReturnType<typeof setTimeout> | undefined;
+/** Erstes Gerät: die Türen, an denen das zweite seinen Fingerabdruck anklopft (signal.ts, „Anklopfen"). */
+let tueren: Tueren | null = null;
+let tuerTakt: ReturnType<typeof setInterval> | undefined;
+/** Erstes Gerät: Die Antwort des zweiten ist gesetzt (gescannt oder angeklopft); eine zweite gilt nicht mehr. */
+let antwortGesetzt = false;
+
+/** So oft liest das erste Gerät seine Türen. */
+const TUER_TAKT_MS = 200;
+/** Zweites Gerät: so viele Durchgänge des Anklopfens, falls einer nicht ankommt. */
+const KLOPF_RUNDEN = 3;
+/** Zweites Gerät: so lange wartet es nach einem Durchgang auf die Verbindung, bevor es noch einmal klopft. */
+const KLOPF_WARTEN_MS = 6000;
 
 /** So viele wartende Plätze hält der Hörer bereit. */
 const PLAETZE = 2;
@@ -85,7 +114,7 @@ const SCHLAF_MS = 20_000;
 /** So lange hat das andere Gerät Zeit, auf die Nachfrage zu antworten. */
 const PONG_FRIST_MS = 3000;
 
-function lesen(text: string): KopplungsSignal {
+function lesen(text: string): ReturnType<typeof signalDekodieren> {
   // Ein Handscanner mit falscher Tastaturbelegung verdreht den Code; das lässt sich zurückrechnen.
   const lesbar = (t: string) => {
     try {
@@ -149,6 +178,60 @@ function taktStoppen(): void {
   takt = undefined;
 }
 
+function tuerenSchliessen(): void {
+  clearInterval(tuerTakt);
+  tuerTakt = undefined;
+  tueren?.schliessen();
+  tueren = null;
+}
+
+/**
+ * Erstes Gerät: Türen lesen. Stehen die jüngsten {@link KLOPFER} Klopfer für einen Fingerabdruck mit stimmendem
+ * Prüfbyte, ist das die Antwort des zweiten Geräts. Die jüngsten, weil ein zweiter Durchgang auf einen misslungenen folgt.
+ */
+async function tuerenLesen(nr: number): Promise<void> {
+  const t = tueren;
+  const a = angebot;
+  if (!t || !a || antwortGesetzt || nr !== lauf) return;
+  const klopfer = await t.lesen();
+  if (klopfer.length < KLOPFER || antwortGesetzt || nr !== lauf || angebot !== a) return;
+  const fp = klopfLesen(klopfer.slice(-KLOPFER).map((k) => k.tuer));
+  if (!fp) return;
+  antwortGesetzt = true;
+  try {
+    await a.antwortAnnehmen(antwortAusFingerabdruck(fp, a.sdp, await kennwoerterAbleiten(a.sdp)));
+  } catch {
+    antwortGesetzt = false;
+  }
+}
+
+/**
+ * Zweites Gerät: den eigenen Fingerabdruck an die Türen des ersten klopfen. Antwortet eine Tür nicht, sind die Türen
+ * von hier nicht erreichbar: Dann bleibt der Antwort-Code im Dialog der Weg.
+ */
+async function anklopfen(nr: number, fingerabdruck: Uint8Array, tuerSdps: readonly string[]): Promise<void> {
+  const zeichen = klopfZeichen(fingerabdruck);
+  const laeuft = () => nr === lauf && kopplungsZustand().phase === "verbindet";
+  for (let runde = 0; runde < KLOPF_RUNDEN && laeuft(); runde++) {
+    for (const z of zeichen) {
+      if (!laeuft()) return;
+      const sdp = tuerSdps[z];
+      if (!sdp || !(await klopfen(sdp))) {
+        if (laeuft()) {
+          const d = kopplungsZustand().dialog;
+          if (d) kopplungsZustandSetzen({ dialog: { ...d, selbst: false } });
+        }
+        return;
+      }
+    }
+    await new Promise((r) => setTimeout(r, KLOPF_WARTEN_MS));
+  }
+  if (laeuft()) {
+    const d = kopplungsZustand().dialog;
+    if (d) kopplungsZustandSetzen({ dialog: { ...d, selbst: false } });
+  }
+}
+
 function rufenStoppen(): void {
   clearTimeout(rufUhr);
   rufUhr = undefined;
@@ -163,6 +246,8 @@ function rufenStoppen(): void {
 function aufraeumen(): void {
   taktStoppen();
   rufenStoppen();
+  tuerenSchliessen();
+  antwortGesetzt = false;
   clearTimeout(aufgebenUhr);
   clearTimeout(pongOffen);
   pongOffen = undefined;
@@ -434,6 +519,7 @@ function horcher(nr: number, marke: object): VerbindungsHorcher {
           sitzung?.neuVerbunden();
         }
         kopplungsZustandSetzen({ phase: "verbunden", wartet: false, seit: null, hinweis: "", dialog: null });
+        tuerenSchliessen();
         void wachHalten();
         schnappschuss = "";
         if (!takt) takt = setInterval(pruefen, TAKT_MS);
@@ -548,14 +634,25 @@ export async function kopplungStarten(einsatzId: string): Promise<void> {
     rolle = "hoerer";
     const marke = {};
     ersteMarke = marke;
-    const a = await angebotErzeugen(horcher(nr, marke));
+    // Ein Zertifikat für das Angebot und die Türen: Das zweite Gerät kennt aus dem Code nur einen Fingerabdruck.
+    const zert = await rufZertifikat();
+    const a = await angebotErzeugen(horcher(nr, marke), zert);
     if (nr !== lauf) {
       a.verbindung.schliessen();
       return;
     }
     angebot = a;
     erste = a.verbindung;
-    kopplungsZustandSetzen({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }) } });
+    // Türen, an denen das zweite Gerät seinen Fingerabdruck anklopft: Dann braucht das erste weder Kamera noch Eingabe.
+    const ohneTueren = !!(globalThis as { __eebKopplungOhneTueren?: boolean }).__eebKopplungOhneTueren;
+    const t = zert && !ohneTueren ? await tuerenOeffnen(zert, angebotAdressen(a.sdp), (i) => tuerKennwoerter(a.sdp, i), tuerPortsLesen, TUEREN) : null;
+    if (nr !== lauf) {
+      t?.schliessen();
+      return;
+    }
+    tueren = t;
+    if (t) tuerTakt = setInterval(() => void tuerenLesen(nr), TUER_TAKT_MS);
+    kopplungsZustandSetzen({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }, t?.ports), selbst: !!t } });
   } catch {
     if (nr === lauf) kopplungsZustandSetzen({ phase: "aus", dialog: { art: "angebot", code: "", fehler: "Dieses Gerät konnte keine Verbindung vorbereiten." } });
   }
@@ -575,18 +672,18 @@ export async function kopplungBeginnenMitRueckfrage(einsatzId: string): Promise<
   await kopplungStarten(einsatzId);
 }
 
-/**
- * Erstes Gerät: den Antwort-Code des zweiten Geräts einsetzen, gescannt oder eingetippt. Wirft mit einem Satz für
- * Scanner oder Eingabefeld.
- */
+/** Erstes Gerät: den gescannten Antwort-Code des zweiten Geräts einsetzen. Wirft mit einem Satz für den Scanner. */
 export async function kopplungAntwortAnnehmen(text: string): Promise<void> {
-  if (!angebot) throw new Error("Die Kopplung wurde inzwischen abgebrochen. Bitte neu beginnen.");
-  const s = istKurzcode(text) ? kurzcodeDekodieren(text, angebot.sdp, await kennwoerterAbleiten(angebot.sdp)) : lesen(text);
+  const s = lesen(text);
   if (s.art !== "antwort") throw new Error(ANGEBOT_STATT_ANTWORT_SATZ);
   if (!angebot) throw new Error("Die Kopplung wurde inzwischen abgebrochen. Bitte neu beginnen.");
+  // Inzwischen angeklopft: Die Antwort ist dieselbe, die Verbindung baut sich schon auf.
+  if (antwortGesetzt) return;
+  antwortGesetzt = true;
   try {
     await angebot.antwortAnnehmen(s.sdp);
   } catch {
+    antwortGesetzt = false;
     throw new Error("Der Antwort-Code passt nicht zu dieser Kopplung. Bitte beide Codes neu tauschen.");
   }
 }
@@ -613,15 +710,11 @@ export async function kopplungAngebotGescannt(text: string): Promise<void> {
       return;
     }
     rufPlaetze = [{ nr: 0, platz }];
-    kopplungsZustandSetzen({
-      dialog: {
-        art: "antwort",
-        code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }),
-        // Zum Eintippen nur, wenn das erste Gerät sich die Kennwörter selbst ableiten kann.
-        ...(platz.vorgabeGilt ? { kurz: kurzcodeKodieren(platz.antwortSdp) } : {}),
-      },
-    });
+    // Anklopfen geht nur, wenn das erste Gerät Türen offen hat und sich die Kennwörter dieses Geräts selbst ableiten kann.
+    const selbst = !!s.tueren && s.tueren.length === TUEREN && platz.vorgabeGilt;
+    kopplungsZustandSetzen({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }), selbst } });
     rufen(nr);
+    if (selbst) void tuerAngebote(s.sdp, s.tueren!).then((sdps) => anklopfen(nr, fingerabdruckVon(platz.antwortSdp), sdps));
   } catch {
     if (nr === lauf) {
       aufraeumen();

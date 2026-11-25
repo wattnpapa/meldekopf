@@ -57,18 +57,21 @@ async function leisteMit(seite: Page, text: string): Promise<void> {
   await leiste(seite).filter({ hasText: text }).waitFor({ state: "visible", timeout: 25_000 });
 }
 
+/** Koppeln, wie es im Betrieb geht: ein Scan am zweiten Gerät, der Rest von selbst. */
 async function koppeln(welt: EebWelt): Promise<void> {
   const b = zweitesGeraet(welt);
   await welt.page.getByRole("button", { name: "Zweites Gerät koppeln…" }).click();
   const angebot = await codeVon(welt.page, "angebot");
   await (await scanKnopf(b)).click();
   await scannen(b, angebot);
-  const antwort = await codeVon(b, "antwort");
-  await welt.page.getByRole("button", { name: "Antwort scannen…" }).click();
-  await scannen(welt.page, antwort);
   await leisteMit(welt.page, "Verbindung aktiv");
   await leisteMit(b, "Verbindung aktiv");
 }
+
+/** Der Haken sitzt in kopplung.ts: ohne Türen bleibt der Antwort-Code der einzige Weg, wie in einem Browser, der sie nicht öffnen kann. */
+Given("das erste Gerät öffnet keine Türen zum Anklopfen", async function (this: EebWelt) {
+  await this.page.evaluate("globalThis.__eebKopplungOhneTueren = true");
+});
 
 Given("ein zweites Gerät hat die App geöffnet", async function (this: EebWelt) {
   const browser = this.page.context().browser();
@@ -181,28 +184,6 @@ Then("zählt die Übersicht {int} Einheiten", async function (this: EebWelt, anz
 
 Then("führt die Übersicht die Einheit {string}", async function (this: EebWelt, name: string) {
   await this.page.locator("main").getByText(name).first().waitFor({ state: "visible" });
-});
-
-async function kurzcode(welt: EebWelt): Promise<string> {
-  const feld = zweitesGeraet(welt).locator("dialog.kopplung-dialog .kopplung-kurzcode");
-  await feld.waitFor();
-  return (await feld.getAttribute("data-kurz")) ?? "";
-}
-
-Then("zeigt das zweite Gerät einen Code zum Eintippen mit {int} Zeichen", async function (this: EebWelt, anzahl: number) {
-  const zeichen = (await kurzcode(this)).replace(/-/g, "");
-  if (zeichen.length !== anzahl) throw new Error(`Der Code zum Eintippen hat ${zeichen.length} Zeichen, erwartet waren ${anzahl}.`);
-});
-
-/** Wie jemand abtippt: klein, mit Leerzeichen statt Strichen, O statt 0. */
-When("ich den Code des zweiten Geräts abtippe", async function (this: EebWelt) {
-  const code = await kurzcode(this);
-  await this.page.locator("#kopplung-kurz").fill(code.replace(/-/g, " ").toLowerCase().replace(/0/g, "o"));
-});
-
-When("ich den Code des zweiten Geräts mit einem Tippfehler abtippe", async function (this: EebWelt) {
-  const code = (await kurzcode(this)).replace(/-/g, "");
-  await this.page.locator("#kopplung-kurz").fill((code[0] === "A" ? "B" : "A") + code.slice(1));
 });
 
 Then("meldet der Dialog {string}", async function (this: EebWelt, text: string) {

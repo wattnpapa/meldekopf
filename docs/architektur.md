@@ -295,7 +295,7 @@ Kennfarbe), liegen unter `src/test/`.
 | Lagemonitor | `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lage-angaben.ts`; Tafel-Ansicht `lagetafel-ui.tsx`, `lagetafel.ts`, Wahl der Ansicht `lagemonitor-ansicht.ts` |
 | Weitergabe | `weitergabe/*`, `@bos/eeb-satz`, `export-stand.ts`, `einsatz-transport.ts` |
 | Ablösung und Rückimport | `einsatz-abgleich.ts`, `entfernte-meldungen.ts` |
-| Zwei Geräte am selben Meldekopf | `kopplung/*`: `signal.ts` (Kopplungs-Code), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx` (Lampe, Leiste), `sammler-ansicht.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
+| Zwei Geräte am selben Meldekopf | `kopplung/*`: `signal.ts` (Kopplungs-Code, Türen und Klopf-Zeichen), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx` (Lampe, Leiste), `sammler-ansicht.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
 | Papier-Rückfallebene | `papier-abgleich-ui.tsx`, `papier-abgleich-entwurf.ts` |
 | Fristen | `@bos/eeb-format/datenschutzfrist`, `datenschutz-uhr.ts`, `@bos/meldekopf` (Papierkorb, Aufräumfrist) |
 
@@ -547,10 +547,10 @@ Beide hängen im selben Netz, Internet gibt es nicht.
 sequenceDiagram
   participant R as Rechner (erstes Gerät)
   participant T as Telefon (zweites Gerät)
-  R->>R: „Zweites Gerät koppeln…": Angebot erzeugen, als QR-Code zeigen
+  R->>R: „Zweites Gerät koppeln…": Angebot und 16 Türen, als QR-Code zeigen
   T->>R: „Bogen scannen…" liest den Code vom Bildschirm
-  T->>T: Antwort erzeugen, als QR-Code und als 53 Zeichen zeigen
-  R->>T: „Antwort scannen…" (Kamera, Handscanner) oder „Code eintippen…"
+  T->>R: Fingerabdruck anklopfen (66 Klopfer an 16 Türen)
+  R->>R: Antwort des Telefons selbst zusammensetzen und setzen
   R-->T: Datenkanal steht (direkt, verschlüsselt, lokales Netz)
   R->>T: Stand der Sammlung (Umschlag der Einsatz-Datei)
   R->>T: Kopf der Sammlung (Name, Art, Ort; keine Meldungen)
@@ -561,21 +561,36 @@ sequenceDiagram
   T->>T: Meldung als „übertragen" zeigen
 ```
 
-- **Antwort ohne Kamera (seit 2026-11-25).** Am Rechner im Fahrzeug gibt es
-  oft weder Kamera noch Handscanner. Unter dem Antwort-Code des zweiten
-  Geräts steht darum derselbe Inhalt zum Eintippen: 53 Zeichen in
-  Vierergruppen (Base32 nach Crockford, ohne I, L, O, U; `signal.ts`). Kürzer
-  geht es nicht: Er trägt den Fingerabdruck des Schlüssels des zweiten Geräts
-  (32 Byte) und ein Prüfbyte, und den ganzen Fingerabdruck verlangt der
-  Browser, bevor er die Verbindung annimmt. Alles andere braucht keinen
-  Transport: Die Kennwörter der Verbindung leiten beide Geräte aus dem ersten
-  Code ab (`kennwoerterAbleiten`), die Adresse des zweiten Geräts lernt das
-  erste aus dessen erstem Paket. Geprüft (Chromium 158), dass es ohne Eingabe
-  nicht geht: Der Rechner bemerkt das Anklopfen, erfährt aber weder die
-  mitgeschickten Kennwort-Namen noch das Zertifikat des Telefons.
-- Das zweite Gerät klopft nach dem Scan so lange beim ersten an, bis dort die
-  Antwort gesetzt ist, gescannt oder getippt, auch wenn das Minuten dauert:
-  derselbe Weg wie beim Wiederverbinden (Anruf, Frist 15 Sekunden, Pausen).
+- **Ein Scan genügt (seit 2026-11-25, „Anklopfen“).** Am Rechner im Fahrzeug
+  gibt es oft weder Kamera noch Handscanner; den Antwort-Code des Telefons
+  konnte er dort nicht lesen, und ein Code zum Abtippen wäre 53 Zeichen lang
+  (gebaut und verworfen). Der Browser nimmt eine Verbindung erst an, wenn er
+  den Schlüssel-Fingerabdruck der Gegenseite kennt, und gibt vorher nichts von
+  ihr heraus (geprüft, Chromium 158: weder die Kennwort-Namen des anklopfenden
+  Geräts noch sein Zertifikat). Eines verrät er: an welcher seiner wartenden
+  Verbindungen wann jemand mit dem richtigen Kennwort angeklopft hat. Das
+  erste Gerät öffnet darum neben dem Angebot 16 Türen, wartende Verbindungen
+  ohne Gegenstelle mit demselben Zertifikat und Kennwörtern, die sich aus dem
+  Angebot ableiten; ihre Ports stehen im Code (er wächst auf rund 190
+  Zeichen). Das zweite Gerät schreibt seinen Fingerabdruck als 64 Zeichen zur
+  Basis 16 und ein Prüfbyte und klopft für jedes Zeichen an die Tür mit dieser
+  Nummer: eine Wegwerf-Verbindung, die die Tür erreicht, den ersten Gruß des
+  Schlüsseltauschs schickt und wieder schließt. Das erste liest Tür und
+  Zeitstempel aus `getStats`, setzt die Folge zusammen und sich selbst die
+  Antwort des zweiten (`antwortAusFingerabdruck`): Fingerabdruck angeklopft,
+  Kennwörter abgeleitet (`kennwoerterAbleiten`), Adresse aus dem ersten Paket.
+  66 Klopfer, im Prüfstand rund 3 Sekunden, Verbindung rund 4 Sekunden nach
+  dem Scan. Stimmt das Prüfbyte nicht, klopft das zweite Gerät nach 6 Sekunden
+  noch einmal (bis zu drei Durchgänge); das erste wertet die jüngsten 66 aus.
+- Anklopfen kann nur, wer das Angebot kennt: Die Kennwörter der Türen stehen
+  in keinem Paket. Der angeklopfte Fingerabdruck ist darum so viel wert wie
+  ein gescannter Antwort-Code.
+- Ausweichweg: Öffnet das erste Gerät keine Türen (der Browser nimmt die
+  abgeleiteten Kennwörter nicht an) oder antwortet eine Tür nicht, zeigt das
+  zweite Gerät seinen Antwort-Code zum Scannen wie bisher.
+- Das zweite Gerät ruft nach dem Scan so lange beim ersten an, bis dort die
+  Antwort gesetzt ist: derselbe Weg wie beim Wiederverbinden (Anruf, Frist
+  15 Sekunden, Pausen).
 - **Rollen (seit 2026-11-24).** Das erste Gerät ist die Zentrale und führt
   die Lage. Das zweite ist ein reiner Sammler: Es nimmt auf und schickt seinen
   ganzen Stand, also alles, was es selbst aufgenommen hat (Umschlag der
@@ -814,10 +829,10 @@ verschlüsselt; die Fingerabdrücke der Schlüssel beider Seiten stehen in den
 beiden QR-Codes, die von Hand getauscht werden, ein Dritter im selben Netz
 kann sich also nicht dazwischensetzen, ohne einen der Codes zu ersetzen. Der
 Kopplungs-Code (`MKK1.`, `kopplung/signal.ts`) trägt keine Einsatzdaten, nur
-Fingerabdruck, Verbindungskennwörter und bis zu vier lokale Adressen. Der
-Antwort-Code zum Eintippen trägt nur den Fingerabdruck des zweiten Geräts; wer
-ihn mitliest, kann sich damit nicht verbinden, denn die Kennwörter stehen
-allein im ersten Code. Was über
+Fingerabdruck, Verbindungskennwörter, bis zu vier lokale Adressen und die
+Ports der 16 Türen. Über die Türen erfährt das erste Gerät den Fingerabdruck
+des zweiten; anklopfen kann nur, wer den ersten Code gesehen hat, denn die
+Kennwörter der Türen leiten sich aus ihm ab und stehen in keinem Paket. Was über
 den Kanal kommt, wird behandelt wie eine importierte Einsatz-Datei
 (`einsatzAusDatei`, Bogenprüfung je Eintrag) und ist gedeckelt (24 MiB gepackt,
 64 MiB entpackt je Nachricht). Daneben gehen nur kurze Steuernachrichten über
@@ -853,7 +868,8 @@ ersten Build, dann festschreiben).
 Die Kopplung (ADR-009) prüft `kopplung/sitzung.test.ts` mit zwei getrennten
 Speichern und einer Warteschlange statt eines Netzes (Abgleich, Widerspruch,
 Entfernen, Zurückholen, Trennung), `kopplung/signal.test.ts` den Code, und
-`features/geraete-koppeln.feature` den ganzen Weg mit zwei Browser-Profilen
+`features/geraete-koppeln.feature` den ganzen Weg (Koppeln mit einem Scan,
+der Antwort-Code als Ausweichweg über den Haken `__eebKopplungOhneTueren`) mit zwei Browser-Profilen
 und einer echten Verbindung über die lokale Schleife; die Codes gehen dort
 über den Handscanner-Weg, und ein Haken (`__eebKopplungAbriss`) kappt die
 Verbindung ohne Abschied, um das Wiederverbinden zu prüfen. Zwei echte Geräte in einem WLAN ersetzt das nicht
@@ -1183,7 +1199,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Kopplung nur im Prüfstand erprobt (zwei Profile eines Chromium, lokale Schleife) | Gerätetest offen: Chrome auf Android gegen Chrome und Edge am Rechner, Safari auf iOS, Firefox; installierte PWA gegen Browser-Tab. Offen ist vor allem, ob die Browser einander im jeweiligen Netz finden: Ohne erteilte Kamerafreigabe nennen sie statt der IP-Adresse einen Namen im lokalen Netz (mDNS), den das andere Gerät auflösen muss. Rückfallebene bleibt die Einsatz-Datei. |
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
 | Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
-| Der Code zum Eintippen braucht einen Browser am zweiten Gerät, der vorgegebene Verbindungskennwörter annimmt | Geprüft am Wegwerf-Objekt, bevor der Code gezeigt wird (`rufPlatzVorbereiten`, `vorgabeGilt`); nimmt der Browser sie nicht, zeigt das zweite Gerät nur den QR-Code. Safari und Firefox ungeprüft. 53 Zeichen abzutippen dauert rund eine Minute; ein Tippfehler fällt am Prüfbyte auf. |
+| Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Safari, Firefox und echte Geräte im WLAN ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand. |
 | Seite neu geladen (auch selbsttätig nach einer neuen Fassung der App) | Trennt die Kopplung endgültig; neu koppeln kostet zwei Scans. Abhilfe wäre, Zertifikat und Plätze des Rufers über das Neuladen zu retten (IndexedDB); nicht gebaut. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |

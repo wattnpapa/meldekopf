@@ -31,8 +31,11 @@ export interface KopplungsDialog {
   art: "angebot" | "antwort";
   /** Der Code als Text; leer, solange er entsteht. */
   code: string;
-  /** Nur am Antwort-Code: derselbe Inhalt zum Eintippen am ersten Gerät, wenn dort weder Kamera noch Handscanner ist. */
-  kurz?: string;
+  /**
+   * Die Geräte verbinden sich nach dem einen Scan von selbst (das zweite klopft seinen Fingerabdruck beim ersten an);
+   * der Antwort-Code ist dann nur der Ausweichweg. `false`: Es geht nicht oder ist misslungen, der Antwort-Code ist der Weg.
+   */
+  selbst?: boolean;
   fehler?: string;
 }
 
