@@ -352,3 +352,18 @@ When("ich die Einheit {string} an der Zentrale entferne", async function (this: 
     })()`,
   );
 });
+
+// --------------------------------------------------------------------------------------------------- Netzanzeige
+
+/** Erster Gerätetest: Im echten WLAN dauert das Anklopfen länger als im Prüfstand (66 Klopfer zu je rund 0,45 s). */
+Given("das Anklopfen des zweiten Geräts dauert eine halbe Minute", async function (this: EebWelt) {
+  await zweitesGeraet(this).evaluate("globalThis.__eebKopplungKlopfPause = 400");
+});
+
+Then("zeigt das zweite Gerät im Dialog {string}", async function (this: EebWelt, text: string) {
+  await zweitesGeraet(this).locator("dialog.kopplung-dialog").getByText(text).first().waitFor({ state: "visible" });
+});
+
+Then("meldet die Kopplungsleiste nach längerem Warten {string}", { timeout: 90_000 }, async function (this: EebWelt, text: string) {
+  await leiste(this.page).filter({ hasText: text }).waitFor({ state: "visible", timeout: 80_000 });
+});

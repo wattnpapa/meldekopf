@@ -30,6 +30,7 @@ import type { GemerkterPlatz } from "./merker";
 import { GETRENNT_SATZ } from "./texte";
 import {
   angebotErzeugen,
+  eigeneAdressen,
   klopfen,
   tuerenOeffnen,
   rufPlatzVorbereiten,
@@ -47,6 +48,9 @@ import type { KopplungsDialog, KopplungsPhase } from "./zustand";
 export const TAKT_MS = 1000;
 
 export const NICHT_ZUSTANDE_SATZ = "Die Verbindung kam nicht zustande. Sind beide Geräte im selben Netz (WLAN oder Hotspot)? Bitte neu koppeln.";
+/** Die Zentrale hat das Anklopfen des Sammlers empfangen: Am Netz lag es nicht. */
+export const ERREICHT_ABER_NICHT_SATZ =
+  "Das zweite Gerät hat dieses erreicht, die Verbindung kam trotzdem nicht zustande. Die Geräte sind im selben Netz. Bitte „Neu beginnen“ und am zweiten Gerät den neuen Code scannen.";
 export const ANGEBOT_STATT_ANTWORT_SATZ = "Das ist kein Antwort-Code. Hier wird der Code gebraucht, den das zweite Gerät nach dem Scannen zeigt.";
 export const NEU_GELADEN_SATZ =
   "Die Seite wurde neu geladen, und das zweite Gerät ist nicht zu erreichen. Dieses Gerät versucht es weiter. Wurde dort ebenfalls neu geladen, hilft nur: „Weiteres Gerät koppeln…“ und am zweiten Gerät den Code scannen. Was dort aufgenommen wurde, bleibt dort gespeichert.";
@@ -61,6 +65,14 @@ const KLOPF_WARTEN_MS = 6000;
 const PLAETZE = 2;
 /** Kommt ein Anruf in dieser Zeit nicht durch, wird er abgebrochen und später wiederholt. */
 const RUF_FRIST_MS = 15_000;
+/**
+ * Beim ersten Koppeln ruft der Sammler länger und ohne wachsende Pausen: Die Zentrale kennt ihn erst, wenn das Anklopfen
+ * fertig oder der Antwort-Code gescannt ist, und sie gibt nach rund 15 Sekunden auf, wenn dann gerade kein Anruf läuft.
+ * (Erster Gerätetest 2026-11-25: Im echten WLAN dauert das Anklopfen länger als im Prüfstand; die Zentrale fiel in eine
+ * Pause zwischen zwei Anrufen und meldete „Die Verbindung kam nicht zustande".)
+ */
+const ERST_RUF_FRIST_MS = 30_000;
+const ERST_RUF_PAUSE_MS = 500;
 /** Pausen zwischen den Anrufen; danach bleibt es bei der letzten. */
 const RUF_PAUSEN_MS = [1000, 3000, 5000, 10_000, 20_000, 30_000];
 /** So lange heißt eine gerissene Verbindung „unterbrochen"; danach „getrennt", auch wenn das Gerät es weiter versucht. */
@@ -220,7 +232,10 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
     const a = angebot;
     if (!t || !a || antwortGesetzt || tot) return;
     const klopfer = await t.lesen();
-    if (klopfer.length < KLOPFER || antwortGesetzt || tot || angebot !== a) return;
+    if (antwortGesetzt || tot || angebot !== a) return;
+    // Für die Anzeige: Kommt vom zweiten Gerät überhaupt etwas an?
+    if (zu.dialog && zu.dialog.netz && klopfer.length !== zu.dialog.netz.klopfer) setze({ dialog: { ...zu.dialog, netz: { ...zu.dialog.netz, klopfer: klopfer.length } } });
+    if (klopfer.length < KLOPFER) return;
     const fp = klopfLesen(klopfer.slice(-KLOPFER).map((k) => k.tuer));
     if (!fp) return;
     antwortGesetzt = true;
@@ -238,21 +253,33 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
   async function anklopfen(fingerabdruck: Uint8Array, tuerSdps: readonly string[]): Promise<void> {
     const zeichen = klopfZeichen(fingerabdruck);
     const laeuft = () => !tot && zu.phase === "verbindet";
+    const netz = (teil: { erreichbar?: boolean; klopfer?: number }) => {
+      if (laeuft() && zu.dialog) setze({ dialog: { ...zu.dialog, netz: { eigene: [], ...zu.dialog.netz, ...teil } } });
+    };
     const ohne = () => {
       if (laeuft() && zu.dialog) setze({ dialog: { ...zu.dialog, selbst: false } });
+      // Der Antwort-Code ist jetzt der Weg: Dafür muss dieses Gerät anrufen, bis er an der Zentrale gescannt ist.
+      rufen();
     };
     for (let runde = 0; runde < KLOPF_RUNDEN && laeuft(); runde++) {
+      let nr = 0;
       for (const z of zeichen) {
         if (!laeuft()) return;
         const sdp = tuerSdps[z];
         if (!sdp || !(await klopfen(sdp))) {
+          netz({ erreichbar: false });
           ohne();
           return;
         }
+        nr++;
+        if (nr === 1 || nr % 6 === 0 || nr === zeichen.length) netz({ erreichbar: true, klopfer: nr });
       }
+      // Erst jetzt anrufen: Die Zentrale setzt die Antwort gleich nach dem letzten Klopfer und soll dann genau einen
+      // laufenden Anruf vorfinden, keine Reste früherer Versuche.
+      rufen();
       await new Promise((r) => setTimeout(r, KLOPF_WARTEN_MS));
     }
-    ohne();
+    if (laeuft() && zu.dialog) setze({ dialog: { ...zu.dialog, selbst: false } });
   }
 
   function rufenStoppen(): void {
@@ -356,7 +383,8 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
     // Eine eingefrorene oder verdeckte Seite ruft nicht: Der Anruf liefe ins Leere. Beim Aufwachen geht es weiter.
     if (document.visibilityState !== "visible") return;
     const ziel = nutzbar[rufZahl % nutzbar.length]!;
-    const pause = RUF_PAUSEN_MS[Math.min(rufZahl, RUF_PAUSEN_MS.length - 1)]!;
+    const erst = zu.phase === "verbindet";
+    const pause = erst ? ERST_RUF_PAUSE_MS : RUF_PAUSEN_MS[Math.min(rufZahl, RUF_PAUSEN_MS.length - 1)]!;
     rufZahl++;
     const marke = {};
     const naechster = () => {
@@ -367,7 +395,7 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
       v?.schliessen();
       if (!tot && !aktiv) rufUhr = setTimeout(rufen, pause);
     };
-    rufVersuch = { marke, platz: ziel.nr, verbindung: null, uhr: setTimeout(naechster, RUF_FRIST_MS) };
+    rufVersuch = { marke, platz: ziel.nr, verbindung: null, uhr: setTimeout(naechster, erst ? ERST_RUF_FRIST_MS : RUF_FRIST_MS) };
     ziel.platz.anrufen(horcher(marke)).then(
       (v) => {
         if (rufVersuch?.marke === marke) rufVersuch.verbindung = v;
@@ -588,7 +616,7 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
           if (ersteMarke === marke && !aktiv && zu.phase === "verbindet") {
             // Vor dem ersten Stand gescheitert: Der Dialog sagt es, eine Leiste „getrennt" gäbe es für nichts.
             angebot = null;
-            setze({ phase: "aus", dialog: zu.dialog ? { ...zu.dialog, fehler: NICHT_ZUSTANDE_SATZ } : null });
+            setze({ phase: "aus", dialog: zu.dialog ? { ...zu.dialog, fehler: (zu.dialog.netz?.klopfer ?? 0) > 0 ? ERREICHT_ABER_NICHT_SATZ : NICHT_ZUSTANDE_SATZ } : null });
           }
         }
       },
@@ -696,7 +724,7 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
         }
         tueren = t;
         if (t) tuerTakt = setInterval(() => void tuerenLesen(), TUER_TAKT_MS);
-        setze({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }, t?.ports), selbst: !!t } });
+        setze({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }, t?.ports), selbst: !!t, netz: { eigene: angebotAdressen(a.sdp), klopfer: 0 } } });
       } catch {
         if (!tot) setze({ phase: "aus", dialog: { art: "angebot", code: "", fehler: "Dieses Gerät konnte keine Verbindung vorbereiten." } });
       }
@@ -729,9 +757,13 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
       rufPlaetze = [{ nr: 0, seite: "", platz }];
       // Anklopfen geht nur, wenn die Zentrale Türen offen hat und sich die Kennwörter dieses Geräts selbst ableiten kann.
       const selbsttaetig = !!s.tueren && s.tueren.length === TUEREN && platz.vorgabeGilt;
-      setze({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }), selbst: selbsttaetig } });
-      rufen();
+      setze({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }), selbst: selbsttaetig, netz: { eigene: [], andere: angebotAdressen(s.sdp) } } });
+      void eigeneAdressen().then((eigene) => {
+        if (!tot && zu.phase === "verbindet" && zu.dialog) setze({ dialog: { ...zu.dialog, netz: { ...zu.dialog.netz, eigene } } });
+      });
+      // Mit Türen erst anklopfen und danach anrufen; ohne Türen gleich anrufen, bis der Antwort-Code gescannt ist.
       if (selbsttaetig) void tuerAngebote(s.sdp, s.tueren!).then((sdps) => anklopfen(fingerabdruckVon(platz.antwortSdp), sdps));
+      else rufen();
     },
 
     fortsetzen(einsatzId, zertifikat, gemerkt, bestaetigt, name, geraet) {

@@ -85,6 +85,17 @@ dialog.kopplung-dialog .aktionen { display: flex; flex-wrap: wrap; justify-conte
 dialog.kopplung-dialog .kopplung-wartet { max-width: 34rem; margin: 0; text-align: center; font-size: var(--t-l); }
 dialog.kopplung-dialog .kopplung-wartet strong { display: block; }
 
+dialog.kopplung-dialog .kopplung-netz {
+  display: grid; grid-template-columns: auto 1fr; gap: 0.15em var(--r-3); width: 100%; max-width: 34rem; margin: 0;
+  padding: var(--r-2) var(--r-3); text-align: left; font-size: var(--t-s);
+  background: var(--flaeche); border: var(--strich) solid var(--linie); border-radius: var(--radius);
+}
+dialog.kopplung-dialog .kopplung-netz dt { color: var(--text-2); }
+dialog.kopplung-dialog .kopplung-netz dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+dialog.kopplung-dialog .kopplung-netz dd[data-erreicht="ja"] { color: var(--gut); font-weight: 600; }
+dialog.kopplung-dialog .kopplung-netz dd[data-erreicht="nein"] { color: var(--alarm); font-weight: 600; }
+dialog.kopplung-dialog .kopplung-netz .kopplung-netz-warnung { grid-column: 1 / -1; font-weight: 600; }
+
 @media print {
   .kopplung-leiste { display: none !important; }
 }

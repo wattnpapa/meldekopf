@@ -32,6 +32,16 @@ Funktionalität: Zweites Gerät koppeln
     Und zeigt das zweite Gerät den Text "Stand der Zentrale (1 Einheit)"
     Und zeigt das zweite Gerät den Text "THW Oldenburg"
 
+  Szenario: Auch in einem langsamen Netz steht die Verbindung nach dem einen Scan
+    Angenommen das Anklopfen des zweiten Geräts dauert eine halbe Minute
+    Wenn ich auf "Zweites Gerät koppeln…" klicke
+    Dann meldet der Dialog "noch nichts angekommen"
+    Wenn das zweite Gerät meinen Kopplungs-Code scannt
+    Dann meldet der Dialog "hat dieses Gerät erreicht"
+    Und zeigt das zweite Gerät im Dialog "ja, das erste Gerät antwortet"
+    Und meldet die Kopplungsleiste nach längerem Warten "Verbindung aktiv"
+    Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+
   Szenario: Ausweichweg: Klappt es nicht von selbst, koppelt der Antwort-Code
     Angenommen das erste Gerät öffnet keine Türen zum Anklopfen
     Wenn ich auf "Zweites Gerät koppeln…" klicke

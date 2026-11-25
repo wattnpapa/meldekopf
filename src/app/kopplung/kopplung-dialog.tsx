@@ -17,6 +17,7 @@ import { QrScannerWeb } from "../eingang/qr-scanner-web";
 import { istNativ, qrScannen } from "../nativ";
 import { kopplungAntwortAnnehmen, kopplungDialogSchliessen, kopplungStarten } from "./kopplung";
 import { useKopplung } from "./kopplung-leiste";
+import type { KopplungsNetz } from "./zustand";
 
 const ANTWORT_ANWEISUNG = "Antwort-Code des zweiten Geräts in den Rahmen halten";
 
@@ -87,7 +88,65 @@ export default function KopplungDialog() {
       />
     );
   }
-  return <Rahmen dialogRef={dialogRef} art={d.art} selbst={d.selbst} fehler={d.fehler} bild={bild} code={code} angenommen={angenommen} scanFehler={scanFehler} onAntwortScannen={() => void antwortScannen()} onNeu={z.einsatzId ? () => void kopplungStarten(z.einsatzId!) : undefined} />;
+  return <Rahmen dialogRef={dialogRef} art={d.art} selbst={d.selbst} netz={d.netz} fehler={d.fehler} bild={bild} code={code} angenommen={angenommen} scanFehler={scanFehler} onAntwortScannen={() => void antwortScannen()} onNeu={z.einsatzId ? () => void kopplungStarten(z.einsatzId!) : undefined} />;
+}
+
+/** Eine Adresse, wie sie jemand am Gerät vergleichen kann; ein Name auf `.local` heißt, der Browser verbirgt sie. */
+function lesbar(adressen: readonly string[]): string {
+  const sichtbar = adressen.filter((a) => !a.endsWith(".local"));
+  if (sichtbar.length > 0) return sichtbar.join(", ");
+  return adressen.length > 0 ? "vom Browser verborgen" : "keine gefunden (kein WLAN, kein Hotspot?)";
+}
+
+/** Liegen zwei IPv4-Adressen in verschiedenen Netzen? Grob: Die ersten drei Stellen unterscheiden sich bei allen Paaren. */
+export function verschiedeneNetze(eigene: readonly string[], andere: readonly string[]): boolean {
+  const kopf = (a: string) => (/^\d+\.\d+\.\d+\.\d+$/.test(a) ? a.split(".").slice(0, 3).join(".") : null);
+  const e = eigene.map(kopf).filter((x): x is string => x != null);
+  const a = andere.map(kopf).filter((x): x is string => x != null);
+  return e.length > 0 && a.length > 0 && !e.some((x) => a.includes(x));
+}
+
+/**
+ * Was sich über das Netz sagen lässt (erster Gerätetest 2026-11-25: „Kann das überhaupt funktionieren?"). Die Adressen
+ * zum Vergleichen, soweit der Browser sie nennt, und was mehr sagt als jede Adresse: ob das zweite Gerät das erste
+ * tatsächlich erreicht.
+ */
+function Netz({ netz, angebot }: { netz: KopplungsNetz; angebot: boolean }) {
+  const klopfer = netz.klopfer ?? 0;
+  return (
+    <dl className="kopplung-netz">
+      <dt>Dieses Gerät</dt>
+      <dd>{lesbar(netz.eigene)}</dd>
+      {!angebot && netz.andere && (
+        <>
+          <dt>Erstes Gerät</dt>
+          <dd>{lesbar(netz.andere)}</dd>
+        </>
+      )}
+      {angebot ? (
+        <>
+          <dt>Zweites Gerät</dt>
+          <dd data-erreicht={klopfer > 0 ? "ja" : "offen"}>
+            {klopfer > 0 ? `hat dieses Gerät erreicht (${Math.min(klopfer, 66)} von 66 Klopfern angekommen)` : "noch nichts angekommen"}
+          </dd>
+        </>
+      ) : (
+        netz.erreichbar != null && (
+          <>
+            <dt>Erreichbar</dt>
+            <dd data-erreicht={netz.erreichbar ? "ja" : "nein"}>
+              {netz.erreichbar
+                ? `ja, das erste Gerät antwortet${klopfer > 0 ? ` (${klopfer} von 66 Klopfern)` : ""}`
+                : "nein, das erste Gerät antwortet nicht. Die Geräte sind nicht im selben Netz, oder das WLAN lässt Geräte nicht miteinander sprechen (Gäste-WLAN)."}
+            </dd>
+          </>
+        )
+      )}
+      {!angebot && netz.andere && verschiedeneNetze(netz.eigene, netz.andere) && (
+        <dd className="fehler kopplung-netz-warnung">Die Adressen liegen in verschiedenen Netzen. Beide Geräte ins selbe WLAN oder in denselben Hotspot bringen.</dd>
+      )}
+    </dl>
+  );
 }
 
 /** Eigener Baustein, damit der modale Dialog beim Wechsel zum Scanner sauber schließt und danach neu öffnet. */
@@ -96,6 +155,7 @@ function Rahmen(props: {
   art: "angebot" | "antwort";
   /** Die Geräte verbinden sich nach dem einen Scan von selbst; `false`: Der Antwort-Code ist der Weg. */
   selbst?: boolean;
+  netz?: KopplungsNetz;
   fehler?: string;
   bild: string;
   code: string;
@@ -150,6 +210,7 @@ function Rahmen(props: {
           {props.selbst ? " Klappt es nicht von selbst, zeigt das zweite Gerät einen Antwort-Code: dann „Antwort scannen…“." : ""}
         </p>
       )}
+      {props.netz && <Netz netz={props.netz} angebot={angebot} />}
       {props.scanFehler && <p className="fehler" role="alert">{props.scanFehler}</p>}
       <div className="aktionen">
         {angebot && !props.fehler && !props.angenommen && (

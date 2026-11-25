@@ -41,6 +41,17 @@ export type KopplungsPhase =
   /** Die Verbindung ist zu Ende; es braucht einen neuen Code-Tausch. */
   | "getrennt";
 
+export interface KopplungsNetz {
+  /** Adressen dieses Geräts im lokalen Netz; ein Name auf `.local`, wo der Browser die Adresse verbirgt. */
+  eigene: string[];
+  /** Zweites Gerät: die Adressen des ersten, aus dessen Code. */
+  andere?: string[];
+  /** Zweites Gerät: Antwortet das erste auf das Anklopfen? Fehlt, solange es nicht versucht ist. */
+  erreichbar?: boolean;
+  /** Wie viele Klopfer hinausgegangen (zweites Gerät) oder angekommen sind (erstes Gerät). */
+  klopfer?: number;
+}
+
 export interface KopplungsDialog {
   /** `angebot`: dieses Gerät hat begonnen und zeigt den ersten Code. `antwort`: es zeigt den Antwort-Code. */
   art: "angebot" | "antwort";
@@ -52,6 +63,8 @@ export interface KopplungsDialog {
    */
   selbst?: boolean;
   fehler?: string;
+  /** Was sich über das Netz sagen lässt: für die Frage, ob die Geräte einander überhaupt erreichen. */
+  netz?: KopplungsNetz;
 }
 
 /** Ein Sammler, wie ihn die Leiste der Zentrale zeigt. */
