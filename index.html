@@ -4679,6 +4679,110 @@
     @media (min-width: 72rem) and (hover: hover) {
       :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt:not(.gewaehlt):hover { background: var(--grund); }
     }
+    /* Liste und Detailspalte, zweiter Anlauf (November 2026): Auf einem breiten Bildschirm zogen sich Aufnahme-Knöpfe, Suche und
+       Kästen über die volle Breite, die Liste begann am unteren Bildrand, und jede Zeile war ein eigener Kasten. Jetzt wie im
+       Entwurf: eine kompakte Werkzeugzeile, die Filter in einer Zeile, die Liste als ruhige Tabelle mit Spaltenkopf. */
+    @media (min-width: 72rem) {
+      /* Werkzeugzeile: die Aufnahme-Knöpfe in ihrer eigenen Breite links, Fahrzeuge und Stand der Ausgabe rechts daneben. */
+      :root:root main.einsatz-detail { padding-top: var(--r-3); }
+      :root:root main.einsatz-detail > .einsatz-seite { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--r-4); row-gap: 6px; }
+      :root:root main.einsatz-detail > .einsatz-seite > * { grid-column: 1 / -1; }
+      :root:root main.einsatz-detail > .einsatz-seite > .aktionen {
+        grid-column: 1; grid-row: 1; display: flex; flex-flow: row wrap; align-items: stretch; gap: var(--r-2); align-self: center;
+      }
+      :root:root main.einsatz-detail > .einsatz-seite > .aktionen > * { width: auto; flex: 0 0 auto; }
+      :root:root main.einsatz-detail > .einsatz-seite > .aktionen .knopf-zusatz { display: none; }
+      :root:root main.einsatz-detail > .einsatz-seite > .aktionen button { padding-inline: var(--r-3); white-space: nowrap; }
+      :root:root main.einsatz-detail > .einsatz-seite > p.ausgabe-stand { grid-column: 2; grid-row: 1; align-self: center; justify-self: end; text-align: right; }
+      /* Die Sprungzeile entfällt am Rechner: Der Stand der Ausgabe rechts neben den Knöpfen trägt den Sprung zu Lageblatt, Export
+         und Übergabe schon, und die Liste steht direkt darunter. */
+      :root:root main.einsatz-detail > .einsatz-seite > p.ausgabe-sprung { display: none; }
+      :root:root main.einsatz-detail > .einsatz-seite > details.bedarf-block { padding: 2px var(--r-3); }
+      /* Meldungskästen (Neu seit …, Quittungen) lesen sich in Textbreite, nicht über den ganzen Bildschirm. */
+      :root:root main.einsatz-detail > .einsatz-seite > :is(.meldung, .warnung) { max-width: 60rem; }
+      /* Kopf der Liste: Überschrift, Lückenzähler und Filter rücken zusammen. */
+      :root:root main.einsatz-detail > .einsatz-liste { margin-top: var(--r-2); padding-top: var(--r-3); }
+      :root:root .einsatz-liste.mit-detail > .kopfzeile { margin-bottom: 0; }
+      :root:root .einsatz-liste.mit-detail > p.hinweis.luecken-zaehler { margin-block: 0 4px; }
+      /* Filter in einer Zeile: Suche und Auswahlfelder in fester, lesbarer Breite statt über 1 500 px gestreckt. */
+      :root:root main.einsatz-detail .einsatz-liste.mit-detail .zeile.einheiten-filter { gap: 8px 12px; margin-bottom: var(--r-2); align-items: flex-end; }
+      :root:root main.einsatz-detail .einsatz-liste.mit-detail .zeile.einheiten-filter > label.feld:first-child { flex: 1 1 16rem; max-width: 28rem; order: -2; }
+      :root:root main.einsatz-detail .einsatz-liste.mit-detail .zeile.einheiten-filter > label.feld { flex: 0 1 12rem; order: 0; }
+      :root:root main.einsatz-detail .einsatz-liste.mit-detail .zeile.einheiten-filter > label.feld.sortierung:nth-child(2) { flex: 0 1 15rem; }
+      :root:root main.einsatz-detail .einsatz-liste.mit-detail .zeile.einheiten-filter > label.inline { order: 5; flex: 0 0 auto; }
+      /* Spaltenkopf über der Liste, in der Flucht der Zeilen. */
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.spalten-kopf {
+        display: flex; gap: 0; align-items: baseline; margin: 0; padding: 6px 2.6rem 6px var(--r-3);
+        font-size: var(--t-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2);
+        border-bottom: var(--strich) solid var(--linie); background: var(--grund);
+      }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.spalten-kopf > .spalte-zeit { margin-left: auto; width: 7.5rem; text-align: right; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.spalten-kopf > .spalte-staerke { width: 11.5rem; text-align: right; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.spalten-kopf + li { border-top: none; }
+      /* Die Liste als Tabelle: ein Rahmen um alles, Haarlinien zwischen den Zeilen, kein Kasten und kein Abstand je Zeile. */
+      :root:root .einsatz-liste.mit-detail > ul.einheiten-liste { border: var(--strich) solid var(--linie); background: var(--flaeche); align-self: start; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt {
+        margin: 0; border: none; border-top: var(--strich) solid var(--linie-fein); border-radius: 0; box-shadow: none; background: none;
+        padding: 8px 2.6rem 8px var(--r-3);
+      }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt:first-child { border-top: none; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt.gewaehlt { background: var(--flaeche-2); box-shadow: inset 4px 0 0 var(--akzent); }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.einheiten-gruppe { margin: 0; border-top: var(--strich) solid var(--linie); }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.einheiten-gruppe:first-child { border-top: none; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt h3.muster-name,
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .kompakt-zeile { padding-right: 19.5rem; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-staerke { right: 2.6rem; width: 11.5rem; top: 9px; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-zeit { right: 14.1rem; width: 7.5rem; top: 11px; }
+      /* Stärke in der Detailspalte als vier Kacheln; der Textwert darüber bleibt für Vorleseprogramme. */
+      :root:root aside.einheit-detail .einheit-zeile.im-detail .kopf-staerke { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      :root:root aside.einheit-detail .einheit-zeile.im-detail .muster-text > .detail-staerke {
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--r-2); margin: var(--r-2) 0;
+        padding-block: var(--r-2); border-block: var(--strich) solid var(--linie-fein);
+        font-size: var(--t-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2);
+      }
+      :root:root aside.einheit-detail .detail-staerke strong {
+        display: block; font-size: var(--t-xl); line-height: 1.1; letter-spacing: 0; color: var(--text); font-variant-numeric: tabular-nums;
+      }
+      :root:root aside.einheit-detail .detail-staerke .gesamt strong { color: var(--akzent); }
+    }
+    /* Liste und Detailspalte, dritter Anlauf (November 2026): „immer noch erschlagen von Informationen". Die Zeile der Liste
+       trägt nur noch, was beim Überfliegen zählt: Nummer, Name, Organisation, Auftrag, dringenden Bedarf, Folgemeldung,
+       Eintreffzeit und Stärke. Stand, Kraftstoff, Funk, Führung, Fahrzeuge und die einzelnen Prüfhinweise stehen in der
+       Detailspalte; die Zeile nennt nur ihre Zahl. Die übrigen Filter liegen hinter „Filter…", die Zwischensummen je
+       Organisation hinter „Stärkemeldung…" und in den Gruppenköpfen. */
+    .reihe-org, .reihe-hinweis, .filter-mehr { display: none; }
+    @media (min-width: 72rem) {
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .kompakt-zeile > :is(.alter-merkmal, .luecken-merkmal, .ruhig-merkmal, .bemerkung-merkmal, .bedarf-marke.routine) { display: none; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-staerke-wort { display: none; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-org { display: inline; color: var(--text-2); font-size: var(--t-s); }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-hinweis { display: inline; order: 9; color: var(--warn-text); font-size: var(--t-xs); font-weight: 600; white-space: nowrap; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .kompakt-zeile { align-items: center; gap: 2px 10px; min-height: 1.5em; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt { padding-block: 9px; }
+      /* In einer Übung zählt jeder Bogen: Die Marke ÜBUNG an jeder Zeile sagt dort nichts; sie bleibt in der Detailspalte und in einem Einsatz. */
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt.in-uebung .uebung-badge { display: none; }
+      /* Filter: offen stehen Suche, Sortierung und Gruppierung; der Rest nach „Filter…" oder sobald einer gesetzt ist. */
+      :root:root .einsatz-liste .zeile.einheiten-filter > button.filter-mehr { display: inline-flex; order: 6; flex: 0 0 auto; align-self: flex-end; border-color: var(--linie); font-weight: 500; }
+      :root:root .einsatz-liste .zeile.einheiten-filter.filter-knapp > label:not(:first-child):not(:nth-child(2)):not(.gruppen-wahl) { display: none; }
+      /* Werkzeugzeile: Knöpfe, daneben Fahrzeuge und Stärkemeldung, rechts der Stand der Ausgabe. Was davor im Dokument steht
+         (Papierkorb-Hinweis), bleibt darüber; die Reihenfolge regelt order statt fester Zeilen. */
+      :root:root main.einsatz-detail > .einsatz-seite { grid-template-columns: auto minmax(14rem, 1fr) fit-content(40%); }
+      :root:root main.einsatz-detail > .einsatz-seite > .aktionen { grid-row: auto; order: -3; }
+      :root:root main.einsatz-detail > .einsatz-seite > p.lage-zusatz { grid-column: 2; grid-row: auto; order: -2; align-self: center; margin: 0; }
+      :root:root main.einsatz-detail > .einsatz-seite > p.ausgabe-stand { grid-column: 3; grid-row: auto; order: -1; }
+      :root:root main.einsatz-detail > .einsatz-seite > p.lage-zusatz > .lage-zusatz-teil:not(:first-child):not(.lage-zusatz-ab) { display: none; }
+    }
+    /* Liste am Rechner: das taktische Zeichen der Formation vorn in der Zeile statt der Nummer (Wunsch November 2026). */
+    .reihe-zeichen { display: none; }
+    @media (min-width: 72rem) {
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt { padding-left: 4.25rem; min-height: 60px; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.spalten-kopf { padding-left: 4.25rem; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-zeichen {
+        display: block; position: absolute; left: 12px; top: 8px; width: 44px; height: 44px;
+      }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .meldung-nr {
+        position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+      }
+    }
   </style>
 </head>
 <body>

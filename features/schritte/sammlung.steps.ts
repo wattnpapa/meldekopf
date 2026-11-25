@@ -130,7 +130,7 @@ const MIME_TYPEN: Record<string, string> = {
 };
 
 async function sichtbar(welt: EebWelt, text: string): Promise<void> {
-  await welt.page.getByText(text).first().waitFor({ state: "visible" });
+  await welt.page.getByText(text).filter({ visible: true }).first().waitFor({ state: "visible" });
 }
 
 function einheitenNamen(welt: EebWelt): Promise<string[]> {
@@ -168,7 +168,17 @@ When("ich das Feld {string} mit {string} fülle", async function (this: EebWelt,
   await (await eingabe(this, name)).fill(wert);
 });
 
+/**
+ * Am Rechner stehen über der Einheitenliste nur Suche, Sortierung und Gruppierung offen; Qualifikation, Auftrag, Status,
+ * Organisation und „nur dringender Bedarf" liegen hinter „Filter…", solange keiner gesetzt ist.
+ */
+async function filterZeigen(welt: EebWelt): Promise<void> {
+  const mehr = welt.page.locator('button.filter-mehr[aria-expanded="false"]');
+  if ((await mehr.count()) > 0 && (await mehr.first().isVisible())) await mehr.first().click();
+}
+
 When("ich das Feld {string} auf {string} stelle", async function (this: EebWelt, name: string, wert: string) {
+  await filterZeigen(this);
   const el = auswahl(this, name);
   const tag = await el.evaluate((e) => e.tagName.toLowerCase());
   if (tag === "select") {
@@ -185,6 +195,7 @@ When("ich das Feld {string} auf {string} stelle", async function (this: EebWelt,
 });
 
 When("ich {string} ankreuze", async function (this: EebWelt, name: string) {
+  await filterZeigen(this);
   await inhalt(this).getByLabel(name, { exact: true }).check();
 });
 
