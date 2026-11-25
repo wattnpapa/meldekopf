@@ -250,7 +250,10 @@ Auswertung, Einheitenliste und -tabelle, Fassungs-Vorrang, Fristen und Uhr,
 Datensicherung, Aufteilen/Zusammenführen, Lagemonitor, Papier-Abgleich,
 PDF-Satz und Exporte unter `weitergabe/`, QR-Leser und Unlesbares unter
 `eingang/`, `nacherfassung`/`nur-staerke` unter `schnellerfassung/`. Die
-Fußzeilen-Gruppe „Daten" steht in `daten-gruppe.tsx`. `main.tsx` verdrahtet
+Fußzeilen-Gruppe „Daten" steht in `daten-gruppe.tsx`. „Was ist neu“ an der
+Versionsnummer der Fußzeile (`useAenderungen` in `fusszeile.tsx`) lädt den
+Änderungsverlauf `aenderungen.ts` erst beim Öffnen als eigenen Brocken nach;
+er liegt wie jeder JS-Baustein im Kern des Offline-Vorrats. `main.tsx` verdrahtet
 Speicher, geprüfte Uhr, Fehlerfänger (aus `@bos/oberflaeche`, mit Sichern und
 Löschen dieser App) und das Lagemonitor-Fenster. Die Eingänge (Scan, Datei,
 Bilderstapel, Link) liegen seit Phase 3 unter `eingang/`, die
@@ -1101,6 +1104,12 @@ Der Brocken des Monitors gewinnt nur das Festhalten von Stufe und Vollbild
 Prüfung der Registrierung statt der Steuerung). Bis zur Grenze bleiben im
 Startbündel 2,2 KB.
 
+**„Was ist neu“ (2026-11-25):** 4.476.962 / 647.649 Byte, Budget neu
+gesetzt. Gemessen gegen den Stand davor (4.465.680 / 645.658 Byte, das
+Startbündel lag da schon über dem Budget, innerhalb der Grenze): Der
+Änderungsverlauf ist ein eigener, beim Öffnen nachgeladener Brocken
+(`aenderungen`, rund 9 KB), das Startbündel trägt rund 2 KB für Knopf,
+Dialog und Blättern (`useAenderungen`).
 **Werkzeugstand:** `npm install` braucht npm 11 (`npx npm@11 install`), npm 10
 bricht an den `file:`-Abhängigkeiten der Submodule untereinander ab
 („Cannot read properties of null (reading 'edgesOut')"); mit Node 24
