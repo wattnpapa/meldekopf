@@ -27,7 +27,7 @@ export interface Aenderung {
  */
 export const MONATE: Readonly<Record<string, string>> = {
   "2026-11":
-    "Die Einsatz-Sammlung ist ganz aus dem Erfassungsbogen herübergekommen und liest auch dessen neue Bögen. Dazu die Tafel für den Fernseher im Führungsfahrzeug, Sammlungen nachträglich als Übung führen, Einzelpersonen wie Fachberater, orange und graue Zeichen für Gerät von Partnern, die Kopplung von bis zu fünf Telefonen an einen Rechner im lokalen Netz ohne Internet und eine Einsatzansicht für breite Bildschirme. Die Zuordnung zu Zügen entfällt.",
+    "Die Einsatz-Sammlung ist ganz aus dem Erfassungsbogen herübergekommen und liest auch dessen neue Bögen. Dazu die Tafel für den Fernseher im Führungsfahrzeug, Sammlungen nachträglich als Übung führen, Einzelpersonen wie Fachberater, orange und graue Zeichen für Gerät von Partnern, die Kopplung von bis zu fünf Telefonen an einen Rechner im lokalen Netz ohne Internet, eine Einsatzansicht für breite Bildschirme und das Tor, an dem Fahrzeuge über ihr Kennzeichen als rausgefahren oder zurück vermerkt werden. Die Zuordnung zu Zügen entfällt.",
   "2026-10":
     "Erste Fassung als eigene App: Einsätze anlegen, Bögen per QR-Code, Handscanner, Foto, PDF oder Datei aufnehmen, Einheiten ohne Bogen schnell erfassen, Lagemonitor, Datensicherung, Offline-Betrieb und eine App für Android. Nach der ersten Prüfrunde bedienbarer am Telefon und in der Nacht.",
 };
@@ -37,6 +37,7 @@ export const AENDERUNGEN: readonly Aenderung[] = [
     datum: "2026-11-25",
     punkte: [
       "Neu: „Was ist neu“. Ein Tipp auf die Versionsnummer in der Fußzeile zeigt diesen Verlauf, monatsweise zum Blättern.",
+      "Neu: Tor. „Tor: Fahrzeuge raus und rein…“ in der Einsatzansicht vermerkt je Fahrzeug, ob es den Bereitstellungsraum verlässt oder zurückkommt. Das Kennzeichen in den Rahmen der Kamera halten oder seine letzten Zeichen tippen, dann „Fährt raus“ oder „Kommt zurück“. Die Karte der Einheit zeigt, welche Fahrzeuge seit wann unterwegs sind, jede Bewegung steht mit Uhrzeit im Verlauf. Die Stärke der Einheit bleibt unverändert. Das Kamerabild wird nur auf dem Gerät ausgewertet und nicht gespeichert. Auf gekoppelten Telefonen (Sammler) gibt es das Tor noch nicht.",
       "Kopplung: Ein Scan am Telefon genügt. Der Rechner im Fahrzeug braucht dafür weder Kamera noch Handscanner; der Antwort-Code bleibt als Ausweichweg, falls ein Browser nicht mitspielt.",
       "Kopplung: Lädt das Telefon oder der Rechner die Seite neu, finden sich beide ohne neuen Scan wieder. Gemerkt wird die Kopplung bis zu 30 Tage; „Kopplung trennen“ und „Alle Daten löschen“ entfernen sie.",
       "Kopplung: Ein Rechner führt jetzt bis zu fünf Telefone. Jedes bekommt einen Namen, etwa „Eingang Nord“, und am Rechner steht für jedes, ob es verbunden ist und wann zuletzt etwas kam.",

@@ -60,7 +60,7 @@ in [funktionsumfang.md](funktionsumfang.md), der Weg der Übernahme in
   Audit-Ergebnisse übernommen werden können: TypeScript, React 19, Vite 8,
   vite-plugin-pwa (Workbox), Vitest 4, Cucumber + Playwright, Electron 44 mit
   electron-updater, Capacitor 8, pdfmake 0.3, pako, @noble/ed25519, zxing-wasm
-  und jsQR, Node 24. Versionsstände vom 2026-10-25; sie folgen dem
+  und jsQR, tesseract.js 7 (nur im Meldekopf, für das Tor), Node 24. Versionsstände vom 2026-10-25; sie folgen dem
   Erfassungsbogen.
 - **Geteilter Kern als Git-Submodule** unter `vendor/`: `@bos/eeb-format`,
   `@bos/meldekopf`, `@bos/vokabulare`, `@bos/taktische-zeichen`. Gepinnte
@@ -224,6 +224,7 @@ flowchart TB
   app --> schnell["schnellerfassung/*<br/>Nur-Stärke-Bogen, Namen, Eintreffzeit,<br/>StAN-Vorbelegung"]
   app --> lage["lagemonitor-ui.tsx<br/>Zweites Fenster"]
   app --> papier["papier-abgleich-ui.tsx"]
+  app --> tor["tor/*<br/>Tor-Ansicht, Fahrzeugstand,<br/>Kennzeichen-Abgleich, Texterkennung"]
   app --> export["weitergabe/*<br/>Sammel-PDF, CSV, XLSX, Einsatz-Datei,<br/>Export-Stand"]
   app --> persist["speicher-browser.ts, einsaetze-lesen.ts,<br/>eintrag-zeiten.ts, fassung-vorrang.ts,<br/>entfernte-meldungen.ts, einsatz-abgleich.ts,<br/>sicherung.ts, datenschutz-uhr.ts"]
   liste --> ausw["auswertung.ts, einheiten-liste.ts,<br/>einheiten-tabelle.ts"]
@@ -912,6 +913,18 @@ Papierkorb 30 Tage, Aufräumfrist ruhender Sammlungen 90 Tage; alle über die
 geprüfte Geräteuhr (`datenschutz-uhr.ts`), nie durch bloßen Zeitablauf nach
 einem Uhrsprung.
 
+Fahrzeuge am Tor (seit 2026-11-25, `tor/fahrzeug-stand.ts`): kein neuer
+Schlüssel. Die letzte Bewegung je Fahrzeug liegt als optionales Feld
+`fahrzeugStand` am Eintrag der Sammlung (`{ [Kennzeichen-Schlüssel]: {
+unterwegs, am } }`), wie `bedarfGeklaert`; der Kern reicht es unverändert
+durch, Einsatz-Datei, Sammel-PDF und Kopplung tragen es mit, ältere
+Sammlungen ohne das Feld bleiben lesbar. Gelöscht wird es mit dem Eintrag.
+Die Texterkennung legt nichts ab: kein Bild, kein gelesener Text, kein
+eigener Vorrat in der IndexedDB (`cacheMethod: "none"`). Ihre drei Dateien
+(rund 7 MB) liegen im Laufzeit-Cache `eeb-zusatz` der zweiten Vorratsstufe,
+unter einem Verzeichnis mit dem Hash des Inhalts im Namen
+(`texterkennung-…/`, `vite.config.ts`).
+
 ### 8.3 Sicherheit und Datenschutz
 
 Wie der Erfassungsbogen (dort Kap. 8.3): CSP ohne Fremdcode, Electron ohne
@@ -958,6 +971,23 @@ den Kanal: Nachfrage und Antwort, Abschied, und die Angebote und Antworten der
 Rückruf-Plätze (Kap. 6.6), die wie die QR-Codes nur Verbindungsangaben tragen. Eine Anmeldung der Gegenstelle gibt es nicht:
 Wer beide Codes tauschen kann, erhält die Sammlung als Vollkopie. Electron
 braucht dafür keine zusätzliche Berechtigung; die Kamera ist schon erlaubt.
+
+Kennzeichen-Erkennung am Tor (seit 2026-11-25, `tor/`): Die Kamera läuft wie
+beim QR-Scan über `getUserMedia`; ausgewertet wird nur der Ausschnitt unter
+dem Rahmen, in einem Arbeiter-Thread derselben Herkunft (tesseract.js,
+WebAssembly). Kein Bild und kein gelesener Text verlässt das Gerät oder wird
+gespeichert; gespeichert wird allein die Bewegung, die der Helfer bucht.
+Die CSP bleibt unverändert: Arbeiter-Skript und Kern kommen als eigene
+Dateien (`script-src 'self'`, kein `blob:`-Arbeiter, `workerBlobURL: false`),
+`'wasm-unsafe-eval'` ist seit dem QR-Decoder erlaubt, die Sprachdaten lädt
+der Arbeiter von der eigenen Herkunft (`connect-src 'self'`). Ohne die
+Pfadvorgaben in `kennzeichen-leser.ts` holte tesseract.js alle drei Dateien
+von `cdn.jsdelivr.net`; die CSP verböte das, und der Prüflauf im gebauten
+Stand zeigt keine Fremdanfrage. Abgeglichen wird nur gegen Kennzeichen, die
+schon in der Sammlung stehen: Ein fremdes Kennzeichen im Bild hinterlässt
+nichts. Electron und Android brauchen keine neue Berechtigung (Kamera ist
+erlaubt); in der Desktop-App lädt die Erkennung nicht (`file://`), dort
+bleibt die Tippsuche.
 
 ### 8.4 Kompatibilität
 
@@ -1045,6 +1075,17 @@ ohne `blob:`) verbietet, und der Satz wartet dann ohne Ende. Ein Update von
 pdfmake braucht deshalb den Verhaltenstest „Sammel-PDF bündelt alle Bögen". Zum Vergleich der Erfassungsbogen
 am selben Tag: 5.500.797 / 1.198.089 Byte. Das Budget wird je Phase bewusst
 angehoben (`npm run bundle-budget -- --setze`, Begründung im Commit).
+**Tor mit Kennzeichen-Erkennung (2026-11-25):** JavaScript gesamt 8.526.210
+Byte, davon 4.010.779 Byte tesseract.js (Arbeiter-Skript 111 KB und der
+SIMD-Kern mit eingebettetem WebAssembly 3,9 MB, beide als fertige Dateien
+unter `texterkennung-…/`, nicht gebündelt) und rund 39 KB für `tor/*`
+(nachgeladen); dazu 2,95 MB Sprachdaten (`eng.traineddata.gz`, zählt nicht
+als JavaScript). Startbündel 654.003 Byte (+6,4 KB: Fahrzeugstand für Karte
+und Summenzeile, Knopf). Neue Laufzeit-Abhängigkeiten, nur im Meldekopf:
+`tesseract.js` 7 (Apache-2.0), `tesseract.js-core` 7 (Apache-2.0),
+`@tesseract.js-data/eng` (Sprachdaten, MIT-Paket, Daten Apache-2.0). Alle drei
+Dateien liegen in der zweiten Vorratsstufe und laden erst, wenn am Tor die
+Kamera läuft.
 **Audit Runde 1, offene P2 (2026-10-26):** 4.107.298 / 535.773 Byte, das
 Startbündel +8 KB: Lagemonitor mit Zug, Gesamt und Bedarf, Verlauf der
 Ansichten (`ansicht-verlauf.ts`), Zähler-Fenster für „Stärke ändern“
@@ -1316,6 +1357,10 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 
 | Risiko / offener Punkt | Umgang |
 | --- | --- |
+| Kennzeichen-Erkennung am Tor nur an gezeichneten Schildern erprobt (Prüfstand: Chromium mit Film als Kamera, zwei Schilder, wörtlich gelesen nach gut einer Sekunde samt Laden) | Feldversuch offen: echte Kennzeichen in FE-Schrift, bei Tag, Dämmerung und Nacht, verschmutzt, schräg, aus zwei bis fünf Metern; Telefone der Helfer (Lesezeit je Bild, Akku, Wärme). Allgemeine Texterkennung mit englischen Sprachdaten, nicht auf FE-Schrift trainiert. Die Zeile „Gelesen: …“ zeigt im Versuch, was die Kamera las. Reicht die Quote nicht: eigener Schild-Sucher vor der Erkennung oder ein auf Kennzeichen trainiertes Modell. Die Tippsuche trägt das Tor in jedem Fall. |
+| Tor nicht auf gekoppelten Sammlern | Die Lage führt nur die Zentrale; das Telefon am Tor muss heute die Sammlung selbst führen oder die Zentrale sein. Nächster Schritt: Bewegungen als eigene Nachricht vom Sammler an die Zentrale, mit Warteschlange wie bei den Meldungen (ADR-009). |
+| Texterkennung vergrößert den Offline-Vorrat um rund 7 MB (zweite Stufe) | Lädt nach dem Kern, hält den Start nicht auf; nur der SIMD-Kern, ältere Geräte (iOS vor 16.4) fallen auf die Tippsuche zurück. Die Sprachdaten ließen sich auf Großbuchstaben und Ziffern kürzen, wenn der Versuch die Erkennung bestätigt. |
+| Kennzeichen-Erkennung in der Android-App und in der Desktop-App ungeprüft | Android: `getUserMedia` in der Capacitor-Hülle nicht erprobt; der QR-Scan nutzt dort den nativen Scanner. Desktop: Die Erkennung lädt unter `file://` nicht. In beiden bleibt die Tippsuche; für den Feldversuch die Web-App im Browser nehmen. |
 | Zwei Apps auf einem Gerät verwirren unter Stress | Klare Namen, Icons, Farben; der Übergang per Link nennt, wohin es geht; Rückfallebene QR. Audit-Runde mit den THW-Reviewer-Rollen nach Phase 3. |
 | Oberflächen-Baustein wird zur Bremse (Pin-Updates in drei Repos) | Klein halten (ADR-004); Rückweg aus ADR-003: Kopie einfrieren, Herkunfts-Commit festhalten. |
 | PDF-Satz im Kern braucht pdfmake unter `node` im Test | Im Erfassungsbogen laufen die Satz-Tests unter `node`; im Kern zusätzlich unter `jsdom` zu prüfen, wenn `pdf-dokument` folgt (zweite Stufe, ADR-005 Nachtrag); sonst Satz in beiden Apps mit gemeinsamer Testfixture. |

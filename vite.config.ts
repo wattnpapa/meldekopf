@@ -105,6 +105,43 @@ function sitemap(): Plugin {
   };
 }
 
+/** Die drei Dateien der Texterkennung (Tor, Kennzeichen): Arbeiter-Skript, SIMD-Kern, Sprachdaten. */
+const TEXTERKENNUNG_DATEIEN: Record<string, string> = {
+  "worker.min.js": "node_modules/tesseract.js/dist/worker.min.js",
+  "tesseract-core-simd-lstm.wasm.js": "node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js",
+  "eng.traineddata.gz": "node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz",
+};
+
+/**
+ * Legt die Texterkennung (tesseract.js) unter einem festen Verzeichnis ins Paket. tesseract.js sucht Kern und
+ * Sprachdaten unter festen Dateinamen in einem Verzeichnis; mit den Hash-Namen von Vite fände es sie nicht und fiele
+ * auf sein CDN zurück. Der Hash steckt darum im Verzeichnisnamen: Die Adressen sind unveränderlich, der Laufzeit-Cache
+ * der zweiten Vorratsstufe darf sie für immer halten, und eine neue Fassung der Bibliothek bekommt neue Adressen.
+ * Die App liest den Namen aus `__TEXTERKENNUNG_PFAD__` (src/app/tor/kennzeichen-leser.ts). Im Dev-Server kommen die
+ * Dateien aus node_modules.
+ */
+function texterkennung(): Plugin {
+  const lesen = (name: string) => readFileSync(pfad(TEXTERKENNUNG_DATEIEN[name]!));
+  const hash = createHash("sha256");
+  for (const name of Object.keys(TEXTERKENNUNG_DATEIEN)) hash.update(lesen(name));
+  const verzeichnis = `texterkennung-${hash.digest("hex").slice(0, 10)}`;
+  return {
+    name: "eeb-texterkennung",
+    config: () => ({ define: { __TEXTERKENNUNG_PFAD__: JSON.stringify(verzeichnis) } }),
+    configureServer(server) {
+      server.middlewares.use((req, res, weiter) => {
+        const name = decodeURIComponent((req.url ?? "").split("?")[0]!).match(/\/texterkennung-[^/]+\/([^/]+)$/)?.[1];
+        if (!name || !(name in TEXTERKENNUNG_DATEIEN)) return weiter();
+        res.setHeader("Content-Type", name.endsWith(".js") ? "text/javascript" : "application/gzip");
+        res.end(lesen(name));
+      });
+    },
+    generateBundle() {
+      for (const name of Object.keys(TEXTERKENNUNG_DATEIEN)) this.emitFile({ type: "asset", fileName: `${verzeichnis}/${name}`, source: lesen(name) });
+    },
+  };
+}
+
 /**
  * Setzt im Build eine Content-Security-Policy als <meta> in den Kopf der
  * index.html. Bewusst NUR im Build: der Vite-Dev-Server braucht den
@@ -348,6 +385,7 @@ export default defineConfig({
     bauStempel(),
     adressen(),
     sitemap(),
+    texterkennung(),
     inlineCssMinify(),
     fontCssInline(),
     // Zuletzt: hasht die Inline-Skripte des FERTIGEN HTML (siehe dort).
@@ -370,7 +408,8 @@ export default defineConfig({
         // woff2 gehört zwingend dazu: die Oberflächenschrift liegt im Bundle
         // (kein CDN), fehlte sie im Precache, fiele die App offline auf die
         // Systemschrift zurück. wasm ebenso (QR-Decoder ab Phase 3).
-        globPatterns: ["**/*.{js,css,html,svg,png,webmanifest,woff2,wasm,json}"],
+        // gz: die Sprachdaten der Texterkennung (Tor), zweite Stufe.
+        globPatterns: ["**/*.{js,css,html,svg,png,webmanifest,woff2,wasm,json,gz}"],
         // Manifest-Screenshots (PNG) braucht nur der Installationsdialog des
         // Browsers, nicht die laufende App — sie gehören nicht in den Vorrat.
         globIgnores: ["screenshots/**/*.png"],
@@ -387,6 +426,12 @@ export default defineConfig({
           },
         ],
         runtimeCaching: [
+          {
+            // Texterkennung am Tor (zweite Stufe): Der Hash steckt im Verzeichnisnamen, die Adressen ändern sich nie.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/texterkennung-[^/]+\/[^/]+$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: { cacheName: "eeb-zusatz" },
+          },
           {
             urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/assets\/[^/]+\.json$/.test(url.pathname),
             handler: "CacheFirst",

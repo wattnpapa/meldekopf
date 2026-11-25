@@ -133,6 +133,7 @@ import type { AufteilungsWahl } from "@bos/meldekopf/aufteilen";
 import { absenderLabel, type Absenderkarte } from "@bos/eeb-format/signatur";
 import { AbsenderKontakt, KontaktLink, PersonKontakt } from "./kontakt-link";
 import { fahrzeugKurzformen, fuehrungDerEinheit, funkrufDerEinheit } from "./erreichbarkeit";
+import { fahrzeugeDerEinheit, torFahrzeuge, unterwegsText } from "./tor/fahrzeug-stand";
 import { abgerueckteSumme, staerkeJeOrganisation, staerkeZeile } from "./lage-zusatz";
 import { erfassungFuer } from "./schnellerfassung/angefangen";
 import { bogenHatInhalt } from "./hilfen";
@@ -1227,6 +1228,8 @@ export function EinsatzDetail(props: {
   onKoppeln?: () => void;
   /** Schnellerfassung (nur Stärke) für diese Sammlung (R16-W3). */
   onSchnell?: () => void;
+  /** „Tor: Fahrzeuge raus und rein…": die Tor-Ansicht dieser Sammlung (tor/). */
+  onTor?: () => void;
   /** Fertige Bögen aus JSON-/PDF-Dateien. */
   onDateiImport: (dateien: File[]) => void;
   /** Stapel abfotografierter/gescannter QR-Codes (Mehrfachauswahl oder Ordner). */
@@ -1653,6 +1656,10 @@ export function EinsatzDetail(props: {
   // Gesamtzahl; `kopf` ist davon nur der gerade angezeigte Ausschnitt. Suche,
   // Filter und Sortierung ändern die Summen oben bewusst nicht.
   const alleEinheiten = geltendeJeEinheit(einsatz.eintraege);
+  // Fahrzeuge der Anwesenden für das Tor, und wie viele davon gerade draußen sind.
+  const torFahrzeugeListe = torFahrzeuge(einsatz);
+  const torFahrzeugeZahl = torFahrzeugeListe.length;
+  const fahrzeugeUnterwegs = torFahrzeugeListe.filter((f) => f.unterwegsSeit != null).length;
   /** Am Telefon steht die Suchleiste hinter einer Zeile, auch bei langer Liste: offen war sie 321 px hoch vor der ersten Karte (R4-K5, R5-K4); Suche oder Filter öffnen sie. */
   const filterEingeklappt = kompakt;
   const letzte = letzteMeldung(einsatz.eintraege);
@@ -2382,7 +2389,11 @@ export function EinsatzDetail(props: {
           und die Abgerückten standen nicht bei der Summe, und für die Meldung über Funk gab es keinen Text. */}
       {alleEinheiten.length > 0 && (
         <p className="hinweis lage-zusatz">
-          <span className="lage-zusatz-teil"><strong>{sum.fahrzeuge}</strong> {sum.fahrzeuge === 1 ? "Fahrzeug" : "Fahrzeuge"}</span>
+          <span className="lage-zusatz-teil">
+            <strong>{sum.fahrzeuge}</strong> {sum.fahrzeuge === 1 ? "Fahrzeug" : "Fahrzeuge"}
+            {/* Am Tor als rausgefahren vermerkt (tor/fahrzeug-stand.ts); die Stärke bleibt davon unberührt. */}
+            {fahrzeugeUnterwegs > 0 && `, davon ${fahrzeugeUnterwegs} unterwegs`}
+          </span>
           {jeOrganisation.length > 1 &&
             jeOrganisation.map((o) => (
               <span className="lage-zusatz-teil" key={o.organisation}>
@@ -2501,6 +2512,17 @@ export function EinsatzDetail(props: {
           aufnahmeWege
         )}
       </div>
+
+      {/* Neu im Meldekopf: Fahrzeuge fahren über den Tag raus und kommen wieder, ohne dass die Einheit abrückt. Ein eigener
+          Knopf statt eines Wegs der Aufnahme: Am Tor wird nichts aufgenommen, und am Telefon lägen die Wege eingeklappt. */}
+      {props.onTor && torFahrzeugeZahl > 0 && (
+        <div className="aktionen tor-aktion">
+          <button type="button" className="mit-zusatz" onClick={props.onTor} aria-describedby="tor-zusatz">
+            Tor: Fahrzeuge raus und rein…
+            <span className="knopf-zusatz" id="tor-zusatz" aria-hidden="true">Kennzeichen mit der Kamera lesen oder tippen</span>
+          </button>
+        </div>
+      )}
 
       {/* Was das Einlesen ergab, dort, wo der Finger eben war (R3-L1). */}
       {props.einleseQuittung}
@@ -4648,6 +4670,8 @@ function EinheitKarte(props: {
   const funkruf = funkrufDerEinheit(kopf.bogen);
   const fuehrung = fuehrungDerEinheit(kopf.bogen);
   const kfzKurz = fahrzeugKurzformen(kopf.bogen);
+  // Am Tor als rausgefahren vermerkte Fahrzeuge (tor/fahrzeug-stand.ts); bei Abgerückten kein Thema mehr.
+  const kfzUnterwegs = kopf.status === MeldeStatus.ANWESEND ? unterwegsText(fahrzeugeDerEinheit(kopf, alle), (ms) => zeitKurz(ms)) : "";
   const revs = revisionenJe(alle, kopf.einheitSchluessel);
   // Folgemeldung: die direkt ältere Fassung derselben Einheit ist der Bezug für
   // „was hat sich seit der letzten Meldung geändert?".
@@ -5618,6 +5642,7 @@ function EinheitKarte(props: {
                   Kfz: {kfzKurz.length > KFZ_KARTE_MAX ? `${kfzKurz.slice(0, KFZ_KARTE_MAX).join(" · ")} · +${kfzKurz.length - KFZ_KARTE_MAX}` : kfzKurz.join(" · ")}
                 </span>
               )}
+              {kfzUnterwegs && <span className="kompakt-merkmal kfz-unterwegs-merkmal">{kfzUnterwegs}</span>}
               {zeitHinweis && (
                 <span className="kompakt-merkmal luecken-merkmal" title={zeitHinweis}>⚠ Zeit prüfen</span>
               )}
@@ -5688,6 +5713,7 @@ function EinheitKarte(props: {
             </span>
           )}
           {kfzKurz.length > 0 && <span className="muster-sub kfz-zeile">Fahrzeuge: {kfzKurz.join(" · ")}</span>}
+          {kfzUnterwegs && <span className="muster-sub kfz-unterwegs-zeile"><strong>{kfzUnterwegs}</strong></span>}
           {/* Die Zeiten der Führungsstelle zuerst, der Absender-Stand nur als
               Zusatz: „eingetroffen 09:40" ist die Zeile fürs Einsatztagebuch,
               „Stand 161923jul26" war die einzige Zeit und sagte nichts über

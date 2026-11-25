@@ -16,7 +16,7 @@ import { useModalesOverlay } from "@bos/oberflaeche/modal-overlay";
 import type { SegmentTeil } from "@bos/eeb-format/codec";
 
 /** Was schiefging (ein Satz) und was dagegen hilft (kurze Schritte). */
-type KameraFehler = { text: string; schritte?: string[] };
+export type KameraFehler = { text: string; schritte?: string[] };
 
 /**
  * Kamerastart-Fehler in einen Rat übersetzen, der zur Ursache passt.
@@ -26,7 +26,7 @@ type KameraFehler = { text: string; schritte?: string[] };
  * system für die Browser-App —, kommt getUserMedia ohne jede Nachfrage als
  * NotAllowedError zurück. Beide Stellen gehören deshalb in den Hinweis.
  */
-function kameraRat(err: unknown): KameraFehler {
+export function kameraRat(err: unknown): KameraFehler {
   const name = err instanceof Error ? err.name : "";
   switch (name) {
     case "NotAllowedError":
@@ -104,7 +104,7 @@ const BILD_WUNSCH: MediaTrackConstraints = {
  * `facingMode` nicht, und manche Webviews weisen die Objekt-Form ganz zurück
  * (die letzte Stufe bleibt deshalb das nackte `video: true`).
  */
-async function kameraOeffnen(wunschId: string): Promise<MediaStream> {
+export async function kameraOeffnen(wunschId: string): Promise<MediaStream> {
   if (wunschId) {
     try {
       return await navigator.mediaDevices.getUserMedia({

@@ -16,7 +16,7 @@
  * Schnellerfassung (schnellerfassung/, Phase 4), die app.tsx einhängt.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Einsatzsammlung } from "@bos/meldekopf/einsaetze";
 import { arbeiten } from "@bos/oberflaeche/arbeitet";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
@@ -49,6 +49,9 @@ import {
 } from "./weitergabe/export-stand";
 import { lageAngabenLaden } from "./weitergabe/lage-angaben";
 import { kopplungBeginnen } from "./kopplung/zustand";
+
+// Die Tor-Ansicht samt Kennzeichen-Abgleich lädt erst, wenn jemand ans Tor geht.
+const TorAnsicht = lazy(() => import("./tor/tor-ansicht"));
 
 export function EinsatzAnsicht({
   einsatz,
@@ -99,6 +102,7 @@ export function EinsatzAnsicht({
 }) {
   const [fehler, setFehler] = useState("");
   const [ausgabeQuittung, setAusgabeQuittung] = useState<string | null>(null);
+  const [torOffen, setTorOffen] = useState(false);
   // Was beim letzten Export dieses Einsatzes schon in der Sammlung stand
   // (export-stand.ts) — die Ansicht zählt daran ab, was seitdem neu ist.
   const [exportStaende, setExportStaende] = useState<Partial<Record<ExportZiel, ExportStand>>>(() => exportStaendeLaden(einsatz.id));
@@ -290,6 +294,7 @@ export function EinsatzAnsicht({
         onManuell={onManuell}
         onBerichtigen={onBerichtigen}
         onKoppeln={() => kopplungBeginnen(einsatz.id)}
+        onTor={() => setTorOffen(true)}
         angefangeneErfassung={angefangeneErfassung}
         onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
         onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}
@@ -334,6 +339,11 @@ export function EinsatzAnsicht({
         ausgabeQuittung={ausgabeQuittung}
         onGeloescht={onGeloescht}
       />
+      {torOffen && (
+        <Suspense fallback={null}>
+          <TorAnsicht einsatz={einsatz} onGeaendert={onGeaendert} onSchliessen={() => setTorOffen(false)} />
+        </Suspense>
+      )}
       {(meldung || fehler || appFehler) && (
         <p className={fehler || appFehler ? "fehler" : "meldung"} role="status" style={{ textAlign: "center" }}>
           {fehler || appFehler || meldung}

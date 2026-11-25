@@ -92,6 +92,7 @@
     "@capacitor/share": "^8.0.3",
     "@fontsource-variable/archivo": "^5.3.0",
     "@noble/ed25519": "^3.2.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "electron-updater": "^6.8.3",
     "jsqr": "^1.4.0",
     "pako": "^3.0.2",
@@ -99,6 +100,8 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.3.0",
+    "tesseract.js": "^7.0.0",
+    "tesseract.js-core": "^7.0.0",
     "zxing-wasm": "^3.1.6"
   },
   "devDependencies": {

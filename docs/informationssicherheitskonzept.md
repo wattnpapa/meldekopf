@@ -373,7 +373,7 @@ Der Electron-Hauptprozess (`electron/main.js`, aus dem Erfassungsbogen
   Renderer hat keinen Zugriff auf Node.js- oder Electron-APIs; es gibt kein
   Preload-Skript.
 - **Minimale Rechtevergabe:** Der Permission-Handler erlaubt ausschließlich
-  `media` (Kamera, seit Phase 3 für den QR-Scan) und Zwischenablage
+  `media` (Kamera, seit Phase 3 für den QR-Scan, seit 2026-11-25 auch für das Tor) und Zwischenablage
   (`clipboard-read`, `clipboard-sanitized-write`); alles andere wird
   abgelehnt.
 - **Kontrollierte externe Links:** `setWindowOpenHandler` und `will-navigate`
@@ -440,7 +440,10 @@ connect-src 'self' file: https://meldekopf.goatcounter.com
   werden beim Bauen gehasht und einzeln freigegeben; findet das Plugin keinen
   Block, bricht der Build ab, statt ohne wirksame Policy auszuliefern.
 - `'wasm-unsafe-eval'` erlaubt nur das Kompilieren von WebAssembly aus der
-  eigenen Herkunft; nötig für den QR-Decoder ZXing (seit Phase 3 im Kamera-Scan).
+  eigenen Herkunft; nötig für den QR-Decoder ZXing (seit Phase 3 im Kamera-Scan)
+  und seit 2026-11-25 für die Texterkennung am Tor (tesseract.js in einem
+  Arbeiter-Thread derselben Herkunft; Skript, Kern und Sprachdaten liegen im
+  Paket, kein CDN, kein `blob:`-Arbeiter).
 - `frame-src blob:` für die PDF-Vorschau im eingebetteten Rahmen.
 - `style-src 'unsafe-inline'` bleibt bewusst (React setzt `style`-Attribute;
   Design-Token und Schrift liegen inline).

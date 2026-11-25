@@ -58,6 +58,8 @@ export function istZusatz(url: string): boolean {
   if (/^assets\/[^/]+\.json$/.test(url)) return true;
   // Themenseiten im Wurzelverzeichnis.
   if (/^[^/]+\.html$/.test(url) && !KERN_SEITEN.has(url)) return true;
+  // Texterkennung für Kennzeichen am Tor (neu im Meldekopf, rund 7 MB): nur wer am Tor die Kamera nutzt, braucht sie.
+  if (/^texterkennung-[^/]+\//.test(url)) return true;
   // Fotos und Bildschirmfotos der Seiten (nur WebP, R5-O4).
   if (/^(?:bilder|screenshots)\/.+\.webp$/.test(url)) return true;
   return false;

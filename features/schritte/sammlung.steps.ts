@@ -35,6 +35,24 @@ async function sammlungAufDemGeraet(welt: EebWelt, name: string, mitWeiteren: bo
   await welt.oeffneApp();
 }
 
+// Für das Tor: der alte Bogen, dessen Fahrzeuge die genannten Kennzeichen tragen (durch Komma getrennt).
+Given("auf dem Gerät liegt die Sammlung {string} mit einer Einheit und den Fahrzeugen {string}", async function (this: EebWelt, name: string, kennzeichen: string) {
+  const b = alterBogen();
+  const muster = b.fahrzeuge[0]!;
+  b.fahrzeuge = kennzeichen.split(",").map((k) => ({ ...muster, kennzeichen: k.trim() }));
+  const { einsaetze, einsatzId } = sammlungSpeicher(name, [b]);
+  await this.page.addInitScript(
+    ([e, id]) => {
+      if (sessionStorage.getItem("prüfstand.gesät")) return;
+      sessionStorage.setItem("prüfstand.gesät", "1");
+      localStorage.setItem("eeb.einsaetze.v1", e);
+      localStorage.setItem("eeb.letzterEinsatz.v1", JSON.stringify({ id, um: Date.now() }));
+    },
+    [einsaetze, einsatzId] as const,
+  );
+  await this.oeffneApp();
+});
+
 Given("auf dem Gerät liegt die Sammlung {string} mit dem alten Bogen", async function (this: EebWelt, name: string) {
   await sammlungAufDemGeraet(this, name, false);
 });
@@ -440,4 +458,9 @@ When("ich das Feld mit dem Platzhalter {string} mit {string} fülle", async func
   wert: string,
 ) {
   await this.page.getByPlaceholder(platzhalter).first().fill(wert);
+});
+
+// Tor-Ansicht: ein Fahrzeug der Liste über sein Kennzeichen wählen.
+When("ich am Tor das Fahrzeug {string} wähle", async function (this: EebWelt, kennzeichen: string) {
+  await offenerDialog(this).locator(".tor-liste button").filter({ hasText: kennzeichen }).first().click();
 });

@@ -55,6 +55,7 @@ import { staerke } from "@bos/eeb-format/model";
 import { geltendeJeEinheit, istPlatzhalterFassung } from "../fassung-vorrang";
 import { einheitAnzeigename, zeitpunktDeutsch } from "../hilfen";
 import { ART_VERLAUF_MAX, artBekannt, sammlungenSchreiben, zeitKurz, type FuehrungsVermerk } from "../eintrag-zeiten";
+import { fahrzeugStandVereint } from "../tor/fahrzeug-stand";
 
 export type Feld = "status" | "notiz" | "eintreffzeit";
 
@@ -500,6 +501,10 @@ export function einsatzAbgleichen(importiert: Einsatzsammlung, jetzt = Date.now(
         });
       }
     }
+    // Fahrzeuge am Tor (tor/fahrzeug-stand.ts): je Fahrzeug gilt die jüngste Bewegung beider Geräte. Kein Widerspruch,
+    // nichts zu fragen: Zwei Helfer an zwei Toren vermerken verschiedene Fahrzeuge, und beim selben gilt die spätere Uhrzeit.
+    const fahrzeugStand = fahrzeugStandVereint(ziel, [...vorher.eintraege, ...importiert.eintraege]);
+    if (fahrzeugStand) ziel.fahrzeugStand = fahrzeugStand;
     const vermerke = vereinigeVermerke([hier.vermerke, datei.vermerke, ziel.vermerke ?? [], notizen]);
     if (vermerke.length > 0) ziel.vermerke = vermerke;
     if (was.length > 0) ergebnis.aktualisiert.push({ einheitSchluessel: schl, einheit: kurzname(ziel, s.eintraege), was });

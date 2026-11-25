@@ -178,6 +178,16 @@ die für die DSFA relevante Kurzfassung:
   aufnimmt, geht an die Zentrale; deren ganzer Stand geht laufend an jeden
   verbundenen Sammler zurück. Die QR-Codes tragen keine Einsatzdaten, nur
   Verbindungsangaben (Schlüssel-Fingerabdruck, Adressen im lokalen Netz).
+- **Tor** (seit 2026-11-25; `src/app/tor/`): Die Kamera liest Kennzeichen
+  ein- und ausfahrender Fahrzeuge, um je Fahrzeug „fährt raus“ oder „kommt
+  zurück“ zu vermerken. Die Texterkennung läuft auf dem Gerät; kein Bild und
+  kein gelesener Text wird gespeichert oder übertragen. Abgeglichen wird nur
+  gegen Kennzeichen, die die Einheit im Bogen selbst gemeldet hat; ein
+  fremdes Kennzeichen im Bild hinterlässt nichts. Gespeichert wird je
+  gebuchter Bewegung: Kennzeichen-Schlüssel, Richtung, Uhrzeit, dazu ein
+  Vermerk im Verlauf der Einheit. Das ergibt ein Bewegungsbild je Fahrzeug
+  über die Dauer des Einsatzes, nicht je Person: Wer fährt, wird nicht
+  erfasst. Löschung mit der Sammlung, nach deren Fristen.
 - **Eingang** (live seit Phase 3; `src/app/eingang/`): QR-Code per Kamera
   oder USB-Handscanner, Fotos aus Messenger und Mail (Bilderstapel),
   JSON-Datei, PDF mit QR oder eingebettetem Bogen, Link mit Payload im
