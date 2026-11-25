@@ -33,15 +33,25 @@ export interface GemerkterPlatz {
   pwd: string;
 }
 
+/** Eine Gegenstelle, wie sie sich merken lässt: womit dieses Gerät sie nach dem Neuladen wieder anruft. */
+export interface GemerktesGeraet {
+  kennung: string;
+  name: string;
+  /** Dauerhafte Kennung des anderen Geräts (geraetename.ts). */
+  geraet: string;
+  plaetze: GemerkterPlatz[];
+  /** Nur Sammler: Meldungen, die die Zentrale bestätigt hat. */
+  bestaetigt?: string[];
+}
+
 export interface KopplungsMerker {
   rolle: "zentrale" | "sammler";
   einsatzId: string | null;
   /** Wann die Kopplung begann (Date.now()). */
   seit: number;
   zertifikat?: RTCCertificate;
-  plaetze?: GemerkterPlatz[];
-  /** Nur Sammler. */
-  bestaetigt?: string[];
+  /** Die Zentrale merkt sich jeden Sammler, der Sammler die eine Zentrale. */
+  geraete?: GemerktesGeraet[];
 }
 
 const DB = "eeb-kopplung";
@@ -124,7 +134,7 @@ export async function merkerLaden(jetzt = Date.now()): Promise<KopplungsMerker |
   const ohne: KopplungsMerker = { rolle: k.rolle, einsatzId, seit };
   try {
     const m = await ablage<KopplungsMerker | undefined>("readonly", (s) => s.get(SCHLUESSEL));
-    if (m && m.rolle === k.rolle && m.seit === seit && m.zertifikat && Array.isArray(m.plaetze)) return m;
+    if (m && m.rolle === k.rolle && m.seit === seit && m.zertifikat && Array.isArray(m.geraete)) return m;
   } catch {
     /* keine Datenbank oder nicht lesbar */
   }

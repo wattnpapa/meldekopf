@@ -156,7 +156,7 @@ der/dem IT-Sicherheitsbeauftragten der jeweiligen Organisation.
 Die Anwendung besteht ausschließlich aus Client-Software, die auf dem
 Meldekopf-Gerät läuft. Es existiert kein Anwendungsserver, keine zentrale
 Datenbank und keine Benutzerverwaltung. Ein Gerät führt eine oder mehrere
-Einsatz-Sammlungen. Seit 2026-11-24 lassen sich genau zwei Geräte am selben
+Einsatz-Sammlungen. Seit 2026-11-24 lassen sich Geräte am selben Meldekopf koppeln, seit 2026-11-25 eine Zentrale mit bis zu fünf Sammlern (je Sammler eine eigene Verbindung; kein Sammler erhält, was ein anderer aufgenommen hat). Ursprünglich: genau zwei Geräte am selben
 Meldekopf koppeln (ADR-009): Sie tauschen von Hand zwei QR-Codes und gleichen
 danach eine Sammlung über eine direkte Verbindung im lokalen Netz ab; jedes
 hält weiter seinen eigenen, vollständigen Bestand. Einen Verbund mehrerer

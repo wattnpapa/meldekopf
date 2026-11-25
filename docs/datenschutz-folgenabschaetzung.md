@@ -41,7 +41,12 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > `eeb.kopplung.v1`, IndexedDB `eeb-kopplung`): Rolle, Kennung der Sammlung,
 > Verbindungsangaben und am zweiten Gerät die Kennungen bestätigter Meldungen, keine Inhalte
 > von Bögen. Gelöscht mit „Kopplung trennen“, einer neuen Kopplung, nach
-> Fristablauf und mit „Alle Daten löschen“. Kein neuer
+> Fristablauf und mit „Alle Daten löschen“.
+> Eine Zentrale führt bis zu fünf Sammler; keiner erhält, was ein anderer
+> aufgenommen hat. Jedes Gerät nennt für die Kopplung einen Namen und eine
+> zufällige Kennung (`eeb.geraet.v1`); der Name ist frei eingebbar und wird
+> der Zentrale übermittelt. Personenbezogen ist er nur, wenn jemand einen
+> Personennamen eintippt: Gerätenamen nach dem Ort wählen („Eingang Nord“). Kein neuer
 > Empfänger außerhalb des Meldekopfs, kein Server, kein neuer Speicherort der
 > App; die Fristen und Löschwege gelten auf jedem der beiden Geräte für sich.
 >

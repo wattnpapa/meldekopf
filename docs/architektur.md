@@ -295,7 +295,7 @@ Kennfarbe), liegen unter `src/test/`.
 | Lagemonitor | `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lage-angaben.ts`; Tafel-Ansicht `lagetafel-ui.tsx`, `lagetafel.ts`, Wahl der Ansicht `lagemonitor-ansicht.ts` |
 | Weitergabe | `weitergabe/*`, `@bos/eeb-satz`, `export-stand.ts`, `einsatz-transport.ts` |
 | Ablösung und Rückimport | `einsatz-abgleich.ts`, `entfernte-meldungen.ts` |
-| Zwei Geräte am selben Meldekopf | `kopplung/*`: `signal.ts` (Kopplungs-Code, Türen und Klopf-Zeichen), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx` (Lampe, Leiste), `sammler-ansicht.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
+| Mehrere Geräte am selben Meldekopf | `kopplung/*`: `kopplung.ts` (führt die Gegenstellen, fasst ihren Zustand zusammen), `gegenstelle.ts` (alles, was dieses Gerät mit genau einem anderen verbindet), `geraetename.ts`, `merker.ts`, `signal.ts` (Kopplungs-Code, Türen und Klopf-Zeichen), `verbindung.ts` (WebRTC-Datenkanal), `abgleich.ts` und `sitzung.ts` (wann welcher Stand hinübergeht; ruft `einsatz-transport.ts` und `einsatz-abgleich.ts`), `kopplung.ts` (Steuerung), `kopplung-leiste.tsx` (Lampe, Leiste), `sammler-ansicht.tsx`, `kopplung-dialog.tsx`, `zustand.ts` |
 | Papier-Rückfallebene | `papier-abgleich-ui.tsx`, `papier-abgleich-entwurf.ts` |
 | Fristen | `@bos/eeb-format/datenschutzfrist`, `datenschutz-uhr.ts`, `@bos/meldekopf` (Papierkorb, Aufräumfrist) |
 
@@ -680,9 +680,31 @@ sequenceDiagram
   Wiederverbinden beim Einschalten aus.
 - „Kopplung trennen“ am Sammler führt in die gewöhnliche App zurück; die
   Sammlung dort enthält, was das Gerät selbst aufgenommen hat.
-- Gekoppelt ist genau eine Sammlung und genau ein zweites Gerät. Wird die
-  Sammlung auf einem Gerät gelöscht, endet die Kopplung; das andere Gerät
-  holt sie nicht zurück.
+- **Mehrere Sammler (seit 2026-11-25).** Eine Zentrale führt bis zu fünf
+  Sammler für eine Sammlung. Je Sammler hält sie eine Gegenstelle
+  (`gegenstelle.ts`): eigene Verbindung, eigene wartende Plätze in beide
+  Richtungen, eigenes Wiederverbinden, eigene Abgleich-Sitzung. Geteilt werden
+  das Zertifikat, die Kennung der Seite und das Gedächtnis. Gekoppelt wird
+  nacheinander („Weiteres Gerät koppeln…“, je ein Scan); die schon gekoppelten
+  bleiben dabei verbunden, Türen stehen immer nur für das eine Gerät offen,
+  das gerade koppelt. Jeder Sammler schickt nur, was er selbst aufgenommen
+  hat, und erhält nur den Kopf der Sammlung: Kein Telefon sieht die Meldungen
+  eines anderen. Nehmen zwei Sammler dieselbe Einheit auf, führt die Zentrale
+  sie als zwei Fassungen einer Einheit, nicht als zwei Einheiten.
+- **Namen.** Jeder Sammler nennt beim Verbinden seinen Namen und eine
+  dauerhafte, zufällige Kennung (`geraetename.ts`, `eeb.geraet.v1`). Der Name
+  wird am Telefon eingegeben („Name ändern…“); die Vorgabe ist das Modell, wo
+  der Browser es nennt, sonst die Geräteart, denn den Namen des Geräts im Netz
+  gibt ein Browser nicht heraus. Koppelt dasselbe Telefon neu, löst es an der
+  Zentrale seinen alten Eintrag ab.
+- **Anzeige an der Zentrale.** Die Lampe heißt „aktiv“, wenn jeder Sammler,
+  der noch dazugehört, verbunden ist; fehlt einer, „unterbrochen“ mit „1 von 2
+  Sammlern verbunden“. Ab zwei Sammlern steht darunter jeder mit eigener
+  Lampe, Namen, Zustand und letztem Eingang, und lässt sich einzeln trennen.
+  Ein Sammler, der getrennt hat oder nicht mehr zu erreichen ist, bleibt als
+  „getrennt“ stehen, bis ihn jemand aus der Liste nimmt.
+- Gekoppelt ist je Zentrale genau eine Sammlung. Wird sie dort gelöscht,
+  endet die Kopplung für alle Sammler; keiner holt sie zurück.
 
 ## 7. Verteilungssicht
 
@@ -782,7 +804,8 @@ seiner Seite ohne neuen Scan wieder anruft (`kopplung/merker.ts`):
 | Ort | Inhalt | Frist, Löschweg |
 | --- | --- | --- |
 | `localStorage` `eeb.kopplung.v1` | Rolle (Zentrale oder Sammler), Kennung der Sammlung, Beginn der Kopplung. Keine Verbindungsangaben, keine Einsatzdaten. Klein, damit der Start ihn ohne Nachladen prüft | „Kopplung trennen“, Trennen durch das andere Gerät, neue Kopplung, 30 Tage, „Alle Daten löschen“. |
-| IndexedDB `eeb-kopplung`, auf beiden Geräten | Das Zertifikat der Kopplung (vom Browser abgelegt, der private Schlüssel ist nicht auslesbar); je wartendem Platz des anderen Geräts dessen Angebot (Fingerabdruck, Verbindungskennwörter, lokale Adressen), die Kennung seiner Seite und die eigenen Kennwörter; am Sammler dazu die Kennungen der Meldungen, die die Zentrale bestätigt hat | wie oben; ohne den Merker im `localStorage` gilt der Inhalt nicht und wird beim nächsten Lesen entfernt; `alleDatenLoeschen` löscht die Datenbank |
+| `localStorage` `eeb.geraet.v1` | Zufällige, dauerhafte Kennung dieses Geräts und der am Gerät eingegebene Name für die Kopplung („Eingang Nord“). Personenbezogen nur, wenn jemand einen Personennamen eintippt | „Alle Daten löschen“; der Name mit leerer Eingabe unter „Name ändern…“ |
+| IndexedDB `eeb-kopplung`, auf beiden Geräten | Das Zertifikat der Kopplung (vom Browser abgelegt, der private Schlüssel ist nicht auslesbar); je Gegenstelle (die Zentrale merkt sich jeden Sammler mit Namen und Kennung, der Sammler die Zentrale) und je wartendem Platz dort dessen Angebot (Fingerabdruck, Verbindungskennwörter, lokale Adressen), die Kennung seiner Seite und die eigenen Kennwörter; am Sammler dazu die Kennungen der Meldungen, die die Zentrale bestätigt hat | wie oben; ohne den Merker im `localStorage` gilt der Inhalt nicht und wird beim nächsten Lesen entfernt; `alleDatenLoeschen` löscht die Datenbank |
 
 Die erste Nutzung von IndexedDB in dieser App; in der Datensicherung steht
 davon nur der Merker aus dem `localStorage`, und eine eingespielte Sicherung
@@ -1161,7 +1184,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   Übersicht, im selben Netz, ohne Internet, alles im Browser. Bisher ging das
   nur über Dateien (Sammel-PDF, Einsatz-Datei) und stand gegen ADR-008
   („ein Gerät").
-- **Entscheidung:** Zwei Geräte am selben Meldekopf koppeln sich direkt über
+- **Entscheidung:** Geräte am selben Meldekopf (zunächst zwei, seit 2026-11-25 eine Zentrale und bis zu fünf Sammler) koppeln sich direkt über
   einen WebRTC-Datenkanal. Kein Server, auch kein fremder: `iceServers` bleibt
   leer, Angebot und Antwort wandern als QR-Code über Bildschirm und Kamera.
   Übertragen wird der Umschlag der Einsatz-Datei, abgeglichen mit
@@ -1180,7 +1203,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   der Sammler bekommt den Kopf der Sammlung und eine Quittung je Stand. Das
   nimmt dem Telefon die Vollkopie (DSFA R16) und der Bedienung am Eingang
   alles, was dort nicht gebraucht wird.
-- **Grenzen, die bleiben:** genau zwei Geräte und eine Sammlung je Kopplung;
+- **Grenzen, die bleiben:** eine Zentrale, höchstens fünf Sammler und eine Sammlung je Kopplung (bis 2026-11-25: genau zwei Geräte; fünf Telefone an einem Eingang sind nach Auskunft des Anwenders schon viel);
   keine Anmeldung, keine Rollen, kein Mehrbenutzerbetrieb über das hinaus;
   keine Kräfteübersicht über mehrere Meldeköpfe; keine Verbindung über das
   Internet. Schläft ein Gerät ein oder verliert es das Netz, verbinden sich
@@ -1206,7 +1229,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Sammlung mit 5 Mio. Zeichen im Speicher | Startseite und Einsatzansicht ohne spürbare Verzögerung (Lese-Ergebnis gemerkt, solange der Text gleich ist). |
 | Ablösung mit zweitem Gerät, beide ändern Status und Auftrag | Rückimport ergänzt Neues, gleicht je Feld ab, nennt Widersprüche; nichts still überschrieben. |
 | Telefon gekoppelt, scannt draußen eine Einheit | Die Einheit steht innerhalb weniger Sekunden auf dem Rechner und dem Lagemonitor; dessen Leiste nennt die Uhrzeit des Eingangs, das Telefon zeigt an der Meldung „✓ übertragen“. |
-| Blick auf eines der beiden Geräte: Steht die Verbindung? | Ohne Rollen und ohne Lesen eines Satzes erkennbar: Lampe und Wort oben im Bild, an der Zentrale wie am Sammler. |
+| Drei Telefone an drei Eingängen, eines fällt aus | Die Zentrale meldet „unterbrochen · 2 von 3 Sammlern verbunden“ und nennt das fehlende beim Namen; die beiden anderen übertragen weiter. |
+| Blick auf eines der Geräte: Steht die Verbindung? | Ohne Rollen und ohne Lesen eines Satzes erkennbar: Lampe und Wort oben im Bild, an der Zentrale wie am Sammler. |
 | Telefon gekoppelt, Bildschirm aus, nach Minuten wieder an | Beim Einschalten verbindet sich das Telefon ohne neuen Code (im Prüfstand in unter einer Sekunde) und gleicht ab; bis dahin meldet der Rechner „unterbrochen“, nach 45 Sekunden „getrennt“. |
 | Telefon gekoppelt, draußen außer Reichweite des WLAN | Beide nehmen weiter auf und speichern bei sich; das Telefon ruft alle 30 Sekunden an und verbindet sich, sobald es wieder im Netz ist. |
 | Seite des Telefons neu geladen oder App am nächsten Tag wieder geöffnet, Rechner unverändert offen | Das Telefon zeigt seine Sammler-Ansicht und verbindet sich ohne Scan; was es inzwischen aufgenommen hat, geht hinüber. |
@@ -1237,6 +1261,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
 | Bundle-Budget mit der Kopplung zweimal angehoben | JavaScript gesamt 4.413.510 Byte (rund 52 KB für `kopplung/*`, nachgeladen); Startbündel 643.035 Byte (rund 2,4 KB: Zustand, Scanner-Weiche, Knopf, die Wege der Aufnahme für die Sammler-Ansicht). |
+| Mehrere Sammler nur im Prüfstand erprobt (drei Profile eines Browsers auf einem Rechner) | Gerätetest offen: fünf echte Telefone in einem WLAN, davon einige schlafend. Je Sammler hält die Zentrale zwei wartende Verbindungen, dazu 16 Türen während des Koppelns; das ist für einen Rechner wenig, für ein altes Tablet als Zentrale ungeprüft. |
 | Der Sammler sieht nicht, was die Zentrale schon führt | Scannt er eine Einheit, die an der Zentrale schon steht, entsteht dort eine weitere Fassung derselben Einheit (Historie), keine doppelte Einheit; eine Warnung am Telefon gibt es nicht. |
 | Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 

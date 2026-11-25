@@ -120,10 +120,70 @@ Funktionalität: Zweites Gerät koppeln
     Angenommen beide Geräte sind gekoppelt
     Wenn das zweite Gerät die Kopplung trennt
     Dann meldet die Kopplungsleiste "Verbindung getrennt"
-    Und meldet die Kopplungsleiste "Das andere Gerät hat die Kopplung getrennt"
+    Und meldet die Kopplungsleiste "hat die Kopplung getrennt"
     Und meldet die Kopplungsleiste "bleibt auf diesem Gerät gespeichert"
     Und sehe ich die Schaltfläche "Neu koppeln…"
     Und zählt die Übersicht 1 Einheiten
+
+  Szenario: Zwei Telefone sammeln für eine Zentrale, keines sieht die Meldungen des anderen
+    Angenommen beide Geräte sind gekoppelt
+    Und ein drittes Gerät hat die App geöffnet
+    Wenn ich auf "Weiteres Gerät koppeln…" klicke
+    Und das dritte Gerät meinen Kopplungs-Code scannt
+    Dann meldet die Kopplungsleiste "2 von 2 Sammlern verbunden"
+    Und meldet die Kopplungsleiste des dritten Geräts "Verbindung aktiv"
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Und das dritte Gerät den Bogen der Feuerwehr Aschhausen scannt
+    Dann zählt die Übersicht 3 Einheiten
+    Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+    Und zeigt das dritte Gerät den Text "Von diesem Gerät aufgenommen (1)"
+    Und zeigt das dritte Gerät "Wardenburg" nicht
+
+  Szenario: Jedes Telefon nennt seinen Namen, und die Leiste sagt, welches fehlt
+    Angenommen beide Geräte sind gekoppelt
+    Und ein drittes Gerät hat die App geöffnet
+    Wenn ich auf "Weiteres Gerät koppeln…" klicke
+    Und das dritte Gerät meinen Kopplungs-Code scannt
+    Und das dritte Gerät sich "Eingang Nord" nennt
+    Dann meldet die Kopplungsleiste "Eingang Nord"
+    Wenn die Verbindung am dritten Gerät abreißt und es nicht zurückfindet
+    Dann meldet die Kopplungsleiste "1 von 2 Sammlern verbunden"
+    Und meldet die Kopplungsleiste "Eingang Nord unterbrochen"
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+
+  Szenario: Trennt ein Telefon, bleibt das andere verbunden
+    Angenommen beide Geräte sind gekoppelt
+    Und ein drittes Gerät hat die App geöffnet
+    Wenn ich auf "Weiteres Gerät koppeln…" klicke
+    Und das dritte Gerät meinen Kopplungs-Code scannt
+    Dann meldet die Kopplungsleiste "2 von 2 Sammlern verbunden"
+    Wenn das dritte Gerät die Kopplung trennt
+    Dann meldet die Kopplungsleiste "Verbindung aktiv"
+    Und meldet die Kopplungsleiste "1 von 2 Sammlern verbunden"
+    Und meldet die Kopplungsleiste "hat die Kopplung getrennt"
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+
+  Szenario: Lädt die Zentrale neu, findet sie beide Telefone ohne neuen Scan wieder
+    Angenommen beide Geräte sind gekoppelt
+    Und ein drittes Gerät hat die App geöffnet
+    Wenn ich auf "Weiteres Gerät koppeln…" klicke
+    Und das dritte Gerät meinen Kopplungs-Code scannt
+    Dann meldet die Kopplungsleiste "2 von 2 Sammlern verbunden"
+    Wenn das erste Gerät seine Seite neu lädt
+    Dann meldet die Kopplungsleiste "2 von 2 Sammlern verbunden"
+    Wenn das dritte Gerät den Bogen der Feuerwehr Aschhausen scannt
+    Und das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 3 Einheiten
+
+  Szenario: Koppelt dasselbe Telefon neu, steht es nicht doppelt in der Liste
+    Angenommen beide Geräte sind gekoppelt
+    Wenn ich auf "Weiteres Gerät koppeln…" klicke
+    Und das zweite Gerät meinen Kopplungs-Code scannt
+    Dann meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+    Und meldet die Kopplungsleiste "Verbindung aktiv"
+    Und führt die Kopplungsleiste genau 1 Sammler
 
   Szenario: Ein Bogen statt des Antwort-Codes wird erklärt, die Kopplung bleibt offen
     Wenn ich auf "Zweites Gerät koppeln…" klicke

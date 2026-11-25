@@ -64,6 +64,11 @@ dialog.sammler .sammler-marke { grid-column: 2; grid-row: 1 / span 2; align-self
 dialog.sammler li[data-uebertragen="ja"] .sammler-marke { color: var(--gut); }
 dialog.sammler li[data-uebertragen="nein"] .sammler-marke { color: var(--warn-text); }
 dialog.sammler .sammler-ende { margin-top: var(--r-6); }
+.kopplung-leiste .kopplung-geraete { list-style: none; margin: 0; padding: 0; flex: 1 1 100%; order: 3; display: flex; flex-wrap: wrap; gap: var(--r-1) var(--r-5); }
+.kopplung-leiste .kopplung-geraete li { display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.35em; }
+.kopplung-leiste .kopplung-geraete li[data-phase="getrennt"], .kopplung-leiste .kopplung-geraete li[data-phase="unterbrochen"] { color: var(--warn-text); }
+.kopplung-leiste .kopplung-geraete .kopplung-lampe { margin-right: 0.2em; }
+dialog.sammler .sammler-name-zeile { font-size: var(--t-s); margin: var(--r-2) 0 0; }
 .kopplung-leiste .kopplung-hinweis { color: var(--warn-text); font-weight: 600; }
 .kopplung-leiste .kopplung-knoepfe { display: flex; flex-wrap: wrap; align-items: center; gap: var(--r-3); }
 .kopplung-leiste button.link { min-height: calc(44px + var(--ziel)); }

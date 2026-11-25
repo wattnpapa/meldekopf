@@ -21,7 +21,7 @@ import { lazy, Suspense, useSyncExternalStore } from "react";
 import "./kopplung.css";
 import { einsaetzeLaden } from "../einsaetze-lesen";
 import { GETRENNT_SATZ, WARTET_SATZ } from "./texte";
-import { kopplungBeginnen, kopplungsZustand, kopplungsZustandAbonnieren, type KopplungsPhase, type KopplungsZustand } from "./zustand";
+import { MAX_SAMMLER, kopplungBeginnen, kopplungsZustand, kopplungsZustandAbonnieren, type KopplungsGeraet, type KopplungsPhase, type KopplungsZustand } from "./zustand";
 
 export { GETRENNT_SATZ, WARTET_SATZ };
 
@@ -68,19 +68,55 @@ export interface SammlerWege {
   fehler?: string;
 }
 
+function geraetTrennen(kennung: string): void {
+  void import("./kopplung").then((m) => m.kopplungGeraetTrennen(kennung));
+}
+
+const GERAET_STAND: Partial<Record<KopplungsPhase, string>> = { verbunden: "verbunden", unterbrochen: "unterbrochen", getrennt: "getrennt" };
+
+/** Die Sammler einer Zentrale, je mit eigener Lampe: wer verbunden ist, seit wann nicht, wann zuletzt etwas kam. */
+function Geraete({ geraete }: { geraete: KopplungsGeraet[] }) {
+  return (
+    <ul className="kopplung-geraete">
+      {geraete.map((g) => (
+        <li key={g.kennung} data-phase={g.phase}>
+          <span className="kopplung-lampe" data-phase={g.phase} aria-hidden="true" />
+          <strong>{g.name}</strong>
+          <span>
+            {" "}
+            {GERAET_STAND[g.phase] ?? ""}
+            {g.phase !== "verbunden" && g.seit != null ? ` seit ${uhr(g.seit)}` : ""}
+            {g.abgleichAm != null ? ` · letzter Eingang ${uhr(g.abgleichAm, true)}` : ""}
+          </span>
+          <button type="button" className="link" onClick={() => geraetTrennen(g.kennung)} aria-label={`${g.name} ${g.phase === "getrennt" && !g.wartet ? "aus der Liste nehmen" : "trennen"}`}>
+            {g.phase === "getrennt" && !g.wartet ? "entfernen" : "trennen"}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Leiste oder Sammler-Ansicht und, solange Codes getauscht werden, der Dialog. */
 export function Kopplung({ sammler }: { sammler?: SammlerWege }) {
   const z = useKopplung();
   const name = z.einsatzId ? einsaetzeLaden().find((s) => s.id === z.einsatzId)?.name : undefined;
   const sammlung = name ? ` · „${name}“` : "";
   const sammlerBild = z.rolle === "sammler" && sammler && !z.dialog && z.phase !== "aus" && z.phase !== "verbindet";
+  const geraete = z.geraete ?? [];
+  const verbunden = geraete.filter((g) => g.phase === "verbunden").length;
+  // Wer sammelt: ohne Namen „zweites Gerät", ein Sammler mit Namen, mehrere als Zahl (die Namen stehen darunter).
+  const wer = geraete.length > 1 ? ` · ${verbunden} von ${geraete.length} Sammlern verbunden` : ` · ${geraete[0]?.name ?? "zweites Gerät"} sammelt`;
+  const weiteres = z.rolle !== "sammler" && z.einsatzId && name && geraete.length < MAX_SAMMLER;
+  const liste = geraete.length > 1 ? <Geraete geraete={geraete} /> : null;
+  const alle = geraete.length > 1 ? "Alle trennen" : "Trennen";
   let leiste = null;
   if (z.phase === "verbunden") {
     leiste = (
       <div className="kopplung-leiste" role="status" data-phase="verbunden">
         <p>
           <Lampe phase="verbunden" />
-          {z.rolle === "sammler" ? " · dieses Gerät sammelt" : " · zweites Gerät sammelt"}
+          {z.rolle === "sammler" ? " · dieses Gerät sammelt" : wer}
           {sammlung}
           {z.rolle === "sammler"
             ? z.offen
@@ -91,7 +127,11 @@ export function Kopplung({ sammler }: { sammler?: SammlerWege }) {
               : " · noch kein Eingang"}
           {z.hinweis && <span className="kopplung-hinweis"> {z.hinweis}</span>}
         </p>
-        <button type="button" className="link" onClick={trennen}>Trennen</button>
+        {liste}
+        <div className="kopplung-knoepfe">
+          {weiteres && <button type="button" onClick={() => kopplungBeginnen(z.einsatzId!)}>Weiteres Gerät koppeln…</button>}
+          <button type="button" className="link" onClick={trennen}>{alle}</button>
+        </div>
       </div>
     );
   } else if (z.phase === "unterbrochen") {
@@ -99,12 +139,18 @@ export function Kopplung({ sammler }: { sammler?: SammlerWege }) {
       <div className="kopplung-leiste warnung" role="status" data-phase="unterbrochen">
         <p>
           <Lampe phase="unterbrochen" />
+          {geraete.length > 1 ? wer : ""}
           {z.seit != null ? ` seit ${uhr(z.seit)}` : ""}.{" "}
           {z.wartet
             ? "Sie wird von selbst wiederhergestellt, sobald das andere Gerät erreichbar ist. Dieses Gerät speichert weiter."
             : "Dieses Gerät speichert weiter; der Abgleich folgt, sobald die Verbindung wieder steht."}
+          {z.hinweis && <span className="kopplung-hinweis"> {z.hinweis}</span>}
         </p>
-        <button type="button" className="link" onClick={trennen}>Trennen</button>
+        {liste}
+        <div className="kopplung-knoepfe">
+          {weiteres && <button type="button" onClick={() => kopplungBeginnen(z.einsatzId!)}>Weiteres Gerät koppeln…</button>}
+          <button type="button" className="link" onClick={trennen}>{alle}</button>
+        </div>
       </div>
     );
   } else if (z.phase === "getrennt") {
@@ -115,10 +161,9 @@ export function Kopplung({ sammler }: { sammler?: SammlerWege }) {
           {z.seit != null ? ` seit ${uhr(z.seit)}` : ""}
           {z.abgleichAm != null ? `, letzter Eingang ${uhr(z.abgleichAm)}` : ""}. {z.hinweis || (z.wartet ? WARTET_SATZ : GETRENNT_SATZ)}
         </p>
+        {liste}
         <div className="kopplung-knoepfe">
-          {z.einsatzId && name && z.rolle !== "sammler" && (
-            <button type="button" onClick={() => kopplungBeginnen(z.einsatzId!)}>Neu koppeln…</button>
-          )}
+          {weiteres && <button type="button" onClick={() => kopplungBeginnen(z.einsatzId!)}>Neu koppeln…</button>}
           <button type="button" className="link" onClick={trennen}>Schließen</button>
         </div>
       </div>

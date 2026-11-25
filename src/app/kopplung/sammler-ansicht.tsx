@@ -14,13 +14,15 @@
  * sich darüber, die Schnellerfassung löst die Ansicht ab, solange sie offen ist.
  */
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { frageText } from "@bos/oberflaeche/dialoge";
 import { staerke } from "@bos/eeb-format/model";
 import { useModalesOverlay } from "@bos/oberflaeche/modal-overlay";
 import { einsaetzeLaden } from "../einsaetze-lesen";
 import { geltendeJeEinheit } from "../fassung-vorrang";
 import { einheitAnzeigename } from "../hilfen";
-import { kopplungUebertragen } from "./kopplung";
+import { geraetename, geraetenameEigen, geraetenameSetzen } from "./geraetename";
+import { kopplungNameGeaendert, kopplungUebertragen } from "./kopplung";
 import { Lampe, trennen, uhr, useKopplung, type SammlerWege } from "./kopplung-leiste";
 import { WARTET_SATZ } from "./texte";
 
@@ -31,6 +33,22 @@ export const SAMMLER_GETRENNT_SATZ =
 export default function SammlerAnsicht({ wege }: { wege: SammlerWege }) {
   const z = useKopplung();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [, neuZeichnen] = useState(0);
+  async function nameAendern() {
+    const name = await frageText({
+      titel: "Name dieses Geräts",
+      label: "Name",
+      vorgabe: geraetenameEigen() ? geraetename() : "",
+      platzhalter: geraetename(),
+      hinweis: "So steht dieses Gerät an der Zentrale, zum Beispiel „Eingang Nord“. Leer nimmt wieder die Vorgabe.",
+      ok: "Übernehmen",
+      optional: true,
+    });
+    if (name == null) return;
+    geraetenameSetzen(name);
+    kopplungNameGeaendert();
+    neuZeichnen((n) => n + 1);
+  }
   // Esc schließt die Ansicht nicht: Sie endet mit „Kopplung trennen".
   useModalesOverlay(dialogRef, { onSchliessen: () => undefined });
   const einsatz = z.einsatzId ? einsaetzeLaden().find((s) => s.id === z.einsatzId) : undefined;
@@ -55,6 +73,10 @@ export default function SammlerAnsicht({ wege }: { wege: SammlerWege }) {
       </div>
       <h1 id="sammler-titel">{einsatz ? einsatz.name : "Sammlung wird übernommen …"}</h1>
       <p className="hinweis">{SAMMLER_ROLLE_SATZ}</p>
+      <p className="sammler-name-zeile">
+        Dieses Gerät heißt an der Zentrale: <strong>{geraetename()}</strong>{" "}
+        <button type="button" className="link" onClick={() => void nameAendern()}>Name ändern…</button>
+      </p>
       <div className="aktionen">
         <button type="button" className="primaer mit-zusatz" onClick={() => wege.onScannen(einsatz?.id ?? null)}>
           Bogen scannen…

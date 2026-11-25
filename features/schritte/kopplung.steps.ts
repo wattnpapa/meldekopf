@@ -220,3 +220,93 @@ When("beide Geräte ihre Seite zugleich neu laden", async function (this: EebWel
   await this.page.waitForTimeout(1500);
   await Promise.all([this.page.reload({ waitUntil: "domcontentloaded" }), zweitesGeraet(this).reload({ waitUntil: "domcontentloaded" })]);
 });
+
+// ---------------------------------------------------------------------------------------------- mehrere Sammler
+
+const dritte = new WeakMap<EebWelt, Page>();
+
+function drittesGeraet(welt: EebWelt): Page {
+  const seite = dritte.get(welt);
+  if (!seite) throw new Error("Das Szenario hat kein drittes Gerät geöffnet.");
+  return seite;
+}
+
+Given("ein drittes Gerät hat die App geöffnet", async function (this: EebWelt) {
+  const browser = this.page.context().browser();
+  if (!browser) throw new Error("Kein Browser für das dritte Gerät.");
+  const kontext = await browser.newContext({ viewport: { width: 390, height: 780 } });
+  await kontext.clock.install({ time: PRUEFSTAND_ZEIT });
+  await kontext.clock.resume();
+  await kontext.addInitScript(`globalThis.__EEB_PRELLSCHUTZ_MS = 0;`);
+  const seite = await kontext.newPage();
+  seite.on("dialog", async (dialog) => {
+    this.systemdialoge.push(`drittes Gerät, ${dialog.type()}: ${dialog.message()}`);
+    await dialog.dismiss();
+  });
+  dritte.set(this, seite);
+  await seite.goto(`${this.basisUrl}/`, { waitUntil: "domcontentloaded" });
+  await seite.getByRole("button", { name: "Bogen scannen…" }).waitFor();
+});
+
+After(async function (this: EebWelt) {
+  const seite = dritte.get(this);
+  if (seite && !seite.isClosed()) await seite.context().close();
+});
+
+When("das dritte Gerät meinen Kopplungs-Code scannt", async function (this: EebWelt) {
+  const c = drittesGeraet(this);
+  const angebot = await codeVon(this.page, "angebot");
+  await (await scanKnopf(c)).click();
+  await scannen(c, angebot);
+});
+
+When("das dritte Gerät den Bogen der Feuerwehr Aschhausen scannt", async function (this: EebWelt) {
+  const c = drittesGeraet(this);
+  await (await scanKnopf(c)).click();
+  await scannen(c, encodePayloadUrl(weitereEinheit(OrganisationsTyp.FEUERWEHR, "Aschhausen"), KOMPRESSOR));
+  // Der Scanner bleibt für den nächsten Bogen offen; hier ist der Durchgang zu Ende.
+  await c.keyboard.press("Escape");
+});
+
+When("das dritte Gerät sich {string} nennt", async function (this: EebWelt, name: string) {
+  const c = drittesGeraet(this);
+  await c.locator("dialog.sammler").getByRole("button", { name: "Name ändern…" }).click();
+  const dialog = c.locator("dialog[open]").filter({ hasText: "Name dieses Geräts" });
+  await dialog.getByRole("textbox").fill(name);
+  await dialog.getByRole("button", { name: "Übernehmen" }).click();
+});
+
+When("das dritte Gerät die Kopplung trennt", async function (this: EebWelt) {
+  await drittesGeraet(this).getByRole("button", { name: "Kopplung trennen" }).click();
+});
+
+/** Wie ein Telefon, das ausgeht und aus bleibt: Die Seite ist weg, niemand ruft zurück. */
+When("die Verbindung am dritten Gerät abreißt und es nicht zurückfindet", async function (this: EebWelt) {
+  const c = drittesGeraet(this);
+  await c.waitForTimeout(1500);
+  await c.context().close();
+});
+
+Then("meldet die Kopplungsleiste des dritten Geräts {string}", async function (this: EebWelt, text: string) {
+  await leisteMit(drittesGeraet(this), text);
+});
+
+Then("zeigt das dritte Gerät den Text {string}", async function (this: EebWelt, text: string) {
+  await drittesGeraet(this).locator("dialog.sammler").getByText(text).first().waitFor({ state: "visible" });
+});
+
+Then("zeigt das dritte Gerät {string} nicht", async function (this: EebWelt, text: string) {
+  const c = drittesGeraet(this);
+  await c.locator("dialog.sammler").waitFor({ state: "visible" });
+  if ((await c.locator("dialog.sammler").getByText(text).count()) > 0) throw new Error(`Das dritte Gerät zeigt „${text}".`);
+  const speicher = String(await c.evaluate("JSON.stringify(Object.fromEntries(Object.entries(localStorage)))"));
+  if (speicher.includes(text)) throw new Error(`Im Speicher des dritten Geräts steht „${text}".`);
+});
+
+/** Ohne Liste führt die Leiste genau einen Sammler (sie nennt ihn im Satz); mit Liste zählen deren Zeilen. */
+Then("führt die Kopplungsleiste genau {int} Sammler", async function (this: EebWelt, anzahl: number) {
+  await this.page.waitForTimeout(1500);
+  const zeilen = await this.page.locator(".kopplung-leiste .kopplung-geraete li").count();
+  const ist = zeilen === 0 ? 1 : zeilen;
+  if (ist !== anzahl) throw new Error(`Die Leiste führt ${ist} Sammler, erwartet waren ${anzahl}.`);
+});

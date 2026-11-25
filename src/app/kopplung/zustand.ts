@@ -54,6 +54,21 @@ export interface KopplungsDialog {
   fehler?: string;
 }
 
+/** Ein Sammler, wie ihn die Leiste der Zentrale zeigt. */
+export interface KopplungsGeraet {
+  kennung: string;
+  name: string;
+  phase: KopplungsPhase;
+  wartet: boolean;
+  seit: number | null;
+  /** Wann zuletzt ein Stand dieses Sammlers eingespielt wurde. */
+  abgleichAm: number | null;
+  hinweis: string;
+}
+
+/** So viele Sammler führt eine Zentrale höchstens. */
+export const MAX_SAMMLER = 5;
+
 export interface KopplungsZustand {
   phase: KopplungsPhase;
   /** Die gekoppelte Sammlung; beim antwortenden Gerät erst nach dem ersten Stand bekannt. */
@@ -69,6 +84,8 @@ export interface KopplungsZustand {
   offen?: number;
   /** Gerissen, aber dieses Gerät verbindet sich ohne neuen Code wieder, sobald das andere erreichbar ist. */
   wartet?: boolean;
+  /** Zentrale: ihre Sammler, in der Reihenfolge des Koppelns. */
+  geraete?: KopplungsGeraet[];
   /** Seit wann getrennt oder unterbrochen. */
   seit: number | null;
   /** Warum getrennt, oder was beim letzten Abgleich auffiel. */
@@ -83,6 +100,12 @@ const horcher = new Set<() => void>();
 
 export function kopplungsZustand(): KopplungsZustand {
   return zustand;
+}
+
+/** Den ganzen Zustand ersetzen (kopplung.ts fasst ihn aus seinen Gegenstellen zusammen). */
+export function kopplungsZustandErsetzen(neu: KopplungsZustand): void {
+  zustand = neu;
+  for (const h of [...horcher]) h();
 }
 
 export function kopplungsZustandSetzen(teil: Partial<KopplungsZustand>): void {

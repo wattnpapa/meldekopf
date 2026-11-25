@@ -1,167 +1,72 @@
 /**
- * Kopplung zweier Geräte am selben Meldekopf (neu im Meldekopf, ADR-009).
+ * Kopplung mehrerer Geräte am selben Meldekopf (neu im Meldekopf, ADR-009).
  *
- * Das Telefon scannt draußen, der Rechner im Fahrzeug zeigt die Übersicht:
- * Beide führen dieselbe Sammlung und schicken einander jeden geänderten Stand
- * über eine direkte Verbindung im lokalen Netz (verbindung.ts). Jedes Gerät
- * behält alles in seinem eigenen Speicher; reißt die Verbindung, arbeitet jedes
- * für sich weiter, und der nächste Code-Tausch gleicht ab.
+ * Die Telefone scannen draußen, der Rechner im Fahrzeug zeigt die Übersicht: Der Rechner ist die Zentrale und führt die
+ * Lage, jedes Telefon ist ein reiner Sammler und schickt ihr, was es aufnimmt, über eine direkte Verbindung im lokalen
+ * Netz (verbindung.ts). Jedes Gerät behält alles in seinem eigenen Speicher; reißt eine Verbindung, arbeitet jedes für
+ * sich weiter.
  *
- * Dieses Modul hält die eine laufende Kopplung des Fensters zusammen:
- * Verbindung, Abgleich-Sitzung (sitzung.ts), Takt und den Zustand für die
- * Oberfläche (zustand.ts). Es lädt erst, wenn jemand koppelt.
+ * Dieses Modul hält die Gegenstellen des Fensters zusammen (gegenstelle.ts): Eine Zentrale führt bis zu
+ * {@link MAX_SAMMLER} Sammler, ein Sammler die eine Zentrale. Es fasst ihre Zustände für die Oberfläche zusammen
+ * (zustand.ts), schreibt das Gedächtnis (merker.ts) und hält, was sie teilen: Zertifikat, Kennung der Seite,
+ * Wachhalten, die Horcher am Fenster. Es lädt erst, wenn jemand koppelt.
  */
 
-import { frageJaNein } from "@bos/oberflaeche/dialoge";
+import { frageJaNein, zeigeHinweis } from "@bos/oberflaeche/dialoge";
 import { entwirreScanText } from "../eingang/tastaturbelegung";
-import { SpeicherVollFehler } from "../eintrag-zeiten";
-import { AbgleichSitzung } from "./sitzung";
-import {
-  KLOPFER,
-  TUEREN,
-  angebotAdressen,
-  antwortAusFingerabdruck,
-  fingerabdruckVon,
-  kennwoerterAbleiten,
-  klopfLesen,
-  klopfZeichen,
-  signalDekodieren,
-  signalKodieren,
-  tuerAngebote,
-  tuerKennwoerter,
-  tuerPortsLesen,
-} from "./signal";
+import { geraetekennung, geraetemodellErfragen, geraetename } from "./geraetename";
+import { NEU_GELADEN_SATZ, neueGegenstelle, type Gegenstelle, type Umfeld } from "./gegenstelle";
+import { signalDekodieren } from "./signal";
 import { merkerLaden, merkerLoeschen, merkerSchreiben } from "./merker";
-import { GETRENNT_SATZ as GETRENNT_HIER_SATZ } from "./texte";
+import { kopplungMoeglich, rufZertifikat } from "./verbindung";
 import {
-  angebotErzeugen,
-  klopfen,
-  kopplungMoeglich,
-  tuerenOeffnen,
-  rufPlatzVorbereiten,
-  rufPlatzWiederherstellen,
-  rufZertifikat,
-  type Angebot,
-  type RufPlatz,
-  type Tueren,
-  type Verbindung,
-  type VerbindungsHorcher,
-  type VerbindungsLage,
-} from "./verbindung";
-import { kopplungsStandMelden, kopplungsZustand, kopplungsZustandSetzen, kopplungsZustandZuruecksetzen } from "./zustand";
+  MAX_SAMMLER,
+  kopplungsStandMelden,
+  kopplungsZustand,
+  kopplungsZustandErsetzen,
+  type KopplungsGeraet,
+  type KopplungsPhase,
+  type KopplungsZustand,
+} from "./zustand";
 
-/** So oft schaut die Kopplung, ob sich der Stand dieses Geräts geändert hat. */
-export const TAKT_MS = 1000;
+export { TAKT_MS, NICHT_ZUSTANDE_SATZ, ANGEBOT_STATT_ANTWORT_SATZ, NEU_GELADEN_SATZ } from "./gegenstelle";
 
 export const KEIN_WEBRTC_SATZ = "Dieser Browser kann keine direkte Verbindung zu einem zweiten Gerät aufbauen.";
-export const NICHT_ZUSTANDE_SATZ = "Die Verbindung kam nicht zustande. Sind beide Geräte im selben Netz (WLAN oder Hotspot)? Bitte neu koppeln.";
 export const ANTWORT_STATT_ANGEBOT_SATZ =
   "Das ist ein Antwort-Code. Er gehört auf das Gerät, das die Kopplung begonnen hat (dort „Antwort scannen…“).";
-export const ANGEBOT_STATT_ANTWORT_SATZ =
-  "Das ist kein Antwort-Code. Hier wird der Code gebraucht, den das zweite Gerät nach dem Scannen zeigt.";
+export const HOECHSTZAHL_SATZ = `Eine Zentrale führt höchstens ${MAX_SAMMLER} Sammler. Erst eines der gekoppelten Geräte trennen.`;
 
-let sitzung: AbgleichSitzung | null = null;
-/** Die Verbindung, über die gerade abgeglichen wird. */
-let aktiv: Verbindung | null = null;
-/** Erkennungsmarke der aktiven Verbindung: Ereignisse anderer Verbindungen gelten ihr nicht. */
-let aktivMarke: object | null = null;
-let angebot: Angebot | null = null;
-/** Die erste Verbindung der Kopplung, aus dem Code-Tausch. */
-let erste: Verbindung | null = null;
-let ersteMarke: object | null = null;
-let takt: ReturnType<typeof setInterval> | undefined;
-/** Zählt jede neue Kopplung hoch: Ereignisse einer abgelösten Kopplung gelten nicht mehr. */
-let lauf = 0;
-let schnappschuss = "";
-let wachsperre: { release: () => Promise<void> } | null = null;
+/** Stand die Uhr dieses Fensters länger still, war das Gerät eingeschlafen: Die Verbindungen werden geprüft. */
+const SCHLAF_MS = 20_000;
 
-// Wiederverbinden ohne neuen Code (verbindung.ts, „Rückruf-Plätze"). Das erste Gerät hört, das zweite ruft.
-let rolle: "hoerer" | "rufer" | null = null;
-/** Hörer: wartende Verbindungen, die das zweite Gerät anrufen kann. */
-const plaetze = new Map<number, { angebot: Angebot; marke: object; beantwortet: boolean }>();
-// Nummern aus der Uhr: Nach einem Neuladen beginnen sie nicht wieder bei eins und treffen keine gemerkte.
-let platzNr = Date.now();
 /**
  * Kennung dieser Seite, bei jedem Laden neu. Wartende Plätze gehören der Seite, die sie angelegt hat: Meldet sich das
  * andere Gerät mit einer neuen Kennung, hat es neu geladen, und seine alten Plätze gibt es nicht mehr.
  */
 const SEITE = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-/** Zentrale, nach dem Neuladen ihrer Seite: Sie ruft das zweite Gerät an, bis die Verbindung wieder steht. */
-let fortgesetzt = false;
+// Nummern aus der Uhr: Nach einem Neuladen beginnen sie nicht wieder bei eins und treffen keine gemerkte.
+let platzNr = Date.now();
+let kennungNr = 0;
 
-/** Wer ruft an, wenn die Verbindung weg ist? Der Sammler immer; die Zentrale nur nach dem Neuladen ihrer Seite. */
-function darfRufen(): boolean {
-  return rolle === "rufer" || (rolle === "hoerer" && fortgesetzt);
-}
-/** Rufer: Plätze des Hörers, zu denen dieses Gerät eine Antwort bereithält. */
-let rufPlaetze: { nr: number; seite: string; platz: RufPlatz }[] = [];
+let rolle: "zentrale" | "sammler" | null = null;
+/** Die laufenden Gegenstellen, in der Reihenfolge des Koppelns. */
+let gegenstellen: Gegenstelle[] = [];
+/** Zentrale: die Gegenstelle, deren Code gerade gezeigt wird. */
+let anbahnung: Gegenstelle | null = null;
+/** Zu Ende gegangene Gegenstellen, die als „getrennt" stehen bleiben, bis sie jemand schließt. */
+let gegangene: KopplungsGeraet[] = [];
+/** Ein Zertifikat für alle Gegenstellen dieses Geräts: Es steht in jedem Angebot und trägt jeden Rückruf. */
 let zertifikat: Promise<RTCCertificate | undefined> | null = null;
-let rufVersuch: { marke: object; platz: number; verbindung: Verbindung | null; uhr: ReturnType<typeof setTimeout> } | null = null;
-let rufUhr: ReturnType<typeof setTimeout> | undefined;
-let rufZahl = 0;
-let aufgebenUhr: ReturnType<typeof setTimeout> | undefined;
-let puls: ReturnType<typeof setInterval> | undefined;
-let pulsZuletzt = 0;
-let pongOffen: ReturnType<typeof setTimeout> | undefined;
-/** Erstes Gerät: die Türen, an denen das zweite seinen Fingerabdruck anklopft (signal.ts, „Anklopfen"). */
-let tueren: Tueren | null = null;
-let tuerTakt: ReturnType<typeof setInterval> | undefined;
-/** Erstes Gerät: Die Antwort des zweiten ist gesetzt (gescannt oder angeklopft); eine zweite gilt nicht mehr. */
-let antwortGesetzt = false;
-
 /** Wann diese Kopplung begann; Kennung des Gemerkten (merker.ts). */
 let kopplungSeit = 0;
+let einsatzId: string | null = null;
+/** Die ganze Kopplung ist zu Ende, der Grund bleibt stehen. */
+let nachruf: { hinweis: string; seit: number; rolle: "zentrale" | "sammler"; einsatzId: string | null } | null = null;
 let merkKette: Promise<unknown> = Promise.resolve();
-
-/**
- * Die Kopplung über ein Neuladen hinweg merken (merker.ts). Der Sammler merkt sich, womit er die Zentrale wieder
- * anruft; die Zentrale nur, dass sie eine war.
- */
-function merken(): void {
-  const nr = lauf;
-  const s = sitzung;
-  if (!s || !rolle || !s.einsatzId) return;
-  merkKette = merkKette.then(async () => {
-    if (nr !== lauf || sitzung !== s) return;
-    const zert = await zertifikat;
-    const plaetze = rufPlaetze.flatMap((p) => {
-      const d = p.platz.daten();
-      return d ? [{ nr: p.nr, seite: p.seite, ...d }] : [];
-    });
-    if (nr !== lauf) return;
-    await merkerSchreiben({
-      rolle: rolle === "hoerer" ? "zentrale" : "sammler",
-      einsatzId: s.einsatzId,
-      seit: kopplungSeit,
-      ...(zert ? { zertifikat: zert, plaetze } : {}),
-      ...(rolle === "rufer" ? { bestaetigt: s.bestaetigte() } : {}),
-    });
-  });
-}
-
-function vergessen(): void {
-  merkKette = merkKette.then(() => merkerLoeschen());
-}
-
-/** So oft liest das erste Gerät seine Türen. */
-const TUER_TAKT_MS = 200;
-/** Zweites Gerät: so viele Durchgänge des Anklopfens, falls einer nicht ankommt. */
-const KLOPF_RUNDEN = 3;
-/** Zweites Gerät: so lange wartet es nach einem Durchgang auf die Verbindung, bevor es noch einmal klopft. */
-const KLOPF_WARTEN_MS = 6000;
-
-/** So viele wartende Plätze hält der Hörer bereit. */
-const PLAETZE = 2;
-/** Kommt ein Anruf in dieser Zeit nicht durch, wird er abgebrochen und später wiederholt. */
-const RUF_FRIST_MS = 15_000;
-/** Pausen zwischen den Anrufen; danach bleibt es bei der letzten. */
-const RUF_PAUSEN_MS = [1000, 3000, 5000, 10_000, 20_000, 30_000];
-/** So lange heißt eine gerissene Verbindung „unterbrochen"; danach „getrennt", auch wenn das Gerät es weiter versucht. */
-const AUFGEBEN_MS = 45_000;
-/** Stand die Uhr dieses Fensters länger still, war das Gerät eingeschlafen: Die Verbindung wird geprüft. */
-const SCHLAF_MS = 20_000;
-/** So lange hat das andere Gerät Zeit, auf die Nachfrage zu antworten. */
-const PONG_FRIST_MS = 3000;
+let puls: ReturnType<typeof setInterval> | undefined;
+let pulsZuletzt = 0;
+let wachsperre: { release: () => Promise<void> } | null = null;
+let horchend = false;
 
 function lesen(text: string): ReturnType<typeof signalDekodieren> {
   // Ein Handscanner mit falscher Tastaturbelegung verdreht den Code; das lässt sich zurückrechnen.
@@ -174,21 +79,6 @@ function lesen(text: string): ReturnType<typeof signalDekodieren> {
     }
   };
   return signalDekodieren(entwirreScanText(text.trim(), lesbar));
-}
-
-/** Alles, was die App im Speicher hält, als ein Text: der billige Vorab-Vergleich vor dem Abdruck. */
-function speicherSchnappschuss(): string {
-  try {
-    const s = globalThis.localStorage;
-    const teile: string[] = [];
-    for (let i = 0; i < s.length; i++) {
-      const k = s.key(i);
-      if (k?.startsWith("eeb.")) teile.push(k, s.getItem(k) ?? "");
-    }
-    return teile.join("\u0000");
-  } catch {
-    return String(Date.now());
-  }
 }
 
 async function wachHalten(): Promise<void> {
@@ -207,271 +97,17 @@ function wachLassen(): void {
   wachsperre = null;
 }
 
+function aufgewacht(): void {
+  for (const g of [...gegenstellen]) g.aufgewacht();
+}
+
 function beiSichtwechsel(): void {
   if (document.visibilityState !== "visible") {
     wachsperre = null; // der Browser gibt die Sperre beim Verbergen selbst frei
     return;
   }
-  const phase = kopplungsZustand().phase;
-  if (phase === "verbunden" || phase === "unterbrochen") void wachHalten();
+  zusammenfassen();
   aufgewacht();
-}
-
-function beiSeitenende(): void {
-  // Kein Abschied: Jedes der beiden Geräte hat sich gemerkt, womit es das andere nach dem Neuladen wieder anruft
-  // (merker.ts), und das andere soll seine wartenden Plätze dafür offen halten. Abschied nimmt nur „Trennen".
-}
-
-function taktStoppen(): void {
-  clearInterval(takt);
-  takt = undefined;
-}
-
-function tuerenSchliessen(): void {
-  clearInterval(tuerTakt);
-  tuerTakt = undefined;
-  tueren?.schliessen();
-  tueren = null;
-}
-
-/**
- * Erstes Gerät: Türen lesen. Stehen die jüngsten {@link KLOPFER} Klopfer für einen Fingerabdruck mit stimmendem
- * Prüfbyte, ist das die Antwort des zweiten Geräts. Die jüngsten, weil ein zweiter Durchgang auf einen misslungenen folgt.
- */
-async function tuerenLesen(nr: number): Promise<void> {
-  const t = tueren;
-  const a = angebot;
-  if (!t || !a || antwortGesetzt || nr !== lauf) return;
-  const klopfer = await t.lesen();
-  if (klopfer.length < KLOPFER || antwortGesetzt || nr !== lauf || angebot !== a) return;
-  const fp = klopfLesen(klopfer.slice(-KLOPFER).map((k) => k.tuer));
-  if (!fp) return;
-  antwortGesetzt = true;
-  try {
-    await a.antwortAnnehmen(antwortAusFingerabdruck(fp, a.sdp, await kennwoerterAbleiten(a.sdp)));
-  } catch {
-    antwortGesetzt = false;
-  }
-}
-
-/**
- * Zweites Gerät: den eigenen Fingerabdruck an die Türen des ersten klopfen. Antwortet eine Tür nicht, sind die Türen
- * von hier nicht erreichbar: Dann bleibt der Antwort-Code im Dialog der Weg.
- */
-async function anklopfen(nr: number, fingerabdruck: Uint8Array, tuerSdps: readonly string[]): Promise<void> {
-  const zeichen = klopfZeichen(fingerabdruck);
-  const laeuft = () => nr === lauf && kopplungsZustand().phase === "verbindet";
-  for (let runde = 0; runde < KLOPF_RUNDEN && laeuft(); runde++) {
-    for (const z of zeichen) {
-      if (!laeuft()) return;
-      const sdp = tuerSdps[z];
-      if (!sdp || !(await klopfen(sdp))) {
-        if (laeuft()) {
-          const d = kopplungsZustand().dialog;
-          if (d) kopplungsZustandSetzen({ dialog: { ...d, selbst: false } });
-        }
-        return;
-      }
-    }
-    await new Promise((r) => setTimeout(r, KLOPF_WARTEN_MS));
-  }
-  if (laeuft()) {
-    const d = kopplungsZustand().dialog;
-    if (d) kopplungsZustandSetzen({ dialog: { ...d, selbst: false } });
-  }
-}
-
-function rufenStoppen(): void {
-  clearTimeout(rufUhr);
-  rufUhr = undefined;
-  if (rufVersuch) {
-    clearTimeout(rufVersuch.uhr);
-    const v = rufVersuch.verbindung;
-    rufVersuch = null;
-    v?.schliessen();
-  }
-}
-
-function aufraeumen(): void {
-  taktStoppen();
-  rufenStoppen();
-  tuerenSchliessen();
-  antwortGesetzt = false;
-  clearTimeout(aufgebenUhr);
-  clearTimeout(pongOffen);
-  pongOffen = undefined;
-  clearInterval(puls);
-  puls = undefined;
-  wachLassen();
-  document.removeEventListener("visibilitychange", beiSichtwechsel);
-  window.removeEventListener("pagehide", beiSeitenende);
-  window.removeEventListener("online", aufgewacht);
-  const v = aktiv;
-  const e = erste;
-  aktiv = null;
-  aktivMarke = null;
-  angebot = null;
-  erste = null;
-  ersteMarke = null;
-  sitzung = null;
-  rolle = null;
-  fortgesetzt = false;
-  zertifikat = null;
-  v?.schliessen();
-  e?.schliessen();
-  for (const p of plaetze.values()) p.angebot.verbindung.schliessen();
-  plaetze.clear();
-  for (const p of rufPlaetze) p.platz.verwerfen();
-  rufPlaetze = [];
-  rufZahl = 0;
-}
-
-/** Kann sich dieses Gerät ohne neuen Code wieder verbinden? */
-function wiederverbindbar(): boolean {
-  // Entweder das andere Gerät kann hier anrufen, oder dieses dort.
-  return [...plaetze.values()].some((p) => p.beantwortet) || (darfRufen() && rufPlaetze.some((p) => p.platz.nutzbar()));
-}
-
-/**
- * Genug wartende Plätze bereithalten und dem anderen Gerät anbieten. Beide Geräte tun das: Die Zentrale wartet auf den
- * Sammler, der nach dem Aufwachen anruft; der Sammler wartet auf die Zentrale, die nach dem Neuladen ihrer Seite anruft.
- */
-function plaetzeAuffuellen(nr: number): void {
-  if (!rolle || nr !== lauf) return;
-  // Angebote, auf die noch keine Antwort kam (die Verbindung riss dazwischen), gehen noch einmal hinaus.
-  for (const [platz, p] of plaetze) if (!p.beantwortet) void aktiv?.senden({ art: "platz", nr: platz, seite: SEITE, sdp: p.angebot.sdp }).catch(() => undefined);
-  for (let i = plaetze.size; i < PLAETZE; i++) {
-    const platz = ++platzNr;
-    const marke = {};
-    void angebotErzeugen(horcher(nr, marke)).then(
-      (a) => {
-        if (nr !== lauf || !rolle) {
-          a.verbindung.schliessen();
-          return;
-        }
-        plaetze.set(platz, { angebot: a, marke, beantwortet: false });
-        void aktiv?.senden({ art: "platz", nr: platz, seite: SEITE, sdp: a.sdp }).catch(() => undefined);
-      },
-      () => undefined,
-    );
-  }
-}
-
-/** Das andere Gerät bietet einen wartenden Platz an. */
-async function platzAnnehmen(nr: number, platz: number, seite: string, sdp: string): Promise<void> {
-  const da = rufPlaetze.find((p) => p.nr === platz);
-  if (da) {
-    void aktiv?.senden({ art: "platz-antwort", nr: platz, sdp: da.platz.antwortSdp }).catch(() => undefined);
-    return;
-  }
-  zertifikat ??= rufZertifikat();
-  const z = await zertifikat;
-  const neu = await rufPlatzVorbereiten(sdp, z);
-  if (nr !== lauf || !rolle) {
-    neu.verwerfen();
-    return;
-  }
-  rufPlaetze.push({ nr: platz, seite, platz: neu });
-  // Ältere Plätze sind beim anderen Gerät verbraucht oder ersetzt.
-  while (rufPlaetze.length > PLAETZE + 1) rufPlaetze.shift()?.platz.verwerfen();
-  merken();
-  void aktiv?.senden({ art: "platz-antwort", nr: platz, sdp: neu.antwortSdp }).catch(() => undefined);
-}
-
-/** Rufer: einen wartenden Platz des ersten Geräts anrufen. Scheitert der Anruf, folgt der nächste nach einer Pause. */
-function rufen(nr: number): void {
-  clearTimeout(rufUhr);
-  rufUhr = undefined;
-  if (nr !== lauf || !darfRufen() || aktiv || rufVersuch) return;
-  // Die jüngsten Plätze zuerst: Ein älterer kann beim ersten Gerät schon verbraucht sein, ohne dass es hier ankam.
-  const nutzbar = rufPlaetze.filter((p) => p.platz.nutzbar()).sort((a, b) => b.nr - a.nr);
-  if (nutzbar.length === 0) {
-    const z = kopplungsZustand();
-    // Im Aufbau (der Antwort-Code steht noch da) sagt es der Dialog; eine Leiste „getrennt" gäbe es für nichts.
-    if (z.phase === "verbindet") kopplungsZustandSetzen({ phase: "aus", dialog: z.dialog ? { ...z.dialog, fehler: NICHT_ZUSTANDE_SATZ } : null });
-    else endgueltigGetrennt();
-    return;
-  }
-  // Eine eingefrorene oder verdeckte Seite ruft nicht: Der Anruf liefe ins Leere. Beim Aufwachen geht es weiter.
-  if (document.visibilityState !== "visible") return;
-  const ziel = nutzbar[rufZahl % nutzbar.length]!;
-  const pause = RUF_PAUSEN_MS[Math.min(rufZahl, RUF_PAUSEN_MS.length - 1)]!;
-  rufZahl++;
-  const marke = {};
-  const naechster = () => {
-    if (rufVersuch?.marke !== marke) return;
-    clearTimeout(rufVersuch.uhr);
-    const v = rufVersuch.verbindung;
-    rufVersuch = null;
-    v?.schliessen();
-    if (nr === lauf && !aktiv) rufUhr = setTimeout(() => rufen(nr), pause);
-  };
-  rufVersuch = { marke, platz: ziel.nr, verbindung: null, uhr: setTimeout(naechster, RUF_FRIST_MS) };
-  ziel.platz.anrufen(horcher(nr, marke)).then(
-    (v) => {
-      if (rufVersuch?.marke === marke) rufVersuch.verbindung = v;
-      else if (aktivMarke !== marke) v.schliessen();
-    },
-    naechster,
-  );
-}
-
-function endgueltigGetrennt(): void {
-  const z = kopplungsZustand();
-  vergessen();
-  clearTimeout(aufgebenUhr);
-  rufenStoppen();
-  wachLassen();
-  kopplungsZustandSetzen({ phase: "getrennt", wartet: false, seit: z.seit ?? Date.now(), dialog: null });
-}
-
-/** Die aktive Verbindung ist weg (gerissen oder von hier aufgegeben). */
-function aktivVerloren(nr: number): void {
-  const z = kopplungsZustand();
-  taktStoppen();
-  aktiv = null;
-  aktivMarke = null;
-  angebot = null;
-  clearTimeout(pongOffen);
-  pongOffen = undefined;
-  if (!wiederverbindbar()) {
-    endgueltigGetrennt();
-    return;
-  }
-  const seit = z.phase === "unterbrochen" && z.seit != null ? z.seit : Date.now();
-  kopplungsZustandSetzen({ phase: "unterbrochen", wartet: true, seit, dialog: null });
-  clearTimeout(aufgebenUhr);
-  aufgebenUhr = setTimeout(() => {
-    if (nr !== lauf || aktiv) return;
-    wachLassen();
-    kopplungsZustandSetzen({ phase: "getrennt", wartet: true });
-  }, AUFGEBEN_MS);
-  rufZahl = 0;
-  rufen(nr);
-}
-
-/** Lebt die Verbindung noch? Nach dem Aufwachen sagt es der Browser erst nach vielen Sekunden; eine Nachfrage sagt es sofort. */
-function nachfragen(nr: number): void {
-  if (!aktiv || pongOffen) return;
-  const marke = aktivMarke;
-  aktiv.sofortSenden({ art: "ping" });
-  pongOffen = setTimeout(() => {
-    pongOffen = undefined;
-    if (nr !== lauf || aktivMarke !== marke || !aktiv) return;
-    const v = aktiv;
-    aktivVerloren(nr);
-    v.schliessen();
-  }, PONG_FRIST_MS);
-}
-
-/** Das Fenster ist wieder da (Bildschirm an, Netz zurück, Uhr stand still): Verbindung prüfen, sonst gleich anrufen. */
-function aufgewacht(): void {
-  const nr = lauf;
-  if (aktiv) nachfragen(nr);
-  else if (darfRufen() && !rufVersuch && (kopplungsZustand().wartet || kopplungsZustand().phase === "verbindet")) {
-    rufZahl = 0;
-    rufen(nr);
-  }
 }
 
 function pulsSchlag(): void {
@@ -479,383 +115,265 @@ function pulsSchlag(): void {
   const stand = jetzt - pulsZuletzt;
   pulsZuletzt = jetzt;
   if (stand > SCHLAF_MS) aufgewacht();
-  offenMelden();
+  for (const g of [...gegenstellen]) g.pulsSchlag();
 }
 
-function fehlerSatz(e: unknown): string {
-  if (e instanceof SpeicherVollFehler) return "Der Speicher dieses Geräts ist voll: Der Stand des anderen Geräts konnte nicht übernommen werden.";
-  return "Ein Stand des anderen Geräts ließ sich nicht übernehmen.";
-}
-
-function pruefen(): void {
-  if (!sitzung || kopplungsZustand().phase !== "verbunden") return;
-  const jetzt = speicherSchnappschuss();
-  if (jetzt === schnappschuss) return;
-  schnappschuss = jetzt;
-  if (sitzung.pruefen() === null) kopplungBeenden("Die Sammlung gibt es auf diesem Gerät nicht mehr. Die Kopplung ist beendet.");
-  else offenMelden();
-}
-
-function steuerNachricht(nr: number, n: { art?: unknown; nr?: unknown; sdp?: unknown }): boolean {
-  if (n.art === "ping") {
-    aktiv?.sofortSenden({ art: "pong" });
-    return true;
+/** Die Horcher am Fenster, solange es eine Gegenstelle gibt. Beim Verlassen der Seite nimmt niemand Abschied: Jedes
+ * Gerät hat sich gemerkt, womit es das andere nach dem Neuladen wieder anruft. Abschied nimmt nur „Trennen". */
+function horchen(an: boolean): void {
+  if (an === horchend) return;
+  horchend = an;
+  if (an) {
+    document.addEventListener("visibilitychange", beiSichtwechsel);
+    window.addEventListener("online", aufgewacht);
+    pulsZuletzt = Date.now();
+    puls = setInterval(pulsSchlag, 2000);
+  } else {
+    document.removeEventListener("visibilitychange", beiSichtwechsel);
+    window.removeEventListener("online", aufgewacht);
+    clearInterval(puls);
+    puls = undefined;
+    wachLassen();
   }
-  if (n.art === "pong") {
-    clearTimeout(pongOffen);
-    pongOffen = undefined;
-    return true;
-  }
-  if (n.art === "erhalten") {
-    if (sitzung?.quittung((n as { kennung?: unknown }).kennung)) {
-      kopplungsZustandSetzen({ abgleichAm: Date.now() });
-      merken();
-    }
-    offenMelden();
-    return true;
-  }
-  if (n.art === "ende") {
-    kopplungBeenden(`Das andere Gerät hat die Kopplung getrennt. ${GETRENNT_HIER_SATZ}`, false);
-    return true;
-  }
-  if (n.art === "hallo") {
-    // Das andere Gerät nennt die Kennung seiner Seite: Plätze einer früheren Seite gibt es dort nicht mehr.
-    const seite = (n as { seite?: unknown }).seite;
-    if (typeof seite === "string") {
-      rufPlaetze = rufPlaetze.filter((p) => {
-        if (p.seite === seite) return true;
-        p.platz.verwerfen();
-        return false;
-      });
-      merken();
-    }
-    return true;
-  }
-  if (n.art === "platz" && typeof n.nr === "number" && typeof n.sdp === "string") {
-    const seite = (n as { seite?: unknown }).seite;
-    void platzAnnehmen(nr, n.nr, typeof seite === "string" ? seite : "", n.sdp).catch(() => undefined);
-    return true;
-  }
-  if (n.art === "platz-antwort" && typeof n.nr === "number" && typeof n.sdp === "string") {
-    const p = plaetze.get(n.nr);
-    if (p && !p.beantwortet) {
-      p.beantwortet = true;
-      p.angebot.antwortAnnehmen(n.sdp).catch(() => {
-        p.angebot.verbindung.schliessen();
-        plaetze.delete(n.nr as number);
-      });
-    }
-    return true;
-  }
-  return false;
 }
 
-/** Horcher einer Verbindung. `marke` unterscheidet sie von den anderen dieser Kopplung (wartende Plätze, Anrufe). */
-function horcher(nr: number, marke: object): VerbindungsHorcher {
-  let verbindung: Verbindung | null = null;
-  const eigene = (): Verbindung | null => {
-    if (verbindung) return verbindung;
-    if (rufVersuch?.marke === marke) return rufVersuch.verbindung;
-    for (const p of plaetze.values()) if (p.marke === marke) return p.angebot.verbindung;
-    return ersteMarke === marke ? erste : null;
-  };
-  return {
-    onLage: (lage: VerbindungsLage) => {
-      if (nr !== lauf) return;
-      if (lage === "verbunden") {
-        if (aktivMarke !== marke) {
-          // Eine neue Verbindung steht: die erste nach dem Code-Tausch, ein angerufener Platz oder ein gelungener Anruf.
-          const neu = eigene();
-          if (!neu) return;
-          verbindung = neu;
-          const alt = aktiv;
-          aktiv = neu;
-          aktivMarke = marke;
-          alt?.schliessen();
-          for (const [platz, p] of plaetze) if (p.marke === marke) plaetze.delete(platz);
-          if (rufVersuch?.marke === marke) {
-            clearTimeout(rufVersuch.uhr);
-            // Der angerufene Platz ist beim ersten Gerät jetzt die laufende Verbindung: Er lässt sich nicht noch einmal anrufen.
-            const verbraucht = rufVersuch.platz;
-            rufPlaetze = rufPlaetze.filter((p) => {
-              if (p.nr !== verbraucht) return true;
-              p.platz.verwerfen();
-              return false;
-            });
-            rufVersuch = null;
-          }
-          clearTimeout(rufUhr);
-          clearTimeout(aufgebenUhr);
-          clearTimeout(pongOffen);
-          pongOffen = undefined;
-          rufZahl = 0;
-          fortgesetzt = false;
-          sitzung?.neuVerbunden();
-          neu.sofortSenden({ art: "hallo", seite: SEITE });
-        }
-        kopplungsZustandSetzen({ phase: "verbunden", wartet: false, seit: null, hinweis: "", dialog: null });
-        tuerenSchliessen();
-        merken();
-        void wachHalten();
-        schnappschuss = "";
-        if (!takt) takt = setInterval(pruefen, TAKT_MS);
-        pruefen();
-        plaetzeAuffuellen(nr);
-      } else if (lage === "unterbrochen") {
-        if (aktivMarke !== marke) return;
-        kopplungsZustandSetzen({ phase: "unterbrochen", wartet: wiederverbindbar(), seit: Date.now() });
-        // Der Browser wartet noch rund zehn Sekunden, bevor er aufgibt; die Nachfrage klärt es in drei.
-        nachfragen(nr);
-      } else if (lage === "getrennt") {
-        if (aktivMarke === marke) {
-          aktivVerloren(nr);
-          return;
-        }
-        // Eine Nebenverbindung ist zu Ende: ein wartender Platz, ein Anruf, oder die abgelöste alte Verbindung.
-        for (const [platz, p] of plaetze) if (p.marke === marke) plaetze.delete(platz);
-        if (rufVersuch?.marke === marke) {
-          const v = rufVersuch;
-          clearTimeout(v.uhr);
-          rufVersuch = null;
-          if (!aktiv) rufUhr = setTimeout(() => rufen(nr), RUF_PAUSEN_MS[Math.min(rufZahl, RUF_PAUSEN_MS.length - 1)]);
-          return;
-        }
-        if (ersteMarke === marke && !aktiv && kopplungsZustand().phase === "verbindet") {
-          // Vor dem ersten Stand gescheitert: Der Dialog sagt es, eine Leiste „getrennt" gäbe es für nichts.
-          const z = kopplungsZustand();
-          angebot = null;
-          kopplungsZustandSetzen({
-            phase: "aus",
-            dialog: z.dialog ? { ...z.dialog, fehler: NICHT_ZUSTANDE_SATZ } : null,
-          });
-        }
-      }
-    },
-    onNachricht: (nachricht: unknown) => {
-      if (nr !== lauf || !sitzung || aktivMarke !== marke) return;
-      if (nachricht && typeof nachricht === "object" && steuerNachricht(nr, nachricht as { art?: unknown })) return;
-      try {
-        const r = sitzung.empfangen(nachricht);
-        if (r.abgelehnt) {
-          kopplungBeenden(
-            r.abgelehnt === "geloescht"
-              ? "Die Sammlung liegt auf diesem Gerät im Papierkorb. Die Kopplung ist beendet; vom anderen Gerät wurde nichts übernommen."
-              : "Das andere Gerät führt eine andere Sammlung. Die Kopplung ist beendet.",
-          );
-          return;
-        }
-        schnappschuss = speicherSchnappschuss();
-        kopplungsZustandSetzen({
-          einsatzId: r.einsatzId,
-          // Die Zentrale hat eben einen Stand des Sammlers eingespielt; der Sammler wartet auf die Quittung.
-          ...(sitzung.rolle === "zentrale" ? { abgleichAm: Date.now() } : {}),
-          hinweis: r.widersprueche > 0 ? "Beide Geräte haben dasselbe geändert. Die Einsatzansicht nennt die Stellen." : kopplungsZustand().hinweis,
-        });
-        if (r.geaendert) kopplungsStandMelden(r.einsatzId);
-        // Der Sammler kennt die Sammlung erst jetzt: Ab hier lässt sich die Kopplung nach einem Neuladen fortsetzen.
-        if (r.neuerEinsatz) merken();
-      } catch (e) {
-        kopplungsZustandSetzen({ hinweis: fehlerSatz(e) });
-      }
-    },
-  };
+function geraetVon(g: Gegenstelle, nr: number): KopplungsGeraet {
+  const z = g.zustand();
+  return { kennung: g.kennung, name: z.name || `Sammler ${nr}`, phase: z.phase, wartet: z.wartet, seit: z.seit, abgleichAm: z.abgleichAm, hinweis: z.hinweis };
 }
 
-function neueSitzung(einsatzId: string | null, nr: number, als: "zentrale" | "sammler", bestaetigt: readonly string[] = []): AbgleichSitzung {
-  return new AbgleichSitzung(
-    einsatzId,
-    (n) => {
-      const v = aktiv;
-      if (!v || nr !== lauf) return;
-      // Ob etwas angekommen ist, sagt erst die Quittung der Zentrale, nicht das gelungene Senden.
-      v.senden(n).catch(() => {
-        // Nicht hinausgegangen: Beim nächsten Verbindungsaufbau geht der ganze Stand neu.
-        if (nr === lauf) sitzung?.neuVerbunden();
-      });
-    },
-    als,
-    bestaetigt,
-  );
-}
-
-/** Sammler: Wie viele eigene Meldungen hat die Zentrale noch nicht bestätigt? Zählt auch ohne Verbindung weiter. */
-function offenMelden(): void {
-  if (!sitzung || sitzung.rolle !== "sammler") return;
-  const offen = sitzung.offen();
-  if (offen !== kopplungsZustand().offen) kopplungsZustandSetzen({ offen });
-}
-
-/** Sammler: Hat die Zentrale diese Meldung bestätigt? */
-export function kopplungUebertragen(eintragId: string): boolean {
-  return !!sitzung?.uebertragen(eintragId);
-}
-
-function beginnen(): number {
-  aufraeumen();
-  document.addEventListener("visibilitychange", beiSichtwechsel);
-  window.addEventListener("pagehide", beiSeitenende);
-  window.addEventListener("online", aufgewacht);
-  pulsZuletzt = Date.now();
-  puls = setInterval(pulsSchlag, 2000);
-  kopplungSeit = Date.now();
-  return ++lauf;
-}
-
-/** Erstes Gerät: Kopplung für die offene Sammlung beginnen und den ersten Code zeigen. */
-export async function kopplungStarten(einsatzId: string): Promise<void> {
-  const nr = beginnen();
-  // Eine neue Kopplung löst die gemerkte ab.
-  vergessen();
-  kopplungsZustandSetzen({ phase: "verbindet", rolle: "zentrale", offen: 0, einsatzId, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "angebot", code: "" } });
-  if (!kopplungMoeglich()) {
-    kopplungsZustandSetzen({ phase: "aus", dialog: { art: "angebot", code: "", fehler: KEIN_WEBRTC_SATZ } });
+/** Aus den Gegenstellen den einen Zustand für die Oberfläche machen. */
+function zusammenfassen(): void {
+  const leer: KopplungsZustand = { phase: "aus", einsatzId: null, abgleichAm: null, seit: null, hinweis: "", dialog: null };
+  if (!rolle) {
+    kopplungsZustandErsetzen(nachruf ? { ...leer, phase: "getrennt", rolle: nachruf.rolle, einsatzId: nachruf.einsatzId, seit: nachruf.seit, hinweis: nachruf.hinweis, wartet: false } : leer);
+    horchen(false);
     return;
   }
-  try {
-    sitzung = neueSitzung(einsatzId, nr, "zentrale");
-    rolle = "hoerer";
-    const marke = {};
-    ersteMarke = marke;
-    // Ein Zertifikat für das Angebot und die Türen: Das zweite Gerät kennt aus dem Code nur einen Fingerabdruck.
-    zertifikat = rufZertifikat();
+  horchen(true);
+  let neu: KopplungsZustand;
+  if (rolle === "sammler") {
+    const z = gegenstellen[0]?.zustand();
+    neu = z
+      ? { phase: z.phase, rolle, einsatzId: z.einsatzId, abgleichAm: z.abgleichAm, seit: z.seit, hinweis: z.hinweis, wartet: z.wartet, offen: z.offen, dialog: z.dialog }
+      : { ...leer, rolle };
+  } else {
+    // Die Gegenstelle, deren Code gerade gezeigt wird, zählt erst als Sammler, wenn sie verbunden war.
+    const stand = anbahnung?.zustand().phase;
+    if (stand === "verbunden" || stand === "unterbrochen" || stand === "getrennt") anbahnung = null;
+    const gekoppelt = gegenstellen.filter((g) => g !== anbahnung);
+    const geraete = [...gekoppelt.map((g, i) => geraetVon(g, i + 1)), ...gegangene];
+    const lebend = geraete.filter((g) => g.phase === "verbunden" || g.phase === "unterbrochen" || (g.phase === "getrennt" && g.wartet));
+    const hat = (p: KopplungsPhase) => geraete.some((g) => g.phase === p);
+    // „Aktiv" heißt: Jeder Sammler, der noch dazugehört, ist verbunden. Fehlt einer, sagt es schon die Lampe.
+    const phase: KopplungsPhase =
+      lebend.length > 0 && lebend.every((g) => g.phase === "verbunden")
+        ? "verbunden"
+        : hat("verbunden") || hat("unterbrochen")
+          ? "unterbrochen"
+          : geraete.length > 0
+            ? "getrennt"
+            : anbahnung?.zustand().phase === "verbindet"
+              ? "verbindet"
+              : "aus";
+    const zeiten = geraete.map((g) => g.abgleichAm).filter((t): t is number => t != null);
+    const seit = geraete.filter((g) => g.phase !== "verbunden" && g.seit != null).map((g) => g.seit!);
+    neu = {
+      phase,
+      rolle,
+      einsatzId,
+      abgleichAm: zeiten.length > 0 ? Math.max(...zeiten) : null,
+      seit: seit.length > 0 ? Math.min(...seit) : null,
+      hinweis: geraete.find((g) => g.hinweis)?.hinweis ?? "",
+      wartet: geraete.some((g) => g.wartet),
+      dialog: anbahnung?.zustand().dialog ?? null,
+      geraete,
+    };
+  }
+  kopplungsZustandErsetzen(neu);
+  if (neu.phase === "verbunden" || neu.phase === "unterbrochen") void wachHalten();
+  else wachLassen();
+}
+
+/** Die Kopplung über ein Neuladen hinweg merken (merker.ts): je Gegenstelle, womit dieses Gerät sie wieder anruft. */
+function merken(): void {
+  const r = rolle;
+  merkKette = merkKette.then(async () => {
+    if (!r || r !== rolle) return;
+    const geraete = gegenstellen.flatMap((g) => g.merkDaten() ?? []);
+    const id = r === "zentrale" ? einsatzId : (gegenstellen[0]?.zustand().einsatzId ?? null);
+    if (geraete.length === 0 || !id) {
+      // Eine Zentrale, deren letzter Sammler gegangen ist, hat nichts fortzusetzen; ein Sammler vor dem ersten Stand auch nicht.
+      await merkerLoeschen();
+      return;
+    }
     const zert = await zertifikat;
-    const a = await angebotErzeugen(horcher(nr, marke), zert);
-    if (nr !== lauf) {
-      a.verbindung.schliessen();
-      return;
-    }
-    angebot = a;
-    erste = a.verbindung;
-    // Türen, an denen das zweite Gerät seinen Fingerabdruck anklopft: Dann braucht das erste weder Kamera noch Eingabe.
-    const ohneTueren = !!(globalThis as { __eebKopplungOhneTueren?: boolean }).__eebKopplungOhneTueren;
-    const t = zert && !ohneTueren ? await tuerenOeffnen(zert, angebotAdressen(a.sdp), (i) => tuerKennwoerter(a.sdp, i), tuerPortsLesen, TUEREN) : null;
-    if (nr !== lauf) {
-      t?.schliessen();
-      return;
-    }
-    tueren = t;
-    if (t) tuerTakt = setInterval(() => void tuerenLesen(nr), TUER_TAKT_MS);
-    kopplungsZustandSetzen({ dialog: { art: "angebot", code: signalKodieren({ art: "angebot", sdp: a.sdp }, t?.ports), selbst: !!t } });
-  } catch {
-    if (nr === lauf) kopplungsZustandSetzen({ phase: "aus", dialog: { art: "angebot", code: "", fehler: "Dieses Gerät konnte keine Verbindung vorbereiten." } });
+    await merkerSchreiben({ rolle: r, einsatzId: id, seit: kopplungSeit, ...(zert ? { zertifikat: zert, geraete } : {}) });
+  });
+}
+
+function vergessen(): void {
+  merkKette = merkKette.then(() => merkerLoeschen());
+}
+
+function entfernen(g: Gegenstelle): void {
+  gegenstellen = gegenstellen.filter((x) => x !== g);
+  if (anbahnung === g) anbahnung = null;
+  if (gegenstellen.length === 0 && gegangene.length === 0) {
+    rolle = null;
+    einsatzId = null;
+    zertifikat = null;
   }
 }
 
-/** „Zweites Gerät koppeln…" und „Neu koppeln…": Eine laufende Kopplung wird nicht still abgelöst. */
-export async function kopplungBeginnenMitRueckfrage(einsatzId: string): Promise<void> {
-  const phase = kopplungsZustand().phase;
-  if (phase === "verbunden" || phase === "unterbrochen") {
+const umfeld = (als: "zentrale" | "sammler"): Umfeld => ({
+  rolle: als,
+  seite: SEITE,
+  zertifikat: () => (zertifikat ??= rufZertifikat()),
+  naechsterPlatz: () => ++platzNr,
+  geaendert: zusammenfassen,
+  merken,
+  standGeaendert: kopplungsStandMelden,
+  vorstellung: () => (als === "sammler" ? { name: geraetename(), geraet: geraetekennung() } : null),
+  vorgestellt: (g) => {
+    if (als !== "zentrale") return;
+    // Dasselbe Telefon hat neu gekoppelt: Sein alter Eintrag ist damit abgelöst.
+    const geraet = g.zustand().geraet;
+    if (geraet) for (const alt of gegenstellen.filter((x) => x !== g && x.zustand().geraet === geraet)) alt.beenden("", false);
+    if (anbahnung === g) anbahnung = null;
+    zusammenfassen();
+  },
+  beendet: (g, hinweis) => {
+    const stelle = gegenstellen.filter((x) => x !== anbahnung).indexOf(g);
+    const war = stelle >= 0 ? geraetVon(g, stelle + 1) : null;
+    const z = g.zustand();
+    // Erst als gegangen führen, dann entfernen: Solange ein getrennter Sammler in der Leiste steht, bleibt dies eine Zentrale.
+    if (hinweis && als === "zentrale" && war) gegangene.push({ ...war, phase: "getrennt", wartet: false, seit: z.seit ?? Date.now(), hinweis });
+    entfernen(g);
+    if (hinweis && als === "sammler") nachruf = { hinweis, seit: z.seit ?? Date.now(), rolle: "sammler", einsatzId: z.einsatzId };
+    merken();
+    zusammenfassen();
+  },
+  alleBeenden: (hinweis) => kopplungBeenden(hinweis),
+});
+
+function neueKennung(): string {
+  return `${SEITE}-${++kennungNr}`;
+}
+
+/** Zentrale: einen (weiteren) Sammler koppeln. Zeigt den Code; die bestehenden Sammler bleiben verbunden. */
+export async function kopplungStarten(sammlung: string): Promise<void> {
+  if (rolle !== "zentrale" || einsatzId !== sammlung) {
+    // Dieses Gerät sammelt gerade oder führt eine andere Sammlung: Das endet hier.
+    kopplungBeenden();
+    rolle = "zentrale";
+    einsatzId = sammlung;
+    kopplungSeit = Date.now();
+    vergessen();
+  }
+  nachruf = null;
+  // Ein Code, der noch dasteht, ohne dass ihn jemand gescannt hat, wird durch den neuen ersetzt.
+  anbahnung?.beenden("", false);
+  rolle = "zentrale";
+  einsatzId = sammlung;
+  const g = neueGegenstelle(neueKennung(), umfeld("zentrale"));
+  gegenstellen.push(g);
+  anbahnung = g;
+  await g.anbieten(sammlung);
+}
+
+/** „Zweites Gerät koppeln…", „Weiteres Gerät koppeln…": Was dabei endet, endet erst nach Rückfrage. */
+export async function kopplungBeginnenMitRueckfrage(sammlung: string): Promise<void> {
+  if (!kopplungMoeglich()) {
+    await zeigeHinweis({ titel: "Koppeln geht hier nicht", text: KEIN_WEBRTC_SATZ });
+    return;
+  }
+  const z = kopplungsZustand();
+  if (rolle === "sammler" && z.phase !== "aus") {
     const neu = await frageJaNein({
-      titel: "Es besteht schon eine Kopplung",
-      text: "Neu koppeln trennt die bestehende Verbindung zum zweiten Gerät. Was beide Geräte gespeichert haben, bleibt erhalten.",
-      ok: "Neu koppeln",
+      titel: "Dieses Gerät sammelt gerade",
+      text: "Als Zentrale koppeln beendet die Verbindung zur bisherigen Zentrale. Was dieses Gerät aufgenommen hat, bleibt hier gespeichert.",
+      ok: "Als Zentrale koppeln",
     });
     if (!neu) return;
+  } else if (rolle === "zentrale" && einsatzId !== sammlung && gegenstellen.some((g) => g !== anbahnung)) {
+    const neu = await frageJaNein({
+      titel: "Es besteht schon eine Kopplung",
+      text: "Diese Zentrale führt gerade eine andere Sammlung. Koppeln für diese Sammlung trennt die bisherigen Sammler; was sie aufgenommen haben, bleibt bei ihnen und in der anderen Sammlung erhalten.",
+      ok: "Für diese Sammlung koppeln",
+    });
+    if (!neu) return;
+  } else if (rolle === "zentrale" && gegenstellen.filter((g) => g !== anbahnung).length >= MAX_SAMMLER) {
+    await zeigeHinweis({ titel: "Mehr geht nicht", text: HOECHSTZAHL_SATZ });
+    return;
   }
-  await kopplungStarten(einsatzId);
+  await kopplungStarten(sammlung);
 }
 
-/** Erstes Gerät: den gescannten Antwort-Code des zweiten Geräts einsetzen. Wirft mit einem Satz für den Scanner. */
+/** Zentrale: den gescannten Antwort-Code des Sammlers einsetzen. Wirft mit einem Satz für den Scanner. */
 export async function kopplungAntwortAnnehmen(text: string): Promise<void> {
   const s = lesen(text);
-  if (s.art !== "antwort") throw new Error(ANGEBOT_STATT_ANTWORT_SATZ);
-  if (!angebot) throw new Error("Die Kopplung wurde inzwischen abgebrochen. Bitte neu beginnen.");
-  // Inzwischen angeklopft: Die Antwort ist dieselbe, die Verbindung baut sich schon auf.
-  if (antwortGesetzt) return;
-  antwortGesetzt = true;
-  try {
-    await angebot.antwortAnnehmen(s.sdp);
-  } catch {
-    antwortGesetzt = false;
-    throw new Error("Der Antwort-Code passt nicht zu dieser Kopplung. Bitte beide Codes neu tauschen.");
-  }
+  if (!anbahnung) throw new Error("Die Kopplung wurde inzwischen abgebrochen. Bitte neu beginnen.");
+  await anbahnung.antwortAnnehmen(s);
 }
 
 /**
- * Zweites Gerät: Der Scanner hat einen Kopplungs-Code gelesen. Erzeugt die
- * Antwort und zeigt sie als Code. Wirft mit einem Satz für den Scanner.
+ * Sammler: Der Scanner hat einen Kopplungs-Code gelesen. Dieses Gerät antwortet, klopft an und verbindet sich. Wirft mit
+ * einem Satz für den Scanner.
  */
 export async function kopplungAngebotGescannt(text: string): Promise<void> {
   const s = lesen(text);
   if (s.art !== "angebot") throw new Error(ANTWORT_STATT_ANGEBOT_SATZ);
   if (!kopplungMoeglich()) throw new Error(KEIN_WEBRTC_SATZ);
-  const nr = beginnen();
-  // Eine neue Kopplung löst die gemerkte ab.
+  // Eine neue Kopplung löst ab, was dieses Gerät bisher war, und das Gemerkte dazu.
+  kopplungBeenden();
+  rolle = "sammler";
+  kopplungSeit = Date.now();
+  nachruf = null;
   vergessen();
-  kopplungsZustandSetzen({ phase: "verbindet", rolle: "sammler", offen: 0, einsatzId: null, abgleichAm: null, seit: null, wartet: false, hinweis: "", dialog: { art: "antwort", code: "" } });
+  void geraetemodellErfragen();
+  const g = neueGegenstelle(neueKennung(), umfeld("sammler"));
+  gegenstellen = [g];
   try {
-    sitzung = neueSitzung(null, nr, "sammler");
-    rolle = "rufer";
-    zertifikat = rufZertifikat();
-    // Das Angebot des ersten Geräts ist der erste wartende Platz: Dieses Gerät ruft ihn an, bis dort die Antwort
-    // gesetzt ist (gescannt oder eingetippt, das kann Minuten dauern), mit denselben Pausen wie nach einem Abriss.
-    const platz = await rufPlatzVorbereiten(s.sdp, await zertifikat, await kennwoerterAbleiten(s.sdp));
-    if (nr !== lauf) {
-      platz.verwerfen();
-      return;
-    }
-    rufPlaetze = [{ nr: 0, seite: "", platz }];
-    // Anklopfen geht nur, wenn das erste Gerät Türen offen hat und sich die Kennwörter dieses Geräts selbst ableiten kann.
-    const selbst = !!s.tueren && s.tueren.length === TUEREN && platz.vorgabeGilt;
-    kopplungsZustandSetzen({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }), selbst } });
-    rufen(nr);
-    if (selbst) void tuerAngebote(s.sdp, s.tueren!).then((sdps) => anklopfen(nr, fingerabdruckVon(platz.antwortSdp), sdps));
+    await g.antworten(s);
   } catch {
-    if (nr === lauf) {
-      aufraeumen();
-      kopplungsZustandZuruecksetzen();
-    }
+    if (gegenstellen.includes(g)) g.beenden("", false);
     throw new Error("Der Kopplungs-Code ließ sich nicht verwenden. Bitte am ersten Gerät neu beginnen.");
   }
 }
 
-export const NEU_GELADEN_SATZ =
-  "Die Seite wurde neu geladen, und das zweite Gerät ist nicht zu erreichen. Dieses Gerät versucht es weiter. Wurde dort ebenfalls neu geladen, hilft nur: „Neu koppeln…“ und am zweiten Gerät den Code scannen. Was dort aufgenommen wurde, bleibt dort gespeichert.";
-
 /**
- * Nach dem Neuladen der Seite: eine gemerkte Kopplung fortsetzen (merker.ts). Der Sammler ruft die Zentrale über die
- * gemerkten Plätze wieder an, ohne neuen Code. Die Zentrale kann das nicht (ihre wartenden Verbindungen sind mit der
- * Seite verschwunden) und sagt, dass neu gekoppelt werden muss.
+ * Nach dem Neuladen der Seite: eine gemerkte Kopplung fortsetzen (merker.ts). Jedes Gerät ruft das andere über die
+ * gemerkten Plätze wieder an, ohne neuen Code; die Zentrale jeden ihrer Sammler. Wurde dort ebenfalls neu geladen, gibt
+ * es die Plätze nicht mehr: Die Zentrale sagt es nach einer Dreiviertelminute.
  */
 export async function kopplungFortsetzen(): Promise<void> {
-  if (sitzung || kopplungsZustand().phase !== "aus") return;
+  if (rolle || kopplungsZustand().phase !== "aus") return;
   const m = await merkerLaden();
-  if (!m || sitzung || kopplungsZustand().phase !== "aus") return;
-  const zentrale = m.rolle === "zentrale";
-  if (!kopplungMoeglich() || !m.zertifikat || !m.plaetze?.length) {
+  if (!m || rolle || kopplungsZustand().phase !== "aus") return;
+  const zert = m.zertifikat;
+  const geraete = (m.geraete ?? []).filter((g) => g.plaetze.length > 0);
+  if (!kopplungMoeglich() || !zert || geraete.length === 0) {
     // Nichts, womit sich anrufen ließe: Die Zentrale sagt es, der Sammler vergisst die Kopplung.
     await merkerLoeschen();
-    if (zentrale) kopplungsZustandSetzen({ phase: "getrennt", rolle: "zentrale", einsatzId: m.einsatzId, wartet: false, abgleichAm: null, seit: Date.now(), hinweis: NEU_GELADEN_SATZ, dialog: null });
+    if (m.rolle === "zentrale") {
+      nachruf = { hinweis: NEU_GELADEN_SATZ, seit: Date.now(), rolle: "zentrale", einsatzId: m.einsatzId };
+      zusammenfassen();
+    }
     return;
   }
-  const nr = beginnen();
+  rolle = m.rolle;
+  einsatzId = m.einsatzId;
   kopplungSeit = m.seit;
-  rolle = zentrale ? "hoerer" : "rufer";
-  fortgesetzt = zentrale;
-  zertifikat = Promise.resolve(m.zertifikat);
-  rufPlaetze = m.plaetze.map((p) => ({ nr: p.nr, seite: p.seite, platz: rufPlatzWiederherstellen(p.angebotSdp, m.zertifikat!, p.ufrag, p.pwd) }));
-  sitzung = neueSitzung(m.einsatzId, nr, m.rolle, m.bestaetigt ?? []);
-  kopplungsZustandSetzen({
-    phase: "unterbrochen",
-    rolle: m.rolle,
-    wartet: true,
-    einsatzId: m.einsatzId,
-    abgleichAm: null,
-    seit: Date.now(),
-    hinweis: "",
-    dialog: null,
-    offen: sitzung.offen(),
-  });
-  clearTimeout(aufgebenUhr);
-  aufgebenUhr = setTimeout(() => {
-    if (nr !== lauf || aktiv) return;
-    wachLassen();
-    // Findet die Zentrale das zweite Gerät nicht, wurde dort wohl auch neu geladen: Dann hilft nur der Scan.
-    kopplungsZustandSetzen({ phase: "getrennt", wartet: true, ...(zentrale ? { hinweis: NEU_GELADEN_SATZ } : {}) });
-  }, AUFGEBEN_MS);
+  zertifikat = Promise.resolve(zert);
+  if (m.rolle === "sammler") void geraetemodellErfragen();
+  for (const gemerkt of m.rolle === "sammler" ? geraete.slice(0, 1) : geraete.slice(0, MAX_SAMMLER)) {
+    const g = neueGegenstelle(neueKennung(), umfeld(m.rolle));
+    gegenstellen.push(g);
+    g.fortsetzen(m.einsatzId, zert, gemerkt.plaetze, gemerkt.bestaetigt ?? [], gemerkt.name, gemerkt.geraet);
+  }
   // Die App öffnet die Sammlung, falls sie nach dem Neuladen auf der Startseite steht.
   if (m.einsatzId) kopplungsStandMelden(m.einsatzId);
-  rufen(nr);
 }
 
 /** Für den Scanner der Aufnahme: wie {@link kopplungAngebotGescannt}, aber mit dem Fehlersatz als Rückgabe (leer = angenommen). */
@@ -869,30 +387,62 @@ export async function kopplungCodeGescannt(text: string): Promise<string> {
 }
 
 /**
- * Kopplung beenden; mit `hinweis` bleibt die Leiste mit dem Grund stehen, ohne verschwindet sie. `melden`: dem anderen
- * Gerät sagen, dass von hier niemand mehr anruft oder wartet — es zeigt dann gleich „getrennt" statt zu warten.
+ * Die ganze Kopplung beenden: alle Gegenstellen, mit Abschied. Mit `hinweis` bleibt die Leiste mit dem Grund stehen, ohne
+ * verschwindet sie.
  */
-export function kopplungBeenden(hinweis = "", melden = true): void {
-  lauf++;
+export function kopplungBeenden(hinweis = ""): void {
+  const war = rolle;
+  const id = rolle === "zentrale" ? einsatzId : (gegenstellen[0]?.zustand().einsatzId ?? null);
+  const alle = [...gegenstellen];
+  gegenstellen = [];
+  anbahnung = null;
+  gegangene = [];
+  rolle = null;
+  einsatzId = null;
+  zertifikat = null;
+  for (const g of alle) g.beenden("", true);
+  nachruf = hinweis && war ? { hinweis, seit: Date.now(), rolle: war, einsatzId: id } : null;
   vergessen();
-  const z = kopplungsZustand();
-  const v = aktiv;
-  if (v && melden && v.sofortSenden({ art: "ende" })) {
-    // Erst hinausgehen lassen, dann schließen: Ein sofort geschlossener Kanal verwirft, was noch nicht gesendet ist.
-    aktiv = null;
-    setTimeout(() => v.schliessen(), 400);
+  zusammenfassen();
+}
+
+/** Zentrale: einen Sammler trennen oder einen getrennten aus der Liste nehmen. */
+export function kopplungGeraetTrennen(kennung: string): void {
+  const vorher = gegangene.length;
+  gegangene = gegangene.filter((g) => g.kennung !== kennung);
+  const g = gegenstellen.find((x) => x.kennung === kennung);
+  if (g) g.beenden("", true);
+  else if (gegangene.length !== vorher) {
+    if (gegenstellen.length === 0 && gegangene.length === 0) rolle = null;
+    merken();
+    zusammenfassen();
   }
-  aufraeumen();
-  if (hinweis) kopplungsZustandSetzen({ phase: "getrennt", wartet: false, seit: z.seit ?? Date.now(), hinweis, dialog: null });
-  else kopplungsZustandZuruecksetzen();
 }
 
-// Für die Verhaltenstests: die laufende Verbindung ohne Abschied kappen, wie es ein eingeschlafenes Telefon tut.
-(globalThis as { __eebKopplungAbriss?: () => void }).__eebKopplungAbriss = () => aktiv?.schliessen();
-
-/** Den Code-Dialog schließen. Steht die Verbindung noch nicht, ist die Kopplung damit abgebrochen. */
+/** Den Code-Dialog schließen: Die Gegenstelle, die noch nicht verbunden war, ist damit abgebrochen; die übrigen bleiben. */
 export function kopplungDialogSchliessen(): void {
-  const z = kopplungsZustand();
-  if (z.phase === "verbindet" || z.phase === "aus") kopplungBeenden();
-  else kopplungsZustandSetzen({ dialog: null });
+  if (rolle === "sammler") {
+    const g = gegenstellen[0];
+    const phase = g?.zustand().phase;
+    if (g && (phase === "verbindet" || phase === "aus")) g.beenden("", false);
+    return;
+  }
+  const g = anbahnung;
+  if (g) g.beenden("", false);
+  else zusammenfassen();
 }
+
+/** Sammler: Hat die Zentrale diese Meldung bestätigt? */
+export function kopplungUebertragen(eintragId: string): boolean {
+  return rolle === "sammler" && !!gegenstellen[0]?.uebertragen(eintragId);
+}
+
+/** Sammler: Der Name dieses Geräts hat sich geändert; die Zentrale erfährt es. */
+export function kopplungNameGeaendert(): void {
+  if (rolle === "sammler") gegenstellen[0]?.vorstellen();
+}
+
+// Für die Verhaltenstests: die laufenden Verbindungen ohne Abschied kappen, wie es ein eingeschlafenes Telefon tut.
+(globalThis as { __eebKopplungAbriss?: () => void }).__eebKopplungAbriss = () => {
+  for (const g of gegenstellen) g.abriss();
+};
