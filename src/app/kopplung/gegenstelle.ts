@@ -34,6 +34,8 @@ import {
   angebotErzeugen,
   eigeneAdressen,
   klopfen,
+  klopferVerwerfen,
+  klopferVorbereiten,
   tuerenOeffnen,
   anklopfenMoeglich,
   rufPlatzVorbereiten,
@@ -256,7 +258,7 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
   async function anklopfen(fingerabdruck: Uint8Array, tuerSdps: readonly string[], kennwoerter: { ufrag: string; pwd: string }): Promise<void> {
     const zeichen = klopfZeichen(fingerabdruck);
     const laeuft = () => !tot && zu.phase === "verbindet";
-    const netz = (teil: { erreichbar?: boolean; klopfer?: number }) => {
+    const netz = (teil: { erreichbar?: boolean; klopfer?: number; dauerMs?: number }) => {
       if (laeuft() && zu.dialog) setze({ dialog: { ...zu.dialog, netz: { eigene: [], ...zu.dialog.netz, ...teil } } });
     };
     const ohne = () => {
@@ -265,17 +267,26 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
       rufen();
     };
     for (let runde = 0; runde < KLOPF_RUNDEN && laeuft(); runde++) {
+      // Alle Klopfer des Durchgangs gleichzeitig vorbereiten (der Browser löst dabei den Namen der Tür auf), dann der
+      // Reihe nach klopfen: Die Reihenfolge trägt den Fingerabdruck.
+      const bereit = zeichen.map((z) => (tuerSdps[z] ? klopferVorbereiten(tuerSdps[z]!) : Promise.resolve(null)));
+      const rest = (ab: number) => bereit.slice(ab).forEach((b) => void b.then(klopferVerwerfen));
+      const beginn = Date.now();
       let nr = 0;
       for (const z of zeichen) {
-        if (!laeuft()) return;
         const sdp = tuerSdps[z];
-        if (!sdp || !(await klopfen(sdp, kennwoerter))) {
+        if (!laeuft()) {
+          rest(nr);
+          return;
+        }
+        if (!sdp || !(await klopfen(sdp, kennwoerter, await bereit[nr]))) {
+          rest(nr + 1);
           netz({ erreichbar: false });
           ohne();
           return;
         }
         nr++;
-        if (nr === 1 || nr % 6 === 0 || nr === zeichen.length) netz({ erreichbar: true, klopfer: nr });
+        if (nr === 1 || nr % 6 === 0 || nr === zeichen.length) netz({ erreichbar: true, klopfer: nr, dauerMs: Date.now() - beginn });
       }
       // Erst jetzt anrufen: Die Zentrale setzt die Antwort gleich nach dem letzten Klopfer und soll dann genau einen
       // laufenden Anruf vorfinden, keine Reste früherer Versuche.

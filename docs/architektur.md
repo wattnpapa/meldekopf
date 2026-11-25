@@ -623,6 +623,16 @@ sequenceDiagram
   auch wenn erst zwei Minuten nach dem Öffnen gescannt wird; Wiederverbinden
   nach dem Neuladen jeder Seite. Der Ton dient nur als Träger der Wege:
   Es wird kein Mikrofon geöffnet und keine Berechtigung erfragt.
+- **Klopfer vorab vorbereiten (seit 2026-11-25, dritter Gerätetest).** Mit
+  iPhone (Safari) und Firefox am Rechner kam die Verbindung zustande, die 66
+  Klopfer brauchten aber rund drei Minuten. Vermutete Ursache, am Gerät nicht
+  gemessen: Jeder Klopfer ist eine neue Verbindung und löst den verborgenen
+  Namen der Tür im lokalen Netz neu auf, auf dem iPhone je zwei bis drei
+  Sekunden. Das zweite Gerät bereitet darum alle Klopfer eines Durchgangs
+  gleichzeitig vor (`klopferVorbereiten`: Beschreibung der Tür gesetzt, Antwort
+  erzeugt, das Auflösen läuft) und klopft danach der Reihe nach
+  (`klopfen` setzt nur noch die Antwort). Der Dialog des zweiten Geräts nennt
+  die Dauer des Durchgangs, damit der nächste Gerätetest eine Zahl liefert.
 - Firefox als zweites Gerät klopft nur bei einem ersten Gerät mit Firefox an.
   Er meldet eine Tür erst als erreicht, wenn die Gegenseite die Verbindung
   bestätigt, und das tut nur die Sammeltür. Gegen Chrome oder Safari als

@@ -50,6 +50,8 @@ export interface KopplungsNetz {
   erreichbar?: boolean;
   /** Wie viele Klopfer hinausgegangen (zweites Gerät) oder angekommen sind (erstes Gerät). */
   klopfer?: number;
+  /** Zweites Gerät: so lange läuft der Durchgang des Anklopfens schon (für die Fehlersuche im Gerätetest). */
+  dauerMs?: number;
 }
 
 export interface KopplungsDialog {

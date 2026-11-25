@@ -695,17 +695,50 @@ const KLOPF_NACHLAUF_MS = 35;
 /** Pause vor dem nächsten Klopfer: Die Zeitstempel zweier Klopfer müssen sich unterscheiden. */
 const KLOPF_PAUSE_MS = 15;
 
+/** Ein vorbereiteter Klopfer: Die Tür ist ihm genannt, seine Antwort steht, gesetzt ist sie noch nicht. */
+export interface KlopferBereit {
+  pc: RTCPeerConnection;
+  antwort: string;
+}
+
+/**
+ * Zweites Gerät: einen Klopfer vorbereiten. Mit der Beschreibung der Tür beginnt der Browser, deren Namen im lokalen
+ * Netz aufzulösen. Das dauert auf dem iPhone je Klopfer zwei bis drei Sekunden (Gerätetest 2026-11-25: 66 Klopfer in
+ * rund drei Minuten) und läuft darum für alle Klopfer gleichzeitig vorab; geklopft wird erst mit {@link klopfen}.
+ * `null`, wenn es nicht geht: Dann klopft `klopfen` aus dem Stand.
+ */
+export async function klopferVorbereiten(tuerSdp: string): Promise<KlopferBereit | null> {
+  let pc: RTCPeerConnection | undefined;
+  try {
+    pc = neuePc();
+    await pc.setRemoteDescription({ type: "offer", sdp: tuerSdp });
+    return { pc, antwort: ((await pc.createAnswer()).sdp ?? "").replace(/^a=setup:.*$/m, "a=setup:active") };
+  } catch {
+    pc?.close();
+    return null;
+  }
+}
+
+/** Einen vorbereiteten Klopfer wegwerfen, der nicht mehr gebraucht wird. */
+export function klopferVerwerfen(k: KlopferBereit | null): void {
+  try {
+    k?.pc.close();
+  } catch {
+    /* schon zu */
+  }
+}
+
 /**
  * Zweites Gerät: einmal an eine Tür klopfen. Eine Wegwerf-Verbindung prüft die Adresse der Tür (die antwortet, weil
  * das Kennwort stimmt), schickt den ersten Gruß des Schlüsseltauschs (den die Tür nicht beantwortet, aber mit Uhrzeit
- * zählt) und schließt wieder. Rückgabe: ob die Tür geantwortet hat.
+ * zählt) und schließt wieder. Rückgabe: ob die Tür geantwortet hat. `bereit`: der vorbereitete Klopfer zu dieser Tür.
  */
-export async function klopfen(tuerSdp: string, kennwoerter?: { ufrag: string; pwd: string }): Promise<boolean> {
-  const pc = neuePc();
+export async function klopfen(tuerSdp: string, kennwoerter?: { ufrag: string; pwd: string }, bereit?: KlopferBereit | null): Promise<boolean> {
+  const k = bereit ?? (await klopferVorbereiten(tuerSdp));
+  if (!k) return false;
+  const pc = k.pc;
   try {
-    await pc.setRemoteDescription({ type: "offer", sdp: tuerSdp });
-    const a = await pc.createAnswer();
-    const sdp = (a.sdp ?? "").replace(/^a=setup:.*$/m, "a=setup:active");
+    const sdp = k.antwort;
     // Mit den abgeleiteten Kennwörtern der Klopfer: Die Sammeltür in Firefox zählt nur, wer sich so meldet.
     // Nimmt der Browser sie nicht an, klopft er mit seinen eigenen: Türen ohne Gegenstelle (Chrome) fragen nicht danach.
     try {
