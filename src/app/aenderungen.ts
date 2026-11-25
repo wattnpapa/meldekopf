@@ -43,6 +43,7 @@ export const AENDERUNGEN: readonly Aenderung[] = [
       "Kopplung: Der Stand des Rechners gilt. Jedes verbundene Telefon zeigt alle Einheiten, die der Rechner führt, auch die der anderen Telefone. Was ein Telefon ohne Verbindung aufnimmt, steht dort als „… wartet“ und geht mit der nächsten Verbindung nach.",
       "Kopplung: Der Dialog zeigt die Netzadressen beider Geräte und ob sie einander erreichen, und warnt, wenn sie in verschiedenen Netzen hängen. Firefox kann jetzt auch das erste Gerät sein, und mit einem iPhone geht das Anklopfen schneller.",
       "Einsatzansicht am Rechner: Links steht die Liste als Tabelle mit taktischem Zeichen, Name, Organisation, Auftrag, dringendem Bedarf, Eintreffzeit und Stärke, rechts die ganze Karte der gewählten Einheit mit der Stärke als vier Kacheln. Die Liste lässt sich nach Organisation gruppieren, die übrigen Filter liegen hinter „Filter…“.",
+      "Karte der Einheit: Die Zeile „Absender“ mit Name, E-Mail und Telefon aus der Signatur steht nicht mehr über der Führung. Wer den Bogen geschickt hat, steht weiter in den Details und im PDF.",
     ],
   },
   {

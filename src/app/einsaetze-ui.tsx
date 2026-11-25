@@ -5680,9 +5680,6 @@ function EinheitKarte(props: {
               <button type="button" className="link" aria-describedby={nameId} onClick={() => void standBestaetigungZuruecknehmen()}>Rückgängig</button>
             </span>
           )}
-          {absenderLabel(kopf.signatur?.absender) && (
-            <span className="muster-sub absender-zeile">Absender: <AbsenderKontakt karte={kopf.signatur?.absender} /></span>
-          )}
           {/* Wer führt, wie erreiche ich ihn, unter welchem Namen rufe ich die Einheit? (Rollenaudit Runde 2, U3) */}
           {(fuehrung || funkruf) && (
             <span className="muster-sub erreichbar-zeile">
