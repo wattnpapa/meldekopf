@@ -947,7 +947,8 @@ export function pruefpunkte(
     uhrzeitAus(ez.zeitraumBisIso),
   ];
   const ohneZeitraum = zeitraumLeer(ez);
-  if (ohneZeitraum && heute != null) {
+  // Nicht bei „nur Stärke": Die Schnellerfassung fragt den Zeitraum nicht ab, die Lücke wäre an jeder Karte.
+  if (ohneZeitraum && heute != null && b.personalErfassung !== PersonalErfassung.NUR_STAERKE) {
     hinweise.push({
       text: "Einsatzzeitraum ist nicht angegeben.",
       schritt: S_EINSATZ,

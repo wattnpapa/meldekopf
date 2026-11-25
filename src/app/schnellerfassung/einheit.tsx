@@ -748,7 +748,9 @@ export function AbschnittEinheit({
     <Feld titel="Organisation">
       <Auswahl
         value={e.organisation}
-        onChange={(ev) => void organisationWechseln(Number(ev.target.value))}
+        // In der Schnellerfassung bleibt der schon getippte Ort stehen: Die Organisation ist von der letzten Einheit
+        // vorbelegt, und wer erst den Ort tippte und dann umstellte, tippte ihn zweimal (Rollenaudit Runde 2, Meldekopf P2-4).
+        onChange={(ev) => void organisationWechseln(Number(ev.target.value), schnell ? e.hierarchie[0]?.name.trim() || undefined : undefined)}
       >
         {ORG_OPTIONEN.map((o) => (
           <option key={o.wert} value={o.wert}>{o.label}</option>

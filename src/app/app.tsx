@@ -107,6 +107,7 @@ function erfassungZuruecklegen(einsatzId: string): void {
 
 // Erst auf Knopfdruck: Die Schnellerfassung bringt Vokabulare, StAN-Tabellen
 // und Formularbausteine mit, die beim Start niemand braucht (Startbündel).
+const Berichtigung = lazy(() => import("./schnellerfassung/berichtigung").then((m) => ({ default: m.Berichtigung })));
 const Schnellerfassung = lazy(() => import("./schnellerfassung/schnellerfassung").then((m) => ({ default: m.Schnellerfassung })));
 
 export function App() {
@@ -148,6 +149,10 @@ export function App() {
     const e = offenerEinsatzId ? erfassungFuer(offenerEinsatzId, entwurfLaden()) : null;
     return !!e && (!e.fremd?.startseite || nachAbgleichFortsetzen());
   });
+  // „Angaben berichtigen…" an einer Karte: die Kennung der Fassung, deren Angaben offen sind (Rollenaudit Runde 2,
+  // Meldekopf P1-1). Nur im Arbeitsspeicher: Nach einem Neuladen steht die Einheit unverändert in der Lage.
+  const [berichtigungId, setBerichtigungId] = useState<string | null>(null);
+  const berichtigung = berichtigungId ? offenerEinsatz?.eintraege.find((e) => e.id === berichtigungId) : undefined;
   // Zweites Fenster (App und Browser, Lagemonitor): Sammlungen sofort neu
   // einlesen, wenn das andere Fenster sie ändert (R2-O4). Den Entwurf der
   // Schnellerfassung gleicht schnellerfassung.tsx selbst ab.
@@ -236,9 +241,12 @@ export function App() {
   };
   // Browser- und Geräte-Zurück bleiben in der App (Audit Meldekopf R1, Fehler F6).
   const ansicht: Ansicht = offenerEinsatz
-    ? { art: erfassungOffen ? "erfassung" : "einsatz", id: offenerEinsatz.id }
+    ? { art: erfassungOffen || berichtigung ? "erfassung" : "einsatz", id: offenerEinsatz.id }
     : { art: "start" };
   useAnsichtVerlauf(ansicht, (ziel) => {
+    // Zurück aus der Berichtigung führt in den Einsatz; die Einheit bleibt unverändert.
+    const ausBerichtigung = berichtigungId != null;
+    setBerichtigungId(null);
     if (ziel.art === "start") {
       if (erfassungOffen && offenerEinsatzId) erfassungZuruecklegen(offenerEinsatzId);
       setErfassungOffen(false);
@@ -247,7 +255,8 @@ export function App() {
     }
     if (ziel.art === "einsatz" && erfassungOffen && offenerEinsatzId) erfassungZuruecklegen(offenerEinsatzId);
     setOffenerEinsatzId(ziel.id);
-    setErfassungOffen(ziel.art === "erfassung");
+    // Vorwärts nach einer verlassenen Berichtigung öffnet keine leere Erfassung.
+    setErfassungOffen(ziel.art === "erfassung" && !ausBerichtigung);
     einsaetzeNeuLaden();
   });
 
@@ -307,6 +316,28 @@ export function App() {
     fehler: aufnahme.einlese?.fehler || fehler,
   };
 
+  if (offenerEinsatz && berichtigung) {
+    return (
+      <>
+        <Aktualisierungshinweise />
+        <KopplungsRahmen />
+        <Suspense fallback={<main id="inhalt" className="schnellerfassung"><p className="hinweis" role="status">Berichtigung lädt …</p></main>}>
+          <Berichtigung
+            key={berichtigung.id}
+            einsatz={offenerEinsatz}
+            eintrag={berichtigung}
+            setMeldung={setMeldung}
+            onEnde={() => {
+              setBerichtigungId(null);
+              einsaetzeNeuLaden();
+            }}
+          />
+        </Suspense>
+        <Dialogschicht />
+      </>
+    );
+  }
+
   if (offenerEinsatz && erfassungOffen) {
     return (
       <>
@@ -343,6 +374,11 @@ export function App() {
           onZurueck={zurStartseite}
           onGeaendert={einsaetzeNeuLaden}
           onManuell={() => void manuellErfassen(offenerEinsatz.id)}
+          onBerichtigen={(id) => {
+            setMeldung("");
+            setFehler("");
+            setBerichtigungId(id);
+          }}
           angefangeneErfassung={(() => {
             // Beim Löschen sagt die Rückfrage, was aus einer angefangenen Erfassung wird (Erfassungsbogen R12-S1).
             const e = erfassungFuer(offenerEinsatz.id, entwurfLaden());

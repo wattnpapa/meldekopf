@@ -391,6 +391,22 @@ describe("tafelbild: feste Plätze", () => {
     expect(tb.bild.uebungenDaneben).toBe(0);
   });
 
+  it("nennt bei einer abgerückten Einheit den Auftrag als Ziel (Rollenaudit Runde 2, Bereitstellungsraum P1-2)", () => {
+    const tb = tafelbild(
+      sammlung([
+        eintrag({ ort: "Da" }),
+        eintrag({ ort: "Vorne", status: MeldeStatus.ABGERUECKT, abgeruecktVorMin: 10, notiz: "EA 2  Deich Nord" }),
+        eintrag({ ort: "Heim", status: MeldeStatus.ABGERUECKT, abgeruecktVorMin: 20 }),
+      ]),
+      JETZT,
+    );
+    // Entsandt und entlassen standen gleich da; das Ziel steht jetzt hinter dem Namen, leer ohne Auftrag.
+    expect(tb.abgerueckt.map((a) => [a.name, a.auftrag])).toEqual([
+      ["THW Vorne", "EA 2 Deich Nord"],
+      ["THW Heim", ""],
+    ]);
+  });
+
   it("lässt die einzige Organisation ohne Kopf, auch wenn Übungsmeldungen danebenstehen; abgerückte Übungsmeldungen sind keine Karte und tragen ihr Wort", () => {
     const tb = tafelbild(
       sammlung([

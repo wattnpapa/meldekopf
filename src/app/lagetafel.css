@@ -426,6 +426,8 @@ main.lt[data-fassung="breit"] .lt-auftrag { font-size: 0.86em; line-height: 1.22
 .lt-abgang > * { font-size: 0.78em; }
 .lt-abgang-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lt-abgang-uebung { flex: none; }
+/* Wohin abgerückt (Auftrag der Führungsstelle): hinter dem Namen, und bei Platzmangel zuerst gekürzt. */
+.lt-abgang-auftrag, .lt-ab-auftrag { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--lt-text-2); }
 
 /* Übungsmeldung, die in der Lage nicht zählt: eine Zeile wie die einer abgerückten Einheit, zurückgenommen. Name und Typ links,
    die Stärke mager am rechten Rand; sie bleibt immer ganz. Reicht die Zeile nicht, weicht zuerst der volle Name der Kurzform, dann
@@ -515,7 +517,7 @@ main.lt .lt-bedarf li.lt-dringend { color: var(--lt-achtung); font-weight: 700; 
 .lt-abgaenge { display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(var(--lt-e) * 0.3); }
 main.lt .lt-abgaenge li { --lt-ab-luecke: calc(var(--lt-e) * 1); display: flex; gap: var(--lt-ab-luecke); font-size: calc(var(--lt-e) * 2.25); line-height: 1.2; white-space: nowrap; }
 .lt-ab-zeit { flex: none; color: var(--lt-text-2); }
-.lt-ab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lt-ab-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Dicht am Namen, wie ein Wortabstand: Der Abstand der Zeile wäre für ein nachgestelltes Wort zu weit. */
 .lt-ab-uebung { flex: none; margin-left: calc(0.25em - var(--lt-ab-luecke)); color: var(--lt-text-2); }
 main.lt .lt-abgaenge li.lt-ab-rest { color: var(--lt-text-2); }

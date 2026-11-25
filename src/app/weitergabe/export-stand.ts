@@ -626,7 +626,7 @@ export function nachtragGruende(eintraege: MeldeEintrag[], stand: ExportStand, a
     if (!bekannteEinheiten.has(schl)) {
       aus[schl] = { neu: true, gruende: ["neu"] };
     } else if (!bekannteIds.has(k.id) || arten.length > 0) {
-      aus[schl] = { neu: false, gruende: [...(bekannteIds.has(k.id) ? [] : [k.angaben?.kennzeichnung ? "Kennzeichnung" : "Folgemeldung"]), ...arten] };
+      aus[schl] = { neu: false, gruende: [...(bekannteIds.has(k.id) ? [] : [k.angaben?.bedarf ? "Bedarf" : k.angaben?.berichtigt ? "Berichtigung" : k.angaben?.kennzeichnung ? "Kennzeichnung" : "Folgemeldung"]), ...arten] };
     }
   }
   return aus;

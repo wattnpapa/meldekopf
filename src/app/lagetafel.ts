@@ -37,7 +37,8 @@ import { aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage } from "./au
 import { bedarfMarken } from "./einheiten-tabelle";
 import { eintreffzeit } from "./eintrag-zeiten";
 import { geltendeJeEinheit } from "./fassung-vorrang";
-import { einheitAnzeigename, funkrufText, nurSollstaerke, orgLabel, vokabText, vokabularFuer } from "./hilfen";
+import { funkrufDerEinheit } from "./erreichbarkeit";
+import { einheitAnzeigename, nurSollstaerke, orgLabel, vokabText, vokabularFuer } from "./hilfen";
 import { auftragKurz, lagebild, uhrzeitText, type Bewegung, type EinheitZeile, type Lagebild } from "./lagemonitor";
 
 // ------------------------------------------------------------------ Inhalt
@@ -116,6 +117,12 @@ export interface TafelAbgang {
   id: string;
   name: string;
   zeit: number | null;
+  /**
+   * Auftrag/Notiz der Führungsstelle in Kurzform, leer ohne: wohin die Einheit abgerückt ist („EA 2 Deich Nord",
+   * „entlassen"). Ohne ihn standen in den Abschnitt entsandte und nach Hause entlassene Einheiten gleich da
+   * (Rollenaudit Runde 2, Bereitstellungsraum P1-2).
+   */
+  auftrag: string;
   /** Eine Übungsmeldung, die in dieser Lage nie gezählt hat: Ohne Kennzeichen läse sie sich wie eine Einheit, die der Lage jetzt fehlt. */
   uebung: boolean;
 }
@@ -385,7 +392,8 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
           id: m.id,
           einheit: e,
           ...mitKurzform(meldungTeile(m)),
-          funkruf: m.bogen.fahrzeuge.map((f) => funkrufText(f, e)).find((t) => t !== "") ?? "",
+          // Sonst der Funkrufname der Führungskraft aus der Schnellerfassung (Rollenaudit Runde 2, U3).
+        funkruf: funkrufDerEinheit(m.bogen),
           auftrag: m.notiz?.trim() ? auftragKurz(m.notiz) : "",
           staerke: { fuehrer: st.fuehrer, unterfuehrer: st.unterfuehrer, mannschaft: st.mannschaft, gesamt: st.gesamt },
           soll: nurSollstaerke(m.bogen),
@@ -408,7 +416,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
       // wie eine Einheit, die der Lage jetzt fehlt. Das Wort steht neben dem Namen, nicht in ihm: Gekürzt wird der Name.
       // In den Listen (Abgerückt, Randspalte) steht der Name kurz wie der Typ: Dort ist eine Zeile schmal und endet sonst mit
       // Auslassung, oft vor dem Standort, der zwei Einheiten unterscheidet.
-      return { id: e.id, name: [herkunftKurzform(n.herkunft, n.ort), n.typKurz].filter(Boolean).join(" "), zeit: abrueckzeit(e), uebung: !zaehltInLage(einsatz.art, e.bogen) };
+      return { id: e.id, name: [herkunftKurzform(n.herkunft, n.ort), n.typKurz].filter(Boolean).join(" "), zeit: abrueckzeit(e), auftrag: e.notiz?.trim() ? auftragKurz(e.notiz) : "", uebung: !zaehltInLage(einsatz.art, e.bogen) };
     })
     .sort((a, b) => (b.zeit ?? 0) - (a.zeit ?? 0) || a.id.localeCompare(b.id));
 

@@ -1165,7 +1165,11 @@ describe("Summe und Aufnahme im ersten Bild", () => {
     const leiste = document.querySelector(".staerke-leiste")!;
     const scannen = screen.getByRole("button", { name: "Bogen scannen…" });
     const bedarf = screen.getByRole("heading", { name: "Bedarf (anwesende Einheiten)" });
-    expect(leiste.nextElementSibling!.contains(scannen)).toBe(true);
+    // Dazwischen steht nur die eine Zeile mit Fahrzeugen und Stärkemeldung (Rollenaudit Runde 2), kein Block.
+    const zusatz = leiste.nextElementSibling!;
+    expect(zusatz.matches("p.lage-zusatz")).toBe(true);
+    expect(zusatz.textContent).toContain("Fahrzeug");
+    expect(zusatz.nextElementSibling!.contains(scannen)).toBe(true);
     expect(scannen.compareDocumentPosition(bedarf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

@@ -62,14 +62,17 @@ export interface EinsatzSummen {
 }
 
 /**
- * Hat bei dieser Meldung niemand den Bedarf erfasst? Schnellerfassung (nur Stärke) ohne Fahrzeuge, Unterbringung,
+ * Hat bei dieser Meldung niemand den Bedarf erfasst? Schnellerfassung (nur Stärke) ohne Unterbringung,
  * Ruhezeit und Betriebsstoff: leer heißt dort „nicht gefragt", nicht „nicht nötig" (R14-W1).
+ *
+ * Fahrzeuge zählen dafür nicht mehr (Rollenaudit Runde 2, U4): Die Schnellerfassung fragt den Bedarf nie ab, mit oder
+ * ohne Fahrzeug. Mit Fahrzeug galt er als erfasst, und das Lageblatt meldete „kein Betriebsstoff" für Einheiten, die
+ * niemand gefragt hatte. „Bedarf ändern…" an der Karte trägt ihn nach.
  */
 export function bedarfNichtErfasst(b: Erfassungsbogen): boolean {
   const sb = b.sofortbedarf;
   return (
     b.personalErfassung === PersonalErfassung.NUR_STAERKE &&
-    b.fahrzeuge.length === 0 &&
     (!sb || (!sb.dieselLiter && !sb.benzinLiter && !sb.gemischLiter && !sb.unterbringung && !sb.ruhezeitErforderlich))
   );
 }

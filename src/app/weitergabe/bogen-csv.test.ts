@@ -144,6 +144,21 @@ describe("bogenCsvInhalt()", () => {
     expect(spalte(csv, 1, "Anzahl Fahrzeuge")).toBe("1");
   });
 
+  it("rechnet bei einer Schnellerfassung nur mit Stärke die Verpflegung aus der Stärke (Rollenaudit Runde 2, U1)", () => {
+    // Die Personalliste trägt nur die Führungskraft; gezählt wurden 0/2/7.
+    const schnell = bogen("Oldenburg", {
+      personal: [person({ nachname: "Chef", staerkeRolle: StaerkeRolle.FUEHRER })],
+      staerkeManuell: { fuehrer: 0, unterfuehrer: 2, mannschaft: 7, gesamt: 9 },
+      sofortbedarf: undefined,
+    });
+    const csv = bogenCsvInhalt(schnell);
+    expect(spalte(csv, 1, "Stärke gesamt")).toBe("9");
+    expect(spalte(csv, 1, "Verpflegung gesamt")).toBe("9");
+    expect(spalte(csv, 1, "Verpflegung Fleisch")).toBe("9");
+    // Kein Geschlecht erfasst: nichts aus der Führungskraft ableiten.
+    expect(spalte(csv, 1, "Unterbringung M")).toBe("0");
+  });
+
   it("lässt die Blöcke der jeweils anderen Satzarten leer", () => {
     const csv = bogenCsvInhalt(bogen());
     expect(spalte(csv, 1, "Nachname")).toBe(""); // Einheitszeile ohne Personenfelder

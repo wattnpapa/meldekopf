@@ -44,8 +44,6 @@ import {
   StaerkeRolle,
   alleFahrerlaubnisse,
   staerke,
-  unterbringungMWD,
-  verpflegung,
   datumZuIso,
   type EebDatum,
   type EebZeitpunkt,
@@ -53,6 +51,7 @@ import {
   type Fahrzeug,
   type Person,
 } from "@bos/eeb-format/model";
+import { unterbringungLage, verpflegungLage } from "../auswertung";
 import {
   FE_TEXT,
   datumAnzeige,
@@ -271,8 +270,11 @@ function kontextFelder(b: Erfassungsbogen, k: Kontext, satzart: string, nr?: num
 
 function einheitSatz(b: Erfassungsbogen, k: Kontext): Satz {
   const st = staerke(b);
-  const vp = verpflegung(b);
-  const u = unterbringungMWD(b);
+  // Wie Übersicht-CSV, Lageblatt und Summen: Eine Schnellerfassung nur mit Stärke trägt in der
+  // Personalliste bloß die Führungskraft. Das Model zählte dort „Verpflegung 1" bei Stärke 9
+  // (Rollenaudit Runde 2, U1); die Lage-Rechnung nimmt die Stärke und leitet kein Geschlecht ab.
+  const vp = verpflegungLage(b);
+  const u = unterbringungLage(b);
   const sb = b.sofortbedarf;
   const ebene0 = b.einheit.hierarchie[0];
   return {
@@ -329,19 +331,22 @@ function einheitSatz(b: Erfassungsbogen, k: Kontext): Satz {
 function personSatz(b: Erfassungsbogen, k: Kontext, p: Person, nr: number): Satz {
   const funktionen = vokabularFuer(b.einheit.organisation, "funktion");
   const { qualifikationen, berufe } = qualifikationenUndBerufe(p);
+  const ansprech = b.personalErfassung === PersonalErfassung.NUR_STAERKE;
   return {
     ...kontextFelder(b, k, SATZART_PERSON, nr),
     Nachname: p.nachname,
     Vorname: p.vorname,
-    Rolle: ROLLE_TEXT[p.staerkeRolle],
+    // Bei „nur Stärke" ist die Person die Ansprechperson der Schnellerfassung. Rolle, Geschlecht und Ernährung hat
+    // niemand angegeben; das Format verlangt trotzdem Werte („Führer / m / Fleisch"). Leer statt erfunden (U5).
+    Rolle: ansprech ? "" : ROLLE_TEXT[p.staerkeRolle],
     Funktionen: p.funktionen.map((f) => vokabText(f, funktionen)).filter(Boolean).join(", "),
     // FE_TEXT schreibt „—" für „keine" — das ist Anzeige-Kosmetik. In einer
     // Tabelle gehört dahin die leere Zelle, sonst zählt jeder Filter den
     // Gedankenstrich als Fahrerlaubnis mit. Mehrere Klassen (B + A) stehen
     // kommagetrennt in derselben Zelle.
     Fahrerlaubnis: alleFahrerlaubnisse(p).map((k) => FE_TEXT[k]).join(", "),
-    Geschlecht: GESCHLECHT_TEXT[p.geschlecht],
-    "Ernährung": ERNAEHRUNG_TEXT[p.ernaehrung],
+    Geschlecht: ansprech ? "" : GESCHLECHT_TEXT[p.geschlecht],
+    "Ernährung": ansprech ? "" : ERNAEHRUNG_TEXT[p.ernaehrung],
     Kontakte: p.kontakte.map(kontaktText).join(" / "),
     // Berufe liegen im selben Bogenfeld wie die Qualifikationen, markiert mit
     // „Beruf: " (beruf.ts) — in der Tabelle bekommen sie eine eigene Spalte,

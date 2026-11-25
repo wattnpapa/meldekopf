@@ -290,8 +290,8 @@ Kennfarbe), liegen unter `src/test/`.
 | Anforderung | Bausteine |
 | --- | --- |
 | Bogen aufnehmen | `eingang/*`, `@bos/eeb-format/codec`, `@bos/meldekopf/einsaetze`, `eintrag-zeiten.ts` |
-| Einheit ohne Bogen erfassen | `schnellerfassung/*`, `@bos/vokabulare`, `@bos/oberflaeche` (Bausteine) |
-| Lage lesen | `einsaetze-ui.tsx`, `auswertung.ts`, `einheiten-liste.ts`, `einheiten-tabelle.ts` |
+| Einheit ohne Bogen erfassen | `schnellerfassung/*`, `@bos/vokabulare`, `@bos/oberflaeche` (Bausteine); die eigene Erfassung nachträglich berichtigen: `schnellerfassung/berichtigung.tsx` |
+| Lage lesen | `einsaetze-ui.tsx`, `auswertung.ts`, `einheiten-liste.ts`, `einheiten-tabelle.ts`, `erreichbarkeit.ts` (Führung, Funkrufname, Fahrzeuge für Karte, Tabelle, Suche, Lagemonitor), `lage-zusatz.ts` (Fahrzeuge, Stärke je Organisation, Abgerückte, Stärkemeldung), `bedarf-aendern.ts` (nachgeladen) |
 | Lagemonitor | `lagemonitor-ui.tsx`, `lagemonitor.ts`, `lage-angaben.ts`; Tafel-Ansicht `lagetafel-ui.tsx`, `lagetafel.ts`, Wahl der Ansicht `lagemonitor-ansicht.ts` |
 | Weitergabe | `weitergabe/*`, `@bos/eeb-satz`, `export-stand.ts`, `einsatz-transport.ts` |
 | Ablösung und Rückimport | `einsatz-abgleich.ts`, `entfernte-meldungen.ts` |
