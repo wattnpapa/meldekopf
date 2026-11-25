@@ -224,7 +224,8 @@ flowchart TB
   app --> schnell["schnellerfassung/*<br/>Nur-Stärke-Bogen, Namen, Eintreffzeit,<br/>StAN-Vorbelegung"]
   app --> lage["lagemonitor-ui.tsx<br/>Zweites Fenster"]
   app --> papier["papier-abgleich-ui.tsx"]
-  app --> tor["tor/*<br/>Tor-Ansicht, Fahrzeugstand,<br/>Kennzeichen-Abgleich, Texterkennung"]
+  app --> tor["tor/*<br/>Kennzeichen im Scanner, Tor-Liste,<br/>Fahrzeugstand, Abgleich, Texterkennung"]
+  eingang -. "zusatz: Videobild, Rahmen" .-> tor
   app --> export["weitergabe/*<br/>Sammel-PDF, CSV, XLSX, Einsatz-Datei,<br/>Export-Stand"]
   app --> persist["speicher-browser.ts, einsaetze-lesen.ts,<br/>eintrag-zeiten.ts, fassung-vorrang.ts,<br/>entfernte-meldungen.ts, einsatz-abgleich.ts,<br/>sicherung.ts, datenschutz-uhr.ts"]
   liste --> ausw["auswertung.ts, einheiten-liste.ts,<br/>einheiten-tabelle.ts"]
@@ -972,9 +973,10 @@ Rückruf-Plätze (Kap. 6.6), die wie die QR-Codes nur Verbindungsangaben tragen.
 Wer beide Codes tauschen kann, erhält die Sammlung als Vollkopie. Electron
 braucht dafür keine zusätzliche Berechtigung; die Kamera ist schon erlaubt.
 
-Kennzeichen-Erkennung am Tor (seit 2026-11-25, `tor/`): Die Kamera läuft wie
-beim QR-Scan über `getUserMedia`; ausgewertet wird nur der Ausschnitt unter
-dem Rahmen, in einem Arbeiter-Thread derselben Herkunft (tesseract.js,
+Kennzeichen-Erkennung am Tor (seit 2026-11-25, `tor/`): Es ist die Kamera
+des QR-Scanners, keine zweite Freigabe; der Scanner reicht Videobild und
+Suchrahmen an einen zweiten Leser (`zusatz`, `tor/scanner-tor.tsx`).
+Ausgewertet wird nur der Ausschnitt unter dem Rahmen, in einem Arbeiter-Thread derselben Herkunft (tesseract.js,
 WebAssembly). Kein Bild und kein gelesener Text verlässt das Gerät oder wird
 gespeichert; gespeichert wird allein die Bewegung, die der Helfer bucht.
 Die CSP bleibt unverändert: Arbeiter-Skript und Kern kommen als eigene
@@ -1086,6 +1088,8 @@ und Summenzeile, Knopf). Neue Laufzeit-Abhängigkeiten, nur im Meldekopf:
 `@tesseract.js-data/eng` (Sprachdaten, MIT-Paket, Daten Apache-2.0). Alle drei
 Dateien liegen in der zweiten Vorratsstufe und laden erst, wenn am Tor die
 Kamera läuft.
+Am selben Tag in den Scanner verlegt (eine Kamera-Ansicht für Bögen und
+Kennzeichen): 8.527.223 / 654.799 Byte.
 **Audit Runde 1, offene P2 (2026-10-26):** 4.107.298 / 535.773 Byte, das
 Startbündel +8 KB: Lagemonitor mit Zug, Gesamt und Bedarf, Verlauf der
 Ansichten (`ansicht-verlauf.ts`), Zähler-Fenster für „Stärke ändern“
@@ -1357,8 +1361,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 
 | Risiko / offener Punkt | Umgang |
 | --- | --- |
-| Kennzeichen-Erkennung am Tor nur an gezeichneten Schildern erprobt (Prüfstand: Chromium mit Film als Kamera, zwei Schilder, wörtlich gelesen nach gut einer Sekunde samt Laden) | Feldversuch offen: echte Kennzeichen in FE-Schrift, bei Tag, Dämmerung und Nacht, verschmutzt, schräg, aus zwei bis fünf Metern; Telefone der Helfer (Lesezeit je Bild, Akku, Wärme). Allgemeine Texterkennung mit englischen Sprachdaten, nicht auf FE-Schrift trainiert. Die Zeile „Gelesen: …“ zeigt im Versuch, was die Kamera las. Reicht die Quote nicht: eigener Schild-Sucher vor der Erkennung oder ein auf Kennzeichen trainiertes Modell. Die Tippsuche trägt das Tor in jedem Fall. |
-| Tor nicht auf gekoppelten Sammlern | Die Lage führt nur die Zentrale; das Telefon am Tor muss heute die Sammlung selbst führen oder die Zentrale sein. Nächster Schritt: Bewegungen als eigene Nachricht vom Sammler an die Zentrale, mit Warteschlange wie bei den Meldungen (ADR-009). |
+| Kennzeichen-Erkennung am Tor nur an gezeichneten Schildern erprobt (Prüfstand: Chromium mit Film als Kamera, je zwei Schilder quer und hochkant, wörtlich gelesen nach gut einer Sekunde samt Laden) | Feldversuch offen: echte Kennzeichen in FE-Schrift, bei Tag, Dämmerung und Nacht, verschmutzt, schräg, aus zwei bis fünf Metern; Telefone der Helfer (Lesezeit je Bild, Akku, Wärme). Allgemeine Texterkennung mit englischen Sprachdaten, nicht auf FE-Schrift trainiert. Gelesen wird der ganze quadratische Suchrahmen des QR-Scanners, nicht ein Streifen in Schildform: mehr Umgebung im Bild, dafür ein Knopf und eine Ansicht. Die Zeile „Kennzeichen gelesen: …“ zeigt, was die Kamera las, sobald es einem Kennzeichen der Sammlung ähnelt. QR-Decoder und Texterkennung laufen nebeneinander; die Last auf alten Telefonen ist ungemessen. Reicht die Quote nicht: eigener Schild-Sucher vor der Erkennung oder ein auf Kennzeichen trainiertes Modell. Die Tippsuche trägt das Tor in jedem Fall. |
+| Tor nicht auf gekoppelten Sammlern | Die Lage führt nur die Zentrale; der Scanner eines Sammlers liest keine Kennzeichen. Das Telefon am Tor muss heute die Sammlung selbst führen oder die Zentrale sein. Nächster Schritt: Bewegungen als eigene Nachricht vom Sammler an die Zentrale, mit Warteschlange wie bei den Meldungen (ADR-009). |
 | Texterkennung vergrößert den Offline-Vorrat um rund 7 MB (zweite Stufe) | Lädt nach dem Kern, hält den Start nicht auf; nur der SIMD-Kern, ältere Geräte (iOS vor 16.4) fallen auf die Tippsuche zurück. Die Sprachdaten ließen sich auf Großbuchstaben und Ziffern kürzen, wenn der Versuch die Erkennung bestätigt. |
 | Kennzeichen-Erkennung in der Android-App und in der Desktop-App ungeprüft | Android: `getUserMedia` in der Capacitor-Hülle nicht erprobt; der QR-Scan nutzt dort den nativen Scanner. Desktop: Die Erkennung lädt unter `file://` nicht. In beiden bleibt die Tippsuche; für den Feldversuch die Web-App im Browser nehmen. |
 | Zwei Apps auf einem Gerät verwirren unter Stress | Klare Namen, Icons, Farben; der Übergang per Link nennt, wohin es geht; Rückfallebene QR. Audit-Runde mit den THW-Reviewer-Rollen nach Phase 3. |

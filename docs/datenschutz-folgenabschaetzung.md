@@ -178,7 +178,7 @@ die für die DSFA relevante Kurzfassung:
   aufnimmt, geht an die Zentrale; deren ganzer Stand geht laufend an jeden
   verbundenen Sammler zurück. Die QR-Codes tragen keine Einsatzdaten, nur
   Verbindungsangaben (Schlüssel-Fingerabdruck, Adressen im lokalen Netz).
-- **Tor** (seit 2026-11-25; `src/app/tor/`): Die Kamera liest Kennzeichen
+- **Tor** (seit 2026-11-25; `src/app/tor/`): Die Kamera des Scanners liest neben den QR-Codes Kennzeichen
   ein- und ausfahrender Fahrzeuge, um je Fahrzeug „fährt raus“ oder „kommt
   zurück“ zu vermerken. Die Texterkennung läuft auf dem Gerät; kein Bild und
   kein gelesener Text wird gespeichert oder übertragen. Abgeglichen wird nur

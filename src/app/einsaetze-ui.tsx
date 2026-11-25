@@ -1228,7 +1228,7 @@ export function EinsatzDetail(props: {
   onKoppeln?: () => void;
   /** Schnellerfassung (nur Stärke) für diese Sammlung (R16-W3). */
   onSchnell?: () => void;
-  /** „Tor: Fahrzeuge raus und rein…": die Tor-Ansicht dieser Sammlung (tor/). */
+  /** „Fahrzeuge am Tor…": die Tor-Liste dieser Sammlung (tor/tor-ansicht.tsx). */
   onTor?: () => void;
   /** Fertige Bögen aus JSON-/PDF-Dateien. */
   onDateiImport: (dateien: File[]) => void;
@@ -2406,6 +2406,8 @@ export function EinsatzDetail(props: {
               {abgerueckte.fahrzeuge === 1 ? "1 Fahrzeug" : `${abgerueckte.fahrzeuge} Fahrzeuge`}
             </span>
           )}
+          {/* Die Tor-Liste ohne Kamera (tor/tor-ansicht.tsx). Mit der Kamera liest „Bogen scannen…" die Kennzeichen mit. */}
+          {props.onTor && torFahrzeugeZahl > 0 && <button type="button" className="link tor-knopf" onClick={props.onTor}>Fahrzeuge am Tor…</button>}
           <button type="button" className="link staerkemeldung-knopf" onClick={() => void staerkemeldungZeigen()}>Stärkemeldung…</button>
         </p>
       )}
@@ -2497,7 +2499,7 @@ export function EinsatzDetail(props: {
             Unterzeile gehört nicht zum Knopfnamen, sie beschreibt ihn. */}
         <button type="button" className="primaer mit-zusatz" onClick={onScannen} aria-describedby="aufnahme-zusatz-scan">
           Bogen scannen…
-          <span className="knopf-zusatz" id="aufnahme-zusatz-scan" aria-hidden="true">mit Kamera oder Handscanner</span>
+          <span className="knopf-zusatz" id="aufnahme-zusatz-scan" aria-hidden="true">{torFahrzeugeZahl > 0 ? "QR-Code des Bogens oder Kennzeichen eines Fahrzeugs" : "mit Kamera oder Handscanner"}</span>
         </button>
         {/* R21-A4, W4, E5, H4, K3, G5, M5, L4, N4, O3, S3, D4: Am Telefon steht, sobald die Sammlung Meldungen hat, nur „Bogen scannen…"
             offen da (die Hauptaktion bleibt oben, R2-S3, R18-G2); die anderen drei Wege liegen eine Zeile darunter („Weitere Wege der
@@ -2512,17 +2514,6 @@ export function EinsatzDetail(props: {
           aufnahmeWege
         )}
       </div>
-
-      {/* Neu im Meldekopf: Fahrzeuge fahren über den Tag raus und kommen wieder, ohne dass die Einheit abrückt. Ein eigener
-          Knopf statt eines Wegs der Aufnahme: Am Tor wird nichts aufgenommen, und am Telefon lägen die Wege eingeklappt. */}
-      {props.onTor && torFahrzeugeZahl > 0 && (
-        <div className="aktionen tor-aktion">
-          <button type="button" className="mit-zusatz" onClick={props.onTor} aria-describedby="tor-zusatz">
-            Tor: Fahrzeuge raus und rein…
-            <span className="knopf-zusatz" id="tor-zusatz" aria-hidden="true">Kennzeichen mit der Kamera lesen oder tippen</span>
-          </button>
-        </div>
-      )}
 
       {/* Was das Einlesen ergab, dort, wo der Finger eben war (R3-L1). */}
       {props.einleseQuittung}

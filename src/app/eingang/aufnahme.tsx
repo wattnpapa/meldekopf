@@ -2027,6 +2027,8 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
     segmentStand,
     scanErgebnisWeb,
     scanAbbrechen,
+    /** In welche Sammlung der offene Scanner aufnimmt (`null`: Startseite, die Rückfrage entscheidet). Für den Kennzeichen-Leser im Scanner. */
+    scanZiel: () => sammelZielRef.current,
     ladeQrBild,
     scanneQr,
     scanneInEinsatz,

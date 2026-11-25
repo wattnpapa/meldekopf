@@ -40,7 +40,8 @@ import { entwurfLaden, entwurfSpeichern, entwurfVerwerfen } from "./entwurf";
 import { useAnsichtVerlauf, type Ansicht } from "./ansicht-verlauf";
 import { QrScannerWeb } from "./eingang/qr-scanner-web";
 import { KopplungsRahmen } from "./kopplung/kopplung-rahmen";
-import { kopplungFortsetzenWennGemerkt, kopplungsStandAbonnieren } from "./kopplung/zustand";
+import { kopplungFortsetzenWennGemerkt, kopplungsStandAbonnieren, kopplungsZustand } from "./kopplung/zustand";
+import { torOeffnen } from "./tor/tor-zustand";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
 import { SpeicherWarnung } from "./speicher-warnung";
 import { UhrWarnung } from "./uhr-warnung";
@@ -107,6 +108,8 @@ function erfassungZuruecklegen(einsatzId: string): void {
 
 // Erst auf Knopfdruck: Die Schnellerfassung bringt Vokabulare, StAN-Tabellen
 // und Formularbausteine mit, die beim Start niemand braucht (Startbündel).
+// Kennzeichen im Scanner (tor/): lädt erst, wenn der Scanner für eine Sammlung offen ist.
+const ScannerTor = lazy(() => import("./tor/scanner-tor"));
 const Berichtigung = lazy(() => import("./schnellerfassung/berichtigung").then((m) => ({ default: m.Berichtigung })));
 const Schnellerfassung = lazy(() => import("./schnellerfassung/schnellerfassung").then((m) => ({ default: m.Schnellerfassung })));
 
@@ -294,8 +297,36 @@ export function App() {
   // nur den Durchgang, deshalb „Fertig". Liegen Teile eines noch
   // unvollständigen Bogens im Sammelstand, gehen sie beim Schließen verloren —
   // dann ist es ehrlicher ein „Abbrechen".
+  // Neu im Meldekopf: Derselbe Scanner liest auch die Kennzeichen der Fahrzeuge der Sammlung, in die er aufnimmt
+  // (tor/scanner-tor.tsx). Nicht auf einem gekoppelten Sammler: Dort führt nur die Zentrale die Lage.
+  const torZiel = aufnahme.scannerOffen && kopplungsZustand().rolle !== "sammler" ? aufnahme.scanZiel() : null;
   const scanner = aufnahme.scannerOffen && (
     <QrScannerWeb
+      aufforderung={torZiel ? "QR-Code des Bogens oder Kennzeichen eines Fahrzeugs in den Rahmen halten" : undefined}
+      zusatz={
+        torZiel
+          ? (teile) => (
+              <Suspense fallback={null}>
+                <ScannerTor einsatzId={torZiel} {...teile} onGeaendert={einsaetzeNeuLaden} />
+              </Suspense>
+            )
+          : undefined
+      }
+      zusatzAktionen={
+        torZiel ? (
+          <button
+            type="button"
+            onClick={() => {
+              // Der Scanner verschluckt jede Taste für den Handscanner: Getippt wird in der Tor-Liste, ohne Scanner.
+              aufnahme.scanAbbrechen(true);
+              setOffenerEinsatzId(torZiel);
+              torOeffnen();
+            }}
+          >
+            Kennzeichen tippen…
+          </button>
+        ) : undefined
+      }
       onErgebnis={(text) => void aufnahme.scanErgebnisWeb(text)}
       fortschritt={aufnahme.scanFortschritt}
       onAbbruch={() => aufnahme.scanAbbrechen(true)}

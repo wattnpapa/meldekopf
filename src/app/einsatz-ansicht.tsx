@@ -50,7 +50,9 @@ import {
 import { lageAngabenLaden } from "./weitergabe/lage-angaben";
 import { kopplungBeginnen } from "./kopplung/zustand";
 
-// Die Tor-Ansicht samt Kennzeichen-Abgleich lädt erst, wenn jemand ans Tor geht.
+import { torOeffnen, torSchliessen, useTorOffen } from "./tor/tor-zustand";
+
+// Die Tor-Liste (Tippsuche) lädt erst, wenn jemand sie öffnet: „Kennzeichen tippen…" im Scanner oder „Fahrzeuge am Tor…".
 const TorAnsicht = lazy(() => import("./tor/tor-ansicht"));
 
 export function EinsatzAnsicht({
@@ -102,7 +104,9 @@ export function EinsatzAnsicht({
 }) {
   const [fehler, setFehler] = useState("");
   const [ausgabeQuittung, setAusgabeQuittung] = useState<string | null>(null);
-  const [torOffen, setTorOffen] = useState(false);
+  const torOffen = useTorOffen();
+  // Die Liste gehört zu dieser Ansicht: Mit ihr geht sie zu.
+  useEffect(() => torSchliessen, []);
   // Was beim letzten Export dieses Einsatzes schon in der Sammlung stand
   // (export-stand.ts) — die Ansicht zählt daran ab, was seitdem neu ist.
   const [exportStaende, setExportStaende] = useState<Partial<Record<ExportZiel, ExportStand>>>(() => exportStaendeLaden(einsatz.id));
@@ -294,7 +298,7 @@ export function EinsatzAnsicht({
         onManuell={onManuell}
         onBerichtigen={onBerichtigen}
         onKoppeln={() => kopplungBeginnen(einsatz.id)}
-        onTor={() => setTorOffen(true)}
+        onTor={torOeffnen}
         angefangeneErfassung={angefangeneErfassung}
         onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
         onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}
@@ -341,7 +345,13 @@ export function EinsatzAnsicht({
       />
       {torOffen && (
         <Suspense fallback={null}>
-          <TorAnsicht einsatz={einsatz} onGeaendert={onGeaendert} onSchliessen={() => setTorOffen(false)} />
+          <TorAnsicht
+            einsatz={einsatz}
+            onGeaendert={onGeaendert}
+            onSchliessen={torSchliessen}
+            // In der Android-App scannt der native Scanner; den kombinierten gibt es nur im Web.
+            onKamera={istNativ() ? undefined : () => { torSchliessen(); aufnahme.scanneInEinsatz(einsatz.id); }}
+          />
         </Suspense>
       )}
       {(meldung || fehler || appFehler) && (

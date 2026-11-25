@@ -46,9 +46,10 @@ Verlauf über Tage oder Aufträge braucht, ist S1-Control.
   12 → 9, Fahrzeug abgemeldet").
 - Abrücken, Bogen aufteilen und zusammenführen, Papier-Abgleich.
 - Tor des Bereitstellungsraums: je Fahrzeug vermerken, ob es rausfährt oder
-  zurückkommt, ohne dass die Einheit abrückt. Das Kennzeichen liest die Kamera
-  (Texterkennung auf dem Gerät, Abgleich nur gegen die Kennzeichen der
-  Sammlung), oder der Helfer tippt seine letzten Zeichen. Die Stärke bleibt
+  zurückkommt, ohne dass die Einheit abrückt. Der Scanner, der die Bögen
+  liest, liest auch die Kennzeichen (Texterkennung auf dem Gerät, Abgleich nur
+  gegen die Kennzeichen der Sammlung); ohne Kamera tippt der Helfer die
+  letzten Zeichen. Die Stärke bleibt
   unverändert, jede Bewegung steht mit Uhrzeit im Verlauf der Einheit.
 - Sofortbedarf je Einheit als geklärt abhaken und Prüfhinweise zur Kenntnis
   nehmen: Erledigtes tritt in der Liste zurück, offen bleibt, was noch zu

@@ -7,7 +7,7 @@
  * Capacitor-Scanner (siehe nativ.ts).
  */
 
-import { useEffect, useRef, useState, type ChangeEvent, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode, type RefObject, type SyntheticEvent } from "react";
 import { gemerkteKamera, kameraListe, merkeKamera, suchAusschnitt, type Kamera } from "./kamera";
 import { gemerkterScanWeg, handscannerLauscher, merkeScanWeg, type ScanWeg } from "./handscanner";
 import { qrLeserLaden, type QrLeser } from "./qr-decoder";
@@ -194,6 +194,16 @@ export function QrScannerWeb(props: {
   abbruchText?: string;
   /** Ausweg, wenn das Abfilmen nicht klappt: QR aus einem Foto/Screenshot lesen. */
   onBild?: (e: ChangeEvent<HTMLInputElement>) => void;
+  /**
+   * Neu im Meldekopf: ein zweiter Leser auf demselben Kamerabild (Kennzeichen am Tor, tor/scanner-tor.tsx). Er bekommt
+   * Videobild und Suchrahmen und zeichnet, was er findet, zwischen Rahmen und Knopfleiste. Der Scanner selbst kennt
+   * nur QR-Codes.
+   */
+  zusatz?: (teile: { video: RefObject<HTMLVideoElement | null>; rahmen: RefObject<HTMLDivElement | null>; kameraLaeuft: boolean }) => ReactNode;
+  /** Die Aufforderung über dem Rahmen, solange kein Fortschritt dasteht. Vorgabe: der QR-Code des Bogens. */
+  aufforderung?: string;
+  /** Weitere Knöpfe der Knopfleiste, vor „Abbrechen" (im Meldekopf: „Kennzeichen tippen…"). */
+  zusatzAktionen?: ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   // Modaler Dialog statt Overlay-<div>: Tab, Enter und Vorlesen erreichen die
@@ -224,6 +234,8 @@ export function QrScannerWeb(props: {
   // daraus geworden ist — sonst würde die Rückmeldung den Stream erneut starten.
   const [wunschKamera, setWunschKamera] = useState(gemerkteKamera);
   const [benutzteKamera, setBenutzteKamera] = useState("");
+  // Liefert die Kamera gerade ein Bild? Für den zweiten Leser (`zusatz`).
+  const [kameraLaeuft, setKameraLaeuft] = useState(false);
   // Zeichen, die der Handscanner gerade tippt. Nur als Lebenszeichen gedacht:
   // Ohne Kamerabild sieht man sonst nicht, ob der Scanner überhaupt am Rechner
   // ankommt — ein stummer Bildschirm wirkt wie ein kaputter Scanner.
@@ -266,6 +278,7 @@ export function QrScannerWeb(props: {
       cancelAnimationFrame(rahmen);
       clearTimeout(tippUhr);
       stream?.getTracks().forEach((t) => t.stop());
+      setKameraLaeuft(false);
     }
 
     function suchen() {
@@ -344,6 +357,7 @@ export function QrScannerWeb(props: {
       if (!video) return;
       video.srcObject = stream;
       await video.play().catch(() => {});
+      if (aktiv) setKameraLaeuft(true);
       tippUhr = setTimeout(() => { if (aktiv) setTipp(true); }, TIPP_NACH_MS);
       suchen();
     })();
@@ -401,7 +415,7 @@ export function QrScannerWeb(props: {
           <div className="scanner-text">
             {/* role="status": der Fortschritt wechselt mit jedem gelesenen Teil
                 — ohne Ansage wüsste ein Screenreader im Overlay nichts davon. */}
-            <p role="status">{props.fortschritt || "QR-Code des Erfassungsbogens vor die Kamera halten"}</p>
+            <p role="status">{props.fortschritt || props.aufforderung || "QR-Code des Erfassungsbogens vor die Kamera halten"}</p>
             {/* Der Rat, den sonst nur kennt, wer die Naheinstellgrenze von
                 Handykameras kennt: Zu nah ist der häufigste Grund, warum ein
                 Code unlesbar bleibt, den dieselbe Kamera in der Kamera-App
@@ -471,6 +485,7 @@ export function QrScannerWeb(props: {
           </div>
         )}
       </div>
+      {props.zusatz?.({ video: videoRef, rahmen: rahmenRef, kameraLaeuft: kameraLaeuft && !ohneKamera })}
       <div className="scanner-aktionen">
         {kameras.length > 1 && !ohneKamera && (
           <label className="scanner-kamera">
@@ -493,6 +508,7 @@ export function QrScannerWeb(props: {
             : <button type="button" onClick={() => wegWaehlen("handscanner")}>Handscanner statt Kamera</button>
         )}
         {props.onBild && <BildKnopf onBild={props.onBild} klasse={fehler ? "primaer" : undefined} />}
+        {props.zusatzAktionen}
         <button type="button" onClick={props.onAbbruch}>{props.abbruchText ?? "Abbrechen"}</button>
       </div>
     </dialog>

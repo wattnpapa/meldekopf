@@ -1,5 +1,6 @@
-/* Tor-Ansicht (neu im Meldekopf): Vollbild über der Einsatzansicht. Oben das Kamerabild mit dem Rahmen in Schildform,
-   darunter Treffer, Tippsuche und Liste. Große Flächen: bedient wird im Stehen, mit Handschuh, bei jedem Licht. */
+/* Tor (neu im Meldekopf). Zwei Orte teilen sich Treffer, Quittung und Liste: die Tor-Liste als Vollbild über der
+   Einsatzansicht (dialog.tor, Tippsuche) und der Zusatz im Scanner (.scanner-tor, Treffer der Kamera). Große Flächen:
+   bedient wird im Stehen, mit Handschuh, bei jedem Licht. */
 
 dialog.tor {
   margin: 0; border: none; border-radius: 0; width: 100%; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none;
@@ -10,68 +11,57 @@ dialog.tor::backdrop { background: transparent; animation: none; }
 dialog.tor:focus { outline: none; }
 dialog.tor > * { max-width: 40rem; margin-inline: auto; }
 
-dialog.tor .tor-kopf {
+:is(dialog.tor, .scanner-tor) .tor-kopf {
   display: flex; align-items: center; justify-content: space-between; gap: var(--r-3);
   padding-block: var(--r-3);
 }
 dialog.tor h1 { font-size: var(--t-l); margin: 0; }
-dialog.tor .tor-zahl { margin: 0; font-size: var(--t-s); }
+dialog.tor .tor-kopf-knoepfe { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--r-2); }
 
-/* Das Kamerabild: ein flacher Streifen, damit Treffer und Knöpfe ohne Rollen darunter stehen. */
-dialog.tor .tor-kamera {
-  position: relative; height: min(32vh, 15rem); background: #000; border-radius: var(--radius); overflow: hidden;
-  display: grid; place-items: center;
+/* Im Scanner: eine Karte auf fester Fläche zwischen Suchrahmen und Knopfleiste, über dem Kamerabild lesbar. */
+.scanner-tor { width: min(100%, 34rem); display: grid; gap: var(--r-2); color: var(--text); }
+.scanner-tor > * { margin: 0; }
+.scanner-tor .tor-quittung, .scanner-tor > .fehler { background: var(--flaeche); margin: 0; }
+.scanner-tor > .fehler { padding: var(--r-2) var(--r-3); border-radius: var(--radius); }
+.scanner-tor .scanner-tor-gelesen {
+  justify-self: center; padding: 0.2rem 0.7rem; border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: var(--t-s); overflow-wrap: anywhere;
 }
-dialog.tor .tor-kamera video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-/* Der Rahmen in der Form eines Kennzeichens (520 × 110 mm, mit Luft). Farben als Rohwerte: dahinter läuft ein Kamerabild. */
-dialog.tor .tor-rahmen {
-  position: relative; width: 88%; aspect-ratio: 4 / 1; max-height: 80%;
-  border: 3px solid rgba(255, 255, 255, 0.9); border-radius: var(--radius);
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
-  transition: border-color var(--dauer-3) ease-out;
-}
-dialog.tor .tor-rahmen.erkannt { border-color: #8fe0ab; transition-duration: var(--dauer-1); }
+.scanner-tor .tor-liste { max-height: 30vh; overflow-y: auto; }
+:is(dialog.tor, .scanner-tor) .tor-zahl { margin: 0; font-size: var(--t-s); }
 
-dialog.tor .tor-kamera-zeile {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--r-3);
-  margin-block: var(--r-2) var(--r-3); font-size: var(--t-s);
-}
-dialog.tor .tor-kamera-zeile p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-dialog.tor .tor-kamera-zeile button { flex: none; }
-dialog.tor .tor-schritte { margin-block: 0 var(--r-3); padding-left: 1.2rem; font-size: var(--t-s); }
-
-dialog.tor .tor-quittung {
+:is(dialog.tor, .scanner-tor) .tor-quittung {
   display: flex; align-items: center; justify-content: space-between; gap: var(--r-3);
   margin-block: 0 var(--r-3); padding: var(--r-2) var(--r-3);
   border: var(--strich) solid var(--gut); border-radius: var(--radius); background: var(--flaeche);
 }
-dialog.tor .tor-quittung button { flex: none; }
+:is(dialog.tor, .scanner-tor) .tor-quittung button { flex: none; }
 
-dialog.tor .tor-treffer {
+:is(dialog.tor, .scanner-tor) .tor-treffer {
   padding: var(--r-4); border: var(--strich-stark) solid var(--linie-stark); border-radius: var(--radius); background: var(--flaeche);
 }
-dialog.tor .tor-treffer p { margin: 0; }
-dialog.tor .tor-kennzeichen { font-size: var(--t-xl); font-weight: 700; letter-spacing: 0.04em; overflow-wrap: anywhere; }
-dialog.tor .tor-fahrzeug { margin-top: var(--r-1); }
-dialog.tor .tor-stand { margin-top: var(--r-2); font-weight: 600; }
-dialog.tor .tor-stand[data-unterwegs="ja"]::before, dialog.tor .tor-liste-stand[data-unterwegs="ja"]::before { content: "→ "; }
-dialog.tor .tor-knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: var(--r-3); margin-block: var(--r-4) var(--r-2); }
-dialog.tor .tor-knoepfe button { min-height: 4.5rem; font-size: var(--t-l); width: 100%; max-width: none; }
+:is(dialog.tor, .scanner-tor) .tor-treffer p { margin: 0; }
+:is(dialog.tor, .scanner-tor) .tor-kennzeichen { font-size: var(--t-xl); font-weight: 700; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+:is(dialog.tor, .scanner-tor) .tor-fahrzeug { margin-top: var(--r-1); }
+:is(dialog.tor, .scanner-tor) .tor-stand { margin-top: var(--r-2); font-weight: 600; }
+:is(dialog.tor, .scanner-tor) .tor-stand[data-unterwegs="ja"]::before, :is(dialog.tor, .scanner-tor) .tor-liste-stand[data-unterwegs="ja"]::before { content: "→ "; }
+:is(dialog.tor, .scanner-tor) .tor-knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: var(--r-3); margin-block: var(--r-4) var(--r-2); }
+:is(dialog.tor, .scanner-tor) .tor-knoepfe button { min-height: 4.5rem; font-size: var(--t-l); width: 100%; max-width: none; }
 
-dialog.tor .tor-eingabe { display: grid; gap: var(--r-1); margin-bottom: var(--r-3); }
-dialog.tor .tor-eingabe span { font-size: var(--t-s); }
-dialog.tor .tor-eingabe input { width: 100%; box-sizing: border-box; font-size: var(--t-l); min-height: 3.25rem; text-transform: uppercase; }
-dialog.tor .tor-mehrere { margin-block: 0 var(--r-3); font-weight: 600; }
+:is(dialog.tor, .scanner-tor) .tor-eingabe { display: grid; gap: var(--r-1); margin-bottom: var(--r-3); }
+:is(dialog.tor, .scanner-tor) .tor-eingabe span { font-size: var(--t-s); }
+:is(dialog.tor, .scanner-tor) .tor-eingabe input { width: 100%; box-sizing: border-box; font-size: var(--t-l); min-height: 3.25rem; text-transform: uppercase; }
+:is(dialog.tor, .scanner-tor) .tor-mehrere { margin-block: 0 var(--r-3); font-weight: 600; }
 
-dialog.tor .tor-liste { list-style: none; padding: 0; margin: 0; }
-dialog.tor .tor-liste li { border-top: var(--strich) solid var(--linie); }
-dialog.tor .tor-liste button {
+:is(dialog.tor, .scanner-tor) .tor-liste { list-style: none; padding: 0; margin: 0; }
+:is(dialog.tor, .scanner-tor) .tor-liste li { border-top: var(--strich) solid var(--linie); }
+:is(dialog.tor, .scanner-tor) .tor-liste button {
   display: grid; grid-template-columns: 1fr auto; gap: 0 var(--r-3); align-items: baseline;
   width: 100%; max-width: none; min-height: 3.5rem; padding: var(--r-2) var(--r-1); text-align: left;
   background: none; border: none; border-radius: 0; color: inherit; font: inherit;
 }
-dialog.tor .tor-liste-kennzeichen { font-weight: 700; letter-spacing: 0.03em; }
-dialog.tor .tor-liste-stand { font-size: var(--t-s); text-align: right; }
-dialog.tor .tor-liste-stand[data-unterwegs="ja"] { font-weight: 700; }
-dialog.tor .tor-liste-wer { grid-column: 1 / -1; font-size: var(--t-s); overflow-wrap: anywhere; }
-dialog.tor .tor-fuss { margin-top: var(--r-5); }
+:is(dialog.tor, .scanner-tor) .tor-liste-kennzeichen { font-weight: 700; letter-spacing: 0.03em; }
+:is(dialog.tor, .scanner-tor) .tor-liste-stand { font-size: var(--t-s); text-align: right; }
+:is(dialog.tor, .scanner-tor) .tor-liste-stand[data-unterwegs="ja"] { font-weight: 700; }
+:is(dialog.tor, .scanner-tor) .tor-liste-wer { grid-column: 1 / -1; font-size: var(--t-s); overflow-wrap: anywhere; }
+:is(dialog.tor, .scanner-tor) .tor-fuss { margin-top: var(--r-5); }
