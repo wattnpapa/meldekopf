@@ -190,6 +190,7 @@ import { PapierAbgleich, PapierMarke } from "./papier-abgleich-ui";
 import { abgleichEntwurfAufraeumen, abgleichEntwurfLoeschen } from "./papier-abgleich-entwurf";
 import { SOLL_NICHT_GEMELDET } from "./soll-text";
 import { karteOffenMerken, karteWarOffen } from "./ansicht-stelle";
+import { EinheitZeichen } from "./zeichen-bild";
 import type { PapierkorbMeldung } from "./meldungs-papierkorb";
 import { standAbsenderVermerken, standDesAbsenders } from "./stand-absender";
 import { ortBilligen, ortIstGebilligt } from "./ort-gebilligt";
@@ -1374,6 +1375,8 @@ export function EinsatzDetail(props: {
   const [sortierung, setSortierung] = useState<EinheitenSortierung>("nummer");
   // Neu im Meldekopf: die Liste wahlweise nach Organisation gruppiert, mit Zwischenüberschrift je Organisation.
   const [gruppiert, setGruppiert] = useState(false);
+  // Am Rechner stehen nur Suche, Sortierung und Gruppierung offen; die übrigen Filter hinter „Filter…", solange keiner gesetzt ist.
+  const [filterMehr, setFilterMehr] = useState(false);
   // Liste und Detailspalte am Rechner: die gewählte Einheit und der Platz, an dem ihre Karte steht.
   const breit = useSchmal(BREIT_ABFRAGE);
   const [gewaehlt, setGewaehlt] = useState<string | null>(null);
@@ -2129,8 +2132,10 @@ export function EinsatzDetail(props: {
     onGeloescht();
   }
 
+  const filterGesetzt = quali !== "" || nurBedarf || lueckenFilter != null || auftragFilter != null || statusFilter != null || orgFilter != null;
+  const filterKnapp = breit && !filterMehr && !filterGesetzt;
   const filterZeile = (
-    <div className="zeile einheiten-filter">
+    <div className={`zeile einheiten-filter${filterKnapp ? " filter-knapp" : ""}`}>
       <label className="feld">
         Suche
         <input
@@ -2252,6 +2257,11 @@ export function EinsatzDetail(props: {
             ))}
           </Auswahl>
         </label>
+      )}
+      {breit && !filterGesetzt && (
+        <button type="button" className="filter-mehr" aria-expanded={filterMehr} onClick={() => setFilterMehr(!filterMehr)}>
+          {filterMehr ? "Weniger Filter" : "Filter…"}
+        </button>
       )}
     </div>
   );
@@ -3147,7 +3157,7 @@ export function EinsatzDetail(props: {
             {/* Liste am Rechner: die Legende als Spaltenkopf, in der Flucht von Eintreffzeit und Stärke (nur fürs Auge). */}
             {meisterDetail && (
               <li className="spalten-kopf" aria-hidden="true">
-                <span>Nr. · Einheit</span>
+                <span>Einheit</span>
                 <span className="spalte-zeit">Eingetroffen</span>
                 <span className="spalte-staerke">Stärke F / U / M // G</span>
               </li>
@@ -5476,7 +5486,7 @@ function EinheitKarte(props: {
     <li
       ref={detail ? undefined : zeile}
       {...(detail ? { "data-einheit-detail": kopf.einheitSchluessel } : { "data-einheit": kopf.einheitSchluessel })}
-      className={`einheit-zeile${zaehlt ? "" : " gestrichen"}${zu ? " kompakt" : kompakt ? " karte-offen" : ""}${aufteilen || zusammenfuehren ? " mehr-panel" : ""}${reihe && auswahl.gewaehlt ? " gewaehlt" : ""}${detail ? " im-detail" : ""}`}
+      className={`einheit-zeile${zaehlt ? "" : " gestrichen"}${zu ? " kompakt" : kompakt ? " karte-offen" : ""}${aufteilen || zusammenfuehren ? " mehr-panel" : ""}${reihe && auswahl.gewaehlt ? " gewaehlt" : ""}${detail ? " im-detail" : ""}${reihe && props.einsatzArt === EinsatzArt.UEBUNG ? " in-uebung" : ""}`}
       // Prellschutz (R2-G4): Den zweiten Tipp eines Doppeltipps auf „Abrücken" fängt der gesperrte Wechselknopf selbst
       // (`disabled={prellt}`) und die Ortssperre an der Stelle des Tipps (tipp-schutz.ts). Die ganze Karte
       // zu sperren schluckte auch den bewussten Tipp auf „Mehr…" eine halbe Sekunde später (R17-H3).
@@ -5491,6 +5501,9 @@ function EinheitKarte(props: {
           <h3 className="muster-name" id={kopfId}>
             {/* Laufende Nummer vorn — „Meldung 3" über Funk, auf Blatt und
                 Gerät gleich (Audit Runde 2, R2-A6). */}
+            {/* Liste am Rechner: vorn das taktische Zeichen der Formation statt der Nummer; die Nummer bleibt für Vorleseprogramme
+                in der Zeile und steht sichtbar in der Detailspalte. */}
+            {reihe && <EinheitZeichen einheit={kopf.bogen.einheit} className="reihe-zeichen" aria-hidden="true" />}
             {props.nummer != null ? <><span className="meldung-nr">Nr. {props.nummer}</span>{" "}</> : null}
             {einheitAnzeigename(kopf.bogen.einheit)}
             {/* Übungsbögen bleiben auch neben echten Meldungen unübersehbar. */}
@@ -5544,7 +5557,13 @@ function EinheitKarte(props: {
             // und wer noch ohne Auftrag ist (Audit Runde 3, R3-K2). Der
             // Bedarf steht dafür in der Kurzform der Tabelle.
             <span className="muster-sub kompakt-zeile">
-              <span className="reihe-staerke">Stärke {staerkeText(kopf.bogen)}</span>
+              <span className="reihe-staerke"><span className="reihe-staerke-wort">Stärke </span>{staerkeText(kopf.bogen)}</span>
+              {/* Liste am Rechner: die Organisation als ruhige Angabe und alle Hinweise als eine Zahl; die Einzelheiten stehen in der Detailspalte. */}
+              {reihe && <span className="reihe-org">{orgLabel(kopf.bogen.einheit.organisation)}</span>}
+              {reihe && (() => {
+                const n = (zaehlt && Date.now() - angabenZeit(kopf) >= VERALTET_MIN * 60_000 ? 1 : 0) + (zaehlt ? luecken.length : 0) + (props.fremderOrt ? 1 : 0) + (zeitHinweis ? 1 : 0) + (nachgereicht ? 1 : 0);
+                return n > 0 ? <span className="reihe-hinweis" title="Stand, Lücken und Prüfhinweise stehen bei der gewählten Einheit rechts.">⚠ {n === 1 ? "1 Hinweis" : `${n} Hinweise`}</span> : null;
+              })()}
               {/* Liste am Rechner: die Eintreffzeit als eigene Spalte neben der Stärke. */}
               {reihe && <span className="reihe-zeit">seit {zeitKurz(eintreffzeit(kopf))}</span>}
               {zaehlt && Date.now() - angabenZeit(kopf) >= VERALTET_MIN * 60_000 && (

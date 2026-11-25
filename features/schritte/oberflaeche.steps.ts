@@ -95,7 +95,8 @@ When("ich die App vom Netz trenne", async function (this: EebWelt) {
 // ------------------------------------------------------------------- Prüfen
 
 Then("sehe ich den Hinweis {string}", async function (this: EebWelt, text: string) {
-  await this.page.getByText(text).first().waitFor({ state: "visible" });
+  // Der erste SICHTBARE Treffer: Am Rechner trägt die Zeile der Liste manches nur ausgeblendet (es steht in der Detailspalte).
+  await this.page.getByText(text).filter({ visible: true }).first().waitFor({ state: "visible" });
 });
 
 Then("sehe ich den Hinweis {string} nicht", async function (this: EebWelt, text: string) {

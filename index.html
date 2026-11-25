@@ -4745,6 +4745,44 @@
       }
       :root:root aside.einheit-detail .detail-staerke .gesamt strong { color: var(--akzent); }
     }
+    /* Liste und Detailspalte, dritter Anlauf (November 2026): „immer noch erschlagen von Informationen". Die Zeile der Liste
+       trägt nur noch, was beim Überfliegen zählt: Nummer, Name, Organisation, Auftrag, dringenden Bedarf, Folgemeldung,
+       Eintreffzeit und Stärke. Stand, Kraftstoff, Funk, Führung, Fahrzeuge und die einzelnen Prüfhinweise stehen in der
+       Detailspalte; die Zeile nennt nur ihre Zahl. Die übrigen Filter liegen hinter „Filter…", die Zwischensummen je
+       Organisation hinter „Stärkemeldung…" und in den Gruppenköpfen. */
+    .reihe-org, .reihe-hinweis, .filter-mehr { display: none; }
+    @media (min-width: 72rem) {
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .kompakt-zeile > :is(.alter-merkmal, .luecken-merkmal, .ruhig-merkmal, .bemerkung-merkmal, .bedarf-marke.routine) { display: none; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-staerke-wort { display: none; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-org { display: inline; color: var(--text-2); font-size: var(--t-s); }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-hinweis { display: inline; order: 9; color: var(--warn-text); font-size: var(--t-xs); font-weight: 600; white-space: nowrap; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .kompakt-zeile { align-items: center; gap: 2px 10px; min-height: 1.5em; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt { padding-block: 9px; }
+      /* In einer Übung zählt jeder Bogen: Die Marke ÜBUNG an jeder Zeile sagt dort nichts; sie bleibt in der Detailspalte und in einem Einsatz. */
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt.in-uebung .uebung-badge { display: none; }
+      /* Filter: offen stehen Suche, Sortierung und Gruppierung; der Rest nach „Filter…" oder sobald einer gesetzt ist. */
+      :root:root .einsatz-liste .zeile.einheiten-filter > button.filter-mehr { display: inline-flex; order: 6; flex: 0 0 auto; align-self: flex-end; border-color: var(--linie); font-weight: 500; }
+      :root:root .einsatz-liste .zeile.einheiten-filter.filter-knapp > label:not(:first-child):not(:nth-child(2)):not(.gruppen-wahl) { display: none; }
+      /* Werkzeugzeile: Knöpfe, daneben Fahrzeuge und Stärkemeldung, rechts der Stand der Ausgabe. Was davor im Dokument steht
+         (Papierkorb-Hinweis), bleibt darüber; die Reihenfolge regelt order statt fester Zeilen. */
+      :root:root main.einsatz-detail > .einsatz-seite { grid-template-columns: auto minmax(14rem, 1fr) fit-content(40%); }
+      :root:root main.einsatz-detail > .einsatz-seite > .aktionen { grid-row: auto; order: -3; }
+      :root:root main.einsatz-detail > .einsatz-seite > p.lage-zusatz { grid-column: 2; grid-row: auto; order: -2; align-self: center; margin: 0; }
+      :root:root main.einsatz-detail > .einsatz-seite > p.ausgabe-stand { grid-column: 3; grid-row: auto; order: -1; }
+      :root:root main.einsatz-detail > .einsatz-seite > p.lage-zusatz > .lage-zusatz-teil:not(:first-child):not(.lage-zusatz-ab) { display: none; }
+    }
+    /* Liste am Rechner: das taktische Zeichen der Formation vorn in der Zeile statt der Nummer (Wunsch November 2026). */
+    .reihe-zeichen { display: none; }
+    @media (min-width: 72rem) {
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt { padding-left: 4.25rem; min-height: 60px; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > li.spalten-kopf { padding-left: 4.25rem; }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .reihe-zeichen {
+        display: block; position: absolute; left: 12px; top: 8px; width: 44px; height: 44px;
+      }
+      :root:root .einsatz-liste.mit-detail ul.einheiten-liste > .einheit-zeile.kompakt .meldung-nr {
+        position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+      }
+    }
   </style>
 </head>
 <body>
