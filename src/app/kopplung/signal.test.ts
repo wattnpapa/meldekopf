@@ -22,7 +22,7 @@ import {
   tuerKennwoerter,
   tuerPortsLesen,
 } from "./signal";
-import { KOPPLUNG_MARKE, istKopplungsCode } from "./zustand";
+import { KOPPLUNG_MARKE, istKopplungsCode, kopplungsLink } from "./zustand";
 import { verschiedeneNetze } from "./kopplung-dialog";
 
 const FP = "7B:1A:0F:9C:D4:E2:33:58:A1:00:FF:6E:21:9B:C7:45:10:8D:F3:2A:64:B9:5E:77:C0:1D:E8:92:3F:AB:06:D5";
@@ -174,6 +174,8 @@ describe("Anklopfen: Fingerabdruck ohne Scan und ohne Eingabe", () => {
     const s = signalDekodieren(code);
     expect(s.tueren).toEqual(ports);
     expect(s.tuerAdressen).toEqual([NAME]);
+    // Als Link für die Kamera-App: Die Adresse davor macht den Code kaum feiner.
+    expect(QRCode.create(kopplungsLink(code), { errorCorrectionLevel: "L" }).version).toBeLessThanOrEqual(17);
     const tueren = await tuerAngebote(s.sdp, s.tueren!, s.tuerAdressen);
     const k0 = await tuerKennwoerter(s.sdp, 0);
     expect(tueren).toHaveLength(TUEREN);

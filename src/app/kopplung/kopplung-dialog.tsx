@@ -17,7 +17,7 @@ import { QrScannerWeb } from "../eingang/qr-scanner-web";
 import { istNativ, qrScannen } from "../nativ";
 import { kopplungAntwortAnnehmen, kopplungDialogSchliessen, kopplungStarten } from "./kopplung";
 import { useKopplung } from "./kopplung-leiste";
-import type { KopplungsNetz } from "./zustand";
+import { kopplungsLink, type KopplungsNetz } from "./zustand";
 
 const ANTWORT_ANWEISUNG = "Antwort-Code des zweiten Geräts in den Rahmen halten";
 
@@ -34,6 +34,7 @@ export default function KopplungDialog() {
   const [scanFehler, setScanFehler] = useState("");
   const [angenommen, setAngenommen] = useState(false);
   const code = d?.code ?? "";
+  const art = d?.art;
 
   useEffect(() => {
     let aktiv = true;
@@ -41,7 +42,9 @@ export default function KopplungDialog() {
     setAngenommen(false);
     if (!code) return;
     // Stufe L: Der Code steht auf einem Bildschirm, nicht auf zerknittertem Papier; gröbere Module scannen sich leichter.
-    void QRCode.toDataURL(code, { errorCorrectionLevel: "L", width: 720, margin: 4 }).then(
+    // Das erste Gerät zeigt den Code als Adresse der App: Den liest auch die Kamera-App des Telefons und öffnet damit
+    // den Browser. Der Antwort-Code bleibt, wie er ist; ihn liest nur der Scanner der App.
+    void QRCode.toDataURL(art === "angebot" ? kopplungsLink(code) : code, { errorCorrectionLevel: "L", width: 720, margin: 4 }).then(
       (url) => {
         if (aktiv) setBild(url);
       },
@@ -50,7 +53,7 @@ export default function KopplungDialog() {
     return () => {
       aktiv = false;
     };
-  }, [code]);
+  }, [code, art]);
 
   async function antwort(text: string) {
     try {
@@ -175,7 +178,7 @@ function Rahmen(props: {
         <p role="status" className="kopplung-wartet">Antwort gelesen. Die Verbindung wird aufgebaut …</p>
       ) : props.bild ? (
         // Der Code als Text steht im Attribut: für Verhaltenstests und für die Fehlersuche, nicht zum Abtippen.
-        <img src={props.bild} alt={angebot ? "Kopplungs-Code dieses Geräts" : "Antwort-Code dieses Geräts"} data-code={props.code} />
+        <img src={props.bild} alt={angebot ? "Kopplungs-Code dieses Geräts" : "Antwort-Code dieses Geräts"} data-code={props.code} data-link={angebot ? kopplungsLink(props.code) : undefined} />
       ) : (
         <p role="status">Der Code wird vorbereitet …</p>
       )}
@@ -183,7 +186,7 @@ function Rahmen(props: {
         angebot ? (
           <ol className="kopplung-schritte">
             <li>Beide Geräte ins selbe Netz bringen (WLAN des Fahrzeugs oder Hotspot). Internet braucht es nicht.</li>
-            <li>Am zweiten Gerät die Meldekopf-App öffnen, „Bogen scannen…“ tippen und diesen Code scannen.</li>
+            <li>Am zweiten Gerät diesen Code scannen: mit der Kamera des Telefons (sie öffnet die App im Browser) oder in der Meldekopf-App mit „Bogen scannen…“.</li>
             {props.selbst ? (
               <li>Die Geräte verbinden sich danach von selbst; das dauert einige Sekunden. Hier ist nichts weiter zu tun.</li>
             ) : (

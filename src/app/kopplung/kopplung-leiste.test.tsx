@@ -9,7 +9,7 @@ import { EinsatzArt, einsatzAnlegen, meldungHinzufuegen } from "@bos/meldekopf/e
 import { neuerBogen } from "../hilfen";
 import { SAMMLER_ROLLE_SATZ } from "./sammler-ansicht";
 import { GETRENNT_SATZ, Kopplung, WARTET_SATZ } from "./kopplung-leiste";
-import { istKopplungsCode, kopplungAktiv, kopplungsZustandSetzen, kopplungsZustandZuruecksetzen } from "./zustand";
+import { istKopplungsCode, kopplungAktiv, kopplungsCodeAus, kopplungsLink, kopplungsZustandSetzen, kopplungsZustandZuruecksetzen } from "./zustand";
 
 describe("Kopplungsleiste", () => {
   let id: string;
@@ -172,5 +172,17 @@ describe("Kopplungs-Code erkennen", () => {
     expect(istKopplungsCode("  mkk1.abc")).toBe(true);
     expect(istKopplungsCode("https://erfassungsbogen.app/#B.ABC")).toBe(false);
     expect(istKopplungsCode("EEBS.1.2.ABC")).toBe(false);
+  });
+
+  it("liest den Code auch aus dem Link, den die Kamera-App des Telefons öffnet", () => {
+    const link = kopplungsLink("MKK1.ABC$DEF");
+    // Großbuchstaben und der Code hinter #: dichter QR-Modus, und nichts davon geht an einen Server.
+    expect(link).toMatch(/^HTTPS?:\/\/[A-Z0-9.:-]+\/#MKK1\.ABC\$DEF$/);
+    expect(kopplungsCodeAus(link)).toBe("MKK1.ABC$DEF");
+    expect(kopplungsCodeAus("https://meldekopf.erfassungsbogen.app/#mkk1.abc")).toBe("mkk1.abc");
+    expect(kopplungsCodeAus("MKK1.ABC")).toBe("MKK1.ABC");
+    // Ein Bogen-Link oder ein Text, in dem die Marke nur vorkommt, ist keiner.
+    expect(kopplungsCodeAus("https://erfassungsbogen.app/#B.ABC")).toBeNull();
+    expect(kopplungsCodeAus("Notiz MKK1.ABC")).toBeNull();
   });
 });

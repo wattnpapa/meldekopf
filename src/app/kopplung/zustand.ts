@@ -6,6 +6,8 @@
  * jemand koppelt.
  */
 
+import { BASIS_URL } from "../adressen";
+
 /** Jeder Kopplungs-Code beginnt so; Großbuchstaben, damit der QR-Code im dichten alphanumerischen Modus bleibt. */
 export const KOPPLUNG_MARKE = "MKK1.";
 
@@ -24,9 +26,34 @@ export function kopplungFortsetzenWennGemerkt(): void {
   }
 }
 
-/** Ist der gescannte Text ein Kopplungs-Code (Angebot oder Antwort)? */
+/**
+ * Der Kopplungs-Code aus einem gescannten Text oder einem Link: der Code selbst oder das, was in der Adresse hinter
+ * `#` steht ({@link kopplungsLink}). `null`, wenn der Text keiner ist.
+ */
+export function kopplungsCodeAus(text: string): string | null {
+  return /(?:^|#)(MKK1\.\S*)$/i.exec(text.trim())?.[1] ?? null;
+}
+
+/** Ist der gescannte Text ein Kopplungs-Code (Angebot oder Antwort), auch als Link? */
 export function istKopplungsCode(text: string): boolean {
-  return text.trim().toUpperCase().startsWith(KOPPLUNG_MARKE);
+  return kopplungsCodeAus(text) != null;
+}
+
+/**
+ * Der Code als Adresse der App, für den QR-Code des ersten Geräts: So öffnet ihn auch die Kamera-App des Telefons, die
+ * den Browser mit der App aufmacht. Der Code steht hinter `#` und geht damit an keinen Server. In Großbuchstaben,
+ * damit der QR-Code im dichten alphanumerischen Modus bleibt (Schema und Rechnername gelten in jeder Schreibweise);
+ * nur das `#` kostet ein paar Module mehr.
+ */
+export function kopplungsLink(code: string): string {
+  let basis = BASIS_URL;
+  try {
+    // Die Seite, von der dieses Gerät die App hat; aus einer installierten App heraus die öffentliche Adresse.
+    if (/^https?:$/.test(window.location.protocol)) basis = `${window.location.origin}/`;
+  } catch {
+    /* ohne Fenster: die öffentliche Adresse */
+  }
+  return `${basis.toUpperCase()}#${code}`;
 }
 
 export type KopplungsPhase =
