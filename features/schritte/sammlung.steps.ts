@@ -134,7 +134,8 @@ async function sichtbar(welt: EebWelt, text: string): Promise<void> {
 }
 
 function einheitenNamen(welt: EebWelt): Promise<string[]> {
-  return welt.page.locator(".einheit-zeile .muster-name").allInnerTexts();
+  // Nur die Liste: Am Rechner steht die gewählte Einheit zusätzlich in der Detailspalte (ul.detail-liste).
+  return welt.page.locator("ul.einheiten-liste:not(.detail-liste) .einheit-zeile .muster-name").allInnerTexts();
 }
 
 function tabellenNamen(welt: EebWelt): Promise<string[]> {
@@ -309,13 +310,28 @@ When("ich {string} aufklappe", async function (this: EebWelt, text: string) {
 When(
   "ich bei der Einheit {string} auf {string} klicke",
   async function (this: EebWelt, einheit: string, name: string) {
-    await this.page
-      .locator(".einheit-zeile")
-      .filter({ hasText: einheit })
-      .getByRole("button", { name, exact: true })
-      .click();
+    // Am Rechner (Liste und Detailspalte) wählt der Klick auf die Zeile die Einheit; ihre Knöpfe stehen dann rechts daneben.
+    const reihe = this.page.locator("ul.einheiten-liste:not(.detail-liste) > .einheit-zeile").filter({ hasText: einheit }).first();
+    const detail = this.page.locator("aside.einheit-detail");
+    if ((await detail.count()) > 0) {
+      const wahl = reihe.locator("> button.karte-aufklappen");
+      if ((await wahl.getAttribute("aria-pressed")) !== "true") await wahl.click();
+      await detail.locator(".einheit-zeile").filter({ hasText: einheit }).getByRole("button", { name, exact: true }).click();
+      return;
+    }
+    await reihe.getByRole("button", { name, exact: true }).click();
   },
 );
+
+/**
+ * Liste und Detailspalte am Rechner (neu im Meldekopf): Die Angaben einer Einheit stehen rechts, sobald ihre Zeile gewählt
+ * ist. Wo jede Karte offen in der Liste steht (Tablet hochkant), ist nichts zu wählen.
+ */
+When("ich die Einheit {string} auswähle", async function (this: EebWelt, einheit: string) {
+  if ((await this.page.locator("aside.einheit-detail").count()) === 0) return;
+  const wahl = this.page.locator("ul.einheiten-liste:not(.detail-liste) > .einheit-zeile").filter({ hasText: einheit }).first().locator("> button.karte-aufklappen");
+  if ((await wahl.getAttribute("aria-pressed")) !== "true") await wahl.click();
+});
 
 Then("führt die Einheitenliste {string} an Stelle {int}", async function (this: EebWelt, name: string, platz: number) {
   const namen = await einheitenNamen(this);

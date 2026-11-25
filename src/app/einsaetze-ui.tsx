@@ -11,6 +11,7 @@
  */
 
 import { zeitraumLeer } from "./zeitraum-eingabe";
+import { createPortal } from "react-dom";
 import { Fragment, Suspense, lazy, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { DaumenQuittung } from "@bos/oberflaeche/daumen-quittung";
 import { useJuengsteQuittung } from "./eingang/juengste-quittung";
@@ -1125,6 +1126,11 @@ const QUITTUNG_MAX = 10;
 const QUITTUNG_VIELE = 5;
 
 const SCHMAL_ABFRAGE = "(max-width: 600px)";
+/**
+ * Ab dieser Breite (dieselbe Schwelle wie das zweispaltige Raster in index.html) zeigt die Kartensicht Liste und Detailspalte
+ * (neu im Meldekopf, November 2026): links eine Zeile je Einheit, rechts Angaben und Knöpfe der gewählten Einheit.
+ */
+const BREIT_ABFRAGE = "(min-width: 72rem)";
 /** So lange steht „Zuletzt abgelegt/eingelesen … jetzt n Einheiten" (R17-S8): zehn Minuten, dann ist „jetzt" nicht mehr wahr. */
 export const EINGANG_QUITTUNG_MS = 10 * 60_000;
 
@@ -1195,11 +1201,11 @@ function ArbeitFortschrittZeile() {
   );
 }
 
-function useSchmal(): boolean {
-  const [schmal, setSchmal] = useState(() => typeof matchMedia === "function" && matchMedia(SCHMAL_ABFRAGE).matches);
+function useSchmal(abfrage: string = SCHMAL_ABFRAGE): boolean {
+  const [schmal, setSchmal] = useState(() => typeof matchMedia === "function" && matchMedia(abfrage).matches);
   useEffect(() => {
     if (typeof matchMedia !== "function") return;
-    const m = matchMedia(SCHMAL_ABFRAGE);
+    const m = matchMedia(abfrage);
     const wechsel = () => setSchmal(m.matches);
     m.addEventListener?.("change", wechsel);
     return () => m.removeEventListener?.("change", wechsel);
@@ -1366,6 +1372,12 @@ export function EinsatzDetail(props: {
   const weitergabeOffen = seitWeitergabe > 0 || aenderungenSeitWeitergabe.anzahl > 0;
   const [suche, setSuche] = useState("");
   const [sortierung, setSortierung] = useState<EinheitenSortierung>("nummer");
+  // Neu im Meldekopf: die Liste wahlweise nach Organisation gruppiert, mit Zwischenüberschrift je Organisation.
+  const [gruppiert, setGruppiert] = useState(false);
+  // Liste und Detailspalte am Rechner: die gewählte Einheit und der Platz, an dem ihre Karte steht.
+  const breit = useSchmal(BREIT_ABFRAGE);
+  const [gewaehlt, setGewaehlt] = useState<string | null>(null);
+  const [detailZiel, setDetailZiel] = useState<HTMLElement | null>(null);
   // Sprünge innerhalb der Ansicht (R4-K5): zur Einheitenliste und zu Weitergabe/Export.
   const ausgabeBlock = useRef<HTMLDivElement>(null);
   const listeKopf = useRef<HTMLHeadingElement>(null);
@@ -2046,6 +2058,21 @@ export function EinsatzDetail(props: {
   const kopf = statusFilter ? kopfNachOrg.filter((e) => passtZuStatusfilter(e, statusFilter)) : kopfNachOrg;
   // Erste nicht anwesende Karte, falls vor ihr anwesende stehen: dort beginnt der Abschnitt „Abgerückt" (R17-E6, K4).
   const abgerueckteStelle = kopf.some((e) => e.status === MeldeStatus.ANWESEND) ? kopf.findIndex((e) => e.status !== MeldeStatus.ANWESEND) : -1;
+  // Gruppiert: die Anwesenden nach Organisation zusammengezogen (Reihenfolge der Organisationen wie ihr erstes Auftreten, innerhalb
+  // bleibt die gewählte Sortierung); die Abgerückten stehen unverändert am Ende unter ihrer Überschrift.
+  const gruppenEnde = abgerueckteStelle >= 0 ? abgerueckteStelle : kopf.length;
+  const orgVon = (e: MeldeEintrag) => orgLabel(e.bogen.einheit.organisation);
+  const gruppenFolge = [...new Set(kopf.slice(0, gruppenEnde).map(orgVon))];
+  const anzeige = gruppiert
+    ? [...gruppenFolge.flatMap((o) => kopf.slice(0, gruppenEnde).filter((e) => orgVon(e) === o)), ...kopf.slice(gruppenEnde)]
+    : kopf;
+  // Die gewählte Einheit der Detailspalte: die angetippte, sonst die zuletzt offene, sonst die erste der Liste.
+  const meisterDetail = breit && ansicht === "karten";
+  const gewaehltGilt = !meisterDetail
+    ? null
+    : anzeige.some((e) => e.einheitSchluessel === gewaehlt)
+      ? gewaehlt
+      : (anzeige.find((e) => karteWarOffen(einsatz.id, e.einheitSchluessel)) ?? anzeige[0])?.einheitSchluessel ?? null;
   const anwesendAnzahl = alleEinheiten.filter((e) => passtZuStatusfilter(e, "anwesend")).length;
   const abgerueckteAnzahl = alleEinheiten.length - anwesendAnzahl;
   const veraltetAnzahl = alleEinheiten.filter((e) => passtZuStatusfilter(e, "veraltet")).length;
@@ -2171,6 +2198,10 @@ export function EinsatzDetail(props: {
         />
         {" "}nur dringender Bedarf (ohne Kraftstoff)
       </label>
+      <label className="inline gruppen-wahl" title="Zwischenüberschrift je Organisation; innerhalb gilt die gewählte Sortierung.">
+        <input type="checkbox" checked={gruppiert} onChange={(e) => setGruppiert(e.target.checked)} />
+        {" "}nach Organisation gruppieren
+      </label>
       {/* Lücke: wer noch keinen Auftrag hat (R7-K6). */}
       <label className="feld sortierung">
         Auftrag
@@ -2257,6 +2288,16 @@ export function EinsatzDetail(props: {
     </>
   );
 
+  // Die Kopfzahlen: am Rechner im Seitenkopf neben dem Namen (Liste und Detailspalte, Entwurf B), sonst über der Aufnahme.
+  const kopfzahlen = (
+      <section className="karte staerke-leiste">
+        <div className="anzahl"><Zaehlwert wert={sum.einheiten} /><span>Einheiten{uebungenDaneben.length > 0 ? ` (+${uebungenDaneben.length} Übung)` : ""}</span></div>
+        <div><Zaehlwert wert={sum.staerke.fuehrer} /><span>Führer</span></div>
+        <div><Zaehlwert wert={sum.staerke.unterfuehrer} /><span>Unterf.</span></div>
+        <div><Zaehlwert wert={sum.staerke.mannschaft} /><span>Mannsch.</span></div>
+        <div className="gesamt"><Zaehlwert wert={sum.staerke.gesamt} /><span>Gesamt</span></div>
+      </section>
+  );
   return (
     <>
     <SeitenKopf variante="einsatz-kopf">
@@ -2279,6 +2320,7 @@ export function EinsatzDetail(props: {
         <button type="button" className="kopf-aendern" onClick={() => void kopfAendern()}>
           Einsatz bearbeiten…
         </button>
+        {breit && kopfzahlen}
       </div>
       <p className="hinweis">
         {ART_LABEL[einsatz.art]}{einsatz.ort ? ` · ${einsatz.ort}` : ""}
@@ -2334,13 +2376,7 @@ export function EinsatzDetail(props: {
           Spalte neben der Liste (R4-K5); auf dem Telefon löst „display:
           contents" den Rahmen auf, es bleibt eine Spalte. */}
       <div className="einsatz-seite">
-      <section className="karte staerke-leiste">
-        <div className="anzahl"><Zaehlwert wert={sum.einheiten} /><span>Einheiten{uebungenDaneben.length > 0 ? ` (+${uebungenDaneben.length} Übung)` : ""}</span></div>
-        <div><Zaehlwert wert={sum.staerke.fuehrer} /><span>Führer</span></div>
-        <div><Zaehlwert wert={sum.staerke.unterfuehrer} /><span>Unterf.</span></div>
-        <div><Zaehlwert wert={sum.staerke.mannschaft} /><span>Mannsch.</span></div>
-        <div className="gesamt"><Zaehlwert wert={sum.staerke.gesamt} /><span>Gesamt</span></div>
-      </section>
+      {!breit && kopfzahlen}
       {/* Rollenaudit Runde 2 (Meldekopf P2-1, P2-6; Bereitstellungsraum P2-2; UEAL U12): Fahrzeuge, Stärke je Organisation
           und die Abgerückten standen nicht bei der Summe, und für die Meldung über Funk gab es keinen Text. */}
       {alleEinheiten.length > 0 && (
@@ -2709,7 +2745,8 @@ export function EinsatzDetail(props: {
           schob die erste Einheitenkarte auf 2,6 Bildschirme (R5-K4). Am Laptop steht
           er wie bisher offen in der linken Spalte. */}
       {/* Ohne Meldung gibt es keinen Bedarf: „Bedarf: Verpflegung 0" unter fünf Nullen sagt nichts (R18-N4). */}
-      {einsatz.eintraege.length === 0 ? null : kompakt ? (
+      {/* Am Rechner ebenso eingeklappt (Liste und Detailspalte): Die Summenzeile steht im Band über der Liste. */}
+      {einsatz.eintraege.length === 0 ? null : kompakt || breit ? (
         <details className="karte bedarf-block">
           <summary>
             <strong>Bedarf:</strong>{" "}
@@ -2919,7 +2956,7 @@ export function EinsatzDetail(props: {
       )}
       </div>
 
-      <section className="karte einsatz-liste">
+      <section className={`karte einsatz-liste${meisterDetail && kopf.length > 0 ? " mit-detail" : ""}`}>
         {/* Entfernte Meldungen stehen erst am Listenende; hier steht, dass welche liegen, und der Weg dorthin (R18-E3, H3). */}
         {papierkorbAnzahl(einsatz.id) > 0 && (
           <p className="hinweis papierkorb-verweis">
@@ -3088,6 +3125,7 @@ export function EinsatzDetail(props: {
             onOeffnen={(schluessel) => {
               // Zur Karte wechseln und sie aufklappen (R18-E5): Die Karte liest beim Einhängen, ob sie die zuletzt offene war.
               karteOffenMerken(einsatz.id, schluessel, true);
+              setGewaehlt(schluessel);
               tabellenLauf = window.scrollY;
               setAnsicht("karten");
               merkeAnsicht("karten");
@@ -3106,8 +3144,20 @@ export function EinsatzDetail(props: {
             erlaubt den Sprung von Eintrag zu Eintrag (R2-M4). */}
         {ansicht === "karten" && kopf.length > 0 && (
           <ul className="einheiten-liste">
-            {kopf.map((e, i) => (
+            {anzeige.map((e, i) => (
               <Fragment key={e.einheitSchluessel}>
+              {gruppiert && i < gruppenEnde && (i === 0 || orgVon(anzeige[i - 1]!) !== orgVon(e)) && (
+                <li className="einheiten-gruppe">
+                  <strong>{orgVon(e)}</strong>
+                  <span>{(() => { const n = anzeige.slice(0, gruppenEnde).filter((x) => orgVon(x) === orgVon(e)).length; return n === 1 ? "1 Einheit" : `${n} Einheiten`; })()}</span>
+                  {/* Dieselbe Zwischensumme wie neben den Kopfzahlen: alle Anwesenden der Organisation, auch bei gesetztem Filter. */}
+                  {jeOrganisation.find((o) => o.organisation === orgVon(e)) && (
+                    <span className="gruppen-staerke" title="Stärke aller anwesenden Einheiten dieser Organisation">
+                      Stärke {staerkeZeile(jeOrganisation.find((o) => o.organisation === orgVon(e))!.staerke)}
+                    </span>
+                  )}
+                </li>
+              )}
               {/* Abgerückte stehen am Ende unter eigener Überschrift, nicht zwischen den Anwesenden (R17-E6, K4). */}
               {i === abgerueckteStelle && (
                 <li className="einheiten-trenner"><strong>{abgerueckteUeberschrift(kopf)}</strong></li>
@@ -3127,6 +3177,7 @@ export function EinsatzDetail(props: {
                 onStaerkeGeaendert={(x) => { setZuletztEntfernt(null); setStatusWechsel(null); setAufgeteilt(null); setZusammengefuehrt(null); setZurueckQuittung(null); setStaerkeGeaendert(x); }}
                 onZusammengefuehrt={(z) => { setZuletztEntfernt(null); setStatusWechsel(null); setAufgeteilt(null); setStaerkeGeaendert(null); setZurueckQuittung(null); setZusammengefuehrt(z); }}
                 kompakt={kompakt}
+                auswahl={meisterDetail ? { gewaehlt: gewaehltGilt === e.einheitSchluessel, waehlen: () => setGewaehlt(e.einheitSchluessel), ziel: detailZiel } : undefined}
                 nummer={nummern.get(e.einheitSchluessel)}
                 ungesehen={ungeseheneIds.has(e.id)}
                 frisch={frischUnquittiert(e)}
@@ -3141,6 +3192,8 @@ export function EinsatzDetail(props: {
             ))}
           </ul>
         )}
+        {/* Detailspalte am Rechner: Die gewählte Karte hängt sich selbst hier ein (EinheitKarte, createPortal). */}
+        {meisterDetail && kopf.length > 0 && <aside className="einheit-detail" aria-label="Gewählte Einheit" ref={setDetailZiel} />}
       </section>
 
       {/* Entfernte Meldungen bleiben eine Woche zum Zurückholen liegen — auch nach dem Neuladen (R17-E2, R17-D6). */}
@@ -4458,6 +4511,11 @@ function EinheitKarte(props: {
   onStatusWechsel?: (w: StatusWechsel) => void;
   /** Schmaler Bildschirm: zugeklappt nur Name, Stärke und Bedarf (R2-K7). */
   kompakt?: boolean;
+  /**
+   * Liste und Detailspalte am Rechner (neu im Meldekopf): Die Karte steht in der Liste immer als zugeklappte Zeile; ist sie
+   * gewählt, hängt sie ihre volle Form zusätzlich in `ziel` ein (die Detailspalte). Ein Zustand, eine Komponente, zwei Orte.
+   */
+  auswahl?: { gewaehlt: boolean; waehlen: () => void; ziel: HTMLElement | null };
   /** Stärke eben geändert — die Ansicht quittiert mit Rückweg (R4-E4). */
   onStaerkeGeaendert?: (s: StaerkeGeaendert) => void;
   /** Eben zusammengeführt — die Ansicht quittiert mit Rückweg (R4-D5). */
@@ -4490,8 +4548,9 @@ function EinheitKarte(props: {
   const setAufgeklappt = (offen: boolean) => {
     setAufgeklapptRoh(offen);
     karteOffenMerken(einsatzId, kopf.einheitSchluessel, offen);
+    if (offen) props.auswahl?.waehlen();
   };
-  const zu = kompakt && !aufgeklappt;
+  const zu = props.auswahl ? !props.auswahl.gewaehlt : kompakt && !aufgeklappt;
   // R20-G2, M1: „⚠ Anderer Einsatz? Prüfen ▸" klappt die Karte auf und bringt „Gehört zu dieser Lage" ins Bild (statt die Karte nur zu öffnen
   // und den Helfer den Warnsatz 400 px tiefer suchen zu lassen).
   const ortKnopf = useRef<HTMLButtonElement>(null);
@@ -5402,11 +5461,14 @@ function EinheitKarte(props: {
     onGeaendert();
   }
 
-  return (
+  // Die Karte als Funktion ihrer Form: `zu` (Zeile) oder offen, `kompakt` (Telefon) oder breit, `detail` (in der Detailspalte).
+  // In der Zeile der Liste trägt die Überschrift eine eigene Kennung; die Knöpfe der Detailspalte verweisen auf die dortige.
+  const auswahl = props.auswahl;
+  const karte = (zu: boolean, kompakt: boolean, detail: boolean) => { const reihe = !!auswahl && !detail; const kopfId = reihe ? `${nameId}z` : nameId; return (
     <li
-      ref={zeile}
-      data-einheit={kopf.einheitSchluessel}
-      className={`einheit-zeile${zaehlt ? "" : " gestrichen"}${zu ? " kompakt" : kompakt ? " karte-offen" : ""}${aufteilen || zusammenfuehren ? " mehr-panel" : ""}`}
+      ref={detail ? undefined : zeile}
+      {...(detail ? { "data-einheit-detail": kopf.einheitSchluessel } : { "data-einheit": kopf.einheitSchluessel })}
+      className={`einheit-zeile${zaehlt ? "" : " gestrichen"}${zu ? " kompakt" : kompakt ? " karte-offen" : ""}${aufteilen || zusammenfuehren ? " mehr-panel" : ""}${reihe && auswahl.gewaehlt ? " gewaehlt" : ""}${detail ? " im-detail" : ""}`}
       // Prellschutz (R2-G4): Den zweiten Tipp eines Doppeltipps auf „Abrücken" fängt der gesperrte Wechselknopf selbst
       // (`disabled={prellt}`) und die Ortssperre an der Stelle des Tipps (tipp-schutz.ts). Die ganze Karte
       // zu sperren schluckte auch den bewussten Tipp auf „Mehr…" eine halbe Sekunde später (R17-H3).
@@ -5418,7 +5480,7 @@ function EinheitKarte(props: {
               die Knöpfe verweisen über aria-describedby auf ihn, sonst stand
               in der Knopfliste 21× „Abrücken" ohne Einheit (Audit Runde 2,
               R2-M4). Der sichtbare Knopfname bleibt, wie er ist. */}
-          <h3 className="muster-name" id={nameId}>
+          <h3 className="muster-name" id={kopfId}>
             {/* Laufende Nummer vorn — „Meldung 3" über Funk, auf Blatt und
                 Gerät gleich (Audit Runde 2, R2-A6). */}
             {props.nummer != null ? <><span className="meldung-nr">Nr. {props.nummer}</span>{" "}</> : null}
@@ -5474,7 +5536,9 @@ function EinheitKarte(props: {
             // und wer noch ohne Auftrag ist (Audit Runde 3, R3-K2). Der
             // Bedarf steht dafür in der Kurzform der Tabelle.
             <span className="muster-sub kompakt-zeile">
-              <span>Stärke {staerkeText(kopf.bogen)}</span>
+              <span className="reihe-staerke">Stärke {staerkeText(kopf.bogen)}</span>
+              {/* Liste am Rechner: die Eintreffzeit als eigene Spalte neben der Stärke. */}
+              {reihe && <span className="reihe-zeit">seit {zeitKurz(eintreffzeit(kopf))}</span>}
               {zaehlt && Date.now() - angabenZeit(kopf) >= VERALTET_MIN * 60_000 && (
                 <span className="kompakt-merkmal alter-merkmal warnung-text">⚠ {angabenAlterWort(kopf)} {alterText(angabenZeit(kopf), Date.now())}</span>
               )}
@@ -5552,8 +5616,9 @@ function EinheitKarte(props: {
             </span>
           ) : (
           <>
-          <span className="muster-sub">
-            {orgLabel(kopf.bogen.einheit.organisation)} · Stärke {staerkeText(kopf.bogen)}
+          <span className="muster-sub kopf-sub">
+            {/* Die Stärke als eigenes Stück: In der breiten Karte steht sie rechts oben in einer Flucht, wie eine Spalte (index.html, „Karten aufgeräumt"). */}
+            {orgLabel(kopf.bogen.einheit.organisation)}<span className="kopf-trenner"> · </span><span className="kopf-staerke"><span className="kopf-staerke-wort">Stärke </span>{staerkeText(kopf.bogen)}</span>
             {aufgegangen ? " · zusammengeführt" : ""}
             {/* Ungültig steht schon als Marke im Kopf (R3-L2). */}
             {kopf.signatur?.zustand === "gueltig" ? <> · {signaturBadge(kopf)}</> : null}
@@ -5818,8 +5883,8 @@ function EinheitKarte(props: {
         <button
           type="button"
           className="karte-aufklappen"
-          aria-expanded={false}
-          aria-describedby={nameId}
+          {...(reihe ? { "aria-pressed": auswahl.gewaehlt } : { "aria-expanded": false })}
+          aria-describedby={kopfId}
           onClick={(e) => {
             // Der Knopf liegt über der ganzen Zeile. Traf der Tipp die Rückfrage-
             // Marke, zeigt die aufgeklappte Karte die Hinweise gleich im Satz:
@@ -5831,7 +5896,7 @@ function EinheitKarte(props: {
             setAufgeklappt(true);
           }}
         >
-          <span className="nur-sr">Aufklappen: Zeiten, Details und Aktionen</span>
+          <span className="nur-sr">{reihe ? "Auswählen: Zeiten, Details und Aktionen stehen rechts daneben" : "Aufklappen: Zeiten, Details und Aktionen"}</span>
           <span aria-hidden="true">▾</span>
         </button>
       )}
@@ -6066,5 +6131,12 @@ function EinheitKarte(props: {
       </>
       )}
     </li>
+  ); };
+  if (!auswahl) return karte(zu, kompakt, false);
+  return (
+    <>
+      {karte(true, true, false)}
+      {auswahl.gewaehlt && auswahl.ziel ? createPortal(<ul className="einheiten-liste detail-liste">{karte(false, false, true)}</ul>, auswahl.ziel) : null}
+    </>
   );
 }

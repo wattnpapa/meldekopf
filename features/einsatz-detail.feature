@@ -26,7 +26,9 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     Und sehe ich die Überschrift "Einheiten (1 gemeldet"
 
   Szenario: Die Sammlung summiert Stärke und Bedarf über alle Einheiten
-    Dann sehe ich die Überschrift "Bedarf (anwesende Einheiten)"
+    # Am Rechner steht der Bedarf als eine Zeile im Band über der Liste (Liste und Detailspalte); die Paare folgen aufgeklappt.
+    Dann sehe ich den Hinweis "Bedarf:"
+    Wenn ich "Bedarf:" aufklappe
     Und sehe ich zu "Verpflegung" den Wert "vegetarisch"
     Und sehe ich zu "Kraftstoff" den Wert "keiner angefordert"
     Und sehe ich zu "Fahrzeuge" den Wert "1"
@@ -76,7 +78,9 @@ Funktionalität: Einsatz-Sammlung führen (Meldekopf)
     # Die Einheit steht wieder mit ihrer vollen Stärke da, nichts doppelt.
     Dann sehe ich den Hinweis "Stärke 1 / 0 / 2 // 3"
     Und sehe ich den Hinweis "zusammengeführt"
-    Und sehe ich den Hinweis "aufgegangen in"
+    # Wohin der Teil aufging, steht an seiner Karte: am Rechner in der Detailspalte, sobald er gewählt ist.
+    Wenn ich die Einheit "zusammengeführt" auswähle
+    Dann sehe ich den Hinweis "aufgegangen in"
 
   Szenario: Ohne zweiten Teil gibt es nichts zusammenzuführen
     Wenn ich auf "Mehr…" klicke
