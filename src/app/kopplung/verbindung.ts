@@ -285,33 +285,6 @@ export async function angebotErzeugen(h: VerbindungsHorcher): Promise<Angebot> {
   };
 }
 
-/** Zweites Gerät: aus dem gescannten Angebot die Antwort erzeugen. */
-export async function antwortErzeugen(
-  angebotSdp: string,
-  h: VerbindungsHorcher,
-  /** Die Verbindung, sobald es sie gibt: Sie kann offen sein, bevor diese Funktion zurückkehrt. */
-  bekannt?: (v: Verbindung) => void,
-): Promise<{ sdp: string; verbindung: Verbindung }> {
-  const pc = neuePc();
-  const { kanalSetzen, verbindung } = verdrahten(pc, h);
-  bekannt?.(verbindung);
-  pc.addEventListener("datachannel", (e) => kanalSetzen(e.channel));
-  try {
-    await pc.setRemoteDescription({ type: "offer", sdp: angebotSdp });
-    await pc.setLocalDescription(await pc.createAnswer());
-    await fertigGesammelt(pc);
-  } catch (e) {
-    verbindung.schliessen();
-    throw e;
-  }
-  const sdp = pc.localDescription?.sdp;
-  if (!sdp) {
-    verbindung.schliessen();
-    throw new Error("Dieses Gerät konnte keine Verbindung vorbereiten.");
-  }
-  return { sdp, verbindung };
-}
-
 /** Ein Platz, den der Rufer anrufen kann, wenn die Verbindung gerissen ist. */
 export interface RufPlatz {
   /** Die Antwort ohne Adressen, für den Hörer. */
@@ -336,8 +309,19 @@ function sdpFeld(sdp: string, name: string): string {
   return new RegExp(`^a=${name}:(.*)$`, "m").exec(sdp)?.[1]?.trim() ?? "";
 }
 
-/** Rufer: zu einem wartenden Angebot des Hörers die Antwort erzeugen, ohne sie zu setzen. */
-export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCertificate | undefined): Promise<RufPlatz> {
+/**
+ * Rufer: zu einem wartenden Angebot des Hörers die Antwort erzeugen, ohne sie zu setzen.
+ *
+ * `vorgabe`: Kennwörter, die beide Seiten schon kennen (aus dem ersten Code abgeleitet). Die Antwort trägt dann sie
+ * statt der zufälligen des Browsers; der Hörer kann sie sich selbst zusammensetzen und braucht vom Rufer nur noch
+ * den Fingerabdruck. Das geht nur mit einem festen Zertifikat und einem Browser, der eingesetzte Kennwörter annimmt;
+ * sonst bleibt es bei den eigenen (`vorgabeGilt` sagt, was gilt).
+ */
+export async function rufPlatzVorbereiten(
+  angebotSdp: string,
+  zertifikat: RTCCertificate | undefined,
+  vorgabe?: { ufrag: string; pwd: string },
+): Promise<RufPlatz & { vorgabeGilt: boolean }> {
   // Die Ereignisse des ursprünglichen Objekts gehen erst mit dem Anruf an einen Horcher.
   let ziel: VerbindungsHorcher | null = null;
   const weiche: VerbindungsHorcher = { onLage: (l) => ziel?.onLage(l), onNachricht: (n) => ziel?.onNachricht(n) };
@@ -353,9 +337,9 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
     verbindung.schliessen();
     throw e;
   }
-  const antwortSdp = antwort.sdp ?? "";
-  const ufrag = sdpFeld(antwortSdp, "ice-ufrag");
-  const pwd = sdpFeld(antwortSdp, "ice-pwd");
+  let antwortSdp = antwort.sdp ?? "";
+  let ufrag = sdpFeld(antwortSdp, "ice-ufrag");
+  let pwd = sdpFeld(antwortSdp, "ice-pwd");
   if (!ufrag || !pwd) {
     verbindung.schliessen();
     throw new Error("Antwort ohne Kennwörter.");
@@ -363,8 +347,10 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
   erstes = { pc, verbindung, antwort };
   // Ein frisches Objekt kann den Platz nur treffen, wenn es denselben Schlüssel trägt.
   let frischMoeglich = !!zertifikat;
+  const eingesetzt = (sdp: string, u: string, p: string) =>
+    sdp.replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${u}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${p}`).replace(/^a=setup:.*$/m, "a=setup:active");
 
-  async function frisch(h: VerbindungsHorcher): Promise<Verbindung> {
+  async function frisch(h: VerbindungsHorcher, u = ufrag, p = pwd): Promise<Verbindung> {
     let hin: VerbindungsHorcher | null = null;
     const neu = neuePc(zertifikat);
     const draht = verdrahten(neu, { onLage: (l) => hin?.onLage(l), onNachricht: (n) => hin?.onNachricht(n) });
@@ -372,11 +358,11 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
     try {
       await neu.setRemoteDescription({ type: "offer", sdp: angebotSdp });
       const a = await neu.createAnswer();
-      const sdp = (a.sdp ?? "").replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${pwd}`);
+      const sdp = eingesetzt(a.sdp ?? "", u, p);
       if (sdpFeld(sdp, "fingerprint") !== sdpFeld(antwortSdp, "fingerprint")) throw new Error("anderer Schlüssel");
       hin = h;
       await neu.setLocalDescription({ type: "answer", sdp });
-      if (sdpFeld(neu.localDescription?.sdp ?? "", "ice-ufrag") !== ufrag) throw new Error("Kennwörter nicht übernommen");
+      if (sdpFeld(neu.localDescription?.sdp ?? "", "ice-ufrag") !== u) throw new Error("Kennwörter nicht übernommen");
       return draht.verbindung;
     } catch (e) {
       hin = null;
@@ -385,15 +371,42 @@ export async function rufPlatzVorbereiten(angebotSdp: string, zertifikat: RTCCer
     }
   }
 
+  // Vorgegebene Kennwörter gelten nur, wenn der Browser sie annimmt: an einem Wegwerf-Objekt ausprobiert, das nie anklopft
+  // (es kennt keine Adresse des Hörers, also ein Angebot ohne dessen Adressen).
+  let vorgabeGilt = false;
+  if (vorgabe && frischMoeglich) {
+    const probe = neuePc(zertifikat);
+    try {
+      await probe.setRemoteDescription({ type: "offer", sdp: angebotSdp.replace(/^a=(candidate:|end-of-candidates).*\r?\n/gm, "") });
+      const a = await probe.createAnswer();
+      await probe.setLocalDescription({ type: "answer", sdp: eingesetzt(a.sdp ?? "", vorgabe.ufrag, vorgabe.pwd) });
+      vorgabeGilt = sdpFeld(probe.localDescription?.sdp ?? "", "ice-ufrag") === vorgabe.ufrag;
+    } catch {
+      vorgabeGilt = false;
+    } finally {
+      probe.close();
+    }
+    if (vorgabeGilt) {
+      ufrag = vorgabe.ufrag;
+      pwd = vorgabe.pwd;
+      antwortSdp = eingesetzt(antwortSdp, ufrag, pwd);
+      // Das ursprüngliche Objekt trägt andere Kennwörter als die Antwort: Es wird nicht gebraucht.
+      erstes.verbindung.schliessen();
+      erstes = null;
+    }
+  }
+
   return {
     antwortSdp,
+    vorgabeGilt,
     nutzbar: () => frischMoeglich || erstes != null,
     async anrufen(h) {
       if (frischMoeglich) {
         try {
           return await frisch(h);
-        } catch {
+        } catch (e) {
           frischMoeglich = false; // dieser Browser nimmt die eingesetzten Kennwörter nicht: Es bleibt der eine Versuch unten
+          if (!erstes) throw e;
         }
       }
       const e = erstes;

@@ -182,3 +182,29 @@ Then("zählt die Übersicht {int} Einheiten", async function (this: EebWelt, anz
 Then("führt die Übersicht die Einheit {string}", async function (this: EebWelt, name: string) {
   await this.page.locator("main").getByText(name).first().waitFor({ state: "visible" });
 });
+
+async function kurzcode(welt: EebWelt): Promise<string> {
+  const feld = zweitesGeraet(welt).locator("dialog.kopplung-dialog .kopplung-kurzcode");
+  await feld.waitFor();
+  return (await feld.getAttribute("data-kurz")) ?? "";
+}
+
+Then("zeigt das zweite Gerät einen Code zum Eintippen mit {int} Zeichen", async function (this: EebWelt, anzahl: number) {
+  const zeichen = (await kurzcode(this)).replace(/-/g, "");
+  if (zeichen.length !== anzahl) throw new Error(`Der Code zum Eintippen hat ${zeichen.length} Zeichen, erwartet waren ${anzahl}.`);
+});
+
+/** Wie jemand abtippt: klein, mit Leerzeichen statt Strichen, O statt 0. */
+When("ich den Code des zweiten Geräts abtippe", async function (this: EebWelt) {
+  const code = await kurzcode(this);
+  await this.page.locator("#kopplung-kurz").fill(code.replace(/-/g, " ").toLowerCase().replace(/0/g, "o"));
+});
+
+When("ich den Code des zweiten Geräts mit einem Tippfehler abtippe", async function (this: EebWelt) {
+  const code = (await kurzcode(this)).replace(/-/g, "");
+  await this.page.locator("#kopplung-kurz").fill((code[0] === "A" ? "B" : "A") + code.slice(1));
+});
+
+Then("meldet der Dialog {string}", async function (this: EebWelt, text: string) {
+  await this.page.locator("dialog[open]").getByText(text).first().waitFor({ state: "visible" });
+});

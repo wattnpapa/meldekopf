@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import QRCode from "qrcode";
 import { usBelegungZurueck } from "../eingang/tastaturbelegung";
-import { signalDekodieren, signalKodieren } from "./signal";
+import { KURZCODE_ZEICHEN, istKurzcode, kennwoerterAbleiten, kurzcodeBereinigen, kurzcodeDekodieren, kurzcodeKodieren, signalDekodieren, signalKodieren } from "./signal";
 import { KOPPLUNG_MARKE, istKopplungsCode } from "./zustand";
 
 const FP = "7B:1A:0F:9C:D4:E2:33:58:A1:00:FF:6E:21:9B:C7:45:10:8D:F3:2A:64:B9:5E:77:C0:1D:E8:92:3F:AB:06:D5";
@@ -96,5 +96,63 @@ describe("Kopplungs-Code", () => {
   it("sagt, wenn das Gerät in keinem Netz hängt", () => {
     const ohne = CHROME_ANGEBOT.split("\r\n").filter((z) => !z.startsWith("a=candidate:")).join("\r\n");
     expect(() => signalKodieren({ art: "angebot", sdp: ohne })).toThrow(/keine Adresse in einem Netz/);
+  });
+});
+
+describe("Antwort-Code zum Eintippen", () => {
+  const ANTWORT = CHROME_ANGEBOT.replace("a=setup:actpass", "a=setup:active");
+  const KENNWOERTER = { ufrag: "ABCD1234", pwd: "0123456789ABCDEFGHJKMNPQRSTVWXYZ" };
+
+  it("trägt nur den Fingerabdruck: 53 Zeichen in Vierergruppen, ohne verwechselbare Buchstaben", () => {
+    const kurz = kurzcodeKodieren(ANTWORT);
+    expect(kurz).toMatch(/^([0-9A-HJKMNP-TV-Z]{4}-){13}[0-9A-HJKMNP-TV-Z]$/);
+    expect(kurzcodeBereinigen(kurz)).toHaveLength(KURZCODE_ZEICHEN);
+    expect(istKurzcode(kurz)).toBe(true);
+    expect(istKurzcode(signalKodieren({ art: "antwort", sdp: ANTWORT }))).toBe(false);
+  });
+
+  it("ergibt am ersten Gerät eine Antwort mit Fingerabdruck und den abgeleiteten Kennwörtern, ohne Adressen", () => {
+    const s = kurzcodeDekodieren(kurzcodeKodieren(ANTWORT), CHROME_ANGEBOT, KENNWOERTER);
+    expect(s.art).toBe("antwort");
+    expect(s.sdp).toContain(`a=fingerprint:sha-256 ${FP}`);
+    expect(s.sdp).toContain("a=ice-ufrag:ABCD1234\r\n");
+    expect(s.sdp).toContain("a=ice-pwd:0123456789ABCDEFGHJKMNPQRSTVWXYZ\r\n");
+    expect(s.sdp).toContain("a=setup:active");
+    expect(s.sdp).toContain("a=mid:0");
+    expect(s.sdp).not.toContain("a=candidate:");
+    expect(s.sdp).not.toContain("a=end-of-candidates");
+  });
+
+  it("verzeiht, wie Menschen abtippen: klein, ohne Striche, mit Leerzeichen, O statt 0, I und L statt 1", () => {
+    const kurz = kurzcodeKodieren(ANTWORT);
+    const getippt = kurz.replace(/-/g, " ").toLowerCase().replace(/0/g, "o").replace(/1/g, "l");
+    expect(kurzcodeDekodieren(`  ${getippt}\n`, CHROME_ANGEBOT, KENNWOERTER).sdp).toContain(FP);
+  });
+
+  it("bemerkt einen Tippfehler am Prüfbyte und nennt eine falsche Länge", () => {
+    const kurz = kurzcodeBereinigen(kurzcodeKodieren(ANTWORT));
+    const falsch = (kurz[7] === "A" ? "B" : "A").padStart(8, kurz.slice(0, 7)) + kurz.slice(8);
+    expect(falsch).toHaveLength(KURZCODE_ZEICHEN);
+    expect(() => kurzcodeDekodieren(falsch, CHROME_ANGEBOT, KENNWOERTER)).toThrow(/stimmt nicht/);
+    expect(() => kurzcodeDekodieren(kurz.slice(0, 40), CHROME_ANGEBOT, KENNWOERTER)).toThrow(/53 Zeichen, eingegeben sind 40/);
+  });
+
+  it("leitet auf beiden Geräten dieselben Kennwörter aus dem Angebot ab, für ein anderes Angebot andere", async () => {
+    const a = await kennwoerterAbleiten(CHROME_ANGEBOT);
+    // Das zweite Gerät kennt das Angebot nur aus dem Code: in anderer Zeilenfolge und ohne Formalien.
+    const b = await kennwoerterAbleiten(signalDekodieren(signalKodieren({ art: "angebot", sdp: CHROME_ANGEBOT })).sdp);
+    expect(b).toEqual(a);
+    expect(a.ufrag).toMatch(/^[0-9A-Z]{8}$/);
+    expect(a.pwd).toMatch(/^[0-9A-Z]{32}$/);
+    const c = await kennwoerterAbleiten(CHROME_ANGEBOT.replace("kQ3vW9zR1tY5uI8oP2aS4dF6", "kQ3vW9zR1tY5uI8oP2aS4dF7"));
+    expect(c.pwd).not.toBe(a.pwd);
+  });
+
+  it("nimmt eine gescannte Antwort auch ohne Adressen an, ein Angebot ohne Adressen nicht", () => {
+    const ohne = ANTWORT.split("\r\n").filter((z) => !z.startsWith("a=candidate:")).join("\r\n");
+    const s = signalDekodieren(signalKodieren({ art: "antwort", sdp: ohne }));
+    expect(s.sdp).not.toContain("a=candidate:");
+    expect(s.sdp).not.toContain("a=end-of-candidates");
+    expect(s.sdp).toContain(FP);
   });
 });

@@ -549,8 +549,8 @@ sequenceDiagram
   participant T as Telefon (zweites Gerät)
   R->>R: „Zweites Gerät koppeln…": Angebot erzeugen, als QR-Code zeigen
   T->>R: „Bogen scannen…" liest den Code vom Bildschirm
-  T->>T: Antwort erzeugen, als QR-Code zeigen
-  R->>T: „Antwort scannen…" liest den Code (Kamera oder Handscanner)
+  T->>T: Antwort erzeugen, als QR-Code und als 53 Zeichen zeigen
+  R->>T: „Antwort scannen…" (Kamera, Handscanner) oder „Code eintippen…"
   R-->T: Datenkanal steht (direkt, verschlüsselt, lokales Netz)
   R->>T: Stand der Sammlung (Umschlag der Einsatz-Datei)
   R->>T: Kopf der Sammlung (Name, Art, Ort; keine Meldungen)
@@ -561,6 +561,21 @@ sequenceDiagram
   T->>T: Meldung als „übertragen" zeigen
 ```
 
+- **Antwort ohne Kamera (seit 2026-11-25).** Am Rechner im Fahrzeug gibt es
+  oft weder Kamera noch Handscanner. Unter dem Antwort-Code des zweiten
+  Geräts steht darum derselbe Inhalt zum Eintippen: 53 Zeichen in
+  Vierergruppen (Base32 nach Crockford, ohne I, L, O, U; `signal.ts`). Kürzer
+  geht es nicht: Er trägt den Fingerabdruck des Schlüssels des zweiten Geräts
+  (32 Byte) und ein Prüfbyte, und den ganzen Fingerabdruck verlangt der
+  Browser, bevor er die Verbindung annimmt. Alles andere braucht keinen
+  Transport: Die Kennwörter der Verbindung leiten beide Geräte aus dem ersten
+  Code ab (`kennwoerterAbleiten`), die Adresse des zweiten Geräts lernt das
+  erste aus dessen erstem Paket. Geprüft (Chromium 158), dass es ohne Eingabe
+  nicht geht: Der Rechner bemerkt das Anklopfen, erfährt aber weder die
+  mitgeschickten Kennwort-Namen noch das Zertifikat des Telefons.
+- Das zweite Gerät klopft nach dem Scan so lange beim ersten an, bis dort die
+  Antwort gesetzt ist, gescannt oder getippt, auch wenn das Minuten dauert:
+  derselbe Weg wie beim Wiederverbinden (Anruf, Frist 15 Sekunden, Pausen).
 - **Rollen (seit 2026-11-24).** Das erste Gerät ist die Zentrale und führt
   die Lage. Das zweite ist ein reiner Sammler: Es nimmt auf und schickt seinen
   ganzen Stand, also alles, was es selbst aufgenommen hat (Umschlag der
@@ -799,7 +814,10 @@ verschlüsselt; die Fingerabdrücke der Schlüssel beider Seiten stehen in den
 beiden QR-Codes, die von Hand getauscht werden, ein Dritter im selben Netz
 kann sich also nicht dazwischensetzen, ohne einen der Codes zu ersetzen. Der
 Kopplungs-Code (`MKK1.`, `kopplung/signal.ts`) trägt keine Einsatzdaten, nur
-Fingerabdruck, Verbindungskennwörter und bis zu vier lokale Adressen. Was über
+Fingerabdruck, Verbindungskennwörter und bis zu vier lokale Adressen. Der
+Antwort-Code zum Eintippen trägt nur den Fingerabdruck des zweiten Geräts; wer
+ihn mitliest, kann sich damit nicht verbinden, denn die Kennwörter stehen
+allein im ersten Code. Was über
 den Kanal kommt, wird behandelt wie eine importierte Einsatz-Datei
 (`einsatzAusDatei`, Bogenprüfung je Eintrag) und ist gedeckelt (24 MiB gepackt,
 64 MiB entpackt je Nachricht). Daneben gehen nur kurze Steuernachrichten über
@@ -1165,6 +1183,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Kopplung nur im Prüfstand erprobt (zwei Profile eines Chromium, lokale Schleife) | Gerätetest offen: Chrome auf Android gegen Chrome und Edge am Rechner, Safari auf iOS, Firefox; installierte PWA gegen Browser-Tab. Offen ist vor allem, ob die Browser einander im jeweiligen Netz finden: Ohne erteilte Kamerafreigabe nennen sie statt der IP-Adresse einen Namen im lokalen Netz (mDNS), den das andere Gerät auflösen muss. Rückfallebene bleibt die Einsatz-Datei. |
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
 | Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
+| Der Code zum Eintippen braucht einen Browser am zweiten Gerät, der vorgegebene Verbindungskennwörter annimmt | Geprüft am Wegwerf-Objekt, bevor der Code gezeigt wird (`rufPlatzVorbereiten`, `vorgabeGilt`); nimmt der Browser sie nicht, zeigt das zweite Gerät nur den QR-Code. Safari und Firefox ungeprüft. 53 Zeichen abzutippen dauert rund eine Minute; ein Tippfehler fällt am Prüfbyte auf. |
 | Seite neu geladen (auch selbsttätig nach einer neuen Fassung der App) | Trennt die Kopplung endgültig; neu koppeln kostet zwei Scans. Abhilfe wäre, Zertifikat und Plätze des Rufers über das Neuladen zu retten (IndexedDB); nicht gebaut. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |

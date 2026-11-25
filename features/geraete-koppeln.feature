@@ -28,6 +28,27 @@ Funktionalität: Zweites Gerät koppeln
     Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (0)"
     Und zeigt das zweite Gerät "THW Oldenburg" nicht
 
+  Szenario: Ohne Kamera am ersten Gerät: den Antwort-Code eintippen
+    Wenn ich auf "Zweites Gerät koppeln…" klicke
+    Und das zweite Gerät meinen Kopplungs-Code scannt
+    Dann zeigt das zweite Gerät einen Code zum Eintippen mit 53 Zeichen
+    Wenn ich auf "Code eintippen…" klicke
+    Dann sehe ich den Dialog "Antwort-Code eintippen"
+    Und ist im Dialog "Verbinden" gesperrt
+    Wenn ich den Code des zweiten Geräts abtippe
+    Und ich im Dialog auf "Verbinden" klicke
+    Dann meldet die Kopplungsleiste "Verbindung aktiv"
+    Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+
+  Szenario: Ein vertippter Antwort-Code wird bemerkt, die Kopplung bleibt offen
+    Wenn ich auf "Zweites Gerät koppeln…" klicke
+    Und das zweite Gerät meinen Kopplungs-Code scannt
+    Und ich auf "Code eintippen…" klicke
+    Und ich den Code des zweiten Geräts mit einem Tippfehler abtippe
+    Und ich im Dialog auf "Verbinden" klicke
+    Dann sehe ich den Dialog "Antwort-Code eintippen"
+    Und meldet der Dialog "Der Code stimmt nicht."
+
   Szenario: Was das zweite Gerät scannt, steht auf der Übersicht des ersten
     Angenommen beide Geräte sind gekoppelt
     Dann zählt die Übersicht 1 Einheiten

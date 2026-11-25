@@ -108,7 +108,8 @@ function zerlegen(s: KopplungsSignal): Teile {
     .filter((a): a is Adresse => a != null);
   // IPv4 und Namen im lokalen Netz zuerst: Sie tragen im WLAN des Fahrzeugs und im Hotspot.
   const adressen = [...alle.filter((a) => a.typ !== 6), ...alle.filter((a) => a.typ === 6)].slice(0, MAX_ADRESSEN);
-  if (adressen.length === 0) throw new Error("Dieses Gerät hat keine Adresse in einem Netz. Ist WLAN oder ein Hotspot verbunden?");
+  // Eine Antwort darf ohne Adressen kommen: Das erste Gerät lernt die des zweiten aus dessen erstem Paket.
+  if (adressen.length === 0 && s.art === "angebot") throw new Error("Dieses Gerät hat keine Adresse in einem Netz. Ist WLAN oder ein Hotspot verbunden?");
   return {
     art: s.art,
     setup,
@@ -184,7 +185,7 @@ function entpacken(bytes: Uint8Array): Teile {
   }
   // Nur Zeichen, die in einer Beschreibung stehen dürfen: Der Text wird Zeile für Zeile eingesetzt.
   const sauber = (s: string) => /^[\x21-\x7e]{1,255}$/.test(s);
-  if (i !== bytes.length || anzahl === 0 || ![ufrag, pwd, mid].every(sauber) || adressen.some((a) => !sauber(a.wert) || a.port === 0)) throw new Error(UNLESBAR);
+  if (i !== bytes.length || (anzahl === 0 && art === "angebot") || ![ufrag, pwd, mid].every(sauber) || adressen.some((a) => !sauber(a.wert) || a.port === 0)) throw new Error(UNLESBAR);
   return { art, setup, fingerabdruck, ufrag, pwd, mid, sctpPort, maxNachricht, adressen };
 }
 
@@ -202,7 +203,8 @@ function zusammensetzen(t: Teile): string {
       "m=application 9 UDP/DTLS/SCTP webrtc-datachannel",
       "c=IN IP4 0.0.0.0",
       ...t.adressen.map((a, n) => `a=candidate:${n + 1} 1 udp ${2113937151 - n} ${a.wert} ${a.port} typ host generation 0`),
-      "a=end-of-candidates",
+      // Ohne Adressen kein „Ende der Adressen": Die Gegenseite wartet dann auf das erste Paket.
+      ...(t.adressen.length > 0 ? ["a=end-of-candidates"] : []),
       `a=ice-ufrag:${t.ufrag}`,
       `a=ice-pwd:${t.pwd}`,
       `a=fingerprint:sha-256 ${fp}`,
@@ -231,4 +233,117 @@ export function signalDekodieren(code: string): KopplungsSignal {
   }
   const t = entpacken(bytes);
   return { art: t.art, sdp: zusammensetzen(t) };
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+// Antwort zum Eintippen: für ein erstes Gerät ohne Kamera und ohne Handscanner.
+//
+// Abtippen lässt sich nur wenig. Von der Antwort bleibt darum allein, was sich nicht anders beschaffen lässt: der
+// Fingerabdruck des Schlüssels des zweiten Geräts (32 Byte) und ein Prüfbyte. Die Kennwörter der Verbindung leiten
+// beide Geräte aus dem ersten Code ab ({@link kennwoerterAbleiten}); das zweite setzt sie in seine Antwort ein. Die
+// Adressen des zweiten Geräts lernt das erste aus dessen erstem Paket. Kürzer geht es nicht: Der Browser verlangt
+// den ganzen Fingerabdruck, bevor er die Verbindung annimmt.
+//
+// 33 Byte in Base32 nach Crockford (ohne I, L, O, U; Groß- und Kleinschreibung gleich) sind 53 Zeichen.
+
+const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+export const KURZCODE_ZEICHEN = 53;
+
+function pruefbyte(bytes: Uint8Array): number {
+  let c = 0;
+  for (const b of bytes) {
+    c ^= b;
+    for (let i = 0; i < 8; i++) c = c & 0x80 ? ((c << 1) ^ 0x07) & 0xff : (c << 1) & 0xff;
+  }
+  return c;
+}
+
+/** Getipptes angleichen: Großbuchstaben, ohne Trennzeichen, verwechselbare Buchstaben auf ihre Ziffern. */
+export function kurzcodeBereinigen(text: string): string {
+  return text.toUpperCase().replace(/[OÖ]/g, "0").replace(/[IL]/g, "1").replace(/U/g, "V").replace(/[^0-9A-Z]/g, "");
+}
+
+/** Sieht der Text nach einem getippten Antwort-Code aus (und nicht nach einem gescannten)? */
+export function istKurzcode(text: string): boolean {
+  return !text.trim().toUpperCase().startsWith(KOPPLUNG_MARKE) && /^[0-9A-Z]{20,80}$/.test(kurzcodeBereinigen(text));
+}
+
+function fingerabdruckBytes(sdp: string): Uint8Array {
+  const [alg, hex] = (zeile(sdp, "a=fingerprint:") ?? "").split(/\s+/);
+  const bytes = (hex ?? "").split(":").map((x) => parseInt(x, 16));
+  if (alg?.toLowerCase() !== "sha-256" || bytes.length !== 32 || bytes.some((b) => !(b >= 0 && b <= 255))) throw new Error("Dieses Gerät konnte keine Verbindung vorbereiten.");
+  return Uint8Array.from(bytes);
+}
+
+/** Die Antwort als Code zum Eintippen, in Vierergruppen. */
+export function kurzcodeKodieren(antwortSdp: string): string {
+  const fp = fingerabdruckBytes(antwortSdp);
+  const bytes = Uint8Array.from([...fp, pruefbyte(fp)]);
+  let bits = 0;
+  let wert = 0;
+  let s = "";
+  for (const b of bytes) {
+    wert = (wert << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      s += B32[(wert >> bits) & 31];
+    }
+    wert &= (1 << bits) - 1;
+  }
+  if (bits > 0) s += B32[(wert << (5 - bits)) & 31];
+  return s.match(/.{1,4}/g)!.join("-");
+}
+
+export const KURZCODE_FALSCH = "Der Code stimmt nicht. Bitte Zeichen für Zeichen mit dem zweiten Gerät vergleichen.";
+
+/**
+ * Aus dem getippten Code und dem eigenen Angebot die Antwort des zweiten Geräts zusammensetzen. `kennwoerter`: aus
+ * dem Angebot abgeleitet ({@link kennwoerterAbleiten}). Wirft mit einem Satz für den Nutzer.
+ */
+export function kurzcodeDekodieren(code: string, angebotSdp: string, kennwoerter: { ufrag: string; pwd: string }): KopplungsSignal {
+  const text = kurzcodeBereinigen(code);
+  if (text.length !== KURZCODE_ZEICHEN) throw new Error(`Der Code hat ${KURZCODE_ZEICHEN} Zeichen, eingegeben sind ${text.length}.`);
+  const bytes: number[] = [];
+  let bits = 0;
+  let wert = 0;
+  for (const z of text) {
+    const v = B32.indexOf(z);
+    if (v < 0) throw new Error(KURZCODE_FALSCH);
+    wert = (wert << 5) | v;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((wert >> bits) & 0xff);
+      wert &= (1 << bits) - 1;
+    }
+  }
+  const fp = Uint8Array.from(bytes.slice(0, 32));
+  if (bytes.length < 33 || pruefbyte(fp) !== bytes[32]) throw new Error(KURZCODE_FALSCH);
+  return {
+    art: "antwort",
+    sdp: zusammensetzen({
+      art: "antwort",
+      setup: "active",
+      fingerabdruck: fp,
+      ufrag: kennwoerter.ufrag,
+      pwd: kennwoerter.pwd,
+      mid: zeile(angebotSdp, "a=mid:") ?? "0",
+      sctpPort: 5000,
+      maxNachricht: 262144,
+      adressen: [],
+    }),
+  };
+}
+
+/**
+ * Die Kennwörter, mit denen das zweite Gerät anklopft, aus dem Angebot des ersten abgeleitet: Beide Geräte kennen
+ * das Angebot (es stand im ersten Code), sonst niemand. Ohne sie müsste der getippte Code sie mittragen.
+ */
+export async function kennwoerterAbleiten(angebotSdp: string): Promise<{ ufrag: string; pwd: string }> {
+  const quelle = `meldekopf-kopplung|${zeile(angebotSdp, "a=ice-pwd:") ?? ""}|${zeile(angebotSdp, "a=ice-ufrag:") ?? ""}|${(zeile(angebotSdp, "a=fingerprint:") ?? "").toUpperCase()}`;
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(quelle)));
+  // Nur Buchstaben und Ziffern: Mehr braucht ein Kennwort der Verbindung nicht, und jedes Zeichen darf dort stehen.
+  const text = [...hash].map((b) => B32[b & 31]! + B32[(b >> 3) & 31]!).join("");
+  return { ufrag: text.slice(0, 8), pwd: text.slice(8, 40) };
 }

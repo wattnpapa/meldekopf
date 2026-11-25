@@ -31,6 +31,8 @@ export interface KopplungsDialog {
   art: "angebot" | "antwort";
   /** Der Code als Text; leer, solange er entsteht. */
   code: string;
+  /** Nur am Antwort-Code: derselbe Inhalt zum Eintippen am ersten Gerät, wenn dort weder Kamera noch Handscanner ist. */
+  kurz?: string;
   fehler?: string;
 }
 

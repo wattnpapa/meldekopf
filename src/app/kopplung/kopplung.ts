@@ -16,11 +16,10 @@ import { frageJaNein } from "@bos/oberflaeche/dialoge";
 import { entwirreScanText } from "../eingang/tastaturbelegung";
 import { SpeicherVollFehler } from "../eintrag-zeiten";
 import { AbgleichSitzung } from "./sitzung";
-import { signalDekodieren, signalKodieren, type KopplungsSignal } from "./signal";
+import { istKurzcode, kennwoerterAbleiten, kurzcodeDekodieren, kurzcodeKodieren, signalDekodieren, signalKodieren, type KopplungsSignal } from "./signal";
 import { GETRENNT_SATZ as GETRENNT_HIER_SATZ } from "./texte";
 import {
   angebotErzeugen,
-  antwortErzeugen,
   kopplungMoeglich,
   rufPlatzVorbereiten,
   rufZertifikat,
@@ -36,6 +35,7 @@ import { kopplungsStandMelden, kopplungsZustand, kopplungsZustandSetzen, kopplun
 export const TAKT_MS = 1000;
 
 export const KEIN_WEBRTC_SATZ = "Dieser Browser kann keine direkte Verbindung zu einem zweiten Gerät aufbauen.";
+export const NICHT_ZUSTANDE_SATZ = "Die Verbindung kam nicht zustande. Sind beide Geräte im selben Netz (WLAN oder Hotspot)? Bitte neu koppeln.";
 export const ANTWORT_STATT_ANGEBOT_SATZ =
   "Das ist ein Antwort-Code. Er gehört auf das Gerät, das die Kopplung begonnen hat (dort „Antwort scannen…“).";
 export const ANGEBOT_STATT_ANTWORT_SATZ =
@@ -64,7 +64,7 @@ let platzNr = 0;
 /** Rufer: Plätze des Hörers, zu denen dieses Gerät eine Antwort bereithält. */
 let rufPlaetze: { nr: number; platz: RufPlatz }[] = [];
 let zertifikat: Promise<RTCCertificate | undefined> | null = null;
-let rufVersuch: { marke: object; verbindung: Verbindung | null; uhr: ReturnType<typeof setTimeout> } | null = null;
+let rufVersuch: { marke: object; platz: number; verbindung: Verbindung | null; uhr: ReturnType<typeof setTimeout> } | null = null;
 let rufUhr: ReturnType<typeof setTimeout> | undefined;
 let rufZahl = 0;
 let aufgebenUhr: ReturnType<typeof setTimeout> | undefined;
@@ -246,7 +246,10 @@ function rufen(nr: number): void {
   if (nr !== lauf || rolle !== "rufer" || aktiv || rufVersuch) return;
   const nutzbar = rufPlaetze.filter((p) => p.platz.nutzbar());
   if (nutzbar.length === 0) {
-    endgueltigGetrennt();
+    const z = kopplungsZustand();
+    // Im Aufbau (der Antwort-Code steht noch da) sagt es der Dialog; eine Leiste „getrennt" gäbe es für nichts.
+    if (z.phase === "verbindet") kopplungsZustandSetzen({ phase: "aus", dialog: z.dialog ? { ...z.dialog, fehler: NICHT_ZUSTANDE_SATZ } : null });
+    else endgueltigGetrennt();
     return;
   }
   // Eine eingefrorene oder verdeckte Seite ruft nicht: Der Anruf liefe ins Leere. Beim Aufwachen geht es weiter.
@@ -263,7 +266,7 @@ function rufen(nr: number): void {
     v?.schliessen();
     if (nr === lauf && !aktiv) rufUhr = setTimeout(() => rufen(nr), pause);
   };
-  rufVersuch = { marke, verbindung: null, uhr: setTimeout(naechster, RUF_FRIST_MS) };
+  rufVersuch = { marke, platz: ziel.nr, verbindung: null, uhr: setTimeout(naechster, RUF_FRIST_MS) };
   ziel.platz.anrufen(horcher(nr, marke)).then(
     (v) => {
       if (rufVersuch?.marke === marke) rufVersuch.verbindung = v;
@@ -324,7 +327,7 @@ function nachfragen(nr: number): void {
 function aufgewacht(): void {
   const nr = lauf;
   if (aktiv) nachfragen(nr);
-  else if (rolle === "rufer" && !rufVersuch && kopplungsZustand().wartet) {
+  else if (rolle === "rufer" && !rufVersuch && (kopplungsZustand().wartet || kopplungsZustand().phase === "verbindet")) {
     rufZahl = 0;
     rufen(nr);
   }
@@ -414,6 +417,13 @@ function horcher(nr: number, marke: object): VerbindungsHorcher {
           for (const [platz, p] of plaetze) if (p.marke === marke) plaetze.delete(platz);
           if (rufVersuch?.marke === marke) {
             clearTimeout(rufVersuch.uhr);
+            // Der angerufene Platz ist beim ersten Gerät jetzt die laufende Verbindung: Er lässt sich nicht noch einmal anrufen.
+            const verbraucht = rufVersuch.platz;
+            rufPlaetze = rufPlaetze.filter((p) => {
+              if (p.nr !== verbraucht) return true;
+              p.platz.verwerfen();
+              return false;
+            });
             rufVersuch = null;
           }
           clearTimeout(rufUhr);
@@ -454,7 +464,7 @@ function horcher(nr: number, marke: object): VerbindungsHorcher {
           angebot = null;
           kopplungsZustandSetzen({
             phase: "aus",
-            dialog: z.dialog ? { ...z.dialog, fehler: "Die Verbindung kam nicht zustande. Sind beide Geräte im selben Netz (WLAN oder Hotspot)? Bitte neu koppeln." } : null,
+            dialog: z.dialog ? { ...z.dialog, fehler: NICHT_ZUSTANDE_SATZ } : null,
           });
         }
       }
@@ -565,9 +575,13 @@ export async function kopplungBeginnenMitRueckfrage(einsatzId: string): Promise<
   await kopplungStarten(einsatzId);
 }
 
-/** Erstes Gerät: den Antwort-Code des zweiten Geräts einsetzen. Wirft mit einem Satz für den Scanner. */
+/**
+ * Erstes Gerät: den Antwort-Code des zweiten Geräts einsetzen, gescannt oder eingetippt. Wirft mit einem Satz für
+ * Scanner oder Eingabefeld.
+ */
 export async function kopplungAntwortAnnehmen(text: string): Promise<void> {
-  const s = lesen(text);
+  if (!angebot) throw new Error("Die Kopplung wurde inzwischen abgebrochen. Bitte neu beginnen.");
+  const s = istKurzcode(text) ? kurzcodeDekodieren(text, angebot.sdp, await kennwoerterAbleiten(angebot.sdp)) : lesen(text);
   if (s.art !== "antwort") throw new Error(ANGEBOT_STATT_ANTWORT_SATZ);
   if (!angebot) throw new Error("Die Kopplung wurde inzwischen abgebrochen. Bitte neu beginnen.");
   try {
@@ -591,17 +605,23 @@ export async function kopplungAngebotGescannt(text: string): Promise<void> {
     sitzung = neueSitzung(null, nr, "sammler");
     rolle = "rufer";
     zertifikat = rufZertifikat();
-    const marke = {};
-    ersteMarke = marke;
-    const a = await antwortErzeugen(s.sdp, horcher(nr, marke), (v) => {
-      if (nr === lauf && ersteMarke === marke) erste = v;
-    });
+    // Das Angebot des ersten Geräts ist der erste wartende Platz: Dieses Gerät ruft ihn an, bis dort die Antwort
+    // gesetzt ist (gescannt oder eingetippt, das kann Minuten dauern), mit denselben Pausen wie nach einem Abriss.
+    const platz = await rufPlatzVorbereiten(s.sdp, await zertifikat, await kennwoerterAbleiten(s.sdp));
     if (nr !== lauf) {
-      a.verbindung.schliessen();
+      platz.verwerfen();
       return;
     }
-    // Die Verbindung kann schon stehen, bevor der Code gezeigt wird (derselbe Rechner im Test): dann keinen Dialog mehr öffnen.
-    if (kopplungsZustand().phase === "verbindet") kopplungsZustandSetzen({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: a.sdp }) } });
+    rufPlaetze = [{ nr: 0, platz }];
+    kopplungsZustandSetzen({
+      dialog: {
+        art: "antwort",
+        code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }),
+        // Zum Eintippen nur, wenn das erste Gerät sich die Kennwörter selbst ableiten kann.
+        ...(platz.vorgabeGilt ? { kurz: kurzcodeKodieren(platz.antwortSdp) } : {}),
+      },
+    });
+    rufen(nr);
   } catch {
     if (nr === lauf) {
       aufraeumen();
