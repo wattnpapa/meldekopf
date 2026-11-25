@@ -86,6 +86,8 @@ export interface TafelEinheit {
   eingetroffen: number;
   /** Was zu entscheiden ist: „Ruhezeit", „Unterbringung", „Verpflegung 20". Leer bei einer Übungsmeldung, die nicht zählt. */
   bedarf: string[];
+  /** Dringender Bedarf, den die Führungsstelle als geklärt abgehakt hat: steht ruhig mit Haken daneben. Fehlt = nichts abgehakt. */
+  geklaert?: string[];
   marke?: TafelMarke;
   /**
    * Übungsmeldung in einer echten Lage: anwesend, aber nicht gezählt (`zaehltInLage`). Sie steht als knappe Zeile in
@@ -279,12 +281,12 @@ export function meldungTeile(m: Pick<MeldeEintrag, "bogen" | "teilEtikett">): { 
 
 /**
  * Kurzer Bedarf je Einheit: nur, was zu entscheiden ist (`bedarfMarken`, dringend), ohne Füllwörter. Was die Führungsstelle
- * als geklärt abgehakt hat (bedarf-geklaert.ts), ist entschieden und steht nicht mehr an der Karte; `alle` sind die
- * Meldungen des Einsatzes, an deren Fassungen die Haken hängen.
+ * als geklärt abgehakt hat (bedarf-geklaert.ts), ist entschieden und trägt kein Warnzeichen mehr: Es steht mit `geklaert`
+ * = true als eigene, ruhige Liste. `alle` sind die Meldungen des Einsatzes, an deren Fassungen die Haken hängen.
  */
-export function bedarfKurz(e: MeldeEintrag, alle: readonly MeldeEintrag[] = [e]): string[] {
+export function bedarfKurz(e: MeldeEintrag, alle: readonly MeldeEintrag[] = [e], geklaert = false): string[] {
   return bedarfMarken(e.bogen)
-    .filter((m) => m.dringend && bedarfGeklaertAm(e, m, alle) == null)
+    .filter((m) => m.dringend && (bedarfGeklaertAm(e, m, alle) != null) === geklaert)
     .map((m) => m.lang.replace(/ angefordert$/, "").replace(/ \(Stärke \d+\)$/, ""));
 }
 
@@ -372,6 +374,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
       stand: angabenZeit(m),
       eingetroffen: z.eingetroffen,
       bedarf: bedarfKurz(m, einsatz.eintraege),
+      ...(bedarfKurz(m, einsatz.eintraege, true).length > 0 ? { geklaert: bedarfKurz(m, einsatz.eintraege, true) } : {}),
       ...(neuAmPlatz ? { marke: neuAmPlatz } : {}),
       uebung: false,
     });
@@ -495,10 +498,15 @@ function breitAus(wer: number, was: number): number {
   return kartenRand() + Math.max(wer + was, wer / SATZ.wer.max, was / (1 - SATZ.wer.min));
 }
 
+/** Text der ruhigen Marke für abgehakten Bedarf („✓ Ruhezeit, Unterbringung"); leer, wenn nichts abgehakt ist. */
+export function geklaertText(e: Pick<TafelEinheit, "geklaert">): string {
+  return e.geklaert && e.geklaert.length > 0 ? `✓ ${e.geklaert.join(", ")}` : "";
+}
+
 /** Die zwei Teile der breiten Karte, wenn alles ganz dastehen soll ({@link breitAus}). */
 function breitTeile(e: TafelEinheit): { wer: number; was: number } {
   const normal = (text: string) => textBreite(text) * NORMAL_ZU_FETT;
-  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (textBreite(t) + 0.64));
+  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined, geklaertText(e) || undefined].filter((t): t is string => t != null).map((t) => 0.7 * (textBreite(t) + 0.64));
   const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.88 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
   const typKurz = e.typKurz ? 0.74 * textBreite(e.typKurz) + 0.33 : 0;
   const funk = e.funkruf ? 0.74 * normal(e.funkruf) + 0.33 : 0;
@@ -574,7 +582,7 @@ export function kartenBedarf(e: TafelEinheit): Record<KartenFassung, number> {
   const rand = kartenRand();
   const staerke = staerkeBreite(e);
   const stand = STAND_BREITE;
-  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
+  const marken = [e.marke?.text, e.bedarf.length > 0 ? e.bedarf.join(", ") : undefined, geklaertText(e) || undefined].filter((t): t is string => t != null).map((t) => 0.7 * (fett(t) + 0.64));
   const markenBreite = marken.length > 0 ? marken.reduce((summe, b) => summe + b, 0) + (e.bedarf.length > 0 ? 0.88 : 0) + 0.3 * (marken.length - 1) + 0.4 : 0;
   // Wie beim Typ zählt die Kurzform: Sie springt ein, wo der volle Name nicht passt („FF Lenglern"), und bleibt ganz.
   const kopf = nameBreite(e) + staerke;

@@ -355,6 +355,8 @@ main.lt:is([data-fassung="zwei"], [data-fassung="drei"]) .lt-auftrag { container
 .lt-marke-folge { color: var(--lt-text); }
 .lt-marke-achtung { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--lt-achtung); }
 .lt-marke-achtung::before { content: "\26A0\FE0E\00A0"; }
+/* Abgehakter Bedarf: Textfarbe statt Bernstein, normal statt fett, und er weicht vor dem offenen Bedarf. */
+.lt-marke-geklaert { flex: 0 2 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--lt-text); font-weight: 400; }
 
 /* Zwei Zeilen, Typ in Kurzform; der Funkrufname entfällt, wo es eng ist. Die zweite Zeile teilen sich Typ, Auftrag und Marken
    (.lt-wie, mit dem Typ vorn) neben dem Stand. Wird sie eng, weicht zuerst der Auftrag, dann der Bedarf. Der Typ bleibt: Eine

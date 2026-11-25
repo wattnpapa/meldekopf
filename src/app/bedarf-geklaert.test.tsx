@@ -7,7 +7,7 @@ import { OrganisationsTyp, PersonalErfassung, SCHEMA_VERSION, jetztZeitpunkt, ty
 import { EinsatzArt, MeldeStatus, einsaetzeLaden as kernEinsaetzeLaden, einsatzAnlegen, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { bedarfGeklaertAm, bedarfKlaeren, hinweiseGesehen, hinweiseQuittieren, offeneHinweise } from "./bedarf-geklaert";
 import { bedarfMarken, bedarfOffen, offenText, passtZuBedarfsfilter } from "./einheiten-tabelle";
-import { bedarfKurz } from "./lagetafel";
+import { bedarfKurz, geklaertText } from "./lagetafel";
 import { sammlungenSchreiben } from "./eintrag-zeiten";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 
@@ -105,6 +105,9 @@ describe("Sofortbedarf als geklärt abhaken", () => {
     expect(offenText(1, 2)).toBe("davon 1 offen");
     expect(offenText(0, 2)).toBe("alle geklärt");
     expect(bedarfKurz(alle[0]!, alle)).toEqual([]);
+    expect(bedarfKurz(alle[0]!, alle, true)).toEqual(["Ruhezeit"]);
+    expect(geklaertText({ geklaert: bedarfKurz(alle[0]!, alle, true) })).toBe("✓ Ruhezeit");
+    expect(geklaertText({})).toBe("");
     expect(bedarfKurz(alle[1]!, alle)).toEqual(["Ruhezeit"]);
   });
 
