@@ -918,7 +918,8 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     ansicht(angelegt.id);
 
     const marken = [...document.querySelectorAll(".bedarf-marke")].map((m) => m.textContent);
-    expect(marken).toEqual(["Ruhezeit", "Unterbringung angefordert", "Diesel 400 l"]);
+    // Jede Marke ist ein Schalter und fragt, solange der Bedarf offen ist, „geklärt?" (bedarf-geklaert.ts).
+    expect(marken).toEqual(["Ruhezeit · geklärt?", "Unterbringung angefordert · geklärt?", "Diesel 400 l · geklärt?"]);
     // Kraftstoff als Routine abgesetzt, Dringendes hervorgehoben (R2-K4).
     expect(document.querySelectorAll(".bedarf-marke.dringend")).toHaveLength(2);
     expect(document.querySelectorAll(".bedarf-marke.routine")).toHaveLength(1);
@@ -928,6 +929,38 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     expect(namen).toHaveLength(1);
     expect(namen[0]).toContain("Crailsheim");
     expect(screen.getByRole("heading", { name: /Einheiten \(1 von 2 gemeldet · 2 anwesend\)/ })).not.toBeNull();
+  });
+
+  it("hakt Sofortbedarf an der Karte als geklärt ab und nimmt ihn aus dem Filter „dringend“", async () => {
+    const nutzer = userEvent.setup();
+    const angelegt = einsatzAnlegen("Lage", EinsatzArt.EINSATZ);
+    const mitBedarf = bogenMitName("Crailsheim");
+    mitBedarf.sofortbedarf = { verpflegungPersonen: 0, dieselLiter: 400, benzinLiter: 0, gemischLiter: 0, unterbringung: true, ruhezeitErforderlich: true };
+    meldungHinzufuegen(angelegt.id, mitBedarf);
+    const { neuLaden } = ansicht(angelegt.id);
+
+    await nutzer.click(screen.getByRole("button", { name: /^Ruhezeit · geklärt\?$/ }));
+    neuLaden();
+    const ruhe = screen.getByRole("button", { name: /^✓ Ruhezeit · geklärt \d\d:\d\d$/ });
+    expect(ruhe.getAttribute("aria-pressed")).toBe("true");
+    expect(ruhe.className).toContain("geklaert");
+    // Unterbringung ist noch offen: die Einheit bleibt dringend.
+    expect(document.querySelectorAll(".bedarf-marke.dringend")).toHaveLength(1);
+    await nutzer.click(screen.getByRole("button", { name: /^Unterbringung angefordert · geklärt\?$/ }));
+    neuLaden();
+    expect(document.querySelectorAll(".bedarf-marke.dringend")).toHaveLength(0);
+    // Nichts Dringendes mehr offen: der Filter wird gar nicht mehr angeboten.
+    expect(screen.queryByLabelText(/nur dringender Bedarf/)).toBeNull();
+
+    // Der nächste Tipp nimmt den Haken zurück; beides steht im Verlauf der Einheit.
+    await nutzer.click(screen.getByRole("button", { name: /^✓ Ruhezeit · geklärt/ }));
+    neuLaden();
+    expect(screen.getByRole("button", { name: /^Ruhezeit · geklärt\?$/ }).getAttribute("aria-pressed")).toBe("false");
+    expect(einsaetzeLaden()[0]!.eintraege[0]!.vermerke?.map((v) => v.text)).toEqual([
+      "Bedarf geklärt: Ruhezeit",
+      "Bedarf geklärt: Unterbringung angefordert",
+      "Bedarf wieder offen: Ruhezeit",
+    ]);
   });
 
   it("filtert nicht auf Kraftstoff allein und springt aus „Ruhezeit: n×“ in den Filter (R2-K4)", async () => {

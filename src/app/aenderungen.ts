@@ -43,6 +43,8 @@ export const AENDERUNGEN: readonly Aenderung[] = [
       "Kopplung: Der Stand des Rechners gilt. Jedes verbundene Telefon zeigt alle Einheiten, die der Rechner führt, auch die der anderen Telefone. Was ein Telefon ohne Verbindung aufnimmt, steht dort als „… wartet“ und geht mit der nächsten Verbindung nach.",
       "Kopplung: Der Dialog zeigt die Netzadressen beider Geräte und ob sie einander erreichen, und warnt, wenn sie in verschiedenen Netzen hängen. Firefox kann jetzt auch das erste Gerät sein, und mit einem iPhone geht das Anklopfen schneller.",
       "Einsatzansicht am Rechner: Links steht die Liste als Tabelle mit taktischem Zeichen, Name, Organisation, Auftrag, dringendem Bedarf, Eintreffzeit und Stärke, rechts die ganze Karte der gewählten Einheit mit der Stärke als vier Kacheln. Die Liste lässt sich nach Organisation gruppieren, die übrigen Filter liegen hinter „Filter…“.",
+      "Neu: Sofortbedarf abhaken. An der Karte ist jede Marke wie „Ruhezeit“, „Unterbringung angefordert“ oder „Diesel 400 l“ ein Schalter: Ein Tipp vermerkt den Bedarf als geklärt, mit Haken und Uhrzeit, der nächste nimmt den Haken zurück. Geklärtes tritt in der Liste zurück und fällt aus dem Filter „nur dringender Bedarf“. Meldet die Einheit später einen anderen Bedarf, ist er wieder offen. Die Summen rechnen unverändert mit dem gemeldeten Bedarf.",
+      "Neu: „Hinweise gesehen“ an der Karte. Zur Kenntnis genommene Prüfhinweise zählen in der Liste nicht mehr mit; kommt ein neuer Hinweis dazu, erscheint er wieder. „Wieder zeigen“ kehrt das um.",
       "Karte der Einheit: Die Zeile „Absender“ mit Name, E-Mail und Telefon aus der Signatur steht nicht mehr über der Führung. Wer den Bogen geschickt hat, steht weiter in den Details und im PDF.",
     ],
   },

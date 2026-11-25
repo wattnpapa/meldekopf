@@ -32,11 +32,14 @@ import { angabenAlterWort, angabenZeit } from "./angaben-alter";
 import { revisionenJe } from "./einheiten-index";
 import { istVerdraengt } from "./fassung-vorrang";
 import { ortIstGebilligt } from "./ort-gebilligt";
+import { bedarfGeklaertAm, type BedarfArt } from "./bedarf-geklaert";
 
 // ------------------------------------------------------------ Bedarfsmarken
 
 /** Eine Bedarfsmarke: ausgeschrieben für die Karte, kurz für die Tabellenzelle. */
 export interface BedarfMarke {
+  /** Welcher Bedarf — daran hängt der Haken „geklärt" (bedarf-geklaert.ts). */
+  art: BedarfArt;
   lang: string;
   kurz: string;
   /**
@@ -63,19 +66,20 @@ export function bedarfMarken(b: Erfassungsbogen): BedarfMarke[] {
   const sb = b.sofortbedarf;
   if (!sb) return [];
   const marken: BedarfMarke[] = [];
-  if (sb.ruhezeitErforderlich) marken.push({ lang: "Ruhezeit", kurz: "Ruhezeit", dringend: true });
-  if (sb.unterbringung) marken.push({ lang: "Unterbringung angefordert", kurz: "Unterbr.", dringend: true });
+  if (sb.ruhezeitErforderlich) marken.push({ art: "ruhezeit", lang: "Ruhezeit", kurz: "Ruhezeit", dringend: true });
+  if (sb.unterbringung) marken.push({ art: "unterbringung", lang: "Unterbringung angefordert", kurz: "Unterbr.", dringend: true });
   const gesamt = staerke(b).gesamt;
   if (sb.verpflegungPersonen > 0 && sb.verpflegungPersonen !== gesamt) {
     marken.push({
+      art: "verpflegung",
       lang: `Verpflegung ${sb.verpflegungPersonen} (Stärke ${gesamt})`,
       kurz: `Verpfl. ${sb.verpflegungPersonen} (St. ${gesamt})`,
       dringend: true,
     });
   }
-  if (sb.dieselLiter > 0) marken.push({ lang: `Diesel ${sb.dieselLiter} l`, kurz: `Diesel ${sb.dieselLiter} l`, dringend: false });
-  if (sb.benzinLiter > 0) marken.push({ lang: `Benzin ${sb.benzinLiter} l`, kurz: `Benzin ${sb.benzinLiter} l`, dringend: false });
-  if (sb.gemischLiter > 0) marken.push({ lang: `Gemisch ${sb.gemischLiter} l`, kurz: `Gemisch ${sb.gemischLiter} l`, dringend: false });
+  if (sb.dieselLiter > 0) marken.push({ art: "diesel", lang: `Diesel ${sb.dieselLiter} l`, kurz: `Diesel ${sb.dieselLiter} l`, dringend: false });
+  if (sb.benzinLiter > 0) marken.push({ art: "benzin", lang: `Benzin ${sb.benzinLiter} l`, kurz: `Benzin ${sb.benzinLiter} l`, dringend: false });
+  if (sb.gemischLiter > 0) marken.push({ art: "gemisch", lang: `Gemisch ${sb.gemischLiter} l`, kurz: `Gemisch ${sb.gemischLiter} l`, dringend: false });
   return marken;
 }
 
@@ -96,16 +100,19 @@ export function hatSofortbedarf(e: MeldeEintrag): boolean {
  * weil jede Einheit Kraftstoff meldet (Audit Runde 2, R2-K4). Gefiltert wird
  * darum auf das, was jetzt zu entscheiden ist — oder gezielt auf Ruhezeit bzw.
  * Unterbringung (Sprung aus den Kopfzahlen). Abgerückte fallen immer heraus:
- * für sie ist nichts mehr zu entscheiden.
+ * für sie ist nichts mehr zu entscheiden. `alle` sind die Meldungen des
+ * Einsatzes; an ihren Fassungen hängen die Haken „geklärt".
  */
 export type BedarfsFilter = "dringend" | "ruhezeit" | "unterbringung";
 
-export function passtZuBedarfsfilter(e: MeldeEintrag, filter: BedarfsFilter): boolean {
+export function passtZuBedarfsfilter(e: MeldeEintrag, filter: BedarfsFilter, alle: readonly MeldeEintrag[] = [e]): boolean {
   if (e.status !== MeldeStatus.ANWESEND) return false;
   const sb = e.bogen.sofortbedarf;
+  // Die Sprünge aus den Kopfzahlen zeigen alle gezählten Einheiten, auch die geklärten: „Ruhezeit: 5 Einheiten" und fünf Zeilen.
   if (filter === "ruhezeit") return !!sb?.ruhezeitErforderlich;
   if (filter === "unterbringung") return !!sb?.unterbringung;
-  return bedarfMarken(e.bogen).some((m) => m.dringend);
+  // „Dringend" ist, was noch zu entscheiden ist: Als geklärt Abgehaktes fällt heraus (bedarf-geklaert.ts).
+  return bedarfMarken(e.bogen).some((m) => m.dringend && bedarfGeklaertAm(e, m, alle) == null);
 }
 
 /**

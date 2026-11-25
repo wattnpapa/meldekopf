@@ -194,6 +194,7 @@ import { EinheitZeichen } from "./zeichen-bild";
 import type { PapierkorbMeldung } from "./meldungs-papierkorb";
 import { standAbsenderVermerken, standDesAbsenders } from "./stand-absender";
 import { ortBilligen, ortIstGebilligt } from "./ort-gebilligt";
+import { bedarfGeklaertAm, bedarfKlaeren, hinweiseGesehen, hinweiseQuittieren, offeneHinweise, type BedarfPunkt } from "./bedarf-geklaert";
 import { gezaehltWegBeobachten, gezaehltWegFuer, gezaehltWegVergessen, gezaehltZuruecknehmen } from "./gezaehlt-weg";
 import { TabellenScroll } from "@bos/oberflaeche/tabellen-scroll";
 import {
@@ -2040,7 +2041,7 @@ export function EinsatzDetail(props: {
   const qualiFunktionen = qualiListe.filter((q) => !istFahrerlaubnis(q.schluessel));
   const qualiFahrerlaubnis = qualiListe.filter((q) => istFahrerlaubnis(q.schluessel));
   const kopfOhneBedarfsfilter = einheitenAnsicht(alleEinheiten, suche, sortierung, quali, nummern);
-  const kopfNachBedarf = bedarfsFilter ? kopfOhneBedarfsfilter.filter((e) => passtZuBedarfsfilter(e, bedarfsFilter)) : kopfOhneBedarfsfilter;
+  const kopfNachBedarf = bedarfsFilter ? kopfOhneBedarfsfilter.filter((e) => passtZuBedarfsfilter(e, bedarfsFilter, alleEinheiten)) : kopfOhneBedarfsfilter;
   const kopfNachLuecke = lueckenFilter ? kopfNachBedarf.filter((e) => passtZuLueckenfilter(e, lueckenFilter)) : kopfNachBedarf;
   // Die Aufträge des Einsatzes; ein gewählter, den es nicht mehr gibt (geändert, Einheit entfernt), filtert nicht weiter.
   const auftraege = auftraegeImEinsatz(alleEinheiten);
@@ -4638,7 +4639,10 @@ function EinheitKarte(props: {
   // Prüfliste, die die Einheit beim Ausfüllen sieht. Auf der Karte, damit die
   // Rückfrage kommt, solange die Einheit noch vor dem Meldekopf steht (K3).
   const luecken = pruefpunkteEintrag(kopf);
-  const bedarf = bedarfMarken(kopf.bogen);
+  // Je Marke, wann sie als geklärt abgehakt wurde (null = offen); von den Hinweisen die, die noch niemand gesehen hat (bedarf-geklaert.ts).
+  const bedarf = bedarfMarken(kopf.bogen).map((m) => ({ ...m, geklaert: bedarfGeklaertAm(kopf, m, alle) }));
+  const lueckenOffenListe = offeneHinweise(luecken, kopf, alle);
+  const lueckenGesehenAm = luecken.length > 0 && lueckenOffenListe.length === 0 ? hinweiseGesehen(kopf, alle).am : null;
   // Eben bestätigter Stand dieser Karte, für die Zeile mit „Rückgängig".
   const [bestaetigung, setBestaetigung] = useState<{ id: string; zeit: number; vorher: MeldeEintrag["angaben"] } | null>(null);
   const funkruf = funkrufDerEinheit(kopf.bogen);
@@ -5242,6 +5246,17 @@ function EinheitKarte(props: {
     if (ok) onGeaendert();
   }
 
+  /** Sofortbedarf abhaken oder den Haken zurücknehmen — ohne Rückfrage, weil der nächste Tipp es umkehrt. */
+  async function bedarfGeklaert(m: BedarfPunkt, gilt: boolean) {
+    if (await gesichert(gilt ? "Bedarf abhaken" : "Bedarf wieder öffnen", () => void bedarfKlaeren(einsatzId, kopf.id, m, gilt))) onGeaendert();
+  }
+
+  /** Die offenen Prüfhinweise zur Kenntnis nehmen oder alle wieder zeigen. */
+  async function hinweiseGesehenSetzen(gilt: boolean) {
+    const texte = lueckenOffenListe.map((p) => p.text);
+    if (await gesichert(gilt ? "Hinweise abhaken" : "Hinweise wieder zeigen", () => void hinweiseQuittieren(einsatzId, kopf.id, texte, gilt))) onGeaendert();
+  }
+
   async function verschieben() {
     const andere = einsaetzeLaden().filter((s) => s.id !== einsatzId);
     if (andere.length === 0) {
@@ -5538,7 +5553,7 @@ function EinheitKarte(props: {
               {/* Liste am Rechner: die Organisation als ruhige Angabe und alle Hinweise als eine Zahl; die Einzelheiten stehen in der Detailspalte. */}
               {reihe && <span className="reihe-org">{orgLabel(kopf.bogen.einheit.organisation)}</span>}
               {reihe && (() => {
-                const n = (zaehlt && Date.now() - angabenZeit(kopf) >= VERALTET_MIN * 60_000 ? 1 : 0) + (zaehlt ? luecken.length : 0) + (props.fremderOrt ? 1 : 0) + (zeitHinweis ? 1 : 0) + (nachgereicht ? 1 : 0);
+                const n = (zaehlt && Date.now() - angabenZeit(kopf) >= VERALTET_MIN * 60_000 ? 1 : 0) + (zaehlt ? lueckenOffenListe.length : 0) + (props.fremderOrt ? 1 : 0) + (zeitHinweis ? 1 : 0) + (nachgereicht ? 1 : 0);
                 return n > 0 ? <span className="reihe-hinweis" title="Stand, Lücken und Prüfhinweise stehen bei der gewählten Einheit rechts.">⚠ {n === 1 ? "1 Hinweis" : `${n} Hinweise`}</span> : null;
               })()}
               {/* Liste am Rechner: die Eintreffzeit als eigene Spalte neben der Stärke. */}
@@ -5563,7 +5578,8 @@ function EinheitKarte(props: {
                 </span>
               )}
               {bedarf.map((m) => (
-                <span className={m.dringend && zaehlt ? "bedarf-marke dringend" : "bedarf-marke routine"} key={m.lang} title={m.lang}>{m.kurz}</span>
+                // Geklärtes tritt zurück wie der Kraftstoff und trägt den Haken; in der Liste am Rechner fällt es damit aus der Zeile.
+                <span className={m.geklaert != null ? "bedarf-marke routine geklaert" : m.dringend && zaehlt ? "bedarf-marke dringend" : "bedarf-marke routine"} key={m.lang} title={m.geklaert != null ? `${m.lang} — geklärt ${zeitKurz(m.geklaert)}` : m.lang}>{m.geklaert != null ? "✓ " : ""}{m.kurz}</span>
               ))}
               {zaehlt && bedarfNichtErfasst(kopf.bogen) && (
                 <span className="bedarf-marke routine bedarf-nicht-erfasst">Bedarf nicht erfasst</span>
@@ -5612,9 +5628,9 @@ function EinheitKarte(props: {
                   Auftrag: {kopf.notiz.length > AUFTRAG_KARTE_MAX ? `${kopf.notiz.slice(0, AUFTRAG_KARTE_MAX - 1)}… (mehr)` : kopf.notiz}
                 </span>
               )}
-              {zaehlt && luecken.length > 0 && (
-                <span className="kompakt-merkmal luecken-merkmal" data-oeffnet="luecken" title={luecken.map((p) => p.text).join("\n")}>
-                  {lueckenText(luecken.map((p) => p.text))}
+              {zaehlt && lueckenOffenListe.length > 0 && (
+                <span className="kompakt-merkmal luecken-merkmal" data-oeffnet="luecken" title={lueckenOffenListe.map((p) => p.text).join("\n")}>
+                  {lueckenText(lueckenOffenListe.map((p) => p.text))}
                 </span>
               )}
             </span>
@@ -5757,7 +5773,24 @@ function EinheitKarte(props: {
                 // An einer abgerückten oder zusammengeführten Einheit grau:
                 // gezählt wird ihr Bedarf nicht, gelb zog er trotzdem den
                 // Blick (Audit Runde 3, R3-K7).
-                <span className={m.dringend && zaehlt ? "bedarf-marke dringend" : "bedarf-marke routine"} key={m.lang}>{m.lang}</span>
+                // Jede Marke ist ein Schalter: ein Tipp hakt den Bedarf als geklärt ab, der nächste nimmt den Haken zurück.
+                // An einer Einheit, die nicht mehr zählt, ist nichts mehr zu klären — dort bleibt die Marke Text.
+                !zaehlt ? (
+                  <span className="bedarf-marke routine" key={m.lang}>{m.geklaert != null ? "✓ " : ""}{m.lang}</span>
+                ) : (
+                  <button
+                    type="button"
+                    key={m.lang}
+                    className={m.geklaert != null ? "bedarf-marke routine geklaert bedarf-knopf" : `bedarf-marke ${m.dringend ? "dringend" : "routine"} bedarf-knopf`}
+                    aria-pressed={m.geklaert != null}
+                    aria-describedby={nameId}
+                    title={m.geklaert != null ? "Geklärt — antippen, um den Bedarf wieder als offen zu zeigen" : "Antippen, wenn der Bedarf geklärt ist"}
+                    onClick={() => void bedarfGeklaert(m, m.geklaert == null)}
+                  >
+                    {m.geklaert != null ? "✓ " : ""}{m.lang}{" "}
+                    <span className="bedarf-tun">{m.geklaert != null ? `· geklärt ${zeitKurz(m.geklaert)}` : "· geklärt?"}</span>
+                  </button>
+                )
               ))}
             </span>
           )}
@@ -5814,14 +5847,20 @@ function EinheitKarte(props: {
               <button
                 aria-describedby={nameId}
                 type="button"
-                className="link luecken-marke"
+                className={lueckenGesehenAm != null ? "link luecken-marke gesehen" : "link luecken-marke"}
                 aria-expanded={lueckenOffen}
                 title={luecken.map((p) => p.text).join("\n")}
                 onClick={() => setLueckenOffen(!lueckenOffen)}
               >
                 {/* Der Inhalt statt „1 Lücke" (R3-K7). */}
-                Hinweise: {lueckenText(luecken.map((p) => p.text))}
+                {lueckenGesehenAm != null ? `Hinweise (gesehen ${zeitKurz(lueckenGesehenAm)}): ` : "Hinweise: "}{lueckenText(luecken.map((p) => p.text))}
               </button>
+              {/* Prüfhinweise lassen sich nicht immer beheben (Sitzplätze, fehlende Nummer). Zur Kenntnis genommen zählen sie in der Liste nicht mehr mit. */}
+              {zaehlt && (lueckenOffenListe.length > 0 ? (
+                <>{" "}<button type="button" className="link hinweise-gesehen" aria-describedby={nameId} onClick={() => void hinweiseGesehenSetzen(true)}>Hinweise gesehen</button></>
+              ) : (
+                <>{" "}<button type="button" className="link hinweise-gesehen" aria-describedby={nameId} onClick={() => void hinweiseGesehenSetzen(false)}>Wieder zeigen</button></>
+              ))}
             </span>
           )}
           {qualiPersonen.length > 0 && (

@@ -45,6 +45,9 @@ Verlauf über Tage oder Aufträge braucht, ist S1-Control.
 - Folgemeldungen als Historie je Einheit; Schichtübergabe-Diff („Stärke
   12 → 9, Fahrzeug abgemeldet").
 - Abrücken, Bogen aufteilen und zusammenführen, Papier-Abgleich.
+- Sofortbedarf je Einheit als geklärt abhaken und Prüfhinweise zur Kenntnis
+  nehmen: Erledigtes tritt in der Liste zurück, offen bleibt, was noch zu
+  entscheiden ist.
 - Lagemonitor für den Fernseher am Gerät: Funkrufname, Einsatzname, DTG,
   Einsatzdauer, Stärke, Bedarf, Einheitentabelle mit Gesamtstärke, ohne
   Personennamen. Wahlweise als Tafel für den großen Fernseher im

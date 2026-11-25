@@ -1662,6 +1662,15 @@
       background: transparent; color: var(--text-2);
       border-color: var(--linie); font-weight: 400;
     }
+    /* Bedarf abhaken (bedarf-geklaert.ts): In der Karte ist jede Marke ein Schalter. Offen fragt sie „geklärt?", abgehakt
+       steht sie ruhig mit Haken und Uhrzeit. Die Tippfläche ist höher als die Marke, damit sie mit Handschuh trifft. */
+    button.bedarf-marke.bedarf-knopf {
+      font-family: inherit; cursor: pointer; text-align: left; position: relative; z-index: 2;
+      min-height: calc(var(--ziel-basis) + var(--ziel)); padding-inline: 0.6rem;
+    }
+    button.bedarf-marke.bedarf-knopf .bedarf-tun { font-weight: 400; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .bedarf-marke.geklaert::before { content: none; }
+    button.link.luecken-marke.gesehen { color: var(--text-2); font-weight: 400; }
     /* Auftrag/Notiz der Führungsstelle: steht als eigene Zeile unter dem
        Namen, links mit dem Akzentstrich markiert — sie ist das, was die
        Führungsstelle der Einheit gegeben hat, nicht deren Meldung (K5). */
