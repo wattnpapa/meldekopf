@@ -9,6 +9,21 @@
 /** Jeder Kopplungs-Code beginnt so; Großbuchstaben, damit der QR-Code im dichten alphanumerischen Modus bleibt. */
 export const KOPPLUNG_MARKE = "MKK1.";
 
+/**
+ * Merker im `localStorage`, dass dieses Gerät eine Kopplung hat, die sich nach dem Neuladen fortsetzen lässt
+ * (merker.ts): Rolle, Sammlung, Zeit. Keine Verbindungsangaben, keine Einsatzdaten.
+ */
+export const KOPPLUNG_MERKER = "eeb.kopplung.v1";
+
+/** Beim Start: Gibt es eine gemerkte Kopplung, lädt die Steuerung nach und setzt sie fort. */
+export function kopplungFortsetzenWennGemerkt(): void {
+  try {
+    if (localStorage.getItem(KOPPLUNG_MERKER)) void import("./kopplung").then((m) => m.kopplungFortsetzen());
+  } catch {
+    /* Speicher gesperrt: nichts gemerkt */
+  }
+}
+
 /** Ist der gescannte Text ein Kopplungs-Code (Angebot oder Antwort)? */
 export function istKopplungsCode(text: string): boolean {
   return text.trim().toUpperCase().startsWith(KOPPLUNG_MARKE);

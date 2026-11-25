@@ -651,9 +651,20 @@ sequenceDiagram
   45 Sekunden „Kopplung getrennt“; das Wiederverbinden läuft dabei weiter.
   „Trennen“ und das Schließen der Seite sagen dem anderen Gerät Bescheid, es
   zeigt dann sofort „getrennt“ und wartet nicht.
-- Nicht überbrückt wird ein Neuladen der Seite (auch nach einer neuen Fassung
-  der App) und ein vom Browser verworfener Tab: Die Verbindungsobjekte sind
-  dann weg, es braucht den Code-Tausch. Das gilt für beide Geräte.
+- **Neuladen (seit 2026-11-25).** Das zweite Gerät merkt sich sein Zertifikat
+  und die wartenden Plätze des ersten (`merker.ts`, Kap. 8.2). Lädt es seine
+  Seite neu, räumt der Browser den Tab weg oder wird die App erst Tage später
+  wieder geöffnet, ruft es das erste Gerät damit wieder an, ohne Scan; die
+  Marken „✓ übertragen“ bleiben. Das trägt, solange die Seite des ersten
+  Geräts offen geblieben ist, denn dessen wartende Verbindungen leben in
+  seinem Arbeitsspeicher. Beim Neuladen verabschiedet sich das zweite Gerät
+  darum nicht mehr; das erste hält seine Plätze offen.
+- Lädt das erste Gerät seine Seite neu (auch selbsttätig nach einer neuen
+  Fassung der App), sind seine Plätze weg. Es bekommt neue Ports, die das
+  zweite ohne Vermittler nicht finden kann: Dann braucht es den einen Scan.
+  Das erste Gerät sagt das nach dem Neuladen in der Leiste („Die Seite wurde
+  neu geladen …“, „Neu koppeln…“) und sagt es dem zweiten beim Verlassen der
+  Seite, soweit das noch hinausgeht.
 - Solange gekoppelt ist, hält die App den Bildschirm wach (Screen Wake Lock,
   wo der Browser es anbietet); wer ihn von Hand ausschaltet, löst das
   Wiederverbinden beim Einschalten aus.
@@ -751,12 +762,22 @@ Erfassungsbogen** (ADR-007), damit Datensicherung und Einsatz-Datei ohne
 | `sessionStorage`: `eeb.import-laeuft.v1`, `eeb.karte-offen.v1`, `eeb.ansicht-stelle.v1`, `eeb.einsatz.rueckweg`, `eeb.funkruf.merker.<Index>`, `eeb.abgleich.fortsetzen` | Unterbrochener Import; offene Einheitenkarten (Kennungen); Bildlaufstelle; Rückweg nach „Einsatz bearbeiten“; ausgeschaltete Funkrufnamen je Fahrzeug, 15 Minuten; Merker nach dem Fensterabgleich | `eingang/import-unterbrochen.ts`, `einsaetze-ui.tsx`, `ansicht-stelle.ts`, `einsatz-notweg.ts`, `schnellerfassung/fahrzeuge.tsx`, `fenster-abgleich.tsx` |
 | `sessionStorage`: `eeb.fassung.veraltet`, `eeb.fassung.neu-gestartet`, `eeb.lagemonitor.nach-neuladen` | Fassung, für die das Fenster schon einmal wegen „veraltet“ neu geladen hat (Schutz gegen eine Schleife); Merker, dass das Hauptfenster von selbst neu gestartet ist (für die Erklärung danach, seit 2026-11-17); Stufe und Vollbild des Lagemonitors über das selbsttätige Neuladen nach einer neuen Fassung, einmal. Neu im Meldekopf (2026-11-13) | `aktualisierung.tsx`, `lagemonitor-ui.tsx` |
 
-Die Kopplung zweier Geräte (ADR-009) legt keinen eigenen Schlüssel an: Was
-sie überträgt, landet in den Schlüsseln, in die auch „Einsatz importieren…“
-schreibt (`eeb.einsaetze.v1`, `eeb.entfernt.v1`,
+Die Kopplung zweier Geräte (ADR-009) überträgt in die Schlüssel, in die auch
+„Einsatz importieren…“ schreibt (`eeb.einsaetze.v1`, `eeb.entfernt.v1`,
 `eeb.meldungen-papierkorb.v1`, `eeb.widersprueche.v1`,
-`eeb.nummernhinweis.v1`, Export-Stände, Lage-Angaben). Der Zustand der
-Verbindung steht nur im Arbeitsspeicher des Fensters und endet mit ihm.
+`eeb.nummernhinweis.v1`, Export-Stände, Lage-Angaben). Seit 2026-11-25 merkt
+sie sich außerdem selbst etwas, damit das zweite Gerät nach einem Neuladen
+seiner Seite ohne neuen Scan wieder anruft (`kopplung/merker.ts`):
+
+| Ort | Inhalt | Frist, Löschweg |
+| --- | --- | --- |
+| `localStorage` `eeb.kopplung.v1` | Rolle (Zentrale oder Sammler), Kennung der Sammlung, Beginn der Kopplung. Keine Verbindungsangaben, keine Einsatzdaten. Klein, damit der Start ihn ohne Nachladen prüft | „Kopplung trennen“, Trennen durch das andere Gerät, neue Kopplung, 30 Tage, „Alle Daten löschen“. An der Zentrale beim ersten Start nach dem Neuladen (sie sagt dann, dass neu gekoppelt werden muss) |
+| IndexedDB `eeb-kopplung`, nur am Sammler | Das Zertifikat der Kopplung (vom Browser abgelegt, der private Schlüssel ist nicht auslesbar); je wartendem Platz der Zentrale deren Angebot (Fingerabdruck, Verbindungskennwörter, lokale Adressen) und die eigenen Kennwörter; die Kennungen der Meldungen, die die Zentrale bestätigt hat | wie oben; ohne den Merker im `localStorage` gilt der Inhalt nicht und wird beim nächsten Lesen entfernt; `alleDatenLoeschen` löscht die Datenbank |
+
+Die erste Nutzung von IndexedDB in dieser App; in der Datensicherung steht
+davon nur der Merker aus dem `localStorage`, und eine eingespielte Sicherung
+setzt keine Kopplung fort (ohne Datenbank verfällt er). Der Zustand der
+Verbindung selbst steht weiter nur im Arbeitsspeicher des Fensters.
 
 **Nicht** übernommen: `eeb.musterung.v1`, `eeb.vorlagen.v1` (Vorlagen; eine
 eingespielte Sicherung aus dem Erfassungsbogen bringt sie mit, die
@@ -1178,7 +1199,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Blick auf eines der beiden Geräte: Steht die Verbindung? | Ohne Rollen und ohne Lesen eines Satzes erkennbar: Lampe und Wort oben im Bild, an der Zentrale wie am Sammler. |
 | Telefon gekoppelt, Bildschirm aus, nach Minuten wieder an | Beim Einschalten verbindet sich das Telefon ohne neuen Code (im Prüfstand in unter einer Sekunde) und gleicht ab; bis dahin meldet der Rechner „unterbrochen“, nach 45 Sekunden „getrennt“. |
 | Telefon gekoppelt, draußen außer Reichweite des WLAN | Beide nehmen weiter auf und speichern bei sich; das Telefon ruft alle 30 Sekunden an und verbindet sich, sobald es wieder im Netz ist. |
-| Seite auf einem der Geräte neu geladen | „Kopplung getrennt“; neu koppeln über beide Codes, danach stehen alle Einheiten auf beiden. |
+| Seite des Telefons neu geladen oder App am nächsten Tag wieder geöffnet, Rechner unverändert offen | Das Telefon zeigt seine Sammler-Ansicht und verbindet sich ohne Scan; was es inzwischen aufgenommen hat, geht hinüber. |
+| Seite des Rechners neu geladen | Der Rechner zeigt „Verbindung getrennt … Die Seite wurde neu geladen“ und „Neu koppeln…“; ein Scan am Telefon, danach stehen alle Einheiten des Telefons in der Lage. |
 | Geräteausfall, nur das Lageblatt auf Papier | Bögen scannen, Zeiten, Status und Nummer in einer Liste nachtragen, Abgleich in einem Schritt. |
 | Uhr springt um ein Jahr | Keine Löschung, keine Anonymisierung, bis „Geräteuhr stimmt" bestätigt ist. |
 | Erste Nutzung ohne Netz nach Installation | Alles aus dem Vorrat; Sammel-PDF und QR entstehen offline. |
@@ -1200,7 +1222,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
 | Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
 | Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Safari, Firefox und echte Geräte im WLAN ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand. |
-| Seite neu geladen (auch selbsttätig nach einer neuen Fassung der App) | Trennt die Kopplung endgültig; neu koppeln kostet zwei Scans. Abhilfe wäre, Zertifikat und Plätze des Rufers über das Neuladen zu retten (IndexedDB); nicht gebaut. |
+| Gemerkte Kopplung trägt nur, solange die Seite des ersten Geräts offen bleibt | Über Tage ungeprüft: ob wartende Verbindungen so lange leben (gemessen 20 Minuten), ob der Rechner dazwischen schläft, ob eine neue Fassung der App seine Seite neu lädt (mit Netz geschieht das von selbst). Dann zeigt der Rechner „neu koppeln“, und es kostet einen Scan. Safari legt ein Zertifikat womöglich nicht in IndexedDB ab; dann bleibt die Kopplung eine des Arbeitsspeichers. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
 | Bundle-Budget mit der Kopplung zweimal angehoben | JavaScript gesamt 4.413.510 Byte (rund 52 KB für `kopplung/*`, nachgeladen); Startbündel 643.035 Byte (rund 2,4 KB: Zustand, Scanner-Weiche, Knopf, die Wege der Aufnahme für die Sammler-Ansicht). |

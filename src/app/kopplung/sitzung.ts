@@ -43,7 +43,10 @@ export class AbgleichSitzung {
     einsatzId: string | null,
     private readonly senden: (n: StandNachricht | ErhaltenNachricht) => void,
     readonly rolle: SitzungsRolle,
+    /** Sammler, nach einem Neuladen: was die Zentrale schon bestätigt hatte (merker.ts). */
+    bestaetigt: readonly string[] = [],
   ) {
+    for (const id of bestaetigt) this.bestaetigt.add(id);
     this.einsatzId = einsatzId;
     this.entferntZuletzt = this.entfernt();
   }
@@ -140,6 +143,11 @@ export class AbgleichSitzung {
       if (this.einsatzId) this.gesendet = standAbdruck(this.einsatzId, [...this.zurueckgeholt]);
     }
     return true;
+  }
+
+  /** Sammler: alle bestätigten Einträge, zum Merken über ein Neuladen. */
+  bestaetigte(): string[] {
+    return [...this.bestaetigt];
   }
 
   /** Sammler: Hat die Zentrale diesen Eintrag bestätigt? */

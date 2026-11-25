@@ -189,3 +189,23 @@ Then("führt die Übersicht die Einheit {string}", async function (this: EebWelt
 Then("meldet der Dialog {string}", async function (this: EebWelt, text: string) {
   await this.page.locator("dialog[open]").getByText(text).first().waitFor({ state: "visible" });
 });
+
+/**
+ * Neu laden wie ein vom Browser weggeräumter Tab: Die Verbindungsobjekte sind weg, das Gemerkte (merker.ts) bleibt.
+ * Vorher kurz warten, bis das erste Gerät wieder wartende Plätze angeboten hat und sie gemerkt sind.
+ */
+When("das zweite Gerät seine Seite neu lädt", async function (this: EebWelt) {
+  const b = zweitesGeraet(this);
+  await b.waitForTimeout(1500);
+  const getrennt = (await b.locator("dialog.sammler").count()) === 0;
+  await b.reload({ waitUntil: "domcontentloaded" });
+  // Die gemerkte Kopplung setzt sich nach dem Laden fort; erst dann steht die Sammler-Ansicht wieder.
+  if (!getrennt) await b.locator("dialog.sammler").waitFor({ state: "visible" });
+});
+
+Then("zeigt das zweite Gerät keine Kopplung", async function (this: EebWelt) {
+  const b = zweitesGeraet(this);
+  await b.getByRole("button", { name: "Bogen scannen…" }).first().waitFor({ state: "visible" });
+  await b.waitForTimeout(1500);
+  if ((await b.locator(".kopplung-leiste, dialog.sammler").count()) > 0) throw new Error("Das zweite Gerät zeigt weiter eine Kopplung.");
+});

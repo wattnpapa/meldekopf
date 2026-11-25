@@ -67,6 +67,37 @@ Funktionalität: Zweites Gerät koppeln
     Und das zweite Gerät den Bogen der DLRG Wardenburg scannt
     Dann zählt die Übersicht 2 Einheiten
 
+  Szenario: Lädt das zweite Gerät seine Seite neu, verbindet es sich ohne neuen Scan
+    Angenommen beide Geräte sind gekoppelt
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+    Wenn das zweite Gerät seine Seite neu lädt
+    Dann meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+    Und zeigt das zweite Gerät die Überschrift "Hochwasser Weser"
+    Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (1)"
+    Und zeigt das zweite Gerät den Text "✓ übertragen"
+    Und meldet die Kopplungsleiste "Verbindung aktiv"
+
+  Szenario: Auch nach zweimaligem Neuladen des zweiten Geräts steht die Verbindung wieder
+    Angenommen beide Geräte sind gekoppelt
+    Wenn das zweite Gerät seine Seite neu lädt
+    Und das zweite Gerät seine Seite neu lädt
+    Und das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+
+  Szenario: Lädt das erste Gerät seine Seite neu, sagt es, dass neu gekoppelt werden muss
+    Angenommen beide Geräte sind gekoppelt
+    Wenn ich die Seite neu lade
+    Dann meldet die Kopplungsleiste "Verbindung getrennt"
+    Und meldet die Kopplungsleiste "Die Seite wurde neu geladen"
+    Und sehe ich die Schaltfläche "Neu koppeln…"
+
+  Szenario: Nach „Kopplung trennen“ setzt das zweite Gerät nichts fort
+    Angenommen beide Geräte sind gekoppelt
+    Wenn das zweite Gerät die Kopplung trennt
+    Und das zweite Gerät seine Seite neu lädt
+    Dann zeigt das zweite Gerät keine Kopplung
+
   Szenario: Trennt das zweite Gerät, sagt es die Leiste, und das erste arbeitet weiter
     Angenommen beide Geräte sind gekoppelt
     Wenn das zweite Gerät die Kopplung trennt

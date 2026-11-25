@@ -40,7 +40,7 @@ import { entwurfLaden, entwurfSpeichern, entwurfVerwerfen } from "./entwurf";
 import { useAnsichtVerlauf, type Ansicht } from "./ansicht-verlauf";
 import { QrScannerWeb } from "./eingang/qr-scanner-web";
 import { KopplungsRahmen } from "./kopplung/kopplung-rahmen";
-import { kopplungsStandAbonnieren } from "./kopplung/zustand";
+import { kopplungFortsetzenWennGemerkt, kopplungsStandAbonnieren } from "./kopplung/zustand";
 import { letztenEinsatzLaden, letztenEinsatzMerken } from "./letzter-einsatz";
 import { SpeicherWarnung } from "./speicher-warnung";
 import { UhrWarnung } from "./uhr-warnung";
@@ -156,6 +156,7 @@ export function App() {
   // (dieses Gerät hat den Code gescannt und steht auf der Startseite), öffnet sie sich.
   const offenerEinsatzRef = useRef(offenerEinsatzId);
   offenerEinsatzRef.current = offenerEinsatzId;
+  useEffect(() => kopplungFortsetzenWennGemerkt(), []);
   useEffect(
     () =>
       kopplungsStandAbonnieren((id) => {

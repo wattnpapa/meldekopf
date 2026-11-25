@@ -35,7 +35,13 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > schickt, was es selbst aufnimmt, und erhält von der Zentrale nur Name, Art
 > und Ort der Sammlung, keine Meldungen. Es hält damit keine Vollkopie mehr,
 > sondern die Bögen, die es selbst gescannt hat; R16 ist entsprechend
-> herabgestuft. Kein neuer
+> herabgestuft.
+> **Nachgezogen 2026-11-25:** Zum Koppeln genügt ein Scan am zweiten Gerät.
+> Das zweite Gerät merkt sich die Kopplung bis zu 30 Tage (`localStorage`
+> `eeb.kopplung.v1`, IndexedDB `eeb-kopplung`): Rolle, Kennung der Sammlung,
+> Verbindungsangaben und die Kennungen bestätigter Meldungen, keine Inhalte
+> von Bögen. Gelöscht mit „Kopplung trennen“, einer neuen Kopplung, nach
+> Fristablauf und mit „Alle Daten löschen“. Kein neuer
 > Empfänger außerhalb des Meldekopfs, kein Server, kein neuer Speicherort der
 > App; die Fristen und Löschwege gelten auf jedem der beiden Geräte für sich.
 >

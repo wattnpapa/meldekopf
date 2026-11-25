@@ -294,12 +294,15 @@ export interface RufPlatz {
   /** Ist noch ein Versuch möglich? */
   nutzbar: () => boolean;
   verwerfen: () => void;
+  /** Womit sich der Platz nach einem Neuladen wieder anrufen lässt (merker.ts); `null`, wenn er am ursprünglichen Objekt hängt. */
+  daten: () => { angebotSdp: string; ufrag: string; pwd: string } | null;
 }
 
 /** Ein festes Zertifikat für alle Rückrufe einer Kopplung; `undefined`, wenn der Browser keines erzeugt. */
 export async function rufZertifikat(): Promise<RTCCertificate | undefined> {
   try {
-    return await RTCPeerConnection.generateCertificate({ name: "ECDSA", namedCurve: "P-256" } as AlgorithmIdentifier);
+    // 30 Tage, ausdrücklich: So lange gilt auch eine gemerkte Kopplung (merker.ts).
+    return await RTCPeerConnection.generateCertificate({ name: "ECDSA", namedCurve: "P-256", expires: 30 * 24 * 60 * 60 * 1000 } as AlgorithmIdentifier);
   } catch {
     return undefined;
   }
@@ -400,6 +403,7 @@ export async function rufPlatzVorbereiten(
     antwortSdp,
     vorgabeGilt,
     nutzbar: () => frischMoeglich || erstes != null,
+    daten: () => (frischMoeglich ? { angebotSdp, ufrag, pwd } : null),
     async anrufen(h) {
       if (frischMoeglich) {
         try {
@@ -427,6 +431,42 @@ export async function rufPlatzVorbereiten(
       ziel = null;
       erstes?.verbindung.schliessen();
       erstes = null;
+    },
+  };
+}
+
+/**
+ * Rufer, nach einem Neuladen: einen gemerkten Platz wieder anrufbar machen. Es gibt kein ursprüngliches Objekt mehr,
+ * nur das gemerkte Zertifikat und die Kennwörter; jeder Anruf ist ein frisches Objekt damit.
+ */
+export function rufPlatzWiederherstellen(angebotSdp: string, zertifikat: RTCCertificate, ufrag: string, pwd: string): RufPlatz {
+  let moeglich = true;
+  return {
+    antwortSdp: "",
+    nutzbar: () => moeglich,
+    daten: () => (moeglich ? { angebotSdp, ufrag, pwd } : null),
+    verwerfen() {
+      moeglich = false;
+    },
+    async anrufen(h) {
+      let hin: VerbindungsHorcher | null = null;
+      const neu = neuePc(zertifikat);
+      const draht = verdrahten(neu, { onLage: (l) => hin?.onLage(l), onNachricht: (n) => hin?.onNachricht(n) });
+      neu.addEventListener("datachannel", (e) => draht.kanalSetzen(e.channel));
+      try {
+        await neu.setRemoteDescription({ type: "offer", sdp: angebotSdp });
+        const a = await neu.createAnswer();
+        const sdp = (a.sdp ?? "").replace(/^a=ice-ufrag:.*$/m, `a=ice-ufrag:${ufrag}`).replace(/^a=ice-pwd:.*$/m, `a=ice-pwd:${pwd}`).replace(/^a=setup:.*$/m, "a=setup:active");
+        hin = h;
+        await neu.setLocalDescription({ type: "answer", sdp });
+        if (sdpFeld(neu.localDescription?.sdp ?? "", "ice-ufrag") !== ufrag) throw new Error("Kennwörter nicht übernommen");
+        return draht.verbindung;
+      } catch (e) {
+        hin = null;
+        moeglich = false;
+        draht.verbindung.schliessen();
+        throw e;
+      }
     },
   };
 }
