@@ -1434,14 +1434,6 @@ export function EinsatzDetail(props: {
   const [filterOffen, setFilterOffen] = useState(false);
   const bedarfsFilterText =
     bedarfsFilter === "ruhezeit" ? "„nur mit Ruhezeit“" : bedarfsFilter === "unterbringung" ? "„nur mit Unterbringung“" : "„nur dringender Bedarf“";
-  // „n ohne Auftrag": Filter setzen, das Filterfeld zu lassen und die Liste in den Blick rollen (R10-K2).
-  const aufLueckeFiltern = (f: LueckenFilter) => {
-    setLueckenFilter(f);
-    setTimeout(
-      () => document.querySelector(".luecken-zaehler")?.scrollIntoView?.({ block: "start" }),
-      0,
-    );
-  };
   const aufBedarfFiltern = (f: BedarfsFilter) => {
     setBedarfsFilter(f);
     setFilterOffen(true);
@@ -2091,8 +2083,6 @@ export function EinsatzDetail(props: {
   const gefiltert = kopf.length !== alleEinheiten.length;
   /** Irgendeine Einschränkung wirkt: dann bleibt die Suchleiste auch am Telefon offen (R4-K5). */
   const filterAktiv = suche.trim() !== "" || quali !== "" || nurBedarf || lueckenFilter != null || statusFilter != null || gewaehlterAuftrag != null || gewaehlteOrg != null;
-  // Der Lückenfilter („n ohne Auftrag") klappt das Feld nicht auf: Er steht in der Zeile darüber, samt „Filter aufheben" (R10-K2).
-  const filterAktivOhneLuecke = suche.trim() !== "" || quali !== "" || nurBedarf || statusFilter != null || gewaehlterAuftrag != null || gewaehlteOrg != null;
   // Meldeköpfe melden oft nur die Stärke — dort steht keine Person und damit
   // keine Qualifikation. Ohne diesen Hinweis sähe der Filter wie ein Fehler aus.
   const ohnePersonen = alleEinheiten.filter(
@@ -3032,29 +3022,16 @@ export function EinsatzDetail(props: {
             Meldung wäre die Leiste nur Beiwerk, ab der zweiten steht sie
             bereit: eine erst später auftauchende Leiste liest sich am Gerät
             wie eine fehlende Funktion (Rückmeldung Anwender, August 2026). */}
-        {alleEinheiten.length > 0 && ohneAuftragAnzahl > 0 && (
-          <p className="hinweis luecken-zaehler">
-            <button type="button" className="link" onClick={() => aufLueckeFiltern("ohne-auftrag")}>
-              {ohneAuftragAnzahl} ohne Auftrag
-            </button>
-            {lueckenFilter && (
-              <>
-                {" · "}
-                <button type="button" className="link" onClick={() => setLueckenFilter(null)}>Filter aufheben</button>
-              </>
-            )}
-          </p>
-        )}
         {alleEinheiten.length > 1 && (
           filterEingeklappt ? (
             <details
               className="einheiten-filter-wahl"
-              open={filterOffen || filterAktivOhneLuecke}
+              open={filterOffen || filterAktiv}
               onToggle={(e) => setFilterOffen(e.currentTarget.open)}
             >
               <summary>
                 Suchen, sortieren, filtern
-                {filterAktiv ? ` · Filter aktiv${lueckenFilter ? ": ohne Auftrag" : ""}` : ""}
+                {filterAktiv ? " · Filter aktiv" : ""}
               </summary>
               {filterZeile}
             </details>

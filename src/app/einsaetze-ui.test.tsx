@@ -1378,26 +1378,19 @@ describe("Kompakte Einheiten auf dem Telefon (R2-K7)", () => {
     expect(wahl.open).toBe(true);
   });
 
-  // Audit Runde 10, R10-K2: Der Tipp auf „n ohne Auftrag" zeigte das Werkzeug statt der Einheiten.
-  it("Telefon: „n ohne Auftrag“ filtert, ohne das Filterfeld aufzuklappen, und rollt zur Liste (R10-K2)", async () => {
+  it("Telefon: der Filter „ohne Auftrag“ steht im Filterfeld, eine Zählerzeile über der Liste gibt es nicht", async () => {
     const nutzer = userEvent.setup();
-    const rollen = vi.fn();
-    const alt = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = rollen;
-    try {
-      const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
-      for (const n of ["Aalen", "Biberach", "Celle"]) meldungHinzufuegen(angelegt.id, bogenMitName(n));
-      ansicht(angelegt.id);
-      const wahl = document.querySelector<HTMLDetailsElement>("details.einheiten-filter-wahl")!;
-      await nutzer.click(screen.getByRole("button", { name: "3 ohne Auftrag" }));
-      expect(wahl.open).toBe(false);
-      expect(wahl.querySelector("summary")!.textContent).toBe("Suchen, sortieren, filtern · Filter aktiv: ohne Auftrag");
-      expect(screen.getByRole("button", { name: "Filter aufheben" })).toBeDefined();
-      await vi.waitFor(() => expect(rollen).toHaveBeenCalled());
-      expect(rollen.mock.contexts.some((el) => (el as Element).classList.contains("luecken-zaehler"))).toBe(true);
-    } finally {
-      Element.prototype.scrollIntoView = alt;
-    }
+    const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
+    for (const n of ["Aalen", "Biberach", "Celle"]) meldungHinzufuegen(angelegt.id, bogenMitName(n));
+    ansicht(angelegt.id);
+    expect(screen.queryByRole("button", { name: /ohne Auftrag/ })).toBeNull();
+    const wahl = document.querySelector<HTMLDetailsElement>("details.einheiten-filter-wahl")!;
+    await nutzer.click(wahl.querySelector("summary")!);
+    await nutzer.selectOptions(within(wahl).getByRole("combobox", { name: "Auftrag" }), "ohne-auftrag");
+    expect(wahl.open).toBe(true);
+    expect(wahl.querySelector("summary")!.textContent).toBe("Suchen, sortieren, filtern · Filter aktiv");
+    await nutzer.selectOptions(within(wahl).getByRole("combobox", { name: "Auftrag" }), "");
+    expect(wahl.querySelector("summary")!.textContent).toBe("Suchen, sortieren, filtern");
   });
 
   it("Telefon, lange Liste: die Suchleiste steht hinter einer Zeile, damit die erste Karte höchstens zwei Bildschirme tief liegt (R5-K4)", () => {
@@ -2288,7 +2281,7 @@ describe("Auftrag auf einen Blick (R7-K6, R7-K9)", () => {
     localStorage.clear();
   });
 
-  it("zählt Einheiten ohne Auftrag, filtert mit einem Tipp und zeigt den Auftragstext zugeklappt", async () => {
+  it("zählt Einheiten ohne Auftrag im Filter „Auftrag“ und zeigt den Auftragstext zugeklappt", async () => {
     const nutzer = userEvent.setup();
     const b = buehne(["Wardenburg", "Oldenburg", "Aurich"]);
     const { einsatzId } = b;
@@ -2296,13 +2289,14 @@ describe("Auftrag auf einen Blick (R7-K6, R7-K9)", () => {
     notizSetzen(einsatzId, w.id, "Deichabschnitt Nord ab 14:00");
     b.neuLaden();
 
-    expect(screen.getByRole("button", { name: "2 ohne Auftrag" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: /ohne Auftrag/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /ohne Zug/ })).toBeNull();
-    await nutzer.click(screen.getByRole("button", { name: "2 ohne Auftrag" }));
+    expect(screen.getByRole("option", { name: "ohne Auftrag (2)" })).toBeDefined();
+    await nutzer.selectOptions(screen.getByRole("combobox", { name: "Auftrag" }), "ohne-auftrag");
     const namen = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent ?? "");
     expect(namen).toHaveLength(2);
     expect(namen.join(" ")).not.toContain("Wardenburg");
-    await nutzer.click(screen.getAllByRole("button", { name: "Filter aufheben" })[0]!);
+    await nutzer.selectOptions(screen.getByRole("combobox", { name: "Auftrag" }), "");
     expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3);
     // Die Legende steht einmal über der Liste.
     expect(screen.getByText(/Stärke auf den Karten: Führer \/ Unterführer \/ Mannschaft \/ Gesamt/)).toBeDefined();
