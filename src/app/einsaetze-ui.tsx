@@ -3110,7 +3110,7 @@ export function EinsatzDetail(props: {
           </p>
         )}
         {/* Legende einmal über der Liste: „Stärke 1 / 1 / 2 / 4" auf den Karten trägt keine Beschriftung (R7-K9). */}
-        {ansicht === "karten" && kopf.length > 0 && (
+        {ansicht === "karten" && kopf.length > 0 && !meisterDetail && (
           <p className="hinweis staerke-legende">Stärke auf den Karten: Führer / Unterführer / Mannschaft / Gesamt.</p>
         )}
         {ansicht === "tabelle" && kopf.length > 0 && (
@@ -3144,6 +3144,14 @@ export function EinsatzDetail(props: {
             erlaubt den Sprung von Eintrag zu Eintrag (R2-M4). */}
         {ansicht === "karten" && kopf.length > 0 && (
           <ul className="einheiten-liste">
+            {/* Liste am Rechner: die Legende als Spaltenkopf, in der Flucht von Eintreffzeit und Stärke (nur fürs Auge). */}
+            {meisterDetail && (
+              <li className="spalten-kopf" aria-hidden="true">
+                <span>Nr. · Einheit</span>
+                <span className="spalte-zeit">Eingetroffen</span>
+                <span className="spalte-staerke">Stärke F / U / M // G</span>
+              </li>
+            )}
             {anzeige.map((e, i) => (
               <Fragment key={e.einheitSchluessel}>
               {gruppiert && i < gruppenEnde && (i === 0 || orgVon(anzeige[i - 1]!) !== orgVon(e)) && (
@@ -5623,6 +5631,15 @@ function EinheitKarte(props: {
             {/* Ungültig steht schon als Marke im Kopf (R3-L2). */}
             {kopf.signatur?.zustand === "gueltig" ? <> · {signaturBadge(kopf)}</> : null}
           </span>
+          {/* Detailspalte am Rechner: die Stärke als vier Kacheln, wie die Kopfzahlen. Die Zeile darüber trägt denselben Wert als Text. */}
+          {detail && (
+            <span className="detail-staerke" aria-hidden="true">
+              <span><strong>{staerke(kopf.bogen).fuehrer}</strong>Führer</span>
+              <span><strong>{staerke(kopf.bogen).unterfuehrer}</strong>Unterf.</span>
+              <span><strong>{staerke(kopf.bogen).mannschaft}</strong>Mannsch.</span>
+              <span className="gesamt"><strong>{staerke(kopf.bogen).gesamt}</strong>Gesamt</span>
+            </span>
+          )}
           {/* Wen die Einheit für Rückfragen genannt hat, steht an der Karte, wo der Meldekopf zurückruft (R11-W2). */}
           {/* Die Erklärung der Marke steht im Text, nicht nur im Tooltip, den es am Telefon nicht gibt (R11-A1). */}
           {datenschutzfristAbgelaufen(kopf.bogen, datenschutzZeitpunkt()) && (
