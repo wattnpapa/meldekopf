@@ -41,6 +41,7 @@ Verlauf über Tage oder Aufträge braucht, ist S1-Control.
   unter derselben Nummer berichtigen.
 - Laufende Summen über alle anwesenden Einheiten;
   Karten- und Tabellensicht mit Suche, Qualifikations- und Kraftfahrer-Filter.
+  Am Rechner Liste mit Detailspalte, wahlweise nach Organisation gruppiert.
 - Folgemeldungen als Historie je Einheit; Schichtübergabe-Diff („Stärke
   12 → 9, Fahrzeug abgemeldet").
 - Abrücken, Bogen aufteilen und zusammenführen, Papier-Abgleich.
