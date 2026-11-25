@@ -4534,6 +4534,63 @@
     .speicher-warnung > p { margin: 0; }
     .speicher-warnung > details.hinweis-mehr > summary { min-height: 44px; }
     .speicher-warnung > details.hinweis-mehr > p { margin: 0 0 var(--r-2, 0.5rem); }
+    /* Karten aufgeräumt (neu im Meldekopf, November 2026). Die aufgeklappte Karte der breiten Ansicht (Tablet quer, Laptop) trug
+       Name, Stärke, Zeiten, Herkunft, Bedarf und fünf gleich laute Knöpfe in gleicher Schrift untereinander: Bei vierzehn Einheiten
+       war die Liste 7 000 px lang, und die Stärke stand an jeder Karte woanders. Jetzt drei Ebenen: Kopf (Nummer, Name, rechts die
+       Stärke in einer Flucht wie eine Spalte), Lage (Bedarf, Auftrag, Hinweise), Beleg (Zeiten und Herkunft klein am Ende). Die
+       Knopfreihe bleibt, wo sie war, mit vollem Zielmaß; laut ist nur noch, was die Lage ändert (Abrücken, Auftrag/Notiz).
+       Es bleibt bei der Trennlinie statt eines Kastens. Die zugeklappte Karte am Telefon (.kompakt) und ihre aufgeklappte Form
+       (.karte-offen) sind nicht berührt; Reihenfolge im Dokument und Vorlesereihenfolge bleiben, nur die Anordnung im Bild ändert sich. */
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) { position: relative; padding-block: 14px 12px; }
+    /* Die Zeilen der Karte fließen: Organisation und Alter des Stands teilen sich die zweite Zeile, Bedarf und Hinweise die dritte
+       (vorher je eine eigene Zeile, mit 44 px Zielhöhe am Verweis). Alles Übrige bleibt eine Zeile für sich, in der Reihenfolge des Dokuments. */
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text { flex-flow: row wrap; align-items: center; gap: 3px 14px; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text > * { flex: 0 0 100%; order: 3; min-width: 0; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text > h3.muster-name { order: 0; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text > .kopf-sub,
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text > .alter-zeile { flex: 0 1 auto; order: 1; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text::before { content: ""; flex: 0 0 100%; order: 2; margin-top: -3px; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text > .bedarf-zeile,
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text > .muster-sub:has(> button.luecken-marke) { flex: 0 1 auto; margin-block: 2px; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-text > .muster-sub > button.link.luecken-marke { margin-left: 0; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) h3.muster-name { font-weight: 600; line-height: 1.35; padding-right: 11.5rem; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .kopf-trenner { display: none; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .kopf-staerke {
+      position: absolute; top: 14px; right: 0; max-width: 11rem; text-align: right; white-space: nowrap;
+      font-variant-numeric: tabular-nums; font-size: var(--t-m); font-weight: 600; line-height: 1.35; color: var(--text);
+    }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .kopf-staerke-wort {
+      font-size: var(--t-xs); font-weight: 400; color: var(--text-2);
+    }
+    :root:root .einheit-zeile.gestrichen:not(.kompakt):not(.karte-offen) .kopf-staerke { color: var(--text-2); right: var(--r-2); }
+    /* Beleg ans Ende der Karte, klein: wann eingetroffen, welcher Stand, woher. Die Warnungen zu den Zeiten bleiben direkt dahinter. */
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-sub.zeiten-zeile,
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-sub.zeit-unstimmig,
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-sub.uhr-stand { order: 5; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-sub.zeiten-zeile { font-size: var(--t-xs); margin-top: 2px; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-sub.anonym-zeile { font-size: var(--t-xs); max-width: 44rem; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .muster-sub.bedarf-zeile { gap: 6px; }
+    /* Die Knopfreihe: enger, eine Schriftstufe kleiner, Zielhöhe unverändert. Nachschlagen (Details, PDF, Mehr…) tritt zurück. */
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .vorlage-aktionen { margin-top: 10px; gap: 8px; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .vorlage-aktionen > button { font-size: var(--t-s); padding-inline: 0.85rem; }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .vorlage-aktionen:not(.karte-mehr) > button:is(.aktion-details, .aktion-pdf, .aktion-aenderungen, .aktion-historie, .karte-mehr-knopf) {
+      border-color: var(--linie); font-weight: 500;
+    }
+    :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) button.wechsel-knopf { min-width: 7.5rem; }
+    @media (min-width: 72rem) {
+      /* Die Knopfreihe rechtsbündig unter der Stärke: links liest man, rechts handelt man. */
+      :root:root .einheit-zeile:not(.kompakt):not(.karte-offen) .vorlage-aktionen:not(.karte-mehr) { justify-content: flex-end; }
+      /* Suche, Sortierung und Filter in zwei geordneten Zeilen: oben die Suche in voller Breite (ihr Platzhalter war bei 180 px
+         abgeschnitten) mit dem Kästchen daneben, darunter die Auswahlfelder gleich breit. */
+      :root:root main.einsatz-detail .einsatz-liste .zeile.einheiten-filter { gap: 10px 12px; }
+      :root:root main.einsatz-detail .einsatz-liste .zeile.einheiten-filter > label.feld { flex: 1 1 9rem; margin-top: 0; }
+      :root:root main.einsatz-detail .einsatz-liste .zeile.einheiten-filter > label.feld:first-child { flex: 1 1 calc(100% - 24rem); order: -2; }
+      :root:root main.einsatz-detail .einsatz-liste .zeile.einheiten-filter > label.feld.sortierung:nth-child(2) { flex: 1.5 1 12rem; }
+      :root:root main.einsatz-detail .einsatz-liste .zeile.einheiten-filter > label.inline { flex: 0 1 auto; order: -1; margin: 0; }
+      /* Die Liste steht daneben: „Zur Einheitenliste ↓" und der Erklärsatz entfallen, die beiden übrigen Sprünge teilen sich eine Zeile. */
+      :root:root main.einsatz-detail .einsatz-seite > p.ausgabe-sprung:not(.ausgabe-sprung ~ .ausgabe-sprung) { display: none; }
+      :root:root main.einsatz-detail .sprung-erklaerung { display: none; }
+    }
   </style>
 </head>
 <body>

@@ -5552,8 +5552,9 @@ function EinheitKarte(props: {
             </span>
           ) : (
           <>
-          <span className="muster-sub">
-            {orgLabel(kopf.bogen.einheit.organisation)} · Stärke {staerkeText(kopf.bogen)}
+          <span className="muster-sub kopf-sub">
+            {/* Die Stärke als eigenes Stück: In der breiten Karte steht sie rechts oben in einer Flucht, wie eine Spalte (index.html, „Karten aufgeräumt"). */}
+            {orgLabel(kopf.bogen.einheit.organisation)}<span className="kopf-trenner"> · </span><span className="kopf-staerke"><span className="kopf-staerke-wort">Stärke </span>{staerkeText(kopf.bogen)}</span>
             {aufgegangen ? " · zusammengeführt" : ""}
             {/* Ungültig steht schon als Marke im Kopf (R3-L2). */}
             {kopf.signatur?.zustand === "gueltig" ? <> · {signaturBadge(kopf)}</> : null}
