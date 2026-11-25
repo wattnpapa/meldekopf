@@ -15,6 +15,7 @@
  * und im /Names/EmbeddedFiles-Baum, sodass die PDF auch maschinenlesbar ist.
  */
 
+import type { BedarfArt } from "../bedarf-geklaert";
 import type {
   Attachment,
   Content,
@@ -775,6 +776,8 @@ export interface UebersichtEintrag {
    * Wahrheiten für dieselbe Übergabe (Analog-Audit A1).
    */
   abgerueckt?: boolean;
+  /** Sofortbedarf, den die Führungsstelle als geklärt abgehakt hat (bedarf-geklaert.ts); fehlt = nichts abgehakt. */
+  bedarfGeklaert?: readonly BedarfArt[];
   /** Zählt in Summen und Bedarf (anwesend, keine fremde Übung). Fehlt = ja. */
   zaehlt?: boolean;
   /** Auftrag/Notiz der Führungsstelle zu dieser Einheit. */
@@ -1105,7 +1108,7 @@ export function lageblattAenderungen(d: BogenDiff): string[] {
  * Verpflegung) fett, Kraftstoff normal — am Gerät gelb gegen grau, auf dem
  * Papier war alles gleich fett (Audit Runde 3, R3-K6).
  */
-function bedarfZelle(b: Erfassungsbogen): TableCell {
+function bedarfZelle(b: Erfassungsbogen, geklaert: readonly BedarfArt[] = []): TableCell {
   const marken = bedarfMarken(b);
   // Schnellerfassung: leer hieße „nichts nötig" — das Blatt sagt, dass niemand gefragt hat (R14-W1).
   if (marken.length === 0)
@@ -1115,7 +1118,8 @@ function bedarfZelle(b: Erfassungsbogen): TableCell {
   return {
     text: marken.flatMap((m, i) => [
       ...(i > 0 ? [{ text: " · " }] : []),
-      m.dringend ? { text: m.kurz, bold: true } : { text: m.kurz },
+      // Abgehakt steht ausgeschrieben und nicht fett: Die Schrift des Blatts kennt keinen Haken, und fett heißt „zu entscheiden".
+      geklaert.includes(m.art) ? { text: `${m.kurz} (geklärt)` } : m.dringend ? { text: m.kurz, bold: true } : { text: m.kurz },
     ]),
   };
 }
@@ -1459,7 +1463,7 @@ function uebersichtsTabelle(
         ),
       },
       { text: `${b.fahrzeuge.length}` },
-      bedarfZelle(b),
+      bedarfZelle(b, e.bedarfGeklaert),
       bemerkungZelle(
         e.notiz,
         b.sonstiges,

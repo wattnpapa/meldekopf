@@ -35,6 +35,7 @@ import { MeldeStatus, type Einsatzsammlung, type MeldeEintrag } from "@bos/melde
 import { angabenZeit } from "./angaben-alter";
 import { aktuelleMeldungen, uebungenAusserhalbDerLage, zaehltInLage } from "./auswertung";
 import { bedarfMarken } from "./einheiten-tabelle";
+import { bedarfGeklaertAm } from "./bedarf-geklaert";
 import { eintreffzeit } from "./eintrag-zeiten";
 import { geltendeJeEinheit } from "./fassung-vorrang";
 import { funkrufDerEinheit } from "./erreichbarkeit";
@@ -276,10 +277,14 @@ export function meldungTeile(m: Pick<MeldeEintrag, "bogen" | "teilEtikett">): { 
   return { ...n, typ: mit(n.typ), typKurz: mit(n.typKurz) };
 }
 
-/** Kurzer Bedarf je Einheit: nur, was zu entscheiden ist (`bedarfMarken`, dringend), ohne Füllwörter. */
-export function bedarfKurz(e: MeldeEintrag): string[] {
+/**
+ * Kurzer Bedarf je Einheit: nur, was zu entscheiden ist (`bedarfMarken`, dringend), ohne Füllwörter. Was die Führungsstelle
+ * als geklärt abgehakt hat (bedarf-geklaert.ts), ist entschieden und steht nicht mehr an der Karte; `alle` sind die
+ * Meldungen des Einsatzes, an deren Fassungen die Haken hängen.
+ */
+export function bedarfKurz(e: MeldeEintrag, alle: readonly MeldeEintrag[] = [e]): string[] {
   return bedarfMarken(e.bogen)
-    .filter((m) => m.dringend)
+    .filter((m) => m.dringend && bedarfGeklaertAm(e, m, alle) == null)
     .map((m) => m.lang.replace(/ angefordert$/, "").replace(/ \(Stärke \d+\)$/, ""));
 }
 
@@ -366,7 +371,7 @@ export function tafelbild(einsatz: Einsatzsammlung, jetzt: number = Date.now()):
       soll: z.soll,
       stand: angabenZeit(m),
       eingetroffen: z.eingetroffen,
-      bedarf: bedarfKurz(m),
+      bedarf: bedarfKurz(m, einsatz.eintraege),
       ...(neuAmPlatz ? { marke: neuAmPlatz } : {}),
       uebung: false,
     });

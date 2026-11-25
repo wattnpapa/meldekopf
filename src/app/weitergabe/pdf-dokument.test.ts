@@ -776,6 +776,14 @@ describe("einsatzLageblattDokument()", () => {
     expect(t.match(/Nr\. \d/g)).toHaveLength(1);
   });
 
+  it("nennt abgehakten Sofortbedarf als geklärt, nicht fett", () => {
+    const ruhe = basisBogen();
+    ruhe.sofortbedarf = { ...ruhe.sofortbedarf!, ruhezeitErforderlich: true, dieselLiter: 200 };
+    const inhalt = einsatzLageblattDokument("Lage", [{ bogen: ruhe, bedarfGeklaert: ["ruhezeit"] }]).content;
+    expect(texte(inhalt).join("\n")).toMatch(/Ruhezeit \(geklärt\)\n · [\s\S]*Diesel 200 l/);
+    expect(JSON.stringify(inhalt)).not.toContain('{"text":"Ruhezeit (geklärt)","bold":true}');
+  });
+
   it("zeigt den Bedarf je Einheit und Änderungen ohne Pfeil, keine Spalte Zug (R2-K3)", () => {
     const ruhe = basisBogen();
     ruhe.sofortbedarf = { ...ruhe.sofortbedarf!, ruhezeitErforderlich: true, dieselLiter: 200 };

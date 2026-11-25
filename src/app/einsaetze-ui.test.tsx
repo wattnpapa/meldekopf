@@ -944,6 +944,8 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     const ruhe = screen.getByRole("button", { name: /^✓ Ruhezeit · geklärt \d\d:\d\d$/ });
     expect(ruhe.getAttribute("aria-pressed")).toBe("true");
     expect(ruhe.className).toContain("geklaert");
+    // Die Kopfzahl nennt weiter die eine Einheit und daneben, dass nichts mehr offen ist.
+    expect(document.querySelector(".bedarf-offen")?.textContent).toContain("alle geklärt");
     // Unterbringung ist noch offen: die Einheit bleibt dringend.
     expect(document.querySelectorAll(".bedarf-marke.dringend")).toHaveLength(1);
     await nutzer.click(screen.getByRole("button", { name: /^Unterbringung angefordert · geklärt\?$/ }));
