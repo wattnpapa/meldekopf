@@ -553,12 +553,12 @@ sequenceDiagram
   R->>R: Antwort des Telefons selbst zusammensetzen und setzen
   R-->T: Datenkanal steht (direkt, verschlüsselt, lokales Netz)
   R->>T: Stand der Sammlung (Umschlag der Einsatz-Datei)
-  R->>T: Kopf der Sammlung (Name, Art, Ort; keine Meldungen)
-  T->>T: leere Sammlung anlegen, Sammler-Ansicht zeigen
-  T->>R: eigener Stand, sobald er sich ändert (jeder Scan)
+  R->>T: ganzer Stand der Zentrale
+  T->>T: Sammlung damit ersetzen, Sammler-Ansicht zeigen
+  T->>R: was die Zentrale noch nicht kennt (jeder Scan)
   R->>R: abgleichen (einsatzAbgleichen), Ansicht und Lagemonitor lesen neu
-  R->>T: Quittung
-  T->>T: Meldung als „übertragen" zeigen
+  R->>T: Quittung, danach der neue Stand
+  T->>T: Meldung als „in der Lage" zeigen
 ```
 
 - **Ein Scan genügt (seit 2026-11-25, „Anklopfen“).** Am Rechner im Fahrzeug
@@ -591,30 +591,39 @@ sequenceDiagram
 - Das zweite Gerät ruft nach dem Scan so lange beim ersten an, bis dort die
   Antwort gesetzt ist: derselbe Weg wie beim Wiederverbinden (Anruf, Frist
   15 Sekunden, Pausen).
-- **Rollen (seit 2026-11-24).** Das erste Gerät ist die Zentrale und führt
-  die Lage. Das zweite ist ein reiner Sammler: Es nimmt auf und schickt seinen
-  ganzen Stand, also alles, was es selbst aufgenommen hat (Umschlag der
-  Einsatz-Datei, dazu die Kennungen der dort entfernten und zurückgeholten
-  Einträge). Die Zentrale gleicht ihn ab wie eine importierte Datei (je Feld,
-  Widersprüche bleiben an der Einsatzansicht stehen; Rückfragen gibt es nicht)
-  und quittiert ihn. Dem Sammler schickt sie nur den Kopf der Sammlung
-  (Kennung, Name, Art, Ort), keine Meldungen: Das Telefon draußen trägt nie
-  die Lage, nur seine eigenen Scans. Der Sammler verwirft Meldungen der
-  Gegenstelle auch dann, wenn eine sie schickte (`standUebernehmen`,
-  `nurKopf`).
-- Was die Zentrale an einer Einheit des Sammlers ändert (Auftrag, Abrücken,
-  Entfernen), bleibt an der Zentrale gültig, auch wenn der Sammler seinen
-  älteren Stand der Einheit weiter mitschickt. Entfernt oder ändert der
-  Sammler eine seiner Einheiten, übernimmt die Zentrale es.
+- **Rollen: Zentrale und Sammler, wie Server und Client (seit 2026-11-25).**
+  Das erste Gerät ist die Zentrale, ihr Stand ist maßgeblich. Sie schickt
+  jedem verbundenen Sammler ihren ganzen Stand (Umschlag der Einsatz-Datei),
+  sooft er sich ändert. Der Sammler ersetzt damit seine Sammlung
+  (`zentraleStandUebernehmen`): Er zeigt, was die Zentrale führt, auch was
+  sie geändert oder entfernt hat und was andere Sammler aufgenommen haben; es
+  wird dort nichts je Feld abgeglichen. Darüber hinaus behält er nur, was er
+  selbst aufgenommen hat und die Zentrale noch nicht kennt.
+- Der Sammler schickt der Zentrale genau das: seine Meldungen, die sie noch
+  nicht bestätigt hat. Die Zentrale gleicht sie ab wie eine importierte Datei
+  (`einsatzAbgleichen`), quittiert und schickt danach wieder ihren Stand.
+- **Nachsenden.** War beim Aufnehmen keine Verbindung da oder blieb die
+  Quittung aus, bleibt die Meldung am Sammler als „… wartet“ stehen und geht
+  mit der nächsten Verbindung, auch nach einem Neuladen seiner Seite (was die
+  Zentrale kennt, steht im Gedächtnis, `merker.ts`).
+- Was jemand am Sammler an einer schon übertragenen Meldung ändert, hält
+  nicht: Mit dem nächsten Stand der Zentrale gilt wieder ihrer. Die
+  Sammler-Ansicht bietet solche Änderungen darum nicht an.
+- Am 2026-11-24 war der Sammler ein reiner Datensammler, der nur den Kopf der
+  Sammlung bekam; der Anwender will den Stand der Zentrale auf jedem
+  verbundenen Telefon. Die Bremse gegen ein endloses Hin und Her aus der
+  ersten Fassung ist entfallen: Der Stand der Zentrale erzeugt am Sammler
+  nichts, was die Zentrale nicht kennt.
 - **Anzeige.** Auf beiden Geräten dieselbe Lampe mit einem Wort: Punkt
   „Verbindung aktiv“, Ring „Verbindung unterbrochen“, Quadrat „Verbindung
   getrennt“. An der Zentrale als Leiste, die oben im Bild klebt, mit der
   Uhrzeit des letzten Eingangs. Am Sammler als Kopf einer eigenen Ansicht
   (`sammler-ansicht.tsx`), die die Einsatzansicht ersetzt, solange gekoppelt
   ist: Lampe, „Bogen scannen…“, „Einheit von Hand erfassen…“ und die Liste
-  des selbst Aufgenommenen, je Meldung „✓ übertragen“ oder „… wartet“.
-  „Übertragen“ heißt: Die Zentrale hat den Stand eingespielt und quittiert,
-  nicht bloß, dass er gesendet wurde.
+  aller Einheiten der Zentrale, je Meldung „✓ in der Lage“ oder „… wartet“.
+  „Wartet“ heißt: hier aufgenommen, an der Zentrale noch nicht angekommen; die
+  Marke fällt erst, wenn die Zentrale quittiert oder die Meldung in ihrem
+  Stand zurückschickt, nicht schon beim Senden.
 - Jedes Gerät schaut im Sekundentakt, ob sich sein Speicher geändert hat, und
   schickt dann seinen Stand. Verglichen wird ein Abdruck ohne
   Änderungszeitpunkt und ohne Reihenfolge der Einträge, damit zwei Geräte sich
@@ -687,10 +696,10 @@ sequenceDiagram
   das Zertifikat, die Kennung der Seite und das Gedächtnis. Gekoppelt wird
   nacheinander („Weiteres Gerät koppeln…“, je ein Scan); die schon gekoppelten
   bleiben dabei verbunden, Türen stehen immer nur für das eine Gerät offen,
-  das gerade koppelt. Jeder Sammler schickt nur, was er selbst aufgenommen
-  hat, und erhält nur den Kopf der Sammlung: Kein Telefon sieht die Meldungen
-  eines anderen. Nehmen zwei Sammler dieselbe Einheit auf, führt die Zentrale
-  sie als zwei Fassungen einer Einheit, nicht als zwei Einheiten.
+  das gerade koppelt. Jeder Sammler schickt, was er selbst aufgenommen hat,
+  und erhält den Stand der Zentrale: Über sie sieht jedes Telefon, was die
+  anderen aufgenommen haben. Nehmen zwei Sammler dieselbe Einheit auf, führt
+  die Zentrale sie als zwei Fassungen einer Einheit, nicht als zwei Einheiten.
 - **Namen.** Jeder Sammler nennt beim Verbinden seinen Namen und eine
   dauerhafte, zufällige Kennung (`geraetename.ts`, `eeb.geraet.v1`). Der Name
   wird am Telefon eingegeben („Name ändern…“); die Vorgabe ist das Modell, wo
@@ -1198,11 +1207,13 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
   Internet für den Verbindungsaufbau: braucht Netz und wäre ein zweiter
   Fremd-Host. (c) Nur Dateien wie bisher: kein laufendes Bild am Rechner.
 - **Nachtrag 2026-11-24, Rollen:** Zunächst glichen beide Geräte die ganze
-  Sammlung in beide Richtungen ab. Entschieden: Im gekoppelten Betrieb ist das
-  zweite Gerät ein reiner Datensammler. Die Lage liegt nur auf der Zentrale;
-  der Sammler bekommt den Kopf der Sammlung und eine Quittung je Stand. Das
-  nimmt dem Telefon die Vollkopie (DSFA R16) und der Bedienung am Eingang
-  alles, was dort nicht gebraucht wird.
+  Sammlung in beide Richtungen je Feld ab. Dann: Das zweite Gerät ist ein
+  reiner Datensammler und bekommt nur den Kopf der Sammlung.
+- **Nachtrag 2026-11-25, Zentrale und Sammler:** Entschieden vom Anwender:
+  Die Kopplung ist der Sache nach Server und Client. Die Zentrale ist
+  maßgeblich; jeder verbundene Sammler bekommt laufend ihren Stand und
+  schickt, was sie noch nicht kennt, auch nachträglich. Preis: Jedes
+  gekoppelte Telefon trägt wieder die ganze Sammlung (DSFA R16, ISK R13).
 - **Grenzen, die bleiben:** eine Zentrale, höchstens fünf Sammler und eine Sammlung je Kopplung (bis 2026-11-25: genau zwei Geräte; fünf Telefone an einem Eingang sind nach Auskunft des Anwenders schon viel);
   keine Anmeldung, keine Rollen, kein Mehrbenutzerbetrieb über das hinaus;
   keine Kräfteübersicht über mehrere Meldeköpfe; keine Verbindung über das
@@ -1262,7 +1273,8 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |
 | Bundle-Budget mit der Kopplung zweimal angehoben | JavaScript gesamt 4.413.510 Byte (rund 52 KB für `kopplung/*`, nachgeladen); Startbündel 643.035 Byte (rund 2,4 KB: Zustand, Scanner-Weiche, Knopf, die Wege der Aufnahme für die Sammler-Ansicht). |
 | Mehrere Sammler nur im Prüfstand erprobt (drei Profile eines Browsers auf einem Rechner) | Gerätetest offen: fünf echte Telefone in einem WLAN, davon einige schlafend. Je Sammler hält die Zentrale zwei wartende Verbindungen, dazu 16 Türen während des Koppelns; das ist für einen Rechner wenig, für ein altes Tablet als Zentrale ungeprüft. |
-| Der Sammler sieht nicht, was die Zentrale schon führt | Scannt er eine Einheit, die an der Zentrale schon steht, entsteht dort eine weitere Fassung derselben Einheit (Historie), keine doppelte Einheit; eine Warnung am Telefon gibt es nicht. |
+| Jeder Stand der Zentrale geht ganz an jeden Sammler | Bei großen Sammlungen und fünf Telefonen sind das je Änderung einige hundert Kilobyte je Telefon (gepackt); im lokalen Netz unkritisch, auf alten Telefonen ungemessen. Eine Übertragung nur der Änderungen ist nicht gebaut. |
+| Wer den Code der Zentrale vom Bildschirm scannt, bekommt die ganze Lage | Seit ein Scan genügt und die Zentrale ihren Stand schickt, reicht dafür Sicht auf den Bildschirm im selben Netz, solange der Code dort steht (ISK R13). Den Code nur zeigen, solange gekoppelt wird; die Leiste nennt jeden Sammler beim Namen. |
 | Adresse als Subdomain von erfassungsbogen.app | meldekopf.app war vergeben. Die Subdomain kostet nichts, ein CNAME-Eintrag genügt, HTTPS-Zwang der .app-Endung gilt mit. Ein späterer Umzug auf eine eigene Domain ist ein Konfigurationswechsel (CNAME, App-Links, AASA), kein Umbau. |
 
 ## 12. Glossar

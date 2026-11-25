@@ -139,7 +139,7 @@ function horchen(an: boolean): void {
 
 function geraetVon(g: Gegenstelle, nr: number): KopplungsGeraet {
   const z = g.zustand();
-  return { kennung: g.kennung, name: z.name || `Sammler ${nr}`, phase: z.phase, wartet: z.wartet, seit: z.seit, abgleichAm: z.abgleichAm, hinweis: z.hinweis };
+  return { kennung: g.kennung, name: z.name || `Sammler ${nr}`, geraet: z.geraet, phase: z.phase, wartet: z.wartet, seit: z.seit, abgleichAm: z.abgleichAm, hinweis: z.hinweis };
 }
 
 /** Aus den Gegenstellen den einen Zustand für die Oberfläche machen. */
@@ -239,7 +239,11 @@ const umfeld = (als: "zentrale" | "sammler"): Umfeld => ({
     if (als !== "zentrale") return;
     // Dasselbe Telefon hat neu gekoppelt: Sein alter Eintrag ist damit abgelöst.
     const geraet = g.zustand().geraet;
-    if (geraet) for (const alt of gegenstellen.filter((x) => x !== g && x.zustand().geraet === geraet)) alt.beenden("", false);
+    if (geraet) {
+      for (const alt of gegenstellen.filter((x) => x !== g && x.zustand().geraet === geraet)) alt.beenden("", false);
+      // Auch der Eintrag, mit dem es sich eben verabschiedet hat („… hat die Kopplung getrennt"), ist damit erledigt.
+      gegangene = gegangene.filter((x) => x.geraet !== geraet);
+    }
     if (anbahnung === g) anbahnung = null;
     zusammenfassen();
   },

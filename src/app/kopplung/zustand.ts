@@ -58,6 +58,8 @@ export interface KopplungsDialog {
 export interface KopplungsGeraet {
   kennung: string;
   name: string;
+  /** Dauerhafte Kennung des Geräts (geraetename.ts); leer, solange es sich nicht vorgestellt hat. */
+  geraet?: string;
   phase: KopplungsPhase;
   wartet: boolean;
   seit: number | null;

@@ -608,8 +608,8 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
           schnappschuss = speicherSchnappschuss();
           setze({
             einsatzId: r.einsatzId,
-            // Die Zentrale hat eben einen Stand des Sammlers eingespielt; der Sammler wartet auf die Quittung.
-            ...(zentrale ? { abgleichAm: Date.now() } : {}),
+            // Die Zentrale hat eben Meldungen des Sammlers eingespielt, der Sammler den Stand der Zentrale.
+            abgleichAm: Date.now(),
             hinweis: r.widersprueche > 0 ? "Beide Geräte haben dasselbe geändert. Die Einsatzansicht nennt die Stellen." : zu.hinweis,
           });
           if (r.geaendert) u.standGeaendert(r.einsatzId);

@@ -2,8 +2,9 @@
 # Neu im Meldekopf (ADR-009, docs/architektur.md): keine Vorlage im Erfassungsbogen.
 Funktionalität: Zweites Gerät koppeln
   Am Meldekopf im Fahrzeug scannt das Telefon draußen, der Rechner zeigt die
-  Übersicht. Das Telefon ist dabei ein reiner Sammler: Es schickt, was es
-  aufnimmt, und bekommt die Lage nicht. Die Geräte verbinden sich direkt im
+  Übersicht. Der Rechner ist die Zentrale, sein Stand ist maßgeblich: Jedes
+  verbundene Telefon schickt, was es aufnimmt, und bekommt laufend den Stand
+  der Zentrale. Die Geräte verbinden sich direkt im
   selben Netz, ohne Server und ohne Internet. Ein Scan genügt: Das erste Gerät
   zeigt einen Code, das zweite scannt ihn, danach verbinden sich beide von
   selbst. Am ersten Gerät ist nichts zu scannen und nichts einzugeben, denn im
@@ -28,8 +29,8 @@ Funktionalität: Zweites Gerät koppeln
     Und ist kein Dialog offen
     Und zeigt das zweite Gerät die Überschrift "Hochwasser Weser"
     Und zeigt das zweite Gerät den Text "Dieses Gerät sammelt"
-    Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (0)"
-    Und zeigt das zweite Gerät "THW Oldenburg" nicht
+    Und zeigt das zweite Gerät den Text "Stand der Zentrale (1 Einheit)"
+    Und zeigt das zweite Gerät den Text "THW Oldenburg"
 
   Szenario: Ausweichweg: Klappt es nicht von selbst, koppelt der Antwort-Code
     Angenommen das erste Gerät öffnet keine Türen zum Anklopfen
@@ -47,9 +48,28 @@ Funktionalität: Zweites Gerät koppeln
     Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
     Dann zählt die Übersicht 2 Einheiten
     Und führt die Übersicht die Einheit "DLRG Wardenburg"
-    Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (1)"
-    Und zeigt das zweite Gerät den Text "✓ übertragen"
-    Und zeigt das zweite Gerät den Text "Alles übertragen"
+    Und zeigt das zweite Gerät den Text "Stand der Zentrale (2 Einheiten)"
+    Und zeigt das zweite Gerät den Text "DLRG Wardenburg"
+    Und zeigt das zweite Gerät den Text "Auf dem Stand der Zentrale"
+
+  Szenario: Was ohne Verbindung aufgenommen wurde, wird nachgesendet
+    Angenommen beide Geräte sind gekoppelt
+    Wenn das erste Gerät nicht erreichbar ist
+    Und das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zeigt das zweite Gerät den Text "… wartet"
+    Und zeigt das zweite Gerät den Text "davon 1 noch nicht übertragen"
+    Wenn das erste Gerät wieder erreichbar ist
+    Dann zählt die Übersicht 2 Einheiten
+    Und zeigt das zweite Gerät den Text "Auf dem Stand der Zentrale"
+    Und zeigt das zweite Gerät den Text "Stand der Zentrale (2 Einheiten)"
+
+  Szenario: Was die Zentrale ändert, steht danach auf dem Telefon
+    Angenommen beide Geräte sind gekoppelt
+    Wenn das zweite Gerät den Bogen der DLRG Wardenburg scannt
+    Dann zählt die Übersicht 2 Einheiten
+    Wenn ich die Einheit "DLRG Wardenburg" an der Zentrale entferne
+    Dann zählt die Übersicht 1 Einheiten
+    Und zeigt das zweite Gerät den Text "Stand der Zentrale (1 Einheit)"
 
   Szenario: Schläft das zweite Gerät ein, verbindet es sich beim Aufwachen von selbst wieder
     Angenommen beide Geräte sind gekoppelt
@@ -74,8 +94,8 @@ Funktionalität: Zweites Gerät koppeln
     Wenn das zweite Gerät seine Seite neu lädt
     Dann meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
     Und zeigt das zweite Gerät die Überschrift "Hochwasser Weser"
-    Und zeigt das zweite Gerät den Text "Von diesem Gerät aufgenommen (1)"
-    Und zeigt das zweite Gerät den Text "✓ übertragen"
+    Und zeigt das zweite Gerät den Text "Stand der Zentrale (2 Einheiten)"
+    Und zeigt das zweite Gerät den Text "✓ in der Lage"
     Und meldet die Kopplungsleiste "Verbindung aktiv"
 
   Szenario: Auch nach zweimaligem Neuladen des zweiten Geräts steht die Verbindung wieder
@@ -125,7 +145,7 @@ Funktionalität: Zweites Gerät koppeln
     Und sehe ich die Schaltfläche "Neu koppeln…"
     Und zählt die Übersicht 1 Einheiten
 
-  Szenario: Zwei Telefone sammeln für eine Zentrale, keines sieht die Meldungen des anderen
+  Szenario: Zwei Telefone sammeln für eine Zentrale, jedes sieht über sie, was das andere aufnimmt
     Angenommen beide Geräte sind gekoppelt
     Und ein drittes Gerät hat die App geöffnet
     Wenn ich auf "Weiteres Gerät koppeln…" klicke
@@ -136,8 +156,8 @@ Funktionalität: Zweites Gerät koppeln
     Und das dritte Gerät den Bogen der Feuerwehr Aschhausen scannt
     Dann zählt die Übersicht 3 Einheiten
     Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
-    Und zeigt das dritte Gerät den Text "Von diesem Gerät aufgenommen (1)"
-    Und zeigt das dritte Gerät "Wardenburg" nicht
+    Und zeigt das dritte Gerät den Text "Stand der Zentrale (3 Einheiten)"
+    Und zeigt das dritte Gerät den Text "DLRG Wardenburg"
 
   Szenario: Jedes Telefon nennt seinen Namen, und die Leiste sagt, welches fehlt
     Angenommen beide Geräte sind gekoppelt

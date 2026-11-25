@@ -57,7 +57,7 @@ Verlauf über Tage oder Aufträge braucht, ist S1-Control.
   „Einsatz“ angelegte Sammlung lässt sich nachträglich als Übung führen: am
   Hinweis „Nichts gezählt“, unter „Einsatz bearbeiten…“ oder beim Aufnehmen
   des ersten Übungsbogens. Die Art reist beim Abgleich zweier Geräte mit.
-- Geräte koppeln: Bis zu fünf Telefone scannen draußen als reine Datensammler,
+- Geräte koppeln: Bis zu fünf Telefone scannen draußen als Sammler und zeigen dabei den Stand der Zentrale,
   der Rechner im Fahrzeug führt die Lage und zeigt die Übersicht. Ein Scan
   am Telefon verbindet die Geräte direkt im selben Netz (WLAN, Hotspot), ohne
   Internet und ohne Server; der Rechner braucht dafür weder Kamera noch

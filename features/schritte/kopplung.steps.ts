@@ -310,3 +310,45 @@ Then("führt die Kopplungsleiste genau {int} Sammler", async function (this: Eeb
   const ist = zeilen === 0 ? 1 : zeilen;
   if (ist !== anzahl) throw new Error(`Die Leiste führt ${ist} Sammler, erwartet waren ${anzahl}.`);
 });
+
+// ------------------------------------------------------------------------------------- Stand der Zentrale, Nachsenden
+
+/**
+ * Die Zentrale ist weg, ohne sich zu verabschieden (Rechner zugeklappt, außer Reichweite): Ihre Seite verlässt die App.
+ * Das Telefon merkt es an der ausbleibenden Antwort und nimmt weiter auf.
+ */
+When("das erste Gerät nicht erreichbar ist", async function (this: EebWelt) {
+  await this.page.waitForTimeout(1500);
+  await this.page.goto("about:blank");
+  await leisteMit(zweitesGeraet(this), "Verbindung unterbrochen");
+});
+
+/** Die Zentrale kommt zurück und setzt ihre gemerkte Kopplung fort (merker.ts): Sie ruft das Telefon an. */
+When("das erste Gerät wieder erreichbar ist", async function (this: EebWelt) {
+  await this.oeffneApp();
+  await leisteMit(this.page, "Verbindung aktiv");
+});
+
+When("ich die Einheit {string} an der Zentrale entferne", async function (this: EebWelt, name: string) {
+  const id = String(
+    await this.page.evaluate(`(() => {
+      const s = JSON.parse(localStorage.getItem("eeb.einsaetze.v1"))[0];
+      return s.id;
+    })()`),
+  );
+  // Über denselben Weg wie die Karte der Einheit („Mehr… → Entfernen"): hier direkt im Speicher, die Ansicht liest neu.
+  await this.page.evaluate(
+    `(() => {
+      const liste = JSON.parse(localStorage.getItem("eeb.einsaetze.v1"));
+      const s = liste.find((x) => x.id === ${JSON.stringify(id)});
+      const weg = s.eintraege.filter((e) => JSON.stringify(e.bogen.einheit).includes(${JSON.stringify(name.replace(/^DLRG /, ""))}));
+      s.eintraege = s.eintraege.filter((e) => !weg.includes(e));
+      s.geaendert = Date.now();
+      localStorage.setItem("eeb.einsaetze.v1", JSON.stringify(liste));
+      const entfernt = JSON.parse(localStorage.getItem("eeb.entfernt.v1") || "{}");
+      entfernt[s.id] = [...(entfernt[s.id] || []), ...weg.map((e) => e.id)];
+      localStorage.setItem("eeb.entfernt.v1", JSON.stringify(entfernt));
+      window.dispatchEvent(new StorageEvent("storage", { key: "eeb.einsaetze.v1" }));
+    })()`,
+  );
+});

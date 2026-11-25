@@ -135,7 +135,7 @@ describe("Sammler-Ansicht", () => {
     expect(bild.textContent).toContain("Verbindung aktiv");
     expect(bild.textContent).toContain("1 Meldung wird übertragen");
     expect(bild.textContent).toContain(SAMMLER_ROLLE_SATZ);
-    expect(bild.textContent).toContain("Von diesem Gerät aufgenommen (1)");
+    expect(bild.textContent).toContain("Stand der Zentrale (1 Einheit, davon 1 noch nicht übertragen)");
     expect(bild.textContent).toContain("Wardenburg");
     // Ohne Quittung der Zentrale gilt nichts als übertragen.
     expect(bild.querySelector("li")?.getAttribute("data-uebertragen")).toBe("nein");
