@@ -918,7 +918,8 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     ansicht(angelegt.id);
 
     const marken = [...document.querySelectorAll(".bedarf-marke")].map((m) => m.textContent);
-    expect(marken).toEqual(["Ruhezeit", "Unterbringung angefordert", "Diesel 400 l"]);
+    // Jede Marke ist ein Schalter und fragt, solange der Bedarf offen ist, „geklärt?" (bedarf-geklaert.ts).
+    expect(marken).toEqual(["Ruhezeit · geklärt?", "Unterbringung angefordert · geklärt?", "Diesel 400 l · geklärt?"]);
     // Kraftstoff als Routine abgesetzt, Dringendes hervorgehoben (R2-K4).
     expect(document.querySelectorAll(".bedarf-marke.dringend")).toHaveLength(2);
     expect(document.querySelectorAll(".bedarf-marke.routine")).toHaveLength(1);
@@ -928,6 +929,40 @@ describe("Zeiten, Auftrag und Bedarf auf der Karte", () => {
     expect(namen).toHaveLength(1);
     expect(namen[0]).toContain("Crailsheim");
     expect(screen.getByRole("heading", { name: /Einheiten \(1 von 2 gemeldet · 2 anwesend\)/ })).not.toBeNull();
+  });
+
+  it("hakt Sofortbedarf an der Karte als geklärt ab und nimmt ihn aus dem Filter „dringend“", async () => {
+    const nutzer = userEvent.setup();
+    const angelegt = einsatzAnlegen("Lage", EinsatzArt.EINSATZ);
+    const mitBedarf = bogenMitName("Crailsheim");
+    mitBedarf.sofortbedarf = { verpflegungPersonen: 0, dieselLiter: 400, benzinLiter: 0, gemischLiter: 0, unterbringung: true, ruhezeitErforderlich: true };
+    meldungHinzufuegen(angelegt.id, mitBedarf);
+    const { neuLaden } = ansicht(angelegt.id);
+
+    await nutzer.click(screen.getByRole("button", { name: /^Ruhezeit · geklärt\?$/ }));
+    neuLaden();
+    const ruhe = screen.getByRole("button", { name: /^✓ Ruhezeit · geklärt \d\d:\d\d$/ });
+    expect(ruhe.getAttribute("aria-pressed")).toBe("true");
+    expect(ruhe.className).toContain("geklaert");
+    // Die Kopfzahl nennt weiter die eine Einheit und daneben, dass nichts mehr offen ist.
+    expect(document.querySelector(".bedarf-offen")?.textContent).toContain("alle geklärt");
+    // Unterbringung ist noch offen: die Einheit bleibt dringend.
+    expect(document.querySelectorAll(".bedarf-marke.dringend")).toHaveLength(1);
+    await nutzer.click(screen.getByRole("button", { name: /^Unterbringung angefordert · geklärt\?$/ }));
+    neuLaden();
+    expect(document.querySelectorAll(".bedarf-marke.dringend")).toHaveLength(0);
+    // Nichts Dringendes mehr offen: der Filter wird gar nicht mehr angeboten.
+    expect(screen.queryByLabelText(/nur dringender Bedarf/)).toBeNull();
+
+    // Der nächste Tipp nimmt den Haken zurück; beides steht im Verlauf der Einheit.
+    await nutzer.click(screen.getByRole("button", { name: /^✓ Ruhezeit · geklärt/ }));
+    neuLaden();
+    expect(screen.getByRole("button", { name: /^Ruhezeit · geklärt\?$/ }).getAttribute("aria-pressed")).toBe("false");
+    expect(einsaetzeLaden()[0]!.eintraege[0]!.vermerke?.map((v) => v.text)).toEqual([
+      "Bedarf geklärt: Ruhezeit",
+      "Bedarf geklärt: Unterbringung angefordert",
+      "Bedarf wieder offen: Ruhezeit",
+    ]);
   });
 
   it("filtert nicht auf Kraftstoff allein und springt aus „Ruhezeit: n×“ in den Filter (R2-K4)", async () => {
@@ -1378,26 +1413,19 @@ describe("Kompakte Einheiten auf dem Telefon (R2-K7)", () => {
     expect(wahl.open).toBe(true);
   });
 
-  // Audit Runde 10, R10-K2: Der Tipp auf „n ohne Auftrag" zeigte das Werkzeug statt der Einheiten.
-  it("Telefon: „n ohne Auftrag“ filtert, ohne das Filterfeld aufzuklappen, und rollt zur Liste (R10-K2)", async () => {
+  it("Telefon: der Filter „ohne Auftrag“ steht im Filterfeld, eine Zählerzeile über der Liste gibt es nicht", async () => {
     const nutzer = userEvent.setup();
-    const rollen = vi.fn();
-    const alt = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = rollen;
-    try {
-      const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
-      for (const n of ["Aalen", "Biberach", "Celle"]) meldungHinzufuegen(angelegt.id, bogenMitName(n));
-      ansicht(angelegt.id);
-      const wahl = document.querySelector<HTMLDetailsElement>("details.einheiten-filter-wahl")!;
-      await nutzer.click(screen.getByRole("button", { name: "3 ohne Auftrag" }));
-      expect(wahl.open).toBe(false);
-      expect(wahl.querySelector("summary")!.textContent).toBe("Suchen, sortieren, filtern · Filter aktiv: ohne Auftrag");
-      expect(screen.getByRole("button", { name: "Filter aufheben" })).toBeDefined();
-      await vi.waitFor(() => expect(rollen).toHaveBeenCalled());
-      expect(rollen.mock.contexts.some((el) => (el as Element).classList.contains("luecken-zaehler"))).toBe(true);
-    } finally {
-      Element.prototype.scrollIntoView = alt;
-    }
+    const angelegt = einsatzAnlegen("Hochwasser Test", EinsatzArt.EINSATZ);
+    for (const n of ["Aalen", "Biberach", "Celle"]) meldungHinzufuegen(angelegt.id, bogenMitName(n));
+    ansicht(angelegt.id);
+    expect(screen.queryByRole("button", { name: /ohne Auftrag/ })).toBeNull();
+    const wahl = document.querySelector<HTMLDetailsElement>("details.einheiten-filter-wahl")!;
+    await nutzer.click(wahl.querySelector("summary")!);
+    await nutzer.selectOptions(within(wahl).getByRole("combobox", { name: "Auftrag" }), "ohne-auftrag");
+    expect(wahl.open).toBe(true);
+    expect(wahl.querySelector("summary")!.textContent).toBe("Suchen, sortieren, filtern · Filter aktiv");
+    await nutzer.selectOptions(within(wahl).getByRole("combobox", { name: "Auftrag" }), "");
+    expect(wahl.querySelector("summary")!.textContent).toBe("Suchen, sortieren, filtern");
   });
 
   it("Telefon, lange Liste: die Suchleiste steht hinter einer Zeile, damit die erste Karte höchstens zwei Bildschirme tief liegt (R5-K4)", () => {
@@ -2288,7 +2316,7 @@ describe("Auftrag auf einen Blick (R7-K6, R7-K9)", () => {
     localStorage.clear();
   });
 
-  it("zählt Einheiten ohne Auftrag, filtert mit einem Tipp und zeigt den Auftragstext zugeklappt", async () => {
+  it("zählt Einheiten ohne Auftrag im Filter „Auftrag“ und zeigt den Auftragstext zugeklappt", async () => {
     const nutzer = userEvent.setup();
     const b = buehne(["Wardenburg", "Oldenburg", "Aurich"]);
     const { einsatzId } = b;
@@ -2296,13 +2324,14 @@ describe("Auftrag auf einen Blick (R7-K6, R7-K9)", () => {
     notizSetzen(einsatzId, w.id, "Deichabschnitt Nord ab 14:00");
     b.neuLaden();
 
-    expect(screen.getByRole("button", { name: "2 ohne Auftrag" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: /ohne Auftrag/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /ohne Zug/ })).toBeNull();
-    await nutzer.click(screen.getByRole("button", { name: "2 ohne Auftrag" }));
+    expect(screen.getByRole("option", { name: "ohne Auftrag (2)" })).toBeDefined();
+    await nutzer.selectOptions(screen.getByRole("combobox", { name: "Auftrag" }), "ohne-auftrag");
     const namen = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent ?? "");
     expect(namen).toHaveLength(2);
     expect(namen.join(" ")).not.toContain("Wardenburg");
-    await nutzer.click(screen.getAllByRole("button", { name: "Filter aufheben" })[0]!);
+    await nutzer.selectOptions(screen.getByRole("combobox", { name: "Auftrag" }), "");
     expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3);
     // Die Legende steht einmal über der Liste.
     expect(screen.getByText(/Stärke auf den Karten: Führer \/ Unterführer \/ Mannschaft \/ Gesamt/)).toBeDefined();

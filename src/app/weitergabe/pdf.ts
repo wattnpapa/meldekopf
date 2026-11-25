@@ -32,7 +32,8 @@ import { eintreffzeit, zeitEingelesen, zeitpunktZuMs } from "../eintrag-zeiten";
 import { standLiegtNachEintreffen } from "./stand-uhr";
 import { exportStaendeLaden, lageblattVermerken, weitergabeVermerken } from "./export-stand";
 import { abweichenderOrt } from "../einheiten-tabelle";
-import { meldungsNummern } from "../einheiten-tabelle";
+import { bedarfMarken, meldungsNummern } from "../einheiten-tabelle";
+import { bedarfGeklaertAm } from "../bedarf-geklaert";
 import { kaestchenZeichnen } from "./pdf-kaestchen";
 
 interface FontContainer {
@@ -217,6 +218,7 @@ function uebersichtEintrag(
   const idx = revs.findIndex((r) => r.id === m.id);
   const vorher = idx >= 0 ? revs[idx + 1]?.bogen : undefined;
   const fremderOrt = einsatz.fremdeOrte ? einsatz.fremdeOrte[m.einheitSchluessel] : abweichenderOrt(m, einsatz, historie);
+  const geklaert = bedarfMarken(m.bogen).filter((p) => bedarfGeklaertAm(m, p, historie) != null).map((p) => p.art);
   return {
     bogen: m.bogen,
     vorher,
@@ -247,6 +249,8 @@ function uebersichtEintrag(
     // Über die ganze Sammlung gezählt — auch im Nachtrag „nur neue Bögen"
     // dieselbe Nummer wie am Gerät (R2-A6).
     nummer: meldungsNummern(historie).get(m.einheitSchluessel),
+    // Was die Führungsstelle am Sofortbedarf als geklärt abgehakt hat: Das Blatt nennt es, damit die Ablösung nicht noch einmal fragt.
+    ...(geklaert.length > 0 ? { bedarfGeklaert: geklaert } : {}),
   };
 }
 

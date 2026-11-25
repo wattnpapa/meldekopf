@@ -49,6 +49,7 @@ import {
   textBreite,
   werBreite,
   zeichenFuerTafel,
+  geklaertText,
 } from "./lagetafel";
 import { zeichenLaden } from "./zeichen-bild";
 
@@ -368,11 +369,14 @@ const stummel = (text: string): number => Math.min(textBreite(text), textBreite(
  * Browser 1,22, hier 1,25). Ein Freitext-Typ weicht bis hierhin (`--lt-marken-min` in lagetafel.css); `null` ohne Marken.
  */
 function markenMindest(e: TafelEinheit): number | null {
-  if (!e.marke && e.bedarf.length === 0) return null;
+  const haken = geklaertText(e);
+  if (!e.marke && e.bedarf.length === 0 && !haken) return null;
   const marke = (text: string) => 0.7 * (textBreite(text) + 0.6 + 0.2);
   const bewegung = e.marke ? marke(e.marke.text) + (e.bedarf.length > 0 ? 0.3 : 0) : 0;
   const bedarf = e.bedarf.length > 0 ? 0.7 * (1.25 + stummel(e.bedarf.join(", ")) + 0.6 + 0.2) : 0;
-  return 0.4 + bewegung + bedarf;
+  // Abgehakter Bedarf weicht zuerst und bis auf seinen Stummel („✓ R…"); davor der Abstand zur Marke links.
+  const geklaert = haken ? 0.7 * (stummel(haken) + 0.6 + 0.2) + (e.marke || e.bedarf.length > 0 ? 0.3 : 0) : 0;
+  return 0.4 + bewegung + bedarf + geklaert;
 }
 
 /**
@@ -504,6 +508,7 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
   const knapp = fassung === "zwei";
   const typ = <Typ e={e} fassung={fassung} />;
   const freitext = e.einheit.einheitsTyp?.code == null;
+  const haken = geklaertText(e);
   const mindest = knapp && e.typ && freitext ? markenMindest(e) : null;
   // In der breiten Fassung hält die Spalte des Funkrufnamens mindestens seine Kennziffer frei (Funkrufname 0,74 der Karte).
   const kennziffer = e.funkruf ? funkrufTeile(e.funkruf)?.fest : undefined;
@@ -521,7 +526,7 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
       {!knapp && typ}
       {/* Funkrufname, Auftrag und Marken: in der Fassung „drei" zusammen die dritte Zeile, in „zwei" mit dem Typ die zweite,
           in „breit" je ein Feld der Karte (lagetafel.css). */}
-      {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0 || (knapp && e.typ)) && (
+      {(e.funkruf || e.auftrag || e.marke || e.bedarf.length > 0 || haken || (knapp && e.typ)) && (
         <span className="lt-wie" style={mindest != null ? ({ "--lt-marken-min": mindest.toFixed(2) } as CSSProperties) : undefined}>
           {knapp && typ}
           {e.funkruf && <Funkruf name={e.funkruf} />}
@@ -530,10 +535,12 @@ function Karte({ e, fassung, jetzt }: { e: TafelEinheit; fassung: KartenFassung;
               <span className="lt-auftrag-text">{e.auftrag}</span>
             </span>
           )}
-          {(e.marke || e.bedarf.length > 0) && (
+          {(e.marke || e.bedarf.length > 0 || haken) && (
             <span className="lt-marken">
               {e.marke && <span className={`lt-marke lt-marke-${e.marke.art}`}>{e.marke.text}</span>}
               {e.bedarf.length > 0 && <span className="lt-marke lt-marke-achtung">{e.bedarf.join(", ")}</span>}
+              {/* Als geklärt abgehakt (bedarf-geklaert.ts): ruhig, mit Haken, ohne Warnfarbe und ohne die Karte hervorzuheben. */}
+              {haken && <span className="lt-marke lt-marke-geklaert">{haken}</span>}
             </span>
           )}
         </span>

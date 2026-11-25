@@ -10,6 +10,8 @@
  * Beispielbögen bleiben beim Erfassungsbogen (Übernahme-Doku, Abschnitt F).
  * Aufbau der Dialoge und der Gruppen wie dort (Audit Runde 2, R2-G3:
  * Zielmaß der Zeilen; R2-L6/R4-L2: Zweitschrift in gerechneten Tönen).
+ * „Was ist neu" (useAenderungen) wie im Erfassungsbogen über die
+ * Versionsnummer, die Liste in aenderungen.ts.
  */
 
 import { Fragment, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from "react";
@@ -18,6 +20,8 @@ import { AnzeigeSchalter } from "@bos/oberflaeche/anzeige-schalter";
 import { nutzungsKanal, statistikAbgewaehlt, statistikAbwaehlen } from "./statistik";
 import { WERKZEUGE, WERKZEUGE_TITEL } from "./werkzeuge";
 import { DatenGruppe } from "./daten-gruppe";
+import { fehlerText } from "./nachladen";
+import type { Aenderung } from "./aenderungen";
 
 const KONTAKT = "johannes.rudolph@thw-oldenburg.de";
 
@@ -150,6 +154,7 @@ function Datenschutzdialog({ dialogRef }: { dialogRef: RefObject<HTMLDialogEleme
 export function Fusszeile() {
   const impressum = useRef<HTMLDialogElement>(null);
   const datenschutz = useRef<HTMLDialogElement>(null);
+  const aenderungen = useAenderungen();
 
   return (
     <footer className="seite">
@@ -177,8 +182,13 @@ export function Fusszeile() {
         </div>
       </div>
       <p className="fuss-marke">
-        Meldekopf · Version {__APP_VERSION__} · EUPL-1.2
+        Meldekopf ·{" "}
+        <button type="button" className="link fuss-version" title="Was ist neu" onClick={() => void aenderungen.oeffnen()}>
+          Version {__APP_VERSION__} · Was ist neu
+        </button>{" "}
+        · EUPL-1.2
       </p>
+      {aenderungen.dialog}
 
       <Impressumsdialog dialogRef={impressum} />
       <Datenschutzdialog dialogRef={datenschutz} />
@@ -186,6 +196,88 @@ export function Fusszeile() {
       <Werkzeugzeile />
     </footer>
   );
+}
+
+/**
+ * „Was ist neu" — der Änderungsverlauf (aenderungen.ts). Die Liste kommt erst
+ * beim Öffnen nach (eigener Baustein im Offline-Vorrat), das Startpaket trägt
+ * nur den Knopf. Herkunft: Erfassungsbogen `src/app/fusszeile.tsx`,
+ * `useAenderungen`.
+ */
+function useAenderungen() {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [daten, setDaten] = useState<{ liste: readonly Aenderung[]; monate: Readonly<Record<string, string>> } | null>(null);
+  // Blättern je Monat, 0 = neuester: Als eine Liste wird der Verlauf schnell viele Bildschirme lang.
+  const [seite, setSeite] = useState(0);
+  const [fehler, setFehler] = useState("");
+  const kopf = useRef<HTMLHeadingElement>(null);
+  const oeffnen = async () => {
+    setFehler("");
+    setSeite(0);
+    try {
+      const m = await import("./aenderungen");
+      setDaten({ liste: m.AENDERUNGEN, monate: m.MONATE });
+    } catch (err) {
+      setFehler(`Der Änderungsverlauf ließ sich nicht laden: ${fehlerText(err)}`);
+    }
+    ref.current?.showModal();
+  };
+  const monate = daten ? [...new Set(daten.liste.map((a) => a.datum.slice(0, 7)))] : [];
+  const monat = monate[seite];
+  const blaettern = (neu: number) => {
+    setSeite(neu);
+    // Nach dem Blättern beginnt der neue Monat oben, nicht dort, wo man im alten gerollt hatte.
+    requestAnimationFrame(() => kopf.current?.scrollIntoView?.({ block: "start" }));
+  };
+  const leiste = monate.length > 1 && (
+    <nav className="aenderungen-blaettern" aria-label="Monate blättern">
+      <button type="button" disabled={seite === 0} onClick={() => blaettern(seite - 1)}>← Neuer</button>
+      <span>
+        {seite + 1} von {monate.length}
+      </span>
+      <button type="button" disabled={seite >= monate.length - 1} onClick={() => blaettern(seite + 1)}>Älter →</button>
+    </nav>
+  );
+  const dialog = (
+    <Dialog titel="Was ist neu" dialogRef={ref} klasse="rollhinweis aenderungen">
+      <p className="hinweis">Installierte Fassung: Version {__APP_VERSION__}.</p>
+      {fehler && <p className="fehler" role="alert">{fehler}</p>}
+      {daten && monat && (
+        <>
+          <h3 className="aenderungen-monat" ref={kopf}>{monatsName(monat)}</h3>
+          {daten.monate[monat] && <p className="aenderungen-kurz">{daten.monate[monat]}</p>}
+          {daten.liste
+            .filter((a) => a.datum.startsWith(monat))
+            .map((a) => (
+              <section key={a.datum} className="aenderung">
+                <h4>{aenderungsDatumText(a.datum)}</h4>
+                <ul>
+                  {a.punkte.map((p) => (
+                    <li key={p}>{p}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          {leiste}
+        </>
+      )}
+    </Dialog>
+  );
+  return { oeffnen, dialog };
+}
+
+const MONATSNAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+
+/** „November 2026" aus „2026-11". */
+function monatsName(jjjjmm: string): string {
+  const [j, m] = jjjjmm.split("-");
+  return `${MONATSNAMEN[Number(m) - 1] ?? m} ${j}`;
+}
+
+/** „08.11.2026" aus „2026-11-08" — hier statt aus aenderungen.ts, damit das Startpaket die Liste nicht mitlädt. */
+function aenderungsDatumText(iso: string): string {
+  const [j, m, t] = iso.split("-");
+  return `${t}.${m}.${j}`;
 }
 
 /**
