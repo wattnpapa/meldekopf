@@ -52,6 +52,8 @@ export interface KopplungsNetz {
   klopfer?: number;
   /** Zweites Gerät: so lange läuft der Durchgang des Anklopfens schon (für die Fehlersuche im Gerätetest). */
   dauerMs?: number;
+  /** Zweites Gerät: Mittel je Klopfer, „Port öffnen + Antwort der Tür“ in Millisekunden (für die Fehlersuche). */
+  jeKlopfer?: string;
 }
 
 export interface KopplungsDialog {

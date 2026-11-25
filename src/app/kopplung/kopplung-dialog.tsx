@@ -136,7 +136,7 @@ function Netz({ netz, angebot }: { netz: KopplungsNetz; angebot: boolean }) {
             <dt>Erreichbar</dt>
             <dd data-erreicht={netz.erreichbar ? "ja" : "nein"}>
               {netz.erreichbar
-                ? `ja, das erste Gerät antwortet${klopfer > 0 ? ` (${klopfer} von 66 Klopfern${netz.dauerMs != null ? `, ${Math.round(netz.dauerMs / 1000)} s` : ""})` : ""}`
+                ? `ja, das erste Gerät antwortet${klopfer > 0 ? ` (${klopfer} von 66 Klopfern${netz.dauerMs != null ? `, ${Math.round(netz.dauerMs / 1000)} s` : ""}${netz.jeKlopfer ? `, je Klopfer ${netz.jeKlopfer}` : ""})` : ""}`
                 : "nein, das erste Gerät antwortet nicht. Die Geräte sind nicht im selben Netz, oder das WLAN lässt Geräte nicht miteinander sprechen (Gäste-WLAN)."}
             </dd>
           </>

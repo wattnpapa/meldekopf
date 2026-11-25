@@ -633,6 +633,16 @@ sequenceDiagram
   erzeugt, das Auflösen läuft) und klopft danach der Reihe nach
   (`klopfen` setzt nur noch die Antwort). Der Dialog des zweiten Geräts nennt
   die Dauer des Durchgangs, damit der nächste Gerätetest eine Zahl liefert.
+- Vierter Gerätetest (2026-11-25): Mit vorbereiteten Klopfern ging es
+  schneller, aber immer noch ein Klopfer alle 1 bis 2 Sekunden. Zweiter
+  Verdacht, ebenfalls nicht gemessen: Jeder Klopfer fragt beim Öffnen seines
+  Ports die Netzwerke des Geräts neu ab, weil dazwischen keine Verbindung
+  offen ist. Das zweite Gerät hält darum während des Anklopfens eine
+  Verbindung offen, die ihre Adressen gesammelt hat (`netzWarmhalten`). Der
+  Dialog nennt je Klopfer das Mittel aus „Port öffnen + Antwort der Tür“ in
+  Millisekunden (Prüfstand: 1+3 ms). Die echte Adresse des Rechners in den
+  Code zu schreiben, damit kein Name aufzulösen ist, geht nicht: Firefox
+  verbirgt sie auch in seinen Statistiken (geprüft).
 - Firefox als zweites Gerät klopft nur bei einem ersten Gerät mit Firefox an.
   Er meldet eine Tür erst als erreicht, wenn die Gegenseite die Verbindung
   bestätigt, und das tut nur die Sammeltür. Gegen Chrome oder Safari als

@@ -719,6 +719,40 @@ export async function klopferVorbereiten(tuerSdp: string): Promise<KlopferBereit
   }
 }
 
+/**
+ * Zweites Gerät: das Netz warmhalten, solange geklopft wird. Jeder Klopfer ist eine neue Verbindung und fragt beim
+ * Öffnen seines Ports die Netzwerke des Geräts ab; läuft dabei keine andere Verbindung, beginnt der Browser diese
+ * Abfrage jedes Mal von vorn (Verdacht nach dem Gerätetest 2026-11-25 mit dem iPhone: ein Klopfer alle 1 bis 2
+ * Sekunden, auch mit vorbereiteten Klopfern). Eine Verbindung, die ihre Adressen gesammelt hat und offen bleibt, hält
+ * die Abfrage am Leben. Rückgabe: das Ende des Warmhaltens.
+ */
+export async function netzWarmhalten(): Promise<() => void> {
+  let pc: RTCPeerConnection | undefined;
+  try {
+    pc = neuePc();
+    pc.createDataChannel("warm");
+    await pc.setLocalDescription(await pc.createOffer());
+    await fertigGesammelt(pc);
+  } catch {
+    /* ohne Warmhalten geht es auch, nur langsamer */
+  }
+  return () => {
+    try {
+      pc?.close();
+    } catch {
+      /* schon zu */
+    }
+  };
+}
+
+/** Wo ein Klopfer seine Zeit lässt (Millisekunden), für die Fehlersuche im Gerätetest. */
+export interface KlopfZeiten {
+  /** Antwort setzen: Der Browser öffnet den Port. */
+  setzen: number;
+  /** Bis die Tür geantwortet hat. */
+  antwort: number;
+}
+
 /** Einen vorbereiteten Klopfer wegwerfen, der nicht mehr gebraucht wird. */
 export function klopferVerwerfen(k: KlopferBereit | null): void {
   try {
@@ -733,10 +767,12 @@ export function klopferVerwerfen(k: KlopferBereit | null): void {
  * das Kennwort stimmt), schickt den ersten Gruß des Schlüsseltauschs (den die Tür nicht beantwortet, aber mit Uhrzeit
  * zählt) und schließt wieder. Rückgabe: ob die Tür geantwortet hat. `bereit`: der vorbereitete Klopfer zu dieser Tür.
  */
-export async function klopfen(tuerSdp: string, kennwoerter?: { ufrag: string; pwd: string }, bereit?: KlopferBereit | null): Promise<boolean> {
+export async function klopfen(tuerSdp: string, kennwoerter?: { ufrag: string; pwd: string }, bereit?: KlopferBereit | null, zeiten?: KlopfZeiten): Promise<boolean> {
   const k = bereit ?? (await klopferVorbereiten(tuerSdp));
   if (!k) return false;
   const pc = k.pc;
+  const t0 = performance.now();
+  let t1 = t0;
   try {
     const sdp = k.antwort;
     // Mit den abgeleiteten Kennwörtern der Klopfer: Die Sammeltür in Firefox zählt nur, wer sich so meldet.
@@ -747,6 +783,7 @@ export async function klopfen(tuerSdp: string, kennwoerter?: { ufrag: string; pw
     } catch {
       await pc.setLocalDescription({ type: "answer", sdp });
     }
+    t1 = performance.now();
     const offen = await new Promise<boolean>((fertig) => {
       const uhr = setTimeout(() => fertig(false), KLOPF_FRIST_MS);
       const pruefen = () => {
@@ -758,6 +795,10 @@ export async function klopfen(tuerSdp: string, kennwoerter?: { ufrag: string; pw
       pc.addEventListener("iceconnectionstatechange", pruefen);
       pruefen();
     });
+    if (zeiten) {
+      zeiten.setzen += t1 - t0;
+      zeiten.antwort += performance.now() - t1;
+    }
     if (offen) await new Promise((r) => setTimeout(r, KLOPF_NACHLAUF_MS));
     return offen;
   } catch {
