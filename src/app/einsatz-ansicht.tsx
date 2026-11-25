@@ -48,6 +48,7 @@ import {
   type ExportZiel,
 } from "./weitergabe/export-stand";
 import { lageAngabenLaden } from "./weitergabe/lage-angaben";
+import { kopplungBeginnen } from "./kopplung/zustand";
 
 export function EinsatzAnsicht({
   einsatz,
@@ -288,6 +289,7 @@ export function EinsatzAnsicht({
         onScannen={() => aufnahme.scanneInEinsatz(einsatz.id)}
         onManuell={onManuell}
         onBerichtigen={onBerichtigen}
+        onKoppeln={() => kopplungBeginnen(einsatz.id)}
         angefangeneErfassung={angefangeneErfassung}
         onDateiImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, dateien, [])}
         onBilderImport={(dateien) => void aufnahme.importiereStapel(einsatz.id, [], dateien)}

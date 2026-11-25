@@ -27,9 +27,10 @@ Bereitstellungsräume und kleine Führungsstellen im ELW.
 
 Alle drei sprechen dasselbe Format (`@bos/eeb-format`) und teilen sich die
 Logik der Einsatz-Sammlung (`@bos/meldekopf`). Die Grenze zwischen Meldekopf
-und S1-Control: Der Meldekopf ist **ein Gerät, offline, ohne Anmeldung**, und
-sein Ergebnis ist eine Weitergabe. Alles, was mehrere Geräte, Verlauf über
-Tage oder Aufträge braucht, ist S1-Control.
+und S1-Control: Der Meldekopf ist **eine Stelle, offline, ohne Anmeldung**, und
+sein Ergebnis ist eine Weitergabe. Zwei Geräte an dieser Stelle lassen sich
+koppeln (Telefon draußen, Rechner im Fahrzeug). Alles, was mehrere Meldeköpfe,
+Verlauf über Tage oder Aufträge braucht, ist S1-Control.
 
 ## Was die App können wird
 
@@ -56,6 +57,13 @@ Tage oder Aufträge braucht, ist S1-Control.
   „Einsatz“ angelegte Sammlung lässt sich nachträglich als Übung führen: am
   Hinweis „Nichts gezählt“, unter „Einsatz bearbeiten…“ oder beim Aufnehmen
   des ersten Übungsbogens. Die Art reist beim Abgleich zweier Geräte mit.
+- Zweites Gerät koppeln: Das Telefon scannt draußen als reiner Datensammler,
+  der Rechner im Fahrzeug führt die Lage und zeigt die Übersicht. Zwei
+  QR-Codes verbinden die Geräte direkt im selben Netz (WLAN, Hotspot), ohne
+  Internet und ohne Server. Eine Lampe auf beiden Geräten zeigt, ob die
+  Verbindung steht; das Telefon zeigt je Einheit, ob sie angekommen ist. Geht
+  am Telefon der Bildschirm aus, nimmt es danach weiter auf und verbindet sich
+  von selbst wieder.
 - Weitergabe: Sammel-PDF, CSV-Übersicht für die Lagekarte, CSV mit allen
   Daten, Einsatz-Datei für S1-Control.
   Wahlweise nur, was seit der letzten Weitergabe dazugekommen ist.

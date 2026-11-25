@@ -40,7 +40,7 @@ enthält genau das, was seit der letzten Weitergabe dazukam.
 Der Meldekopf ist das mittlere Glied der Produktfamilie Erfassungsbogen,
 Meldekopf, S1-Control. Er liest, was der Erfassungsbogen erzeugt (QR-Code,
 Link, Datei, PDF), und erzeugt, was S1-Control liest (Einsatz-Datei, CSV,
-Excel-Liste). Offline-first, ohne Server, ohne Kopplung der Geräte, kostenlos,
+Excel-Liste). Offline-first, ohne Server, kein Gerät hängt von einem anderen ab, kostenlos,
 freie Software (EUPL-1.2), keine Anmeldung, keine Cloud.
 
 Die Funktionen entstehen nicht neu: Sie werden aus der Einsatz-Sammlung des
@@ -56,6 +56,9 @@ sobald der Meldekopf sie vollständig trägt.
   Pflicht, nicht Zierde.
 - Ein zweiter Bildschirm (Fernseher per Kabel) zeigt die Lage in großer
   Schrift für alle im Raum.
+- Ein zweites Gerät am selben Meldekopf (Telefon draußen am Eingang, Rechner
+  im Fahrzeug) kann gekoppelt werden: direkt im WLAN des Fahrzeugs oder im
+  Hotspot, ohne Internet.
 - Eingänge ohne Netz: Kamera, USB-Handscanner am PC, Fotos aus Messenger
   und Mail, Datei, PDF, AirDrop/Quick Share, Link.
 - Ausgänge ohne Netz: Sammel-PDF (Papier bleibt der Vertrag), CSV, Excel-Liste
@@ -114,8 +117,11 @@ eigenem Icon und eigener Kennfarbe unterscheidbar bleiben.
    endgültigem Löschen, Historie statt Überschreiben.
 5. **Sofort nutzbar.** Keine Anmeldung, keine Installationspflicht, keine
    Schulung; ein Scan genügt.
-6. **Ein Gerät, eine Weitergabe.** Was mehrere Geräte oder Verlauf über Tage
-   braucht, gehört nach S1-Control, nicht hierher.
+6. **Ein Meldekopf, eine Weitergabe.** Zwei Geräte am selben Meldekopf
+   dürfen sich koppeln (Telefon draußen, Rechner im Fahrzeug), direkt im
+   lokalen Netz und ohne Server; jedes bleibt für sich vollständig. Was
+   mehrere Meldeköpfe, Rollen oder Verlauf über Tage braucht, gehört nach
+   S1-Control, nicht hierher.
 
 ## Accessibility & Inclusion
 

@@ -20,6 +20,14 @@ Grundlage: Repository `wattnpapa/meldekopf`, Stand 2026-10-25, Phase 2 — Versi
 > zwischen Begleitdokumenten und Code sind als *Prüfvermerk* gekennzeichnet;
 > wo Doku und Code sich widersprechen, gilt der Code.
 >
+> **Nachgezogen 2026-11-24 — Kopplung zweier Geräte (ADR-009):** Zwei Geräte
+> am selben Meldekopf können sich direkt im lokalen Netz verbinden und eine
+> Sammlung laufend abgleichen (`src/app/kopplung/`). Neu sind die Verbindung
+> K6 (3.4), die Gefährdungen R13 und R14 (7) und die Maßnahme M16 (8). Die
+> Aussage, die CSP erzwinge das Fehlen weiterer Verbindungen, ist in 3.4
+> eingeschränkt: WebRTC regelt sie nicht. Nur im Prüfstand erprobt, nicht mit
+> zwei echten Geräten.
+>
 > **Nachgezogen 2026-11-15 — Schema 13:** Die Kern-Submodule lesen und schreiben die
 > Farbe des taktischen Zeichens je Fahrzeug (`Fahrzeug.zeichenfarbe`, Flag 64 im
 > Fahrzeug-Byte). Nur Bögen mit diesem Feld sind Schema 13. PDF und CSV nennen die
@@ -148,8 +156,11 @@ der/dem IT-Sicherheitsbeauftragten der jeweiligen Organisation.
 Die Anwendung besteht ausschließlich aus Client-Software, die auf dem
 Meldekopf-Gerät läuft. Es existiert kein Anwendungsserver, keine zentrale
 Datenbank und keine Benutzerverwaltung. Ein Gerät führt eine oder mehrere
-Einsatz-Sammlungen; eine Kopplung mehrerer Meldekopf-Geräte gibt es bewusst
-nicht (ADR-008, Grenze zu S1-Control). Am Gerät kann ein zweiter Bildschirm
+Einsatz-Sammlungen. Seit 2026-11-24 lassen sich genau zwei Geräte am selben
+Meldekopf koppeln (ADR-009): Sie tauschen von Hand zwei QR-Codes und gleichen
+danach eine Sammlung über eine direkte Verbindung im lokalen Netz ab; jedes
+hält weiter seinen eigenen, vollständigen Bestand. Einen Verbund mehrerer
+Meldeköpfe gibt es bewusst nicht (ADR-008, Grenze zu S1-Control). Am Gerät kann ein zweiter Bildschirm
 (Fernseher per Kabel) hängen, auf dem ein zweites Fenster derselben App die
 Lage zeigt.
 
@@ -264,10 +275,14 @@ des Erfassungsbogens.
 | K3 | GitHub-Releases-Abfrage | GitHub-Release-Assets dieses Repositorys | Prüfung auf neue Version (nur Electron, `electron-updater`) | HTTPS; Pakete unsigniert (siehe 6.4) | live (Desktop) |
 | K4 | Lagemonitor-Fenster | Zweites Fenster derselben Herkunft am selben Gerät | Anzeige der Lage auf einem zweiten Bildschirm | Kein Netz; `window.open` bzw. in Electron eigenes Fenster mit denselben Härtungen; Datenweg `localStorage` + `storage`-Ereignis | live |
 | K5 | Link zum Erfassungsbogen | `https://erfassungsbogen.app/#<Payload>&rueck=meldekopf` und zurück | „Im Erfassungsbogen öffnen“ in der Rückfrage zu einem empfangenen Bogen (ohne `rueck=`); „Im Erfassungsbogen vollständig erfassen…“ aus der Schnellerfassung (bisher Erfasstes weiterführen, zurück per QR-Code oder Link) | Payload im Fragment, verlässt das Gerät nicht über das Netz; nach Ablauf der Datenschutzfrist ohne Personendaten; Seitenabruf des Erfassungsbogens wie dort beschrieben | „Im Erfassungsbogen öffnen“ live seit Phase 3, „vollständig erfassen“ seit Phase 4; der Rücksprung-Parameter `rueck=meldekopf` ist **offen**, er braucht das Gegenstück im Erfassungsbogen (ADR-006) |
+| K6 | Kopplung zweier Geräte (seit 2026-11-24) | Das zweite Gerät am selben Meldekopf, im selben lokalen Netz (WLAN des Fahrzeugs, Hotspot); kein Server, kein Fremd-Host (`iceServers` leer, weder STUN noch TURN) | Aufnahme am zweiten Gerät: Das Telefon scannt draußen als reiner Sammler und schickt seine Meldungen an den Rechner (Zentrale), der die Lage führt; zurück gehen nur Name, Art, Ort der Sammlung und Quittungen | WebRTC-Datenkanal, mit DTLS verschlüsselt; die Fingerabdrücke beider Schlüssel stehen in zwei QR-Codes, die von Hand über Bildschirm und Kamera getauscht werden; ohne diesen Tausch keine Verbindung. Keine Anmeldung der Gegenstelle. Eingehendes wird geprüft wie eine importierte Einsatz-Datei und ist in der Größe gedeckelt (24 MiB gepackt, 64 MiB entpackt). Reißt sie, verbinden sich die Geräte über im Voraus verabredete wartende Verbindungen selbst wieder, mit denselben Schlüsseln und ohne neuen Code; die Verabredung liegt nur im Arbeitsspeicher beider Fenster. Die Kopplung endet mit dem Fenster, dem Neuladen oder „Trennen“ | live (Web); Gerätetest offen |
 
 Es existieren keine weiteren Netzwerkverbindungen der eigentlichen
-Sammlungs-Funktion — durch die Content-Security-Policy technisch erzwungen
-(5.3). Die Links in Fußzeile und Textseiten (Erfassungsbogen, GitHub,
+Sammlungs-Funktion. Für Abrufe (`fetch`, Bilder, Skripte, WebSocket) erzwingt
+das die Content-Security-Policy (5.3). Für WebRTC (K6) gilt `connect-src`
+nicht: Dass die Kopplung keinen fremden Rechner erreicht, folgt aus dem Code
+(`kopplung/verbindung.ts`: `iceServers: []`), nicht aus der Policy, und ist
+bei jeder Änderung dort neu zu prüfen. Die Links in Fußzeile und Textseiten (Erfassungsbogen, GitHub,
 Produktfamilie) öffnen auf Klick eine fremde Seite, laden aber nichts in die
 App.
 
@@ -687,6 +702,8 @@ dieses Dokuments.
 | R10 | **Neu:** Sicherungsdatei, Sammel-PDF oder Einsatz-Datei gelangt an einen falschen Ort (Messenger, Cloud, offener USB-Stick) | D6, D7 | Mittel | Hoch (Vollkopie aller Personendaten; bei D7 mit Schlüssel) | **Hoch** |
 | R11 | **Neu:** Unsichtbarer Fremdbestand aus einer eingespielten Erfassungsbogen-Sicherung (Vorlagen, Entwurf, Absenderkarte) bleibt unbemerkt liegen; die Absenderkarte reiste bis 2026-10-25 ungefragt in jedem neu erzeugten QR-Code mit (behoben) | D1, D2p, D3, D5 | Mittel (ADR-007 empfiehlt die Sicherung als Übernahmeweg) | Mittel | Mittel |
 | R12 | **Neu:** Bestand des Erfassungsbogens bleibt nach der Übernahme auf dem alten Gerät/der alten Herkunft liegen (zwei Kopien) | D2 | Mittel (Übergangszeit, ADR-007) | Mittel | Mittel |
+| R13 | **Neu (2026-11-24):** Kopplung mit dem falschen Gerät — wer den Code vom Bildschirm scannt und seinen Antwort-Code vor die Kamera des ersten Geräts bringt, kann als Sammler Meldungen in die Lage einspielen und die von ihm eingespielten wieder entfernen. Die Lage auslesen kann er so nicht: Die Zentrale schickt einem Sammler keine Meldungen. Umgekehrt nimmt ein Telefon, das den Code einer fremden Zentrale scannt, deren Sammlung als leere Sammlung an und schickt ihr, was es danach in diese Sammlung aufnimmt. Die App prüft nicht, wem das andere Gerät gehört | K6, D2 | Niedrig (braucht Sicht auf den Bildschirm und einen bewussten zweiten Scan) | Mittel (verfälschte Lage; Abfluss der danach am Telefon erfassten Bögen) | Niedrig-Mittel |
+| R14 | **Neu (2026-11-24):** Zwei Stände statt eines — die Kopplung reißt unbemerkt (Neuladen, Funkschatten, ein Wiederverbinden, das nicht gelingt), und die Übersicht am Rechner gilt weiter als vollständig, während das Telefon draußen aufnimmt | K6, D2 | Mittel | Mittel (falsche Stärke in Lagemeldung und Verpflegung, bis neu gekoppelt ist) | Mittel (begrenzt durch die Leiste „Kopplung getrennt“ mit Uhrzeit auf beiden Geräten und den Abgleich beim nächsten Koppeln) |
 
 **Höchste Einzelrisiken:** R1 (Geräteverlust), R7 (Ausfall) und R10
 (Vollkopien außer Haus) — primär organisatorisch. R5 liegt beim
@@ -712,6 +729,7 @@ mindern.
 | M13 | 6.4 | `SECURITY.md` mit Meldeweg für dieses Repository und die Submodule `bos-eeb-satz`, `bos-oberflaeche` anlegen | Technisch/organisatorisch | `[Projektbetreiber/Maintainer]` | Mittel |
 | M14 | R12 | Nach erfolgreicher Übernahme in den Meldekopf die Sammlung im Erfassungsbogen und die verwendete Sicherungsdatei löschen | Organisatorisch | `[Organisation]` | Mittel |
 | M15 | — | Diesen Entwurf durch die/den IT-Sicherheitsbeauftragte/n prüfen und freigeben lassen, insbesondere Abschnitt 4; mit jeder Phase (3, 4, 5) fortschreiben | Organisatorisch | `[IT-Sicherheitsbeauftragte/r]` | Hoch |
+| M16 | R13, R14 | Kopplung: nur eigene Geräte des Meldekopfs koppeln, den Code nicht fotografieren lassen, nach dem Einsatz „Trennen“; beide Geräte mit Bildschirmsperre (M1) — das Telefon draußen trägt die Bögen, die es selbst gescannt hat. Vor einer Lagemeldung auf die Leiste sehen: steht dort „getrennt“, erst neu koppeln. Das Netz dafür bewusst wählen (WLAN des Fahrzeugs oder eigener Hotspot, kein offenes Gäste-Netz). Uhren beider Geräte vergleichen | Organisatorisch | `[Organisation/Meldekopf-Verantwortliche/r]` | Hoch |
 
 > *Entfällt gegenüber der Vorlage:* nichts aus M1 bis M10 der Vorlage
 > entfällt ganz; M2 und M6 sind auf den Phasenstand angepasst, M10 der Vorlage
