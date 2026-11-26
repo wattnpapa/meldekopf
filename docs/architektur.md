@@ -58,10 +58,12 @@ in [funktionsumfang.md](funktionsumfang.md), der Weg der Übernahme in
 
 - **Stack wie der Erfassungsbogen**, damit Build, Release, Härtung und
   Audit-Ergebnisse übernommen werden können: TypeScript, React 19, Vite 8,
-  vite-plugin-pwa (Workbox), Vitest 4, Cucumber + Playwright, Electron 44 mit
+  vite-plugin-pwa 2 (Workbox), Vitest 5, Cucumber + Playwright, Electron 45 mit
   electron-updater, Capacitor 8, pdfmake 0.3, pako, @noble/ed25519, zxing-wasm
-  und jsQR, tesseract.js 7 (nur im Meldekopf, für das Tor), Node 24. Versionsstände vom 2026-10-25; sie folgen dem
-  Erfassungsbogen.
+  und jsQR, tesseract.js 7 (nur im Meldekopf, für das Tor), Node 24. Versionsstände vom 2026-11-26; sie folgen dem
+  Erfassungsbogen. Die Kern-Bausteine unter `vendor/` testen weiter mit
+  Vitest 4; beide Stände liegen nebeneinander im Baum, was npm erst ab
+  Version 11 (Node 24) auflöst.
 - **Geteilter Kern als Git-Submodule** unter `vendor/`: `@bos/eeb-format`,
   `@bos/meldekopf`, `@bos/vokabulare`, `@bos/taktische-zeichen`. Gepinnte
   Commits, Vite-Alias auf `vendor/*/src/*.ts`, modulgenaue Importe. Die sechs
@@ -1053,7 +1055,11 @@ Verbindung ohne Abschied, um das Wiederverbinden zu prüfen. Zwei echte Geräte 
 Laufzeit wie der Erfassungsbogen ohne das, was nur der Assistent braucht;
 die Pakete kommen mit den Phasen, die sie brauchen (Phase 0: React,
 `@capacitor/core` für die Plattform-Erkennung, `@fontsource-variable/archivo`,
-`electron-updater`). SBOM und `npm audit` im CI. Submodul-Pins beim Start auf
+`electron-updater`). SBOM und `npm audit` im CI. Zwei `overrides` in
+`package.json` heben `minimatch` (7 bis 11.0.0) und `glob` (9 bis 14.0.1) im
+Bau-Werkzeug (electron-builder, Workbox, Capacitor-CLI) auf die bereinigten
+Stände, weil es für die alten Linien keine Korrektur gibt; sie entfallen,
+sobald die Werkzeuge selbst nachziehen. Submodul-Pins beim Start auf
 den Stand des Erfassungsbogens vom 2026-10-25: `eeb-format` `eb58ad6`,
 `bos-meldekopf` `59a986c`, `bos-vokabulare` `2f94a46`,
 `bos-taktische-zeichen` `cb9c227`; am 2026-11-09 auf den Stand des

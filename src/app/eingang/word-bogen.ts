@@ -184,6 +184,8 @@ function saeubern(s: string): string {
 
 /** Alle Formularfelder aus `word/document.xml`, in Dokumentreihenfolge. */
 export function wordFelderLesen(xml: string): WordFeld[] {
+  // Als XML gelesen, nie als HTML: das Dokument hängt an keinem Fenster, führt
+  // nichts aus und wird nirgends eingefügt; heraus kommt nur Text (textContent).
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (doc.getElementsByTagName("parsererror").length > 0) {
     throw new WordBogenFehler("Der Inhalt der Word-Datei ist unlesbar. Bitte in Word öffnen und erneut als .docx speichern.");
