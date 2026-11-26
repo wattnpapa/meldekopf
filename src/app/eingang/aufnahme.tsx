@@ -1946,6 +1946,16 @@ export function useAufnahme({ offenerEinsatzId, setOffenerEinsatzId, einsaetzeNe
    */
   const linkEmpfangenRef = useRef<(text: string) => void>(() => {});
   linkEmpfangenRef.current = (text: string) => {
+    // Kopplungs-Code als Link (mit der Kamera-App vom Bildschirm des ersten Geräts gescannt): kein Bogen, und nichts,
+    // was sich für ein Neuladen zu merken lohnt.
+    if (istKopplungsCode(text)) {
+      void import("../kopplung/kopplung")
+        .then((m) => m.kopplungCodeGescannt(text))
+        .then((satz) => {
+          if (satz) setFehler(satz);
+        });
+      return;
+    }
     wartendenLinkMerken(text);
     void uebernehmeText(text, LINK_UNGUELTIG, { ohneKiosk: true }).finally(wartendenLinkErledigt).then(
       (fertig) => {

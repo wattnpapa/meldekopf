@@ -116,6 +116,26 @@ export function passtZuBedarfsfilter(e: MeldeEintrag, filter: BedarfsFilter, all
 }
 
 /**
+ * Wie viele der gezählten Einheiten mit Ruhezeit bzw. angeforderter Unterbringung noch nicht als geklärt abgehakt sind.
+ * Die Kopfzahlen nennen weiter alle („Ruhezeit: 5 Einheiten") und daneben, was davon offen ist.
+ */
+export function bedarfOffen(eintraege: MeldeEintrag[], art?: EinsatzArt): { ruhezeit: number; unterbringung: number } {
+  const offen = { ruhezeit: 0, unterbringung: 0 };
+  for (const e of aktuelleMeldungen(eintraege, art)) {
+    for (const m of bedarfMarken(e.bogen)) {
+      if ((m.art === "ruhezeit" || m.art === "unterbringung") && bedarfGeklaertAm(e, m, eintraege) == null) offen[m.art]++;
+    }
+  }
+  return offen;
+}
+
+/** „davon 2 offen" / „alle geklärt" hinter einer Kopfzahl; leer, solange nichts abgehakt ist. */
+export function offenText(offen: number, gesamt: number): string {
+  if (offen >= gesamt) return "";
+  return offen === 0 ? "alle geklärt" : `davon ${offen} offen`;
+}
+
+/**
  * Ist der Absender-Stand alt — älter als 24 Stunden vor dem Eintreffen? Ein
  * Bogen vom Juli in einer September-Lage sah bisher aus wie jeder andere
  * (K2); die Marke „alt" sagt, dass die Zahlen aus einer anderen Zeit stammen.

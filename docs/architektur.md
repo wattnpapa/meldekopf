@@ -638,6 +638,29 @@ sequenceDiagram
   erzeugt, das Auflösen läuft) und klopft danach der Reihe nach
   (`klopfen` setzt nur noch die Antwort). Der Dialog des zweiten Geräts nennt
   die Dauer des Durchgangs, damit der nächste Gerätetest eine Zahl liefert.
+- Vierter Gerätetest (2026-11-25): Mit vorbereiteten Klopfern ging es
+  schneller, aber immer noch ein Klopfer alle 1 bis 2 Sekunden. Zweiter
+  Verdacht, ebenfalls nicht gemessen: Jeder Klopfer fragt beim Öffnen seines
+  Ports die Netzwerke des Geräts neu ab, weil dazwischen keine Verbindung
+  offen ist. Das zweite Gerät hält darum während des Anklopfens eine
+  Verbindung offen, die ihre Adressen gesammelt hat (`netzWarmhalten`). Der
+  Dialog nennt je Klopfer das Mittel aus „Port öffnen + Antwort der Tür“ in
+  Millisekunden (Prüfstand: 1+3 ms). Die echte Adresse des Rechners in den
+  Code zu schreiben, damit kein Name aufzulösen ist, geht nicht: Firefox
+  verbirgt sie auch in seinen Statistiken (geprüft).
+- **Der Code als Adresse der App (seit 2026-11-25).** Der QR-Code des ersten
+  Geräts trägt den Code hinter der Adresse der App
+  (`HTTPS://MELDEKOPF.ERFASSUNGSBOGEN.APP/#MKK1.…`, `kopplungsLink`): Die
+  Kamera-App des Telefons öffnet damit den Browser, die App nimmt den Code aus
+  der Adresse (derselbe Weg wie beim Bogen-Link, `fragmentNehmen`) und
+  entfernt ihn dort. Hinter `#` geht er an keinen Server, auch nicht an die
+  Reichweitenmessung, die nur einen festen Pfad je Nutzungskanal zählt.
+  Schema und Rechnername stehen in Großbuchstaben, damit der QR-Code im
+  dichten Modus bleibt; die Adresse ist die, von der das erste Gerät die App
+  hat, aus einer installierten App heraus die öffentliche. Der Scanner der App
+  liest Link und bloßen Code; der Antwort-Code bleibt ohne Adresse. Ohne
+  Internet öffnet der Link die App nur, wenn sie am Telefon schon einmal
+  geladen wurde, wie bisher.
 - Firefox als zweites Gerät klopft nur bei einem ersten Gerät mit Firefox an.
   Er meldet eine Tür erst als erreicht, wenn die Gegenseite die Verbindung
   bestätigt, und das tut nur die Sammeltür. Gegen Chrome oder Safari als

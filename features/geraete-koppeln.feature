@@ -32,6 +32,13 @@ Funktionalität: Zweites Gerät koppeln
     Und zeigt das zweite Gerät den Text "Stand der Zentrale (1 Einheit)"
     Und zeigt das zweite Gerät den Text "THW Oldenburg"
 
+  Szenario: Der Code lässt sich mit der Kamera-App des Telefons öffnen
+    Wenn ich auf "Zweites Gerät koppeln…" klicke
+    Und das zweite Gerät den Link aus meinem Kopplungs-Code öffnet
+    Dann meldet die Kopplungsleiste "Verbindung aktiv"
+    Und meldet die Kopplungsleiste des zweiten Geräts "Verbindung aktiv"
+    Und zeigt das zweite Gerät die Überschrift "Hochwasser Weser"
+
   Szenario: Auch in einem langsamen Netz steht die Verbindung nach dem einen Scan
     Angenommen das Anklopfen des zweiten Geräts dauert eine halbe Minute
     Wenn ich auf "Zweites Gerät koppeln…" klicke

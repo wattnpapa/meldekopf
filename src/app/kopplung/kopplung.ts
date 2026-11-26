@@ -27,6 +27,7 @@ import {
   type KopplungsGeraet,
   type KopplungsPhase,
   type KopplungsZustand,
+  kopplungsCodeAus,
 } from "./zustand";
 
 export { TAKT_MS, NICHT_ZUSTANDE_SATZ, ANGEBOT_STATT_ANTWORT_SATZ, NEU_GELADEN_SATZ } from "./gegenstelle";
@@ -78,7 +79,8 @@ function lesen(text: string): ReturnType<typeof signalDekodieren> {
       return false;
     }
   };
-  return signalDekodieren(entwirreScanText(text.trim(), lesbar));
+  // Aus einem Link (QR-Code mit der Adresse der App) zählt, was hinter `#` steht.
+  return signalDekodieren(entwirreScanText(kopplungsCodeAus(text) ?? text.trim(), lesbar));
 }
 
 async function wachHalten(): Promise<void> {

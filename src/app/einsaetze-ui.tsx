@@ -203,6 +203,8 @@ import {
   ausgeblendetText,
   einheitenAnwesend,
   bedarfMarken,
+  bedarfOffen,
+  offenText,
   gemerkteAnsicht,
   gemerkteAlleSpalten,
   merkeAlleSpalten,
@@ -1463,6 +1465,10 @@ export function EinsatzDetail(props: {
     };
   }, []);
   const sum = aggregiere(einsatz.eintraege, einsatz.art);
+  // Neben den Kopfzahlen: was davon noch nicht als geklärt abgehakt ist (bedarf-geklaert.ts).
+  const offen = bedarfOffen(einsatz.eintraege, einsatz.art);
+  const ruheOffen = offenText(offen.ruhezeit, sum.ruhezeitErforderlich);
+  const unterkunftOffen = offenText(offen.unterbringung, sum.unterbringungBenoetigt);
   const sollAnteil = sollstaerkeAnteil(einsatz.eintraege, einsatz.art);
   // Was die Lage NICHT enthält, gehört genauso sichtbar gemacht wie das, was
   // sie enthält (siehe zaehltInLage).
@@ -2773,7 +2779,7 @@ export function EinsatzDetail(props: {
                 ...(sum.unterbringungBenoetigt > 0 ? [`Unterbringung ${personenText(sum.unterbringungAngefordert.personen)}`] : []),
                 ...kraftstoffTeile(sum.kraftstoff),
                 ...(sum.ruhezeitErforderlich > 0
-                  ? [`Ruhezeit ${sum.ruhezeitErforderlich} ${sum.ruhezeitErforderlich === 1 ? "Einheit" : "Einheiten"}`]
+                  ? [`Ruhezeit ${sum.ruhezeitErforderlich} ${sum.ruhezeitErforderlich === 1 ? "Einheit" : "Einheiten"}${ruheOffen ? ` (${ruheOffen})` : ""}`]
                   : []),
                 ...(sum.bedarfOhneAngabe > 0 ? [bedarfOhneAngabeText(sum.bedarfOhneAngabe)] : []),
               ].map((posten, i, alle) => (
@@ -2815,6 +2821,7 @@ export function EinsatzDetail(props: {
                 <button type="button" className="link" onClick={() => aufBedarfFiltern("unterbringung")}>
                   {sum.unterbringungBenoetigt} {sum.unterbringungBenoetigt === 1 ? "Einheit" : "Einheiten"}
                 </button>
+                {unterkunftOffen && <span className="bedarf-offen"> ({unterkunftOffen})</span>}
                 {", "}
                 <strong>{sum.unterbringungAngefordert.personen} {sum.unterbringungAngefordert.personen === 1 ? "Person" : "Personen"}</strong>
                 {` (${mwdText(sum.unterbringungAngefordert)})`}
@@ -2843,6 +2850,7 @@ export function EinsatzDetail(props: {
                 <button type="button" className="link" onClick={() => aufBedarfFiltern("ruhezeit")}>
                   Ruhezeit: {sum.ruhezeitErforderlich} {sum.ruhezeitErforderlich === 1 ? "Einheit" : "Einheiten"}
                 </button>
+                {ruheOffen && <span className="bedarf-offen">, {ruheOffen}</span>}
               </>
             )}
           </dd>
@@ -2882,6 +2890,7 @@ export function EinsatzDetail(props: {
                 <button type="button" className="link" onClick={() => aufBedarfFiltern("unterbringung")}>
                   {sum.unterbringungBenoetigt} {sum.unterbringungBenoetigt === 1 ? "Einheit" : "Einheiten"}
                 </button>
+                {unterkunftOffen && <span className="bedarf-offen"> ({unterkunftOffen})</span>}
                 {", "}
                 <strong>{sum.unterbringungAngefordert.personen} {sum.unterbringungAngefordert.personen === 1 ? "Person" : "Personen"}</strong>
                 {` (${mwdText(sum.unterbringungAngefordert)})`}
@@ -2910,6 +2919,7 @@ export function EinsatzDetail(props: {
                 <button type="button" className="link" onClick={() => aufBedarfFiltern("ruhezeit")}>
                   Ruhezeit: {sum.ruhezeitErforderlich} {sum.ruhezeitErforderlich === 1 ? "Einheit" : "Einheiten"}
                 </button>
+                {ruheOffen && <span className="bedarf-offen">, {ruheOffen}</span>}
               </>
             )}
           </dd>

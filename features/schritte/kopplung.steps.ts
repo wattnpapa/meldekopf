@@ -107,6 +107,15 @@ When("das zweite Gerät meinen Kopplungs-Code scannt", async function (this: Eeb
   await scannen(b, angebot);
 });
 
+When("das zweite Gerät den Link aus meinem Kopplungs-Code öffnet", async function (this: EebWelt) {
+  const bild = this.page.locator("dialog.kopplung-dialog[data-art=angebot] img[data-link]");
+  await bild.waitFor();
+  const link = (await bild.getAttribute("data-link")) ?? "";
+  if (!/^HTTPS?:\/\/[^#a-z]+\/#MKK1\./.test(link)) throw new Error(`Kein Link in Großbuchstaben mit dem Code hinter #: ${link.slice(0, 60)}`);
+  // Wie die Kamera-App: Sie übergibt dem Browser die Adresse, wie sie im Code steht.
+  await zweitesGeraet(this).evaluate((ziel) => window.open(ziel, "_self"), link);
+});
+
 When("ich den Antwort-Code des zweiten Geräts scanne", async function (this: EebWelt) {
   const antwort = await codeVon(zweitesGeraet(this), "antwort");
   await this.page.getByRole("button", { name: "Antwort scannen…" }).click();

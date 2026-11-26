@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { OrganisationsTyp, PersonalErfassung, SCHEMA_VERSION, jetztZeitpunkt, type Erfassungsbogen } from "@bos/eeb-format/model";
 import { EinsatzArt, MeldeStatus, einsaetzeLaden as kernEinsaetzeLaden, einsatzAnlegen, type MeldeEintrag } from "@bos/meldekopf/einsaetze";
 import { bedarfGeklaertAm, bedarfKlaeren, hinweiseGesehen, hinweiseQuittieren, offeneHinweise } from "./bedarf-geklaert";
-import { bedarfMarken, passtZuBedarfsfilter } from "./einheiten-tabelle";
+import { bedarfMarken, bedarfOffen, offenText, passtZuBedarfsfilter } from "./einheiten-tabelle";
+import { bedarfKurz, geklaertText } from "./lagetafel";
 import { sammlungenSchreiben } from "./eintrag-zeiten";
 import { einsaetzeLaden } from "./einsaetze-lesen";
 
@@ -89,6 +90,25 @@ describe("Sofortbedarf als geklärt abhaken", () => {
     const alle = geladen(id);
     expect(passtZuBedarfsfilter(alle[0]!, "dringend", alle)).toBe(false);
     expect(passtZuBedarfsfilter(alle[0]!, "ruhezeit", alle)).toBe(true);
+  });
+
+  it("zählt neben den Kopfzahlen, was noch offen ist, und nimmt Geklärtes von der Tafel", () => {
+    const b = bogen(0);
+    const id = einsatzMit([eintrag("m1", b, T + 1000), { ...eintrag("m2", bogen(0), T + 1000), einheitSchluessel: "e2" }]);
+    expect(bedarfOffen(geladen(id), EinsatzArt.EINSATZ)).toEqual({ ruhezeit: 2, unterbringung: 0 });
+    expect(offenText(2, 2)).toBe("");
+    expect(bedarfKurz(erster(id), geladen(id))).toEqual(["Ruhezeit"]);
+
+    bedarfKlaeren(id, "m1", marke(b, "ruhezeit"));
+    const alle = geladen(id);
+    expect(bedarfOffen(alle, EinsatzArt.EINSATZ).ruhezeit).toBe(1);
+    expect(offenText(1, 2)).toBe("davon 1 offen");
+    expect(offenText(0, 2)).toBe("alle geklärt");
+    expect(bedarfKurz(alle[0]!, alle)).toEqual([]);
+    expect(bedarfKurz(alle[0]!, alle, true)).toEqual(["Ruhezeit"]);
+    expect(geklaertText({ geklaert: bedarfKurz(alle[0]!, alle, true) })).toBe("✓ Ruhezeit");
+    expect(geklaertText({})).toBe("");
+    expect(bedarfKurz(alle[1]!, alle)).toEqual(["Ruhezeit"]);
   });
 
   it("meldet einen fehlenden Eintrag, ohne zu schreiben", () => {
