@@ -13,6 +13,10 @@ import { SpeicherVollFehler } from "../eintrag-zeiten";
 import { AbgleichSitzung } from "./sitzung";
 import {
   KLOPFER,
+  SAMMEL_TUEREN,
+  ZAEHL_KLOPFER,
+  zaehlLesen,
+  zaehlSchuebe,
   TUEREN,
   angebotAdressen,
   antwortAusFingerabdruck,
@@ -240,9 +244,12 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
     const klopfer = await t.lesen();
     if (antwortGesetzt || tot || angebot !== a) return;
     // Für die Anzeige: Kommt vom zweiten Gerät überhaupt etwas an?
-    if (zu.dialog && zu.dialog.netz && klopfer.length !== zu.dialog.netz.klopfer) setze({ dialog: { ...zu.dialog, netz: { ...zu.dialog.netz, klopfer: klopfer.length } } });
-    if (klopfer.length < KLOPFER) return;
-    const fp = klopfLesen(klopfer.slice(-KLOPFER).map((k) => k.tuer));
+    // An der Sammeltür (Firefox) zählt, wie oft an welcher Tür geklopft wurde; sonst die Reihenfolge der Türen.
+    const soll = t.adressen ? ZAEHL_KLOPFER : KLOPFER;
+    if (zu.dialog && zu.dialog.netz && klopfer.length !== zu.dialog.netz.klopfer) setze({ dialog: { ...zu.dialog, netz: { ...zu.dialog.netz, klopfer: klopfer.length, klopferSoll: soll } } });
+    if (klopfer.length < soll) return;
+    const juengste = klopfer.slice(-soll).map((k) => k.tuer);
+    const fp = t.adressen ? zaehlLesen(juengste) : klopfLesen(juengste);
     if (!fp) return;
     antwortGesetzt = true;
     try {
@@ -256,7 +263,8 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
    * Sammler: den eigenen Fingerabdruck an die Türen der Zentrale klopfen. Antwortet eine Tür nicht, sind die Türen von
    * hier nicht erreichbar: Dann bleibt der Antwort-Code im Dialog der Weg.
    */
-  async function anklopfen(fingerabdruck: Uint8Array, tuerSdps: readonly string[], kennwoerter: { ufrag: string; pwd: string }): Promise<void> {
+  async function anklopfen(fingerabdruck: Uint8Array, tuerSdps: readonly string[], kennwoerter: { ufrag: string; pwd: string }, sammeltuer: boolean): Promise<void> {
+    if (sammeltuer) return zaehlklopfen(fingerabdruck, tuerSdps, kennwoerter);
     const zeichen = klopfZeichen(fingerabdruck);
     const laeuft = () => !tot && zu.phase === "verbindet";
     const netz = (teil: { erreichbar?: boolean; klopfer?: number; dauerMs?: number; jeKlopfer?: string }) => {
@@ -298,6 +306,55 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
       }
       // Erst jetzt anrufen: Die Zentrale setzt die Antwort gleich nach dem letzten Klopfer und soll dann genau einen
       // laufenden Anruf vorfinden, keine Reste früherer Versuche.
+      rufen();
+      await new Promise((r) => setTimeout(r, KLOPF_WARTEN_MS));
+    }
+    if (laeuft() && zu.dialog) setze({ dialog: { ...zu.dialog, selbst: false } });
+  }
+
+  /**
+   * Sammler an der Sammeltür (Firefox als Zentrale): in vier Schüben klopfen, je Schub alle Klopfer gleichzeitig
+   * (signal.ts, „Zählklopfen"). Ein Klopfer, der nicht durchkommt, klopft bis zu zweimal nach; der nächste Schub
+   * beginnt erst, wenn alle angekommen sind.
+   */
+  async function zaehlklopfen(fingerabdruck: Uint8Array, tuerSdps: readonly string[], kennwoerter: { ufrag: string; pwd: string }): Promise<void> {
+    const schuebe = zaehlSchuebe(fingerabdruck);
+    const laeuft = () => !tot && zu.phase === "verbindet";
+    const netz = (teil: { erreichbar?: boolean; klopfer?: number; dauerMs?: number; jeKlopfer?: string }) => {
+      if (laeuft() && zu.dialog) setze({ dialog: { ...zu.dialog, netz: { eigene: [], ...zu.dialog.netz, klopferSoll: ZAEHL_KLOPFER, ...teil } } });
+    };
+    for (let runde = 0; runde < KLOPF_RUNDEN && laeuft(); runde++) {
+      const warmEnde = await netzWarmhalten();
+      const beginn = Date.now();
+      const zeiten = { setzen: 0, antwort: 0 };
+      let nr = 0;
+      try {
+        for (const schub of schuebe) {
+          if (!laeuft()) return;
+          const einer = async (tuer: number): Promise<boolean> => {
+            const sdp = tuerSdps[tuer];
+            if (!sdp) return false;
+            for (let versuch = 0; versuch < 3 && laeuft(); versuch++) {
+              if (await klopfen(sdp, kennwoerter, await klopferVorbereiten(sdp), zeiten)) {
+                nr++;
+                return true;
+              }
+            }
+            return false;
+          };
+          const alle = await Promise.all(schub.map(einer));
+          if (!laeuft()) return;
+          if (alle.some((ok) => !ok)) {
+            netz({ erreichbar: false });
+            if (laeuft() && zu.dialog) setze({ dialog: { ...zu.dialog, selbst: false } });
+            rufen();
+            return;
+          }
+          netz({ erreichbar: true, klopfer: nr, dauerMs: Date.now() - beginn, jeKlopfer: `${Math.round(zeiten.setzen / nr)}+${Math.round(zeiten.antwort / nr)} ms` });
+        }
+      } finally {
+        warmEnde();
+      }
       rufen();
       await new Promise((r) => setTimeout(r, KLOPF_WARTEN_MS));
     }
@@ -739,7 +796,7 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
         erste = a.verbindung;
         // Türen, an denen der Sammler seinen Fingerabdruck anklopft: Dann braucht die Zentrale weder Kamera noch Eingabe.
         const ohneTueren = !!(globalThis as { __eebKopplungOhneTueren?: boolean }).__eebKopplungOhneTueren;
-        const t = zert && !ohneTueren ? await tuerenOeffnen(zert, angebotAdressen(a.sdp), (i) => tuerKennwoerter(a.sdp, i), tuerPortsLesen, TUEREN, { klopfer: await klopfKennwoerter(a.sdp), adressenLesen: tuerAdressenLesen }) : null;
+        const t = zert && !ohneTueren ? await tuerenOeffnen(zert, angebotAdressen(a.sdp), (i) => tuerKennwoerter(a.sdp, i), tuerPortsLesen, TUEREN, { klopfer: await klopfKennwoerter(a.sdp), adressenLesen: tuerAdressenLesen, anzahl: SAMMEL_TUEREN }) : null;
         if (tot) {
           t?.schliessen();
           return;
@@ -778,13 +835,14 @@ export function neueGegenstelle(kennung: string, u: Umfeld): Gegenstelle {
       }
       rufPlaetze = [{ nr: 0, seite: "", platz }];
       // Anklopfen geht nur, wenn die Zentrale Türen offen hat und sich die Kennwörter dieses Geräts selbst ableiten kann.
-      const selbsttaetig = !!s.tueren && s.tueren.length === TUEREN && platz.vorgabeGilt && anklopfenMoeglich(!!s.tuerAdressen);
+      const sammeltuer = !!s.tuerAdressen;
+      const selbsttaetig = !!s.tueren && s.tueren.length === (sammeltuer ? SAMMEL_TUEREN : TUEREN) && platz.vorgabeGilt && anklopfenMoeglich(sammeltuer);
       setze({ dialog: { art: "antwort", code: signalKodieren({ art: "antwort", sdp: platz.antwortSdp }), selbst: selbsttaetig, netz: { eigene: [], andere: angebotAdressen(s.sdp) } } });
       void eigeneAdressen().then((eigene) => {
         if (!tot && zu.phase === "verbindet" && zu.dialog) setze({ dialog: { ...zu.dialog, netz: { ...zu.dialog.netz, eigene } } });
       });
       // Mit Türen erst anklopfen und danach anrufen; ohne Türen gleich anrufen, bis der Antwort-Code gescannt ist.
-      if (selbsttaetig) void Promise.all([tuerAngebote(s.sdp, s.tueren!, s.tuerAdressen), klopfKennwoerter(s.sdp)]).then(([sdps, k]) => anklopfen(fingerabdruckVon(platz.antwortSdp), sdps, k));
+      if (selbsttaetig) void Promise.all([tuerAngebote(s.sdp, s.tueren!, s.tuerAdressen), klopfKennwoerter(s.sdp)]).then(([sdps, k]) => anklopfen(fingerabdruckVon(platz.antwortSdp), sdps, k, sammeltuer));
       else rufen();
     },
 

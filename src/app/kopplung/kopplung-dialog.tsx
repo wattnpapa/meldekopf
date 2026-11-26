@@ -116,6 +116,7 @@ export function verschiedeneNetze(eigene: readonly string[], andere: readonly st
  */
 function Netz({ netz, angebot }: { netz: KopplungsNetz; angebot: boolean }) {
   const klopfer = netz.klopfer ?? 0;
+  const soll = netz.klopferSoll ?? 66;
   return (
     <dl className="kopplung-netz">
       <dt>Dieses Gerät</dt>
@@ -130,7 +131,7 @@ function Netz({ netz, angebot }: { netz: KopplungsNetz; angebot: boolean }) {
         <>
           <dt>Zweites Gerät</dt>
           <dd data-erreicht={klopfer > 0 ? "ja" : "offen"}>
-            {klopfer > 0 ? `hat dieses Gerät erreicht (${Math.min(klopfer, 66)} von 66 Klopfern angekommen)` : "noch nichts angekommen"}
+            {klopfer > 0 ? `hat dieses Gerät erreicht (${Math.min(klopfer, soll)} von ${soll} Klopfern angekommen)` : "noch nichts angekommen"}
           </dd>
         </>
       ) : (
@@ -139,7 +140,7 @@ function Netz({ netz, angebot }: { netz: KopplungsNetz; angebot: boolean }) {
             <dt>Erreichbar</dt>
             <dd data-erreicht={netz.erreichbar ? "ja" : "nein"}>
               {netz.erreichbar
-                ? `ja, das erste Gerät antwortet${klopfer > 0 ? ` (${klopfer} von 66 Klopfern${netz.dauerMs != null ? `, ${Math.round(netz.dauerMs / 1000)} s` : ""}${netz.jeKlopfer ? `, je Klopfer ${netz.jeKlopfer}` : ""})` : ""}`
+                ? `ja, das erste Gerät antwortet${klopfer > 0 ? ` (${klopfer} von ${soll} Klopfern${netz.dauerMs != null ? `, ${Math.round(netz.dauerMs / 1000)} s` : ""}${netz.jeKlopfer ? `, je Klopfer ${netz.jeKlopfer}` : ""})` : ""}`
                 : "nein, das erste Gerät antwortet nicht. Die Geräte sind nicht im selben Netz, oder das WLAN lässt Geräte nicht miteinander sprechen (Gäste-WLAN)."}
             </dd>
           </>

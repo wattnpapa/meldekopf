@@ -34,6 +34,12 @@ export const MONATE: Readonly<Record<string, string>> = {
 
 export const AENDERUNGEN: readonly Aenderung[] = [
   {
+    datum: "2026-11-26",
+    punkte: [
+      "Kopplung: Mit Firefox am Rechner verbindet sich ein iPhone jetzt in Sekunden statt in Minuten.",
+    ],
+  },
+  {
     datum: "2026-11-25",
     punkte: [
       "Neu: „Was ist neu“. Ein Tipp auf die Versionsnummer in der Fußzeile zeigt diesen Verlauf, monatsweise zum Blättern.",

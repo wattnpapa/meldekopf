@@ -663,6 +663,29 @@ sequenceDiagram
   liest Link und bloßen Code; der Antwort-Code bleibt ohne Adresse. Ohne
   Internet öffnet der Link die App nur, wenn sie am Telefon schon einmal
   geladen wurde, wie bisher.
+- **Zählklopfen an der Sammeltür (seit 2026-11-26, fünfter Gerätetest).**
+  Gemessen mit dem iPhone (Safari): an Chrome 66 Klopfer in 6 Sekunden, je
+  Klopfer 1 ms zum Öffnen des Ports und 32 ms bis zur Antwort; an Firefox
+  2 ms und 2251 ms. Das iPhone löst den verborgenen Namen des Firefox für
+  jede Verbindung neu auf, und erst, wenn sie klopft; Vorbereiten und
+  Warmhalten ändern daran nichts. Nacheinander sind 66 Klopfer zweieinhalb
+  Minuten. An der Sammeltür klopfen darum viele gleichzeitig, und es zählt
+  nicht die Reihenfolge, sondern wie oft an welcher Tür geklopft wird
+  (`zaehlSchuebe`, `zaehlLesen`): 33 Türen mit je 0 bis 3 Klopfern (zwei Bit),
+  vier Schübe für 32 Byte Fingerabdruck und das Prüfbyte. Jeder Schub hat
+  genau 51 Klopfer, damit das erste Gerät die Schübe ohne Uhr trennen kann:
+  Liegt die Summe der Werte über der Hälfte, klopft der Schub das Gegenstück
+  und einmal an die Wechseltür, die Fülltür nimmt den Rest. Das zweite Gerät
+  beginnt einen Schub erst, wenn alle Klopfer des vorigen angekommen sind; ein
+  Klopfer, der nicht durchkommt, klopft bis zu zweimal nach. Die Sammeltür hat
+  damit 35 Türen, der Code wächst auf rund 260 Zeichen (mit Adresse der App
+  rund 300). Prüfstand: verbunden 3 Sekunden nach dem Scan, fünf Läufe in
+  Folge. Erwartung für das iPhone, nicht gemessen: vier Schübe zu je gut zwei
+  Sekunden. Türen ohne Gegenstelle (Chrome) bleiben beim Klopfen der Reihe
+  nach.
+- Safari als erstes Gerät (Mac) antwortet im Gerätetest auf kein Anklopfen;
+  Ursache offen, im Prüfstand gibt es kein Safari. Dort bleibt der
+  Antwort-Code.
 - Firefox als zweites Gerät klopft nur bei einem ersten Gerät mit Firefox an.
   Er meldet eine Tür erst als erreicht, wenn die Gegenseite die Verbindung
   bestätigt, und das tut nur die Sammeltür. Gegen Chrome oder Safari als
@@ -1406,7 +1429,7 @@ das `@bos/meldekopf` in voller Breite nutzt; S1-Control das dritte.
 | Kopplung nur im Prüfstand erprobt (zwei Profile eines Chromium, lokale Schleife) | Gerätetest offen: Chrome auf Android gegen Chrome und Edge am Rechner, Safari auf iOS, Firefox; installierte PWA gegen Browser-Tab. Offen ist vor allem, ob die Browser einander im jeweiligen Netz finden: Ohne erteilte Kamerafreigabe nennen sie statt der IP-Adresse einen Namen im lokalen Netz (mDNS), den das andere Gerät auflösen muss. Rückfallebene bleibt die Einsatz-Datei. |
 | WLAN trennt die Geräte voneinander (Gäste-Netz, „Client Isolation") | Dann kommt keine Verbindung zustande; der Dialog sagt es. Hotspot des Telefons oder das WLAN des Fahrzeugs nehmen. Im Hotspot eines iPhones ist der Weg zwischen Telefon und Gast ebenfalls ungeprüft. |
 | Wiederverbinden nach dem Schlaf nur im Prüfstand erprobt (Chromium 158, Abriss per Haken, wartende Verbindung bis 20 Minuten gehalten) | Gerätetest offen. Drei Annahmen tragen es: Das eingefrorene Telefon behält seine Seite (kein verworfener Tab); die wartenden Ports des Rechners bleiben über Stunden offen; der Browser nimmt eine Antwort mit eingesetzten Kennwörtern an (sonst ein Versuch je Platz). Safari und Firefox ungeprüft. Fällt eine weg, bleibt die Leiste „getrennt“ und „Neu koppeln…“. |
-| Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Firefox als erstes Gerät geht einen eigenen Weg (Sammeltür, Kap. 6.6), im Prüfstand geprüft; Firefox als zweites Gerät gegen Chrome oder Safari braucht den Antwort-Code. Safari (iPhone als zweites Gerät) und echte Geräte im WLAN ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand, und das zweite Gerät muss den verborgenen Namen des ersten im Netz auflösen können (mDNS). Firefox ist in den Verhaltenstests der CI nicht dabei. |
+| Das Koppeln mit einem Scan hängt an Eigenheiten des Browsers | Drei Annahmen, nur in Chromium 158 geprüft: Beide Browser nehmen vorgegebene Verbindungskennwörter an (wird vor dem Zeigen des Codes probiert); eine wartende Verbindung ohne Gegenstelle beantwortet das Anklopfen; `getStats` nennt je Klopfer ein Kandidatenpaar mit `lastPacketReceivedTimestamp`. Fällt eine weg, bleibt der Antwort-Code zum Scannen, und der braucht am ersten Gerät Kamera oder Handscanner. Firefox als erstes Gerät geht einen eigenen Weg (Sammeltür, Kap. 6.6), im Prüfstand geprüft; Firefox als zweites Gerät gegen Chrome oder Safari braucht den Antwort-Code. Gerätetest 2026-11-26 mit dem iPhone (Safari) als zweitem Gerät: an Chrome in 6 Sekunden verbunden, an Firefox mit Klopfen der Reihe nach in Minuten (darum das Zählklopfen, am Gerät noch nicht bestätigt), an Safari als erstem Gerät gar nicht (Ursache offen). In anderen Netzen ungeprüft; dort kann das Anklopfen auch länger dauern als im Prüfstand, und das zweite Gerät muss den verborgenen Namen des ersten im Netz auflösen können (mDNS). Firefox ist in den Verhaltenstests der CI nicht dabei. |
 | Gemerkte Kopplung trägt, solange eine der beiden Seiten offen geblieben ist | Über Tage ungeprüft: ob wartende Verbindungen so lange leben (gemessen 20 Minuten), ob die des Telefons den Schlaf überstehen, in dem der Rechner neu lädt. Laden beide neu, bevor sie sich wiedergefunden haben, zeigt der Rechner „Neu koppeln…“, und es kostet einen Scan. Safari legt ein Zertifikat womöglich nicht in IndexedDB ab; dann bleibt die Kopplung eine des Arbeitsspeichers. |
 | Schläft der Rechner statt des Telefons | Das Telefon ruft weiter an; ob die wartenden Verbindungen des Rechners den Ruhezustand überstehen, ist ungeprüft. Den Rechner als erstes Gerät nehmen und wach lassen. |
 | Zwei Geräte vergeben in derselben Minute Nummern oder ihre Uhren gehen verschieden | Die Nummern folgen der Empfangszeit; der Abgleich ändert dann Nummern und hinterlässt den Nummern-Hinweis. Uhren vor dem Koppeln vergleichen. |

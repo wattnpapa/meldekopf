@@ -77,6 +77,8 @@ export interface KopplungsNetz {
   erreichbar?: boolean;
   /** Wie viele Klopfer hinausgegangen (zweites Gerät) oder angekommen sind (erstes Gerät). */
   klopfer?: number;
+  /** So viele Klopfer trägt ein Fingerabdruck auf diesem Weg (66 der Reihe nach, 204 an der Sammeltür). */
+  klopferSoll?: number;
   /** Zweites Gerät: so lange läuft der Durchgang des Anklopfens schon (für die Fehlersuche im Gerätetest). */
   dauerMs?: number;
   /** Zweites Gerät: Mittel je Klopfer, „Port öffnen + Antwort der Tür“ in Millisekunden (für die Fehlersuche). */

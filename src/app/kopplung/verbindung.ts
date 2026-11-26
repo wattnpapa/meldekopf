@@ -526,9 +526,9 @@ export async function tuerenOeffnen(
   portsLesen: (tuerSdp: string, adressen: readonly string[]) => number[],
   anzahl: number,
   /** Für die Sammeltür: die Kennwörter, mit denen angeklopft wird, und wie sich die Adressen einer Beschreibung lesen. */
-  sammel?: { klopfer: { ufrag: string; pwd: string }; adressenLesen: (sdp: string) => string[] },
+  sammel?: { klopfer: { ufrag: string; pwd: string }; adressenLesen: (sdp: string) => string[]; anzahl: number },
 ): Promise<Tueren | null> {
-  if (sammel && istFirefox()) return sammeltuerOeffnen(zertifikat, await kennwoerter(0), sammel.klopfer, sammel.adressenLesen, portsLesen, anzahl);
+  if (sammel && istFirefox()) return sammeltuerOeffnen(zertifikat, await kennwoerter(0), sammel.klopfer, sammel.adressenLesen, portsLesen, sammel.anzahl);
   const pcs: RTCPeerConnection[] = [];
   const schliessen = () => {
     for (const pc of pcs.splice(0)) {

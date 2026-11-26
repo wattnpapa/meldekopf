@@ -326,6 +326,64 @@ export function klopfLesen(zeichen: readonly number[]): Uint8Array | null {
   return pruefbyte(fp) === bytes[32] ? Uint8Array.from(fp) : null;
 }
 
+// ----------------------------------------------------------------------------------------------------------------
+// Zählklopfen an der Sammeltür (Firefox als erstes Gerät). Gerätetest 2026-11-26 mit dem iPhone: an Chrome 66 Klopfer
+// in 6 Sekunden (32 ms je Klopfer), an Firefox 2,25 Sekunden je Klopfer. Das iPhone löst den verborgenen Namen des
+// Firefox für jede Verbindung neu auf, und zwar erst, wenn sie klopft. Nacheinander sind das zweieinhalb Minuten.
+//
+// Darum klopfen an der Sammeltür viele gleichzeitig, und es zählt nicht die Reihenfolge, sondern wie oft an welcher
+// Tür: 33 Türen, je Tür 0 bis 3 Klopfer (zwei Bit), vier Schübe für 33 Byte. Damit das erste Gerät die Schübe ohne
+// Uhr trennen kann, hat jeder genau {@link ZAEHL_JE_SCHUB} Klopfer: Liegt die Summe über der Hälfte, klopft der Schub
+// das Gegenstück (3 minus Wert) und einmal an die Wechseltür; die Fülltür nimmt den Rest. Das zweite Gerät beginnt
+// einen Schub erst, wenn alle Klopfer des vorigen angekommen sind.
+
+/** Türen der Sammeltür, die Werte tragen. */
+const ZAEHL_TUEREN = 33;
+const WECHSEL_TUER = ZAEHL_TUEREN;
+const FUELL_TUER = ZAEHL_TUEREN + 1;
+/** So viele Türen hat die Sammeltür: 33 für Werte, die Wechseltür, die Fülltür. */
+export const SAMMEL_TUEREN = ZAEHL_TUEREN + 2;
+export const ZAEHL_SCHUEBE = 4;
+/** Klopfer je Schub: höchstens 49 für Werte, dazu Wechsel- und Fülltür. */
+export const ZAEHL_JE_SCHUB = 51;
+/** Klopfer eines ganzen Fingerabdrucks an der Sammeltür. */
+export const ZAEHL_KLOPFER = ZAEHL_SCHUEBE * ZAEHL_JE_SCHUB;
+
+/** Der Fingerabdruck als vier Schübe von Türnummern; innerhalb eines Schubs ist die Reihenfolge gleichgültig. */
+export function zaehlSchuebe(fingerabdruck: Uint8Array): number[][] {
+  const werte = [...fingerabdruck, pruefbyte(fingerabdruck)].flatMap((b) => [b >> 6, (b >> 4) & 3, (b >> 2) & 3, b & 3]);
+  return Array.from({ length: ZAEHL_SCHUEBE }, (_, s) => {
+    let teil = werte.slice(s * ZAEHL_TUEREN, (s + 1) * ZAEHL_TUEREN);
+    const summe = teil.reduce((a, b) => a + b, 0);
+    const wechsel = summe > (3 * ZAEHL_TUEREN) / 2 ? 1 : 0;
+    if (wechsel) teil = teil.map((w) => 3 - w);
+    const klopfer = teil.flatMap((w, tuer) => Array<number>(w).fill(tuer));
+    if (wechsel) klopfer.push(WECHSEL_TUER);
+    while (klopfer.length < ZAEHL_JE_SCHUB) klopfer.push(FUELL_TUER);
+    return klopfer;
+  });
+}
+
+/** Aus den Türnummern der jüngsten {@link ZAEHL_KLOPFER} Klopfer, in der Reihenfolge ihres Eintreffens, der Fingerabdruck; `null`, wenn es nicht aufgeht. */
+export function zaehlLesen(tueren: readonly number[]): Uint8Array | null {
+  if (tueren.length !== ZAEHL_KLOPFER) return null;
+  const werte: number[] = [];
+  for (let s = 0; s < ZAEHL_SCHUEBE; s++) {
+    const zahl = Array<number>(SAMMEL_TUEREN).fill(0);
+    for (const t of tueren.slice(s * ZAEHL_JE_SCHUB, (s + 1) * ZAEHL_JE_SCHUB)) {
+      if (!(t >= 0 && t < SAMMEL_TUEREN)) return null;
+      zahl[t]!++;
+    }
+    const wechsel = zahl[WECHSEL_TUER]!;
+    const teil = zahl.slice(0, ZAEHL_TUEREN);
+    if (wechsel > 1 || teil.some((w) => w > 3)) return null;
+    werte.push(...(wechsel ? teil.map((w) => 3 - w) : teil));
+  }
+  const bytes = Uint8Array.from({ length: 33 }, (_, i) => (werte[i * 4]! << 6) | (werte[i * 4 + 1]! << 4) | (werte[i * 4 + 2]! << 2) | werte[i * 4 + 3]!);
+  const fp = bytes.subarray(0, 32);
+  return pruefbyte(fp) === bytes[32] ? Uint8Array.from(fp) : null;
+}
+
 /** Die Adressen eines Angebots, wie sie im Code stehen: Auswahl und Reihenfolge wie beim Packen. */
 export function angebotAdressen(angebotSdp: string): string[] {
   return zerlegen({ art: "angebot", sdp: angebotSdp }).adressen.map((a) => a.wert.toLowerCase());

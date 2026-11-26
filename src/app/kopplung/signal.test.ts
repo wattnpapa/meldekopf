@@ -7,6 +7,10 @@ import QRCode from "qrcode";
 import { usBelegungZurueck } from "../eingang/tastaturbelegung";
 import {
   KLOPFER,
+  SAMMEL_TUEREN,
+  ZAEHL_JE_SCHUB,
+  ZAEHL_KLOPFER,
+  ZAEHL_SCHUEBE,
   TUEREN,
   angebotAdressen,
   antwortAusFingerabdruck,
@@ -21,6 +25,8 @@ import {
   tuerAngebote,
   tuerKennwoerter,
   tuerPortsLesen,
+  zaehlLesen,
+  zaehlSchuebe,
 } from "./signal";
 import { KOPPLUNG_MARKE, istKopplungsCode, kopplungsLink } from "./zustand";
 import { verschiedeneNetze } from "./kopplung-dialog";
@@ -167,7 +173,7 @@ describe("Anklopfen: Fingerabdruck ohne Scan und ohne Eingabe", () => {
 
   it("Sammeltür (Firefox): Die Türen stehen unter eigenen Adressen und teilen sich die Kennwörter der Tür 0", async () => {
     const NAME = "986d771c-0de9-4826-9d4d-071428227d96.local";
-    const ports = Array.from({ length: TUEREN }, (_, i) => [52000 + i]);
+    const ports = Array.from({ length: SAMMEL_TUEREN }, (_, i) => [52000 + i]);
     const code = signalKodieren({ art: "angebot", sdp: CHROME_ANGEBOT }, ports, [NAME]);
     // Ein Name mehr im Code: Er bleibt so grob wie mit einzelnen Türen.
     expect(QRCode.create(code, { errorCorrectionLevel: "L" }).version).toBeLessThanOrEqual(16);
@@ -175,16 +181,38 @@ describe("Anklopfen: Fingerabdruck ohne Scan und ohne Eingabe", () => {
     expect(s.tueren).toEqual(ports);
     expect(s.tuerAdressen).toEqual([NAME]);
     // Als Link für die Kamera-App: Die Adresse davor macht den Code kaum feiner.
-    expect(QRCode.create(kopplungsLink(code), { errorCorrectionLevel: "L" }).version).toBeLessThanOrEqual(17);
+    expect(QRCode.create(kopplungsLink(code), { errorCorrectionLevel: "L" }).version).toBeLessThanOrEqual(19);
     const tueren = await tuerAngebote(s.sdp, s.tueren!, s.tuerAdressen);
     const k0 = await tuerKennwoerter(s.sdp, 0);
-    expect(tueren).toHaveLength(TUEREN);
+    expect(tueren).toHaveLength(SAMMEL_TUEREN);
     expect(tueren.every((t) => t.includes(`a=ice-ufrag:${k0.ufrag}\r\n`) && t.includes(`a=ice-pwd:${k0.pwd}\r\n`))).toBe(true);
     expect(tueren[5]).toContain(` ${NAME} 52005 typ host`);
     expect(tueren[5]!.match(/a=candidate:/g)).toHaveLength(1);
     // Die Adressen des Angebots selbst bleiben, wie sie waren.
     expect(angebotAdressen(s.sdp).slice(0, 2)).toEqual(angebotAdressen(CHROME_ANGEBOT).slice(0, 2));
     expect(angebotAdressen(s.sdp)).toHaveLength(3);
+  });
+
+  it("Zählklopfen: vier Schübe zu je 51 Klopfern, gelesen ohne Rücksicht auf die Reihenfolge im Schub", () => {
+    const fps = [fingerabdruckVon(ANTWORT), new Uint8Array(32), new Uint8Array(32).fill(255), Uint8Array.from({ length: 32 }, (_, i) => (i * 37 + 11) & 255)];
+    for (const fp of fps) {
+      const schuebe = zaehlSchuebe(fp);
+      expect(schuebe).toHaveLength(ZAEHL_SCHUEBE);
+      expect(schuebe.every((x) => x.length === ZAEHL_JE_SCHUB && x.every((t) => t >= 0 && t < SAMMEL_TUEREN))).toBe(true);
+      expect([...zaehlLesen(schuebe.flat())!]).toEqual([...fp]);
+      // Gleichzeitig geklopft: Im Schub kommt es in beliebiger Reihenfolge an.
+      expect([...zaehlLesen(schuebe.flatMap((x) => [...x].reverse()))!]).toEqual([...fp]);
+    }
+  });
+
+  it("Zählklopfen: verwirft einen fehlenden, einen doppelten und einen Klopfer an der falschen Tür", () => {
+    const alle = zaehlSchuebe(fingerabdruckVon(ANTWORT)).flat();
+    expect(alle).toHaveLength(ZAEHL_KLOPFER);
+    expect(zaehlLesen(alle.slice(1))).toBeNull();
+    expect(zaehlLesen([alle[0]!, ...alle].slice(0, ZAEHL_KLOPFER))).toBeNull();
+    const i = alle.findIndex((t) => t < 32);
+    expect(zaehlLesen([...alle.slice(0, i), alle[i]! + 1, ...alle.slice(i + 1)])).toBeNull();
+    expect(zaehlLesen([...alle.slice(0, 5), SAMMEL_TUEREN, ...alle.slice(6)])).toBeNull();
   });
 
   it("liest die Adressen einer Sammeltür ohne Doppelte und leitet die Kennwörter der Klopfer aus dem Angebot ab", async () => {
