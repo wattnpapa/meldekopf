@@ -34,6 +34,13 @@ export const MONATE: Readonly<Record<string, string>> = {
 
 export const AENDERUNGEN: readonly Aenderung[] = [
   {
+    datum: "2026-11-26",
+    punkte: [
+      "Kennzeichen im Scanner: Die Kamera sucht jetzt zuerst das Schild im Bild und liest nur diesen Ausschnitt, vergrößert. Vorher wurde der ganze Rahmen gelesen, und ein Kennzeichen an einem Fahrzeug mit Aufschrift und Umgebung im Bild blieb unerkannt. Bei THW-Kennzeichen genügen die Ziffern.",
+      "Kennzeichen im Scanner: Liest die Kamera ein Kennzeichen, das zu keinem Fahrzeug der Sammlung gehört, steht das jetzt da („Kennzeichen gelesen: … – kein Fahrzeug dieser Sammlung“), statt dass nichts geschieht.",
+    ],
+  },
+  {
     datum: "2026-11-25",
     punkte: [
       "Neu: „Was ist neu“. Ein Tipp auf die Versionsnummer in der Fußzeile zeigt diesen Verlauf, monatsweise zum Blättern.",

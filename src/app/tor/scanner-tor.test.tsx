@@ -68,7 +68,12 @@ beforeEach(() => {
   Object.defineProperty(HTMLMediaElement.prototype, "readyState", { configurable: true, get: () => 4 });
   Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", { configurable: true, get: () => 720 });
   Object.defineProperty(HTMLVideoElement.prototype, "videoHeight", { configurable: true, get: () => 1280 });
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage: () => {} })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+    drawImage: () => {},
+    // Ein leeres Bild: Der Schild-Sucher findet nichts, gelesen wird der ganze Ausschnitt.
+    getImageData: (_x: number, _y: number, b: number, h: number) => ({ data: new Uint8ClampedArray(b * h * 4) }),
+    putImageData: () => {},
+  })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 });
 
 describe("Kennzeichen im Scanner", () => {
@@ -102,6 +107,20 @@ describe("Kennzeichen im Scanner", () => {
     expect(within(wahl).getAllByRole("listitem")).toHaveLength(2);
     await nutzer.click(within(wahl).getByRole("button", { name: /THW-81284/ }));
     expect(within(screen.getByRole("region", { name: "Gewähltes Fahrzeug" })).getByText("THW-81284")).toBeTruthy();
+  });
+
+  it("sagt, wenn das gelesene Kennzeichen zu keinem Fahrzeug der Sammlung gehört", async () => {
+    lesung = "EE Y SS A 4 THW I8 CT HTHN84588 S55 NAM J";
+    render(<Buehne id={einsatzMit(["THW-81234"])} />);
+    expect(await screen.findByText(/Kennzeichen gelesen: HTHN84588 – kein Fahrzeug dieser Sammlung\./, undefined, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Gewähltes Fahrzeug" })).toBeNull();
+  });
+
+  it("findet im Bild eines ganzen Fahrzeugs das Kennzeichen der Sammlung an seinen Ziffern", async () => {
+    lesung = "EE Y SS A 4 THW I8 CT HTHN84588 S55 NAM J";
+    render(<Buehne id={einsatzMit(["THW-84588", "THW-81234"])} />);
+    const treffer = await screen.findByRole("region", { name: "Gewähltes Fahrzeug" }, { timeout: 3000 });
+    expect(within(treffer).getByText("THW-84588")).toBeTruthy();
   });
 
   it("zeigt nichts, solange die Kamera einen QR-Code oder fremden Text sieht", async () => {

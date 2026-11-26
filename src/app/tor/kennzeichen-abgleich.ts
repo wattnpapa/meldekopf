@@ -54,6 +54,23 @@ export function erlaubterAbstand(laenge: number): number {
   return 2;
 }
 
+/**
+ * THW-Kennzeichen unterscheiden sich nur in den Ziffern, und gerade die drei Buchstaben davor liest die Texterkennung am
+ * echten Schild oft falsch („THN84588", „THH84588": Feldversuch 2026-11-26). Stehen die Ziffern im Text, zählt das fast
+ * wie das ganze Kennzeichen.
+ */
+const THW_MUSTER = /^THW(\d{4,5})$/;
+const THW_NUR_ZIFFERN = 0.5;
+
+function abstandKennzeichen(k: string, text: string): number {
+  const ganz = abstandImText(k, text);
+  const ziffern = THW_MUSTER.exec(k)?.[1];
+  if (!ziffern) return ganz;
+  // Nur wenn die Ziffern selbst sauber dastehen (höchstens eine Verwechslung): Sonst passte jede Zahlenfolge im Bild.
+  const nurZiffern = abstandImText(ziffern, text);
+  return nurZiffern <= KOSTEN_VERWECHSELT ? Math.min(ganz, nurZiffern + THW_NUR_ZIFFERN) : ganz;
+}
+
 /** Kürzer wird nicht erkannt: Drei Zeichen stehen in jedem Kamerabild irgendwo. */
 const MIN_LAENGE = 4;
 /** So viel besser als das nächste muss ein Treffer sein, um als eindeutig zu gelten. */
@@ -76,7 +93,7 @@ export function erkennungAuswerten(gelesen: string, schluessel: readonly string[
   if (text.length < MIN_LAENGE) return leer;
   const bewertet = [...new Set(schluessel)]
     .filter((k) => !k.startsWith("#") && k.length >= MIN_LAENGE)
-    .map((k) => ({ k, abstand: abstandImText(k, text) }))
+    .map((k) => ({ k, abstand: abstandKennzeichen(k, text) }))
     .filter((x) => x.abstand <= erlaubterAbstand(x.k.length))
     .sort((a, b) => a.abstand - b.abstand || b.k.length - a.k.length);
   if (bewertet.length === 0) return leer;
@@ -85,6 +102,24 @@ export function erkennungAuswerten(gelesen: string, schluessel: readonly string[
   // „OLA12" steckt in „OLA123": Liest die Kamera das längere, ist das kürzere nicht gemeint.
   nah = nah.filter((x) => !nah.some((y) => y.k !== x.k && y.k.includes(x.k) && y.abstand <= x.abstand));
   return { treffer: nah.map((x) => x.k), abstand: bester };
+}
+
+/**
+ * Was im gelesenen Text nach einem Kennzeichen aussieht, auch wenn es zu keinem Fahrzeug der Sammlung passt: ein Wort
+ * aus fünf bis neun Zeichen mit mindestens drei Ziffern, davor höchstens Buchstaben („THN84588"), oder ein kurzes
+ * Buchstabenwort mit einer Zifferngruppe dahinter („THW 84588"). Leer, wenn nichts so aussieht. Damit sagt der Scanner
+ * „gelesen, aber nicht in dieser Sammlung", statt zu schweigen (Feldversuch 2026-11-26).
+ */
+export function kennzeichenAehnlich(gelesen: string): string {
+  const woerter = gelesen.toUpperCase().split(/\s+/).map(kennzeichenSchluessel).filter(Boolean);
+  let bestes = "";
+  woerter.forEach((w, i) => {
+    let kandidat = "";
+    if (/^\d{3,5}$/.test(w) && i > 0 && /^[A-Z]{2,5}$/.test(woerter[i - 1]!)) kandidat = `${woerter[i - 1]} ${w}`;
+    else if (/^[A-Z]{0,5}\d{3,6}[A-Z]?$/.test(w) && w.length >= 5 && w.length <= 9) kandidat = w;
+    if (kandidat.length > bestes.length) bestes = kandidat;
+  });
+  return bestes;
 }
 
 /** Für die Suche nach Wörtern: klein, ohne Umlaute und Sonderzeichen. */

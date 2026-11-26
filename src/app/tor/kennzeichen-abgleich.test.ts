@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { kennzeichenSchluessel, type TorFahrzeug } from "./fahrzeug-stand";
-import { abstandImText, erkennungAuswerten, torSuche } from "./kennzeichen-abgleich";
+import { abstandImText, erkennungAuswerten, kennzeichenAehnlich, torSuche } from "./kennzeichen-abgleich";
 
 const BEKANNT = ["THW81234", "THW81284", "OLFW2041", "GOAB123", "#1"];
 
@@ -54,6 +54,35 @@ describe("Auswertung einer Lesung der Kamera", () => {
   });
   it("gleicht Fahrzeuge ohne Kennzeichen nie ab", () => {
     expect(erkennungAuswerten("#1 1111", ["#1"]).treffer).toEqual([]);
+  });
+});
+
+// Was die Texterkennung am 2026-11-26 im Feldversuch aus dem Foto eines THW-Lkw (THW-84588, Schild ein Fünftel der
+// Rahmenbreite, Aufschrift „THW" und Funkrufnummer daneben) las, in drei Bildgrößen.
+const FELD = [
+  "C I 7 A A CS 3 F G NL N5 THEW LD LL 3 F9 8 HTHN84588 8 TS 2 S TE AS SS YR",
+  "EE Y SS A 4 THW I8 CT HTHN84588 S55 NAM J",
+  "AN ANY3 7 4 R K 1S A NL 14 GG2 NC REET THW L W9 THH84588 EB AWA CN B 2 E TY F SS W 4 C PN UID 2",
+];
+
+describe("Lesungen aus dem Feldversuch", () => {
+  it("findet das THW-Kennzeichen an seinen Ziffern, auch wenn die Buchstaben davor falsch gelesen sind", () => {
+    for (const text of FELD) expect(erkennungAuswerten(text, ["THW84588", "THW81234", "OLFW2041"])).toEqual({ treffer: ["THW84588"], abstand: 0.5 });
+  });
+  it("hält zwei THW-Kennzeichen auseinander, die sich in einer Ziffer unterscheiden", () => {
+    expect(erkennungAuswerten(FELD[1]!, ["THW84588", "THW84589"]).treffer).toEqual(["THW84588"]);
+  });
+  it("nennt, was nach einem Kennzeichen aussieht, auch wenn es zu keinem Fahrzeug passt", () => {
+    expect(erkennungAuswerten(FELD[1]!, ["THW81234", "OLFW2041"]).treffer).toEqual([]);
+    expect(kennzeichenAehnlich(FELD[1]!)).toBe("HTHN84588");
+    expect(kennzeichenAehnlich(FELD[2]!)).toBe("THH84588");
+    expect(kennzeichenAehnlich("I BTHW 34588 B")).toBe("BTHW 34588");
+    expect(kennzeichenAehnlich("OL FW 2041")).toBe("FW 2041");
+  });
+  it("hält einen QR-Code, Aufschriften und einzelne Zahlen nicht für ein Kennzeichen", () => {
+    expect(kennzeichenAehnlich("TECHNISCHES HILFSWERK 37 46")).toBe("");
+    expect(kennzeichenAehnlich("EE Y SS A 4 THW I8 CT S55 NAM J")).toBe("");
+    expect(kennzeichenAehnlich("")).toBe("");
   });
 });
 
